@@ -1,0 +1,1642 @@
+# Gateway REST sözleşmesi (OpenAPI 3.1).
+# Bu dosya EL İLE düzenlenen iskelettir; T19.1'de packages/contracts altındaki Zod
+# şemalarından üretilen sürüm burayı devralacak. Ayrıntı: docs/api/README.md
+openapi: 3.1.0
+
+info:
+  title: Quick Commerce Gateway API
+  version: 0.1.0
+  summary: Hızlı market siparişi için genel REST yüzeyi
+  description: |
+    Go gateway'in dışarıya açtığı tek REST yüzeyi. Gateway istekleri doğrular,
+    kimliği çözer, idempotency anahtarını yönetir ve gRPC ile iç servislere
+    (catalog, inventory, order, payment, risk, courier) dağıtır.
+
+    Sözleşme kuralları:
+
+    * **Zarf**: her cevap `ApiResponse` zarfıyla döner; `success` alanı başarıyı
+      hatadan ayırır. HTTP durum kodu ile `error.code` birlikte okunur.
+    * **Para**: tüm tutarlar minor unit (kuruş) cinsinden **tam sayıdır**.
+      Float kullanılmaz, istemci gösterim anında 100'e böler.
+    * **Idempotency**: kalıcı durum değiştiren uçlarda `Idempotency-Key` başlığı
+      zorunludur. Aynı anahtar + aynı gövde ilk cevabı tekrar döndürür; aynı
+      anahtar + farklı gövde `REQUEST_IN_PROGRESS` ile reddedilir.
+      `POST /v1/auth/login` ve `POST /v1/darkstores/resolve` kalıcı durum
+      değiştirmediği (biri oturum jetonu üretir, diğeri sorgu niteliğindedir)
+      için bu başlığı istemez.
+    * **İzleme**: her cevapta `X-Request-Id` başlığı bulunur; hata gövdesindeki
+      `error.requestId` ile aynı değerdir ve log/trace kayıtlarıyla eşleşir.
+  license:
+    name: MIT
+  contact:
+    name: quick-commerce-microservices
+
+servers:
+  - url: http://localhost:8080
+    description: Yerel geliştirme (gateway)
+
+tags:
+  - name: auth
+    description: Kayıt ve oturum açma
+  - name: catalog
+    description: Kategori ve ürün listeleme
+  - name: darkstore
+    description: Konumdan karanlık mağaza çözümleme
+  - name: cart
+    description: Sepet ve stok rezervasyonu
+  - name: orders
+    description: Sipariş oluşturma, 3DS ve sorgulama
+  - name: realtime
+    description: Socket.io odaları için kısa ömürlü jeton
+
+security:
+  - bearerAuth: []
+
+paths:
+  /v1/auth/register:
+    post:
+      tags: [auth]
+      operationId: registerUser
+      summary: Yeni kullanıcı kaydı
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Kullanıcı oluşturuldu, oturum açıldı
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AuthSession"
+        "400":
+          description: Gövde doğrulaması başarısız ya da idempotency başlığı yok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                validationError:
+                  summary: VALIDATION_FAILED
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "İstek gövdesi geçersiz."
+                      details:
+                        fieldErrors:
+                          password: "En az 8 karakter olmalı."
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                idempotencyKeyRequired:
+                  summary: VALIDATION_FAILED
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Idempotency-Key başlığı zorunludur."
+                      details: null
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "409":
+          description: E-posta kayıtlı ya da anahtar farklı gövdeyle tekrar kullanıldı
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                emailAlreadyRegistered:
+                  summary: CONFLICT
+                  value:
+                    success: false
+                    error:
+                      code: CONFLICT
+                      message: "Bu e-posta ile kayıtlı bir hesap var."
+                      details:
+                        email: "ada@example.com"
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                idempotencyKeyReused:
+                  summary: REQUEST_IN_PROGRESS
+                  value:
+                    success: false
+                    error:
+                      code: REQUEST_IN_PROGRESS
+                      message: "Aynı Idempotency-Key farklı bir gövde ile kullanıldı."
+                      details:
+                        idempotencyKey: "0f5d0b2a-1c2d-4e3f-9a8b-7c6d5e4f3a2b"
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/auth/login:
+    post:
+      tags: [auth]
+      operationId: loginUser
+      summary: Oturum açma
+      description: |
+        Kalıcı durum değiştirmediği için `Idempotency-Key` istemez.
+        Dönen erişim jetonu JWT_TTL (3600 sn) boyunca geçerlidir.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Oturum açıldı
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AuthSession"
+        "400":
+          description: Gövde doğrulaması başarısız
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                validationError:
+                  summary: VALIDATION_FAILED
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "E-posta biçimi geçersiz."
+                      details:
+                        fieldErrors:
+                          email: "Geçerli bir e-posta girin."
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "401":
+          description: Kimlik bilgileri hatalı
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                invalidCredentials:
+                  summary: UNAUTHORIZED
+                  value:
+                    success: false
+                    error:
+                      code: UNAUTHORIZED
+                      message: "E-posta veya parola hatalı."
+                      details: null
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/categories:
+    get:
+      tags: [catalog]
+      operationId: listCategories
+      summary: Kategori ağacını listele
+      security: []
+      responses:
+        "200":
+          description: Kategori listesi
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/Category"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/products:
+    get:
+      tags: [catalog]
+      operationId: listProducts
+      summary: Ürünleri listele veya ara
+      description: |
+        Fiyat ve stok mağaza kapsamlı olduğu için `darkStoreId` zorunludur.
+        `q` verilirse arama yapılır; `categoryId` ile birlikte kullanılabilir.
+      security: []
+      parameters:
+        - name: darkStoreId
+          in: query
+          required: true
+          description: Fiyat ve stok bu karanlık mağazaya göre döner.
+          schema:
+            type: string
+            format: uuid
+        - name: categoryId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: q
+          in: query
+          required: false
+          description: Serbest metin araması. En az 2 karakter olmalıdır.
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 64
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: Ürün sayfası
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items, page]
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/Product"
+                          page:
+                            $ref: "#/components/schemas/Page"
+        "400":
+          description: Sorgu parametresi geçersiz
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                queryTooShort:
+                  summary: VALIDATION_FAILED (q en az 2 karakter)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Arama terimi en az 2 karakter olmalı."
+                      details:
+                        fieldErrors:
+                          q: "minLength: 2"
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "404":
+          description: Karanlık mağaza bulunamadı
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                darkStoreNotFound:
+                  summary: NOT_FOUND
+                  value:
+                    success: false
+                    error:
+                      code: NOT_FOUND
+                      message: "Karanlık mağaza bulunamadı."
+                      details:
+                        darkStoreId: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/darkstores/resolve:
+    post:
+      tags: [darkstore]
+      operationId: resolveDarkStore
+      summary: Konuma göre teslimat yapacak mağazayı bul
+      description: |
+        Gövdede konum taşıdığı için POST'tur; kalıcı durum değiştirmez,
+        bu yüzden `Idempotency-Key` istemez.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveDarkStoreRequest"
+      responses:
+        "200":
+          description: Hizmet veren mağaza
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/DarkStoreMatch"
+        "400":
+          description: Konum doğrulaması başarısız
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                validationError:
+                  summary: VALIDATION_FAILED
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Enlem -90 ile 90 arasında olmalı."
+                      details:
+                        fieldErrors:
+                          "location.lat": "range"
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "404":
+          description: Bu konuma hizmet veren mağaza yok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                outOfServiceArea:
+                  summary: NO_STORE
+                  value:
+                    success: false
+                    error:
+                      code: NO_STORE
+                      message: "Bu konum teslimat bölgesi dışında."
+                      details:
+                        nearestDistanceMeters: 8400
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/cart/reserve:
+    post:
+      tags: [cart]
+      operationId: reserveCart
+      summary: Sepeti rezerve et (atomik stok düşümü + TTL)
+      description: |
+        Redis üzerinde Lua ile atomik rezervasyon açar ve bir `orderId` üretir.
+        Varsayılan ömür RESERVATION_TTL_SECONDS (600 sn); risk skoru orta
+        çıkarsa RESERVATION_TTL_MEDIUM_RISK_SECONDS (120 sn) uygulanır.
+        Süre dolduğunda sweeper stoğu geri verir.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReserveCartRequest"
+      responses:
+        "201":
+          description: Rezervasyon açıldı
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Reservation"
+        "400":
+          description: Gövde geçersiz, sepet boş ya da idempotency başlığı yok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                cartEmpty:
+                  summary: VALIDATION_FAILED
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Sepette ürün yok."
+                      details: null
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                idempotencyKeyRequired:
+                  summary: VALIDATION_FAILED
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Idempotency-Key başlığı zorunludur."
+                      details: null
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          description: Mağaza veya ürün bulunamadı
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                productNotFound:
+                  summary: NOT_FOUND
+                  value:
+                    success: false
+                    error:
+                      code: NOT_FOUND
+                      message: "Ürün bulunamadı."
+                      details:
+                        productId: "2b1f7a54-6a8f-4f2e-8f0a-1d3c5b7a9e11"
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "409":
+          description: Stok yetmiyor ya da anahtar farklı gövdeyle kullanıldı
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                insufficientStock:
+                  summary: STOCK_INSUFFICIENT
+                  value:
+                    success: false
+                    error:
+                      code: STOCK_INSUFFICIENT
+                      message: "Yeterli stok yok."
+                      details:
+                        productId: "2b1f7a54-6a8f-4f2e-8f0a-1d3c5b7a9e11"
+                        requested: 5
+                        available: 2
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                idempotencyKeyReused:
+                  summary: REQUEST_IN_PROGRESS
+                  value:
+                    success: false
+                    error:
+                      code: REQUEST_IN_PROGRESS
+                      message: "Aynı Idempotency-Key farklı bir gövde ile kullanıldı."
+                      details:
+                        idempotencyKey: "0f5d0b2a-1c2d-4e3f-9a8b-7c6d5e4f3a2b"
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/cart/reserve/{orderId}:
+    delete:
+      tags: [cart]
+      operationId: releaseCartReservation
+      summary: Rezervasyonu iptal et, stoğu geri ver
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPath"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Rezervasyon serbest bırakıldı
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/ReservationRelease"
+        "400":
+          description: Idempotency başlığı yok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                idempotencyKeyRequired:
+                  summary: VALIDATION_FAILED
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Idempotency-Key başlığı zorunludur."
+                      details: null
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          description: Rezervasyon başka kullanıcıya ait
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                forbidden:
+                  summary: FORBIDDEN
+                  value:
+                    success: false
+                    error:
+                      code: FORBIDDEN
+                      message: "Bu rezervasyon size ait değil."
+                      details: null
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "404":
+          description: Rezervasyon yok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                reservationNotFound:
+                  summary: NOT_FOUND
+                  value:
+                    success: false
+                    error:
+                      code: NOT_FOUND
+                      message: "Rezervasyon bulunamadı."
+                      details:
+                        orderId: "9f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f"
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "409":
+          description: Rezervasyon zaten kapanmış
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                alreadyReleased:
+                  summary: CONFLICT
+                  value:
+                    success: false
+                    error:
+                      code: CONFLICT
+                      message: "Rezervasyon daha önce serbest bırakıldı."
+                      details:
+                        releasedAt: "2026-09-20T18:31:05.000Z"
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                expired:
+                  summary: RESERVATION_EXPIRED
+                  value:
+                    success: false
+                    error:
+                      code: RESERVATION_EXPIRED
+                      message: "Rezervasyon süresi dolmuş, stok geri verildi."
+                      details:
+                        expiredAt: "2026-09-20T18:30:00.000Z"
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                orderStateInvalid:
+                  summary: ORDER_STATE_INVALID
+                  value:
+                    success: false
+                    error:
+                      code: ORDER_STATE_INVALID
+                      message: "Ödemesi alınmış siparişin rezervasyonu iptal edilemez."
+                      details:
+                        status: PAID
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+
+  /v1/orders:
+    post:
+      tags: [orders]
+      operationId: createOrder
+      summary: Rezervasyonu siparişe çevir (saga başlangıcı)
+      description: |
+        Rezervasyon kimliği (`orderId`) ile risk skorlama, ödeme ve kurye
+        atama saga'sını başlatır. Risk orta seviyede ise ödeme 3DS ister ve
+        sipariş `AWAITING_PAYMENT` durumunda döner.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+      responses:
+        "201":
+          description: Sipariş oluşturuldu (3DS gerekebilir)
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Order"
+        "400":
+          description: Gövde geçersiz ya da idempotency başlığı yok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                validationError:
+                  summary: VALIDATION_FAILED
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Teslimat adresi zorunludur."
+                      details:
+                        fieldErrors:
+                          address: "required"
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                idempotencyKeyRequired:
+                  summary: VALIDATION_FAILED
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Idempotency-Key başlığı zorunludur."
+                      details: null
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "402":
+          description: Ödeme reddedildi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                paymentDeclined:
+                  summary: PAYMENT_DECLINED
+                  value:
+                    success: false
+                    error:
+                      code: PAYMENT_DECLINED
+                      message: "Ödeme reddedildi, rezervasyon geri alındı."
+                      details:
+                        reason: INSUFFICIENT_FUNDS
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "404":
+          description: Rezervasyon bulunamadı
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                reservationNotFound:
+                  summary: NOT_FOUND
+                  value:
+                    success: false
+                    error:
+                      code: NOT_FOUND
+                      message: "Rezervasyon bulunamadı."
+                      details:
+                        orderId: "9f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f"
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "409":
+          description: Rezervasyon süresi dolmuş veya durum uygun değil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                reservationExpired:
+                  summary: RESERVATION_EXPIRED
+                  value:
+                    success: false
+                    error:
+                      code: RESERVATION_EXPIRED
+                      message: "Rezervasyon süresi doldu, sepeti yenileyin."
+                      details:
+                        expiredAt: "2026-09-20T18:30:00.000Z"
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                orderStateInvalid:
+                  summary: ORDER_STATE_INVALID
+                  value:
+                    success: false
+                    error:
+                      code: ORDER_STATE_INVALID
+                      message: "Bu rezervasyon için sipariş zaten oluşturuldu."
+                      details:
+                        status: PAID
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "422":
+          description: İş kuralı engeli (risk veya minimum sepet)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                riskRejected:
+                  summary: RISK_BLOCKED
+                  value:
+                    success: false
+                    error:
+                      code: RISK_BLOCKED
+                      message: "Sipariş risk kuralları nedeniyle reddedildi."
+                      details:
+                        score: 91
+                        triggeredRules: ["VELOCITY_5M", "NEW_ACCOUNT_HIGH_BASKET"]
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                minBasketNotMet:
+                  summary: MIN_BASKET_NOT_MET
+                  value:
+                    success: false
+                    error:
+                      code: MIN_BASKET_NOT_MET
+                      message: "Minimum sepet tutarının altındasınız."
+                      details:
+                        minBasket:
+                          amount: 15000
+                          currency: TRY
+                        subtotal:
+                          amount: 9250
+                          currency: TRY
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/orders/{id}/3ds:
+    post:
+      tags: [orders]
+      operationId: submitThreeDsChallenge
+      summary: 3DS doğrulamasını tamamla
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPathId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ThreeDsRequest"
+      responses:
+        "200":
+          description: 3DS doğrulandı, saga devam ediyor
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Order"
+        "400":
+          description: Gövde geçersiz ya da idempotency başlığı yok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                validationError:
+                  summary: VALIDATION_FAILED
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Doğrulama kodu 6 haneli olmalı."
+                      details:
+                        fieldErrors:
+                          otp: "length: 6"
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "402":
+          description: 3DS doğrulaması başarısız, ödeme alınamadı
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                threeDsFailed:
+                  summary: THREEDS_FAILED
+                  value:
+                    success: false
+                    error:
+                      code: THREEDS_FAILED
+                      message: "3DS doğrulaması başarısız."
+                      details:
+                        attemptsLeft: 1
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "403":
+          description: Sipariş başka kullanıcıya ait
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                forbidden:
+                  summary: FORBIDDEN
+                  value:
+                    success: false
+                    error:
+                      code: FORBIDDEN
+                      message: "Bu sipariş size ait değil."
+                      details: null
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "404":
+          $ref: "#/components/responses/OrderNotFound"
+        "409":
+          description: Sipariş 3DS beklemiyor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                orderStateInvalid:
+                  summary: ORDER_STATE_INVALID
+                  value:
+                    success: false
+                    error:
+                      code: ORDER_STATE_INVALID
+                      message: "Sipariş 3DS aşamasında değil."
+                      details:
+                        status: PAID
+                        expected: AWAITING_PAYMENT
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/orders/{id}:
+    get:
+      tags: [orders]
+      operationId: getOrder
+      summary: Sipariş ayrıntısı
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPathId"
+      responses:
+        "200":
+          description: Sipariş
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Order"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          description: Sipariş başka kullanıcıya ait
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                forbidden:
+                  summary: FORBIDDEN
+                  value:
+                    success: false
+                    error:
+                      code: FORBIDDEN
+                      message: "Bu sipariş size ait değil."
+                      details: null
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "404":
+          $ref: "#/components/responses/OrderNotFound"
+
+  /v1/orders/{id}/token:
+    get:
+      tags: [realtime]
+      operationId: getOrderRealtimeToken
+      summary: "order:{orderId} odası için kısa ömürlü Socket.io jetonu"
+      description: |
+        Jeton yalnızca tek bir sipariş odasına katılım yetkisi taşır ve
+        kısa ömürlüdür (bkz. `ttlSeconds`). Sözleşme: docs/api/socket-events.md
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPathId"
+      responses:
+        "200":
+          description: Oda jetonu
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/RealtimeToken"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          description: Sipariş başka kullanıcıya ait
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                forbidden:
+                  summary: FORBIDDEN
+                  value:
+                    success: false
+                    error:
+                      code: FORBIDDEN
+                      message: "Bu sipariş odası için jeton alamazsınız."
+                      details:
+                        room: "order:9f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f"
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "404":
+          $ref: "#/components/responses/OrderNotFound"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "`POST /v1/auth/login` ile alınan erişim jetonu (JWT_TTL = 3600 sn)."
+
+  headers:
+    XRequestId:
+      description: İsteği log ve trace kayıtlarıyla eşleyen kimlik.
+      schema:
+        type: string
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        Kalıcı durum değiştiren uçlarda zorunludur. İstemci üretir (UUID v4
+        önerilir). Aynı anahtar + aynı gövde ilk cevabı tekrar döndürür;
+        aynı anahtar + farklı gövde `REQUEST_IN_PROGRESS` ile reddedilir.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+      example: "0f5d0b2a-1c2d-4e3f-9a8b-7c6d5e4f3a2b"
+
+    OrderIdPath:
+      name: orderId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    OrderIdPathId:
+      name: id
+      in: path
+      required: true
+      description: Sipariş kimliği (rezervasyon anında üretilen `orderId`).
+      schema:
+        type: string
+        format: uuid
+
+    PageParam:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    PageSizeParam:
+      name: pageSize
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  responses:
+    Unauthenticated:
+      description: Erişim jetonu yok, geçersiz ya da süresi dolmuş
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          examples:
+            unauthenticated:
+              summary: UNAUTHORIZED
+              value:
+                success: false
+                error:
+                  code: UNAUTHORIZED
+                  message: "Bu işlem için giriş yapmalısınız."
+                  details: null
+                  requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+            tokenExpired:
+              summary: UNAUTHORIZED
+              value:
+                success: false
+                error:
+                  code: UNAUTHORIZED
+                  message: "Oturum süresi doldu, tekrar giriş yapın."
+                  details:
+                    expiredAt: "2026-09-20T17:30:00.000Z"
+                  requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+
+    OrderNotFound:
+      description: Sipariş bulunamadı
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          examples:
+            orderNotFound:
+              summary: NOT_FOUND
+              value:
+                success: false
+                error:
+                  code: NOT_FOUND
+                  message: "Sipariş bulunamadı."
+                  details:
+                    orderId: "9f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f"
+                  requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+
+    RateLimited:
+      description: İstek hızı sınırı aşıldı
+      headers:
+        Retry-After:
+          description: Yeniden denemeden önce beklenecek saniye.
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          examples:
+            rateLimited:
+              summary: RATE_LIMITED
+              value:
+                success: false
+                error:
+                  code: RATE_LIMITED
+                  message: "Çok fazla istek gönderdiniz."
+                  details:
+                    retryAfterSeconds: 30
+                  requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+
+  schemas:
+    # --- Zarf ---------------------------------------------------------------
+    ApiSuccessResponse:
+      type: object
+      description: Başarılı cevap zarfı. `data` uca göre özelleşir.
+      required: [success, data]
+      properties:
+        success:
+          const: true
+        data:
+          description: Uca özgü yük.
+        meta:
+          $ref: "#/components/schemas/ResponseMeta"
+
+    ApiErrorResponse:
+      type: object
+      description: Hatalı cevap zarfı.
+      required: [success, error]
+      properties:
+        success:
+          const: false
+        error:
+          $ref: "#/components/schemas/ApiError"
+
+    ApiResponse:
+      description: |
+        Her cevap bu iki koldan biridir. `success` alanı ayırt edicidir; JSON
+        boolean olduğu için OpenAPI `discriminator` anahtarı kullanılamaz.
+      oneOf:
+        - $ref: "#/components/schemas/ApiSuccessResponse"
+        - $ref: "#/components/schemas/ApiErrorResponse"
+
+    ApiError:
+      type: object
+      required: [code, message, requestId]
+      properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        message:
+          type: string
+          description: Kullanıcıya gösterilebilir Türkçe açıklama.
+        details:
+          description: Koda özgü ek bağlam (alan hataları, stok miktarı, risk skoru...).
+          type: [object, "null"]
+          additionalProperties: true
+        requestId:
+          type: string
+          description: X-Request-Id başlığı ile aynı değer.
+
+    ResponseMeta:
+      type: object
+      properties:
+        requestId:
+          type: string
+        servedAt:
+          type: string
+          format: date-time
+
+    ErrorCode:
+      type: string
+      description: |
+        Makine tarafindan okunan hata sozlugu. Tek dogruluk kaynagi
+        `packages/core/src/error-codes.ts` icindeki `ERROR_CODES` sabitidir;
+        bu liste onun birebir aynisidir ve ayrisma olursa core kazanir.
+        HTTP karsiliklari da orada (`ERROR_CODE_HTTP_STATUS`) tanimlidir,
+        burada tekrar edilmez.
+      enum:
+        # Genel / tasima katmani
+        - VALIDATION_FAILED
+        - UNAUTHORIZED
+        - FORBIDDEN
+        - NOT_FOUND
+        - CONFLICT
+        - INTERNAL
+        - SERVICE_UNAVAILABLE
+        - RATE_LIMITED
+        - REQUEST_IN_PROGRESS
+        # Stok ve rezervasyon
+        - STOCK_INSUFFICIENT
+        - RESERVATION_EXPIRED
+        - RESERVATION_ACTIVE
+        # Risk
+        - RISK_BLOCKED
+        - RISK_REVIEW
+        # Odeme
+        - PAYMENT_DECLINED
+        - THREEDS_REQUIRED
+        - THREEDS_FAILED
+        # Sepet, fiyat ve siparis
+        - PRICE_CHANGED
+        - COUPON_INVALID
+        - MIN_BASKET_NOT_MET
+        - ORDER_STATE_INVALID
+        # Teslimat bolgesi
+        - NO_STORE
+    # --- Ortak ilkel tipler -------------------------------------------------
+    Money:
+      type: object
+      description: |
+        Tutar minor unit (kuruş) cinsinden TAM SAYIDIR. Float kullanılmaz;
+        1 TL = 100. Gösterim bölmesi yalnızca istemcide yapılır.
+      required: [amount, currency]
+      properties:
+        amount:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Kuruş cinsinden tutar.
+          examples: [15000]
+        currency:
+          type: string
+          enum: [TRY]
+      examples:
+        - amount: 15000
+          currency: TRY
+
+    GeoPoint:
+      type: object
+      description: WGS84 koordinat çifti.
+      required: [lat, lng]
+      properties:
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+        lng:
+          type: number
+          minimum: -180
+          maximum: 180
+      examples:
+        - lat: 41.0082
+          lng: 28.9784
+
+    Page:
+      type: object
+      description: Sayfalama üst verisi; liste cevaplarında `items` ile birlikte döner.
+      required: [page, pageSize, total, hasNext]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 100
+        total:
+          type: integer
+          minimum: 0
+        hasNext:
+          type: boolean
+
+    # --- Kimlik -------------------------------------------------------------
+    RegisterRequest:
+      type: object
+      required: [email, password, fullName]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+        fullName:
+          type: string
+          minLength: 2
+          maxLength: 80
+        phone:
+          type: string
+          pattern: "^\\+90[0-9]{10}$"
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+          maxLength: 72
+
+    AuthSession:
+      type: object
+      required: [accessToken, expiresIn, user]
+      properties:
+        accessToken:
+          type: string
+        tokenType:
+          type: string
+          enum: [Bearer]
+        expiresIn:
+          type: integer
+          description: Saniye cinsinden ömür (JWT_TTL = 3600).
+          examples: [3600]
+        user:
+          $ref: "#/components/schemas/UserProfile"
+
+    UserProfile:
+      type: object
+      required: [id, email, fullName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        fullName:
+          type: string
+
+    # --- Katalog ------------------------------------------------------------
+    Category:
+      type: object
+      required: [id, name, slug]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        parentId:
+          type: [string, "null"]
+          format: uuid
+        imageUrl:
+          type: string
+          format: uri
+        sortOrder:
+          type: integer
+
+    Product:
+      type: object
+      required: [id, name, categoryId, price, availableQuantity]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        categoryId:
+          type: string
+          format: uuid
+        imageUrl:
+          type: string
+          format: uri
+        price:
+          $ref: "#/components/schemas/Money"
+        listPrice:
+          $ref: "#/components/schemas/Money"
+        unit:
+          type: string
+          description: Satış birimi etiketi (adet, kg, lt...).
+        availableQuantity:
+          type: integer
+          minimum: 0
+          description: Sorgulanan mağazadaki rezerve edilmemiş stok.
+
+    # --- Karanlık mağaza ----------------------------------------------------
+    ResolveDarkStoreRequest:
+      type: object
+      required: [location]
+      properties:
+        location:
+          $ref: "#/components/schemas/GeoPoint"
+
+    DarkStore:
+      type: object
+      required: [id, name, location]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        location:
+          $ref: "#/components/schemas/GeoPoint"
+        minBasket:
+          $ref: "#/components/schemas/Money"
+        deliveryFee:
+          $ref: "#/components/schemas/Money"
+
+    DarkStoreMatch:
+      type: object
+      required: [darkStore, distanceMeters, etaMinutes]
+      properties:
+        darkStore:
+          $ref: "#/components/schemas/DarkStore"
+        distanceMeters:
+          type: integer
+          minimum: 0
+        etaMinutes:
+          type: integer
+          minimum: 0
+          description: COURIER_SPEED_KMH (20 km/sa) üzerinden hesaplanan tahmin.
+
+    # --- Sepet ve rezervasyon ----------------------------------------------
+    CartItemInput:
+      type: object
+      required: [productId, quantity]
+      properties:
+        productId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 99
+
+    ReserveCartRequest:
+      type: object
+      required: [darkStoreId, items]
+      properties:
+        darkStoreId:
+          type: string
+          format: uuid
+        items:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/CartItemInput"
+
+    ReservationLine:
+      type: object
+      required: [productId, name, quantity, unitPrice, lineTotal]
+      properties:
+        productId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+        unitPrice:
+          $ref: "#/components/schemas/Money"
+        lineTotal:
+          $ref: "#/components/schemas/Money"
+
+    Reservation:
+      type: object
+      required: [orderId, darkStoreId, lines, subtotal, expiresAt, ttlSeconds]
+      properties:
+        orderId:
+          type: string
+          format: uuid
+          description: Rezervasyonun ve ondan doğacak siparişin ortak kimliği.
+        darkStoreId:
+          type: string
+          format: uuid
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReservationLine"
+        subtotal:
+          $ref: "#/components/schemas/Money"
+        deliveryFee:
+          $ref: "#/components/schemas/Money"
+        total:
+          $ref: "#/components/schemas/Money"
+        expiresAt:
+          type: string
+          format: date-time
+        ttlSeconds:
+          type: integer
+          description: |
+            Varsayılan RESERVATION_TTL_SECONDS = 600. Risk orta seviyede ise
+            RESERVATION_TTL_MEDIUM_RISK_SECONDS = 120 uygulanır.
+          examples: [600]
+
+    ReservationRelease:
+      type: object
+      required: [orderId, released, releasedAt]
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        released:
+          type: boolean
+        releasedAt:
+          type: string
+          format: date-time
+
+    # --- Sipariş ------------------------------------------------------------
+    OrderStatus:
+      type: string
+      description: |
+        Saga boyunca siparisin gectigi durumlar. Tek dogruluk kaynagi
+        `packages/core/src/constants.ts` icindeki `ORDER_STATUS` sabitidir.
+      enum:
+        - DRAFT
+        - RISK_CHECK
+        - REVIEW
+        - RESERVED
+        - AWAITING_PAYMENT
+        - PAID
+        - PAYMENT_FAILED
+        - EXPIRED
+        - CANCELLED
+        - REJECTED
+        - PREPARING
+        - ON_THE_WAY
+        - DELIVERED
+    DeliveryAddress:
+      type: object
+      required: [title, line, location]
+      properties:
+        title:
+          type: string
+        line:
+          type: string
+          maxLength: 240
+        location:
+          $ref: "#/components/schemas/GeoPoint"
+        note:
+          type: string
+          maxLength: 240
+
+    CreateOrderRequest:
+      type: object
+      required: [orderId, address, payment]
+      properties:
+        orderId:
+          type: string
+          format: uuid
+          description: Rezervasyondan dönen kimlik.
+        address:
+          $ref: "#/components/schemas/DeliveryAddress"
+        payment:
+          type: object
+          required: [method]
+          properties:
+            method:
+              type: string
+              enum: [CARD]
+            cardToken:
+              type: string
+              description: Demo ödeme sağlayıcısının ürettiği jeton; kart numarası taşınmaz.
+
+    ThreeDsRequest:
+      type: object
+      required: [challengeId, otp]
+      properties:
+        challengeId:
+          type: string
+        otp:
+          type: string
+          minLength: 6
+          maxLength: 6
+          pattern: "^[0-9]{6}$"
+
+    ThreeDsChallenge:
+      type: object
+      description: Sipariş AWAITING_PAYMENT durumundayken doldurulur.
+      required: [challengeId, expiresAt]
+      properties:
+        challengeId:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+
+    CourierSummary:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        location:
+          $ref: "#/components/schemas/GeoPoint"
+        etaMinutes:
+          type: integer
+          minimum: 0
+
+    Order:
+      type: object
+      required: [id, status, darkStoreId, lines, total, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/OrderStatus"
+        darkStoreId:
+          type: string
+          format: uuid
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReservationLine"
+        subtotal:
+          $ref: "#/components/schemas/Money"
+        deliveryFee:
+          $ref: "#/components/schemas/Money"
+        total:
+          $ref: "#/components/schemas/Money"
+        address:
+          $ref: "#/components/schemas/DeliveryAddress"
+        threeDs:
+          $ref: "#/components/schemas/ThreeDsChallenge"
+        courier:
+          $ref: "#/components/schemas/CourierSummary"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    # --- Gerçek zamanlı -----------------------------------------------------
+    RealtimeToken:
+      type: object
+      required: [token, room, expiresAt, ttlSeconds]
+      properties:
+        token:
+          type: string
+        room:
+          type: string
+          description: Jetonun yetkili olduğu tek oda.
+          examples: ["order:9f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f"]
+        expiresAt:
+          type: string
+          format: date-time
+        ttlSeconds:
+          type: integer
+          minimum: 1

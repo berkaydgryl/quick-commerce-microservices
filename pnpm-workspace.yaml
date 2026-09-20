@@ -1,0 +1,4 @@
+# Workspace uyeleri: uygulamalar (apps) ve paylasilan paketler (packages).
+packages:
+  - "apps/*"
+  - "packages/*"

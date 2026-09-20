@@ -1,0 +1,24 @@
+{
+  "extends": ["stylelint-config-standard"],
+  "rules": {
+    "color-no-hex": true,
+    "declaration-property-value-disallowed-list": {
+      "/^(margin|padding|gap|inset|top|right|bottom|left|width|height|font-size|line-height|border-radius|border-width|box-shadow)/": [
+        "/(^|[^a-z-])[0-9]+([.][0-9]+)?px/"
+      ],
+      "/color$/": ["/^#/", "/^rgb/", "/^hsl/", "/^oklch/", "/^lab/"],
+      "background": ["/^#/", "/^rgb[(]/", "/^hsl[(]/"],
+      "border": ["/^#/", "/(^|[^a-z-])[0-9]+([.][0-9]+)?px/"],
+      "box-shadow": ["/^#/", "/^rgb[(]/"]
+    }
+  },
+  "overrides": [
+    {
+      "files": ["**/tokens.css", "**/global.css"],
+      "rules": {
+        "color-no-hex": null,
+        "declaration-property-value-disallowed-list": null
+      }
+    }
+  ]
+}

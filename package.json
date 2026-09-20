@@ -1,0 +1,49 @@
+{
+  "name": "getir-quick-commerce",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Quick-commerce (Getir tipi hizli market) mikroservis monorepo",
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "lint:style": "stylelint \"apps/web/**/*.css\" --allow-empty-input",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "pnpm run test:unit",
+    "test:unit": "vitest run --passWithNoTests",
+    "test:int": "vitest run --passWithNoTests --config vitest.integration.config.ts",
+    "race": "node -e \"console.log('TODO Gun 6: yaris kosulu (race) senaryosu henuz yok. Gun 6, ayni stok icin es zamanli rezervasyon testini ekleyecek.')\"",
+    "demo": "node -e \"console.log('TODO Gun 7: uctan uca demo senaryosu henuz yok. Gun 7, siparis-odeme-kurye akisini tek komutta kosturacak.')\"",
+    "seed": "node -e \"console.log('TODO Gun 4: seed betigi henuz yok. Gun 4, Mongo icin market/urun/stok baslangic verisini yukleyecek.')\"",
+    "proto:gen": "node -e \"console.log('TODO Gun 2: proto kod uretimi henuz yok. Gun 2, packages/proto altinda .proto dosyalarindan TS ve Go kodu uretecek.')\"",
+    "infra:up": "docker compose -f infra/docker/docker-compose.dev.yml up -d",
+    "infra:ps": "docker compose -f infra/docker/docker-compose.dev.yml ps",
+    "infra:logs": "docker compose -f infra/docker/docker-compose.dev.yml logs -f",
+    "infra:down": "docker compose -f infra/docker/docker-compose.dev.yml down",
+    "infra:reset": "docker compose -f infra/docker/docker-compose.dev.yml down -v",
+    "verify": "pnpm lint && pnpm lint:style && pnpm format:check && pnpm typecheck && pnpm build && pnpm test:unit",
+    "clean": "turbo run clean"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.0",
+    "@types/node": "^22.5.0",
+    "eslint": "^9.9.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.9.0",
+    "prettier": "^3.3.0",
+    "stylelint": "^16.8.0",
+    "stylelint-config-standard": "^36.0.0",
+    "turbo": "^2.0.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^2.0.0"
+  }
+}

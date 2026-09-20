@@ -1,0 +1,38 @@
+# Bagimliliklar ve derleme ciktilari imaj icine kopyalanmaz.
+node_modules
+**/node_modules
+dist
+**/dist
+build
+**/build
+.turbo
+**/.turbo
+coverage
+**/coverage
+
+# VCS ve editor
+.git
+.gitignore
+.github
+.vscode
+.idea
+.husky
+
+# Yerel ortam ve gunlukler
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Konteyner tanimlari kendi baglaminda kullanilir
+Dockerfile
+**/Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Testler calisma imajina girmez
+**/*.spec.ts
+**/*.test.ts
+**/test/**
