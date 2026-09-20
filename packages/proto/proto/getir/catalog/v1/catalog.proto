@@ -1,0 +1,208 @@
+syntax = "proto3";
+
+// catalog-svc sozlesmesi.
+//
+// Bu servis YALNIZCA katalog verisinin sahibidir: products, categories ve
+// darkstores koleksiyonlari. Baska hicbir servis bu koleksiyonlara yazmaz.
+//
+// Bu servisin ISI DEGILDIR:
+//   - stok / musaitlik  -> inventory-svc (getir.inventory.v1, T2.1)
+//   - fiyat kampanyasi / kupon / indirim -> pricing tarafi
+//   - stok rezervasyonu ve dusumu -> inventory-svc + order-svc sagasi
+//
+// Para birimi kurali: tum tutarlar getir.common.v1.Money icinde KURUS
+// (minor unit, int64) olarak tasinir. Proto tarafinda float/double YASAKTIR.
+
+package getir.catalog.v1;
+
+import "getir/common/v1/common.proto";
+
+option go_package = "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/catalog/v1;catalogv1";
+
+// Katalog okuma servisi. Tum RPC'ler okuma yonludur; yazma islemleri
+// (urun/kategori yonetimi) admin API'si uzerinden yapilir.
+service CatalogService {
+  // Musteriye gosterilecek kategori agacinin duz listesi.
+  rpc ListCategories(ListCategoriesRequest) returns (ListCategoriesResponse);
+
+  // Filtreli + sayfali urun listesi.
+  rpc ListProducts(ListProductsRequest) returns (ListProductsResponse);
+
+  // Tek urun detayi; id veya sku ile erisilir.
+  rpc GetProduct(GetProductRequest) returns (GetProductResponse);
+
+  // Musterinin konumuna hizmet veren dark store'u bulur.
+  rpc ResolveDarkStore(ResolveDarkStoreRequest) returns (ResolveDarkStoreResponse);
+
+  // Toplu urun okuma.
+  //
+  // NEDEN VAR: sepet ve rezervasyon akisi 50 kaleme kadar cikabiliyor
+  // (POST /v1/cart/reserve). GetProduct'i dongude cagirmak, B27'de stok icin
+  // yasaklanan N+1'in aynisini katalog tarafinda uretirdi. Gateway sepeti
+  // dogrularken TEK cagri yapar.
+  //
+  // Bulunamayan kimlikler sessizce ATLANMAZ: cevaptaki missing listesinde
+  // dondurulur, boylece cagiran taraf "silinmis urun" ile "yanlis id" ayrimini
+  // yapabilir.
+  rpc BatchGetProducts(BatchGetProductsRequest) returns (BatchGetProductsResponse);
+}
+
+// Urun kategorisi. Duz liste halinde doner; siralama sort_order ile yapilir.
+message Category {
+  string id = 1;
+  string name = 2;
+
+  // URL'de kullanilan okunabilir kimlik, ornek: "sut-kahvaltilik".
+  string slug = 3;
+
+  // Vitrinde gosterim sirasi; kucuk deger once gelir.
+  int32 sort_order = 4;
+
+  string image_url = 5;
+}
+
+// Katalogdaki urun kaydi.
+//
+// DIKKAT - BU MESAJDA STOK ALANI YOKTUR (B27 karari).
+// Stok gercegi inventory-svc'de tutulur ve TOPLU olarak
+// CheckAvailability(dark_store_id, sku[]) RPC'si ile alinir
+// (getir.inventory.v1, T2.1). Urun basina stok sorgusu yapilmaz; boylece
+// N+1 cagri onlenir ve stok ile katalog arasindaki tutarsizlik tek noktada
+// kalir. Gateway, ListProducts/GetProduct cevabi ile CheckAvailability
+// cevabini BIRLESTIREREK istemciye tek bir gorunum sunar.
+// Ayni sekilde kampanyali fiyat da burada degildir; price liste fiyatidir.
+message Product {
+  string id = 1;
+
+  // Stok tutma birimi; inventory-svc ile ortak anahtardir.
+  string sku = 2;
+
+  string name = 3;
+  string description = 4;
+
+  // Liste fiyati. Kurus cinsinden tam sayi; kampanya UYGULANMAMIS halidir.
+  getir.common.v1.Money price = 5;
+
+  string category_id = 6;
+  getir.common.v1.Unit unit = 7;
+  string image_url = 8;
+
+  // false ise urun katalogdan gizlenir (silinmez, gecmis siparisler bozulmasin).
+  bool is_active = 9;
+}
+
+// Hizli teslimat deposu (dark store).
+message DarkStore {
+  string id = 1;
+  string name = 2;
+
+  // Deponun merkez koordinati.
+  getir.common.v1.GeoPoint location = 3;
+
+  // Teslimat yaricapi, METRE cinsinden. Bu yaricap disindaki konumlar
+  // ResolveDarkStore cagrisinda NO_STORE hatasi alir.
+  int32 delivery_radius_meters = 4;
+
+  // Deponun o an calisma saatleri icinde ve siparis kabul ediyor olmasi.
+  bool is_open = 5;
+}
+
+message ListCategoriesRequest {
+  // Bugun parametresiz. Filtre alani BILEREK eklenmedi: pasif kategorileri
+  // isteyecek bir admin yuzeyi yok ve Category mesajinda is_active alani da
+  // yok - bayrak eklenseydi listeye karisan pasif kaydi ayirt etmenin yolu
+  // olmazdi. Ihtiyac dogarsa once Category.is_active, sonra filtre eklenir.
+}
+
+message ListCategoriesResponse {
+  repeated Category categories = 1;
+}
+
+message ListProductsRequest {
+  // Bos birakilirsa kategori filtresi uygulanmaz.
+  string category_id = 1;
+
+  // Verilirse YALNIZCA o depoda satilan urunler doner. Bu bir stok sorgusu
+  // DEGILDIR; yalnizca "bu urun bu depoda satiliyor mu" katalog bilgisidir.
+  // Adet bilgisi icin inventory-svc'ye toplu cagri yapilir (B27).
+  string dark_store_id = 2;
+
+  // Serbest metin aramasi. Kural: EN AZ 2 KARAKTER olmalidir; bos query tum
+  // listeyi dondurur. Dogrulama gateway'de Zod ile yapilir, bu alan yalnizca
+  // dogrulanmis degeri TASIR. 1 karakterlik query gateway'de reddedilir.
+  string query = 3;
+
+  getir.common.v1.PageRequest page = 4;
+}
+
+// Urun listesi cevabi.
+//
+// dark_store_id verilmis ama boyle bir depo yoksa NOT_FOUND doner; depo var
+// ama filtreye uyan urun yoksa BOS liste doner (hata degil). Bu ayrim,
+// istemcide "depo secimi bozuldu" ile "bu kategoride urun yok" ekranlarini
+// ayirabilmek icindir.
+message ListProductsResponse {
+  repeated Product products = 1;
+  getir.common.v1.PageResponse page = 2;
+}
+
+message GetProductRequest {
+  // Iki farkli erisim yolu vardir ve ikisi de birincil anahtardir:
+  //   id  -> uygulama ici yonlendirme (derin baglanti, sepet satiri)
+  //   sku -> dis entegrasyon (tedarikci akisi, inventory-svc eslesmesi)
+  // Tam olarak biri set edilmelidir; hicbiri set edilmezse INVALID_ARGUMENT.
+  oneof identifier {
+    string id = 1;
+    string sku = 2;
+  }
+}
+
+// Tek urun cevabi.
+//
+// Urun yoksa BOS cevap DONMEZ, NOT_FOUND hatasi doner. Pasif urun (is_active
+// false) NOT_FOUND sayilmaz: kayit vardir ve istemci "satista degil" durumunu
+// gosterebilmelidir.
+message GetProductResponse {
+  Product product = 1;
+}
+
+// Toplu urun okuma istegi. Iki kimlik yolundan YALNIZCA BIRI doldurulur.
+message BatchGetProductsRequest {
+  // En fazla 100 kimlik; daha fazlasi VALIDATION_FAILED ile reddedilir.
+  repeated string ids = 1;
+
+  // Alternatif kimlik yolu; entegrasyonlar urunu sku ile tanir.
+  repeated string skus = 2;
+}
+
+message BatchGetProductsResponse {
+  // Bulunan urunler. SIRA GARANTISI YOKTUR; cagiran taraf id/sku ile eslestirir.
+  repeated Product products = 1;
+
+  // Istenip bulunamayan kimlikler (ids ya da skus ile ayni bicimde).
+  repeated string missing = 2;
+}
+
+message ResolveDarkStoreRequest {
+  // Musterinin teslimat konumu.
+  getir.common.v1.GeoPoint location = 1;
+}
+
+// Konumdan depo cozumleme cevabi.
+//
+// DAVRANIS SOZLESMESI (uc tarafta ayni olmak zorunda: proto, gateway, UI):
+//   - Yaricap disindaki konum        -> NO_STORE hatasi (gRPC NOT_FOUND)
+//   - Yaricap icinde ama magaza KAPALI -> yine NO_STORE; cunku kullanici
+//     acisindan sonuc aynidir (siparis verilemez) ve iki ayri kod istemcide
+//     iki ayri ekran gerektirirdi. Kapali olma bilgisi ErrorDetail.metadata
+//     icinde "reason": "STORE_CLOSED" olarak tasinir.
+//   - NO_STORE hatasi ayrica metadata icinde "nearest_distance_meters"
+//     anahtarini tasir (deger metindir), boylece UI "en yakin depo 8,4 km
+//     uzakta" diyebilir.
+message ResolveDarkStoreResponse {
+  DarkStore dark_store = 1;
+
+  // Konum ile depo merkezi arasindaki mesafe, METRE cinsinden.
+  // Her zaman dark_store.delivery_radius_meters degerinden kucuk veya esittir.
+  int32 distance_meters = 2;
+}

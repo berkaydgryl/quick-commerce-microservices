@@ -15,6 +15,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "lint:style": "stylelint \"apps/web/**/*.css\" --allow-empty-input",
+    "lint:proto": "buf lint packages/proto && buf format --diff --exit-code packages/proto",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "pnpm run test:unit",
@@ -29,7 +30,7 @@
     "infra:logs": "docker compose -f infra/docker/docker-compose.dev.yml logs -f",
     "infra:down": "docker compose -f infra/docker/docker-compose.dev.yml down",
     "infra:reset": "docker compose -f infra/docker/docker-compose.dev.yml down -v",
-    "verify": "pnpm lint && pnpm lint:style && pnpm format:check && pnpm typecheck && pnpm build && pnpm test:unit",
+    "verify": "pnpm lint && pnpm lint:style && pnpm lint:proto && pnpm format:check && pnpm typecheck && pnpm build && pnpm test:unit",
     "clean": "turbo run clean"
   },
   "devDependencies": {

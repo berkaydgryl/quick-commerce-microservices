@@ -3,7 +3,7 @@
 
 # Getir Market Klonu — Mimari & 20 Günlük Roadmap (Opsiyon A + B)
 
-Kaynak: mimari & 20 günlük yol haritası belgesi · Son güncelleme: 2026-09-20
+Kaynak: mimari & 20 günlük yol haritası belgesi · Son güncelleme: 2026-09-21
 
 ## Yönetici Özeti
 
@@ -417,21 +417,21 @@ Kurallar: alan numaraları asla yeniden kullanılmaz, silinen alan reserved işa
 | GET    | /v1/orders/{id}                       | JWT        | Sipariş, zaman çizelgesi, kurye rotası ve son konum                                  |
 | GET    | /v1/orders/{id}/token                 | JWT        | Socket odası için kısa ömürlü token                                                  |
 
-Cevap biçimi her yerde aynı zarftır: başarıda { success: true, data }, hatada { success: false, message, error: { code, details, requestId } }. Kodlar VALIDATION_FAILED, STOCK_INSUFFICIENT, RESERVATION_EXPIRED, RISK_BLOCKED, PAYMENT_DECLINED gibi sabit bir sözlükten gelir ve istemcide kullanıcı mesajına çevrilir.
+Cevap biçimi her yerde aynı zarftır: başarıda { success: true, data }, hatada { success: false, error: { code, message, details, requestId } }. Kodlar VALIDATION_FAILED, STOCK_INSUFFICIENT, RESERVATION_EXPIRED, RISK_BLOCKED, PAYMENT_DECLINED gibi sabit bir sözlükten gelir ve istemcide kullanıcı mesajına çevrilir.
 
 ### Socket.io event sözleşmesi
 
 Oda adı order:{orderId}; istemci GET /v1/orders/{id}/token ile aldığı token'ı handshake'te gönderir, realtime-svc doğrulamadan odaya almaz.
 
-| Event                | Oda                 | Payload                                        |
-| -------------------- | ------------------- | ---------------------------------------------- |
-| order.status         | order:{orderId}     | { orderId, status, at }                        |
-| reservation.expiring | order:{orderId}     | { orderId, secondsLeft }                       |
-| reservation.released | order:{orderId}     | { orderId, reason }                            |
-| courier.assigned     | order:{orderId}     | { orderId, courier: { id, name }, etaSeconds } |
-| courier.location     | order:{orderId}     | { orderId, lat, lng, heading, at, seq }        |
-| order.delivered      | order:{orderId}     | { orderId, at }                                |
-| stock.changed        | store:{darkStoreId} | { sku, availableQty, at }                      |
+| Event                | Oda                 | Payload                                                                   |
+| -------------------- | ------------------- | ------------------------------------------------------------------------- |
+| order.status         | order:{orderId}     | { orderId, status, at }                                                   |
+| reservation.expiring | order:{orderId}     | { orderId, secondsLeft }                                                  |
+| reservation.released | order:{orderId}     | { orderId, reason }                                                       |
+| courier.assigned     | order:{orderId}     | { orderId, courier: { id, name }, etaSeconds }                            |
+| courier.location     | order:{orderId}     | { orderId, lat, lng, heading, at, seq }                                   |
+| order.delivered      | order:{orderId}     | { orderId, at }                                                           |
+| stock.changed        | store:{darkStoreId} | { productId, availableQuantity, at } — sku ic anahtardir, disariya cikmaz |
 
 İki oda türü vardır: sipariş odasına yalnızca o siparişin sahibi girer, depo odası ise herkese açıktır ve yalnızca stok değişimi taşır (B11). Katalog ekranı rozetlerini bu odadan tazeler; abone olamadığı durumda staleTime: 10s yedeği devreye girer.
 
@@ -777,7 +777,7 @@ Kupon listesi packages/pricing/src/campaigns.ts içinde sabittir; veritabanı ta
 | ILK10       | %10 indirim, en çok 30 TL | Kullanıcının ilk siparişi olmalı |
 | KARGOBEDAVA | Teslimat ücreti 0         | Sepet 150 TL üzeri               |
 
-Kupon istemcide anında hesaplanır ama gerçek karar sunucudadır: CreateOrder toplamı yeniden hesaplar, istemciden gelen tutarı doğrulamak için kullanır ve uyuşmazsa PRICE_MISMATCH döner. Geçersiz kupon COUPON_INVALID ile reddedilir. Bu, kupon özelliğini ucuz ve güvenli kılar.
+Kupon istemcide anında hesaplanır ama gerçek karar sunucudadır: CreateOrder toplamı yeniden hesaplar, istemciden gelen tutarı doğrulamak için kullanır ve uyuşmazsa PRICE_CHANGED döner. Geçersiz kupon COUPON_INVALID ile reddedilir. Bu, kupon özelliğini ucuz ve güvenli kılar.
 
 ### Stok sınırı ön kontrolü
 
@@ -991,7 +991,7 @@ Her görev tek alana dokunur, tek çıktısı ve tek bitti tanımı vardır. Gü
 | T6.3 | 6   | risk     | risk_events yazımı + Evaluate RPC                                                                                                     | Değerlendirme kaydı sorgulanabilir                                                      |
 | T6.4 | 6   | web      | useCartStore + packages/pricing ile toplam, minimum sepet, kademeli kurye ücreti                                                      | “X TL daha ekle” mesajı doğru hesaplanır; hesap bileşende değil serviste durur          |
 | T7.1 | 7   | order    | Saga: Risk → Payment zinciri + telafi adımları                                                                                        | Kart reddinde sipariş PAYMENT_FAILED                                                    |
-| T7.2 | 7   | order    | Sunucu tarafı fiyat doğrulaması: pricing ile yeniden hesap, PRICE_MISMATCH ve COUPON_INVALID                                          | İstemciden gelen sahte toplam reddedilir                                                |
+| T7.2 | 7   | order    | Sunucu tarafı fiyat doğrulaması: pricing ile yeniden hesap, PRICE_CHANGED ve COUPON_INVALID                                           | İstemciden gelen sahte toplam reddedilir                                                |
 | T7.3 | 7   | order    | Outbox yazımı (transaction içinde) + publisher worker                                                                                 | stream:events olayları görülür                                                          |
 | T7.4 | 7   | platform | event-bus paketi: publish/subscribe + consumer group                                                                                  | İki tüketici aynı olayı iki kez işlemez                                                 |
 | T7.5 | 7   | gateway  | POST /v1/orders uçtan uca (stok hariç)                                                                                                | curl ile sipariş oluşturulur                                                            |
@@ -1232,7 +1232,7 @@ packages/event-bus içine KafkaEventBus yaz, bootstrap.ts içinde uygulamayı de
 - ☐ Eşzamanlı iki istekte tek stok düşümü, testle kanıtlı
 - ☐ TTL sonrası stok otomatik serbest kalır
 - ☐ Minimum sepet altında sipariş verilemiyor, kurye ücreti eşikte sıfırlanıyor
-- ☐ Sunucu toplamı yeniden hesaplıyor; değiştirilmiş tutar PRICE_MISMATCH ile reddediliyor
+- ☐ Sunucu toplamı yeniden hesaplıyor; değiştirilmiş tutar PRICE_CHANGED ile reddediliyor
 - ☐ Sayfa yenilendiğinde sepet ve oturum kaybolmuyor
 - ☐ Düşük / orta / kritik bantların gözlemlenebilir farklı aksiyonu
 - ☐ Tüm giriş noktaları Zod ile doğrulanıyor: REST, env, socket, form

@@ -1,0 +1,70 @@
+# @getir/proto - kod uretimi yapilandirmasi. Config semasi: v2.
+#
+# ###########################################################################
+# # BUGUN (T1.6) BU DOSYA YALNIZCA YAPILANDIRMADIR; KOD URETIMI CALISTIRILMAZ.
+# #
+# # Kod uretimi T2.3'un isidir. Kok package.json'daki "pnpm proto:gen" su an
+# # hala bir PLACEHOLDER'dir (ekrana not basar, is yapmaz) ve T2.3'te gercek
+# # uretime baglanacaktir. Asagidaki eklentiler (ts-proto, protoc-gen-go,
+# # protoc-gen-go-grpc) henuz kurulu olmadigi icin "buf generate" bugun hata
+# # verir; bu beklenen davranistir. Bugun yesil olmasi gereken tek komut:
+# #     buf lint
+# ###########################################################################
+version: v2
+
+# --- Managed mode ------------------------------------------------------------
+# Kapali. Gerekce: go_package secenegi proje sozlesmesi geregi her .proto dosyasinin
+# ICINE elle yaziliyor. Managed mode acik olsaydi buf bu secenegi uretim aninda ezerdi
+# ve ayni bilginin iki kaynagi olurdu: dosyadaki satir ile buradaki kural. Ikisi
+# ayrisinca hata, uretilen kodun import yolunda -yani en gec fark edilen yerde- cikar.
+managed:
+  enabled: false
+
+plugins:
+  # --- TypeScript: Node servisleri (catalog, inventory, order, payment, ...) ---
+  # ts-proto duz TypeScript arayuzleri uretir (sinif/wrapper katmani yok), bu yuzden
+  # uretilen tipler packages/contracts icindeki Zod semalarindan cikan tiplerle yan
+  # yana durabilir; arada bir donusturucu katmani gerekmez.
+  - local: protoc-gen-ts_proto
+    out: gen/ts
+    opt:
+      # esModuleInterop=true
+      # Monorepo bastan sona ESM ("type": "module"). Bu secenek olmadan ts-proto,
+      # @grpc/grpc-js gibi CommonJS paketleri icin namespace-import bicimi uretir;
+      # ESM altinda bu "X is not a constructor" gibi CALISMA ZAMANI hatasina doner,
+      # derlemede gorunmez.
+      - esModuleInterop=true
+      # outputServices=grpc-js
+      # Istemci/sunucu iskeletleri dogrudan @grpc/grpc-js icin uretilir. Servislerin
+      # kullandigi kutuphane bu. "generic-definitions" veya "nice-grpc" secilseydi
+      # arada elle yazilan bir adaptor katmani tasimak gerekirdi.
+      - outputServices=grpc-js
+      # useOptionals=messages
+      # Yalnizca IC ICE MESAJ alanlari "?" ile isaretlenir; skaler alanlar zorunlu kalir.
+      # Dogru olani budur: proto3'te her skalerin varsayilani vardir (int64 -> 0,
+      # string -> ""), yani skaleri "opsiyonel" diye yazmak yaniltici olur. Ic ice
+      # mesajlar ise gercekten undefined gelebilir - ornegin Money set edilmemisse.
+      - useOptionals=messages
+      # snakeToCamel=true
+      # .proto icinde amount_minor, TypeScript'te amountMinor. Bu protobuf'un resmi
+      # JSON esleme kuralidir; gateway'in urettigi REST JSON ile Node tarafindaki alan
+      # adlari boylece birebir ortusur ve arada isim cevirisi yapmak gerekmez.
+      - snakeToCamel=true
+
+  # --- Go: apps/gateway --------------------------------------------------------
+  # Mesaj tipleri.
+  - local: protoc-gen-go
+    out: gen/go
+    # paths=source_relative
+    # Cikti agaci kaynak agacini birebir izler:
+    #     proto/getir/common/v1/common.proto -> gen/go/getir/common/v1/common.pb.go
+    # Varsayilan "import" modunda eklenti, go_package icindeki TAM modul yolunu klasor
+    # olarak acar ve gen/go/github.com/berkaydgryl/... seklinde ic ice bir agac cikar.
+    opt: paths=source_relative
+
+  # gRPC istemci/sunucu iskeletleri. Ayri bir eklenti olmasinin sebebi protoc-gen-go'nun
+  # BILEREK yalnizca mesaj uretmesidir: mesaj tiplerini kullanip gRPC kullanmayan
+  # projelere grpc bagimliligi bulasmasin diye ikiye ayrilmistir.
+  - local: protoc-gen-go-grpc
+    out: gen/go
+    opt: paths=source_relative
