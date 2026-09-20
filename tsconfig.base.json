@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "moduleDetection": "force",
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "useUnknownInCatchVariables": true,
+    "forceConsistentCasingInFileNames": true,
+
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "skipLibCheck": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "@getir/core": ["packages/core/src/index.ts"],
+      "@getir/contracts": ["packages/contracts/src/index.ts"],
+      "@getir/proto": ["packages/proto/src/index.ts"],
+      "@getir/pricing": ["packages/pricing/src/index.ts"],
+      "@getir/redis-kit": ["packages/redis-kit/src/index.ts"],
+      "@getir/mongo-kit": ["packages/mongo-kit/src/index.ts"],
+      "@getir/event-bus": ["packages/event-bus/src/index.ts"],
+      "@getir/observability": ["packages/observability/src/index.ts"],
+      "@getir/service-kit": ["packages/service-kit/src/index.ts"],
+      "@getir/testing": ["packages/testing/src/index.ts"]
+    }
+  },
+  "exclude": ["node_modules", "dist", ".turbo", "coverage"]
+}

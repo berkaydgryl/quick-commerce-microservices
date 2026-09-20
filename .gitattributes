@@ -1,0 +1,52 @@
+# Satir sonlari her makinede LF olarak saklanir ve LF olarak checkout edilir.
+# Gerekce: Windows'ta core.autocrlf varsayilan olarak true'dur; bu ayar olmadan
+# klon sonrasi dosyalar CRLF'e donusur ve su uc sey kirilir:
+#   1) Prettier "endOfLine: lf" kuralini ihlal eder -> pnpm format:check kirmizi
+#   2) shell betikleri CRLF ile Git Bash'te calismaz
+#   3) redis.conf ve Docker'a mount edilen yapilandirmalar Linux konteynerinde bozulur
+* text=auto eol=lf
+
+# Acikca metin ve LF olmasi gereken dosyalar
+*.ts      text eol=lf
+*.tsx     text eol=lf
+*.js      text eol=lf
+*.mjs     text eol=lf
+*.cjs     text eol=lf
+*.json    text eol=lf
+*.jsonc   text eol=lf
+*.md      text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.css     text eol=lf
+*.html    text eol=lf
+*.proto   text eol=lf
+*.lua     text eol=lf
+*.go      text eol=lf
+*.sh      text eol=lf
+*.conf    text eol=lf
+*.env     text eol=lf
+Dockerfile        text eol=lf
+.dockerignore     text eol=lf
+.gitignore        text eol=lf
+.editorconfig     text eol=lf
+.nvmrc            text eol=lf
+
+# Windows'a ozgu betikler CRLF ister
+*.bat     text eol=crlf
+*.cmd     text eol=crlf
+
+# Ikili dosyalar: Git dokunmasin
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.webp    binary
+*.ico     binary
+*.pdf     binary
+*.docx    binary
+*.woff    binary
+*.woff2   binary
+
+# Uretilen dosyalar diff/istatistiklerde gurultu yapmasin
+pnpm-lock.yaml        linguist-generated=true -diff
+packages/proto/gen/** linguist-generated=true -diff

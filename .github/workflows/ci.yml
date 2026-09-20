@@ -1,0 +1,142 @@
+name: CI
+
+# Tetikleyiciler: main ve feat/** dallarina push, ayrica tum pull request'ler.
+on:
+  push:
+    branches:
+      - main
+      - "feat/**"
+  pull_request:
+
+# Ayni dal icin yeni bir kosu basladiginda devam eden eski kosuyu iptal et.
+# Boylece pesi sira gelen push'lar runner dakikasi harcamaz.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# En az yetki ilkesi: is akisinin repoyu okumaktan baska hakki yok.
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Kalite (lint, format, typecheck, build, unit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+
+      # pnpm, setup-node'dan ONCE kurulmali: "cache: pnpm" ayari pnpm ikilisini
+      # PATH'te bulamazsa adim hata verir.
+      # Surum TEK yerden gelir: kok package.json'daki "packageManager" alani.
+      # Buraya ayrica "version" yazilirsa action iki kaynak arasinda celiski
+      # gorup hata firlatir.
+      - name: pnpm kur
+        uses: pnpm/action-setup@v4
+
+      - name: Node kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # --frozen-lockfile: lockfile ile package.json ayrisirsa CI kirmizi olur,
+      # sessizce lockfile guncellenmez.
+      - name: Bagimliliklari kur
+        run: pnpm install --frozen-lockfile
+
+      # Adimlar bilerek ayri tutuldu: kirmizi olan asamayi is akisi ozetinde
+      # tek bakista gormek icin.
+      - name: Lint
+        run: pnpm lint
+
+      - name: Stil kapisi (token disi renk/olcu)
+        run: pnpm lint:style
+
+      - name: Bicim kontrolu
+        run: pnpm format:check
+
+      - name: Tip kontrolu
+        run: pnpm typecheck
+
+      - name: Derleme
+        run: pnpm build
+
+      - name: Birim testleri
+        run: pnpm test:unit
+
+  integration:
+    name: Entegrasyon (Testcontainers)
+    runs-on: ubuntu-latest
+    # Kalite kapisi gecmeden entegrasyon testlerine runner harcamiyoruz.
+    needs: quality
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+
+      - name: pnpm kur
+        uses: pnpm/action-setup@v4
+
+      - name: Node kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Bagimliliklari kur
+        run: pnpm install --frozen-lockfile
+
+      # NEDEN "services:" BLOGU YOK?
+      # Entegrasyon testleri Mongo ve Redis konteynerlerini Testcontainers ile
+      # testin kendi icinden ayaga kaldirir; ubuntu-latest runner'inda Docker
+      # daemon hazir geldigi icin ek bir kuruluma gerek kalmaz. Ayni testler
+      # boylece yerelde ve CI'da bire bir ayni yoldan calisir, iki ayri
+      # yapilandirma (docker-compose + services) bakimi kalmaz.
+      # Ayrica: tek dugumlu Mongo replica set'i GitHub "services" blogu ile
+      # kurmak zahmetlidir, cunku servis konteynerine ozel bir komut/healthcheck
+      # verilemedigi icin rs.initiate() ve replica set'in PRIMARY'e gecmesini
+      # bekleme adimlari elle disaridan yazilmak zorunda kalir; Testcontainers'in
+      # Mongo modulu bunu kendi yapar.
+      - name: Entegrasyon testleri
+        run: pnpm test:int
+
+  contract:
+    name: Sozlesme (buf lint + breaking)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+
+      # packages/proto Gun 2'de geliyor; klasor yokken is akisi kirmizi olmasin
+      # diye varlik kontrolu yapip sonraki adimlari kosula bagliyoruz.
+      - name: proto klasoru var mi?
+        id: detect
+        run: |
+          if [ -d "packages/proto" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "packages/proto bulundu; buf adimlari calisacak." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "packages/proto henuz yok; buf adimlari atlandi." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: buf kur
+        if: steps.detect.outputs.exists == 'true'
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: buf lint
+        if: steps.detect.outputs.exists == 'true'
+        uses: bufbuild/buf-lint-action@v1
+        with:
+          input: packages/proto
+
+      # Geriye donuk uyumsuzluk kontrolu yalnizca PR'da anlamli: karsilastirma
+      # tabani main dalindaki proto agacidir.
+      - name: buf breaking
+        if: steps.detect.outputs.exists == 'true' && github.event_name == 'pull_request'
+        uses: bufbuild/buf-breaking-action@v1
+        with:
+          input: packages/proto
+          against: "https://github.com/${{ github.repository }}.git#branch=main,subdir=packages/proto"

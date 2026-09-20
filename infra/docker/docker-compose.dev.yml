@@ -1,0 +1,97 @@
+# Gelistirme ortami altyapisi (yalnizca durum tutan servisler).
+#
+# Bu compose dosyasi SADECE MongoDB ve Redis'i ayaga kaldirir. Uygulama
+# servisleri (apps/*) host uzerinde "pnpm dev" ile calisir; bilerek
+# konteynerize edilmemislerdir (hizli yeniden yukleme + kolay hata ayiklama).
+#
+# Kullanim:
+#   docker compose -f infra/docker/docker-compose.dev.yml up -d
+#
+# Ayrintili adimlar icin ayni klasordeki README.md dosyasina bakin.
+
+name: getir-dev
+
+services:
+  # ---------------------------------------------------------------------------
+  # MongoDB 7 - tek dugumlu replica set (rs0)
+  # ---------------------------------------------------------------------------
+  # NEDEN replica set? Cok belgeli ACID transaction (siparis olusturma akisinda
+  # gerekiyor) MongoDB'de yalnizca replica set uzerinde calisir. Tek dugum de
+  # olsa replica set olarak baslatmak zorundayiz.
+  mongo:
+    image: mongo:7
+    container_name: getir-mongo
+    restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - getir-mongo-data:/data/db
+    networks:
+      - getir-net
+    # -------------------------------------------------------------------------
+    # Kendi kendine baslayan replica set (healthcheck icinde rs.initiate)
+    # -------------------------------------------------------------------------
+    # Healthcheck iki is birden yapar:
+    #   1) rs.status().myState === 1 ise (dugum PRIMARY) -> saglikli say.
+    #   2) hata firlatirsa -> ilk acilistir, rs.initiate ile rs0'i baslat ve
+    #      bu kosuyu BASARISIZ say; bir sonraki denemede PRIMARY'e gecmis olur.
+    #      (rs.initiate anindan PRIMARY secimine kadar kisa bir pencere vardir;
+    #       healthcheck o pencerede "healthy" derse transaction'lar patlar.)
+    # Boylece ayri bir "init" konteyneri veya elle mongosh adimi gerekmez;
+    # konteyner "healthy" oldugunda replica set de hazirdir.
+    #
+    # KRITIK KARAR - member host'u NEDEN "localhost:27017"?
+    # Node servisleri konteyner icinde DEGIL, host makinede calisir ve
+    # MONGO_URI = mongodb://localhost:27017/getir?directConnection=true
+    # ile baglanir. Replica set uyesini "mongo:27017" (konteyner adi) diye
+    # kaydedersek, surucu replica set topolojisini kesfedip bu adrese yeniden
+    # baglanmaya calisir ve host'tan "mongo" adi cozulemedigi icin transaction'lar
+    # patlar. Uyeyi "localhost:27017" olarak kaydedip istemci tarafinda
+    # directConnection=true kullanmak, surucunun topoloji kesfini atlayip
+    # dogrudan bu dugume konusmasini saglar -> host'tan transaction calisir.
+    #
+    # NOT: directConnection=true ile replicaSet=rs0 ayni baglanti dizesinde
+    # BIRLIKTE KULLANILAMAZ; bu yuzden URI'de sadece directConnection vardir.
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - >-
+          mongosh --quiet --eval "try { quit(rs.status().myState === 1 ? 0 : 1) } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'localhost:27017'}]}); quit(1) }"
+      interval: 5s
+      retries: 20
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Redis 7 - stok sayaclari, rezervasyon indeksi, oran sinirlama, idempotency
+  # ---------------------------------------------------------------------------
+  # Ayarlar bilerek dosyadan okunur (redis.conf): her ayarin gerekcesi orada
+  # yorum olarak durur, komut satirinda kaybolmaz.
+  redis:
+    image: redis:7-alpine
+    container_name: getir-redis
+    restart: unless-stopped
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - getir-redis-data:/data
+    networks:
+      - getir-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+      start_period: 5s
+
+volumes:
+  getir-mongo-data:
+    name: getir-mongo-data
+  getir-redis-data:
+    name: getir-redis-data
+
+networks:
+  getir-net:
+    name: getir-net
+    driver: bridge

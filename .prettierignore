@@ -1,0 +1,15 @@
+node_modules
+dist
+build
+coverage
+.turbo
+.git
+pnpm-lock.yaml
+
+# Uretilen kod (elle duzenlenmez)
+packages/proto/gen
+
+# Go tarafi kendi araclariyla bicimlenir (gofmt)
+apps/gateway
+*.go
+*.sum
