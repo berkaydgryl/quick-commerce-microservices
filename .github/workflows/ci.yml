@@ -101,42 +101,60 @@ jobs:
         run: pnpm test:int
 
   contract:
-    name: Sozlesme (buf lint + breaking)
+    name: Sozlesme (buf lint + format + breaking)
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 ZORUNLU - "buf breaking" karsilastirma tabani olarak
+      # main dalini .git uzerinden okur; sig klonda o dal hic bulunmaz.
       - name: Depoyu al
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      # packages/proto Gun 2'de geliyor; klasor yokken is akisi kirmizi olmasin
-      # diye varlik kontrolu yapip sonraki adimlari kosula bagliyoruz.
-      - name: proto klasoru var mi?
+      # Iki ayri sorunun cevabi aliniyor:
+      #   exists   -> bu dalda packages/proto var mi (yoksa tum adimlar atlanir)
+      #   baseline -> MAIN dalinda packages/proto var mi
+      # baseline kontrolu olmadan, paketi main'e ilk tasiyan PR kesin kirmizi
+      # olurdu: buf breaking bos bir tabanla "Module had no .proto files" der.
+      - name: proto klasoru ve karsilastirma tabani var mi?
         id: detect
         run: |
           if [ -d "packages/proto" ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "packages/proto bulundu; buf adimlari calisacak." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "packages/proto henuz yok; buf adimlari atlandi." >> "$GITHUB_STEP_SUMMARY"
+            echo "packages/proto bu dalda yok; buf adimlari atlandi." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          git fetch --no-tags --depth=1 origin main:refs/remotes/origin/main || true
+          if git cat-file -e refs/remotes/origin/main:packages/proto/buf.yaml 2>/dev/null; then
+            echo "baseline=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "baseline=false" >> "$GITHUB_OUTPUT"
+            echo "main dalinda packages/proto henuz yok; geriye uyum kontrolu bu kosuda atlandi (ilk merge'den sonra devreye girer)." >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      # Surum sabitlendi: buf'in yeni surumu yeni lint kurallari getirdiginde
+      # CI kendiliginden kirmiziya donmesin, yukseltme bilincli yapilsin.
       - name: buf kur
         if: steps.detect.outputs.exists == 'true'
         uses: bufbuild/buf-setup-action@v1
         with:
+          version: 1.73.0
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
+      # buf-lint-action / buf-breaking-action KULLANILMIYOR: ikisi de kullanimdan
+      # kaldirildi. Duz "run:" hem yerelde hem CI'da BIREBIR ayni komuttur.
       - name: buf lint
         if: steps.detect.outputs.exists == 'true'
-        uses: bufbuild/buf-lint-action@v1
-        with:
-          input: packages/proto
+        run: buf lint packages/proto
 
-      # Geriye donuk uyumsuzluk kontrolu yalnizca PR'da anlamli: karsilastirma
-      # tabani main dalindaki proto agacidir.
+      # Bicim kapisi: prettier .proto uzantisini tanimaz, bu yuzden proto
+      # dosyalari baska hicbir kapida bicim denetiminden gecmiyor.
+      - name: buf format
+        if: steps.detect.outputs.exists == 'true'
+        run: buf format --diff --exit-code packages/proto
+
+      # Geriye uyum yalnizca PR'da ve taban varken anlamlidir.
       - name: buf breaking
-        if: steps.detect.outputs.exists == 'true' && github.event_name == 'pull_request'
-        uses: bufbuild/buf-breaking-action@v1
-        with:
-          input: packages/proto
-          against: "https://github.com/${{ github.repository }}.git#branch=main,subdir=packages/proto"
+        if: steps.detect.outputs.exists == 'true' && steps.detect.outputs.baseline == 'true' && github.event_name == 'pull_request'
+        run: buf breaking packages/proto --against ".git#branch=main,subdir=packages/proto"

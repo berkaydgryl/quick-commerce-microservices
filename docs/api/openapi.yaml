@@ -110,21 +110,21 @@ paths:
                       details: null
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "409":
-          description: E-posta kayıtlı ya da anahtar farklı gövdeyle tekrar kullanıldı
+          description: Telefon numarası kayıtlı ya da anahtar farklı gövdeyle tekrar kullanıldı
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
               examples:
-                emailAlreadyRegistered:
+                phoneAlreadyRegistered:
                   summary: CONFLICT
                   value:
                     success: false
                     error:
                       code: CONFLICT
-                      message: "Bu e-posta ile kayıtlı bir hesap var."
+                      message: "Bu telefon numarasıyla kayıtlı bir hesap var."
                       details:
-                        email: "ada@example.com"
+                        phone: "+905321234567"
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
                 idempotencyKeyReused:
                   summary: REQUEST_IN_PROGRESS
@@ -182,10 +182,10 @@ paths:
                     success: false
                     error:
                       code: VALIDATION_FAILED
-                      message: "E-posta biçimi geçersiz."
+                      message: "Telefon numarası biçimi geçersiz."
                       details:
                         fieldErrors:
-                          email: "Geçerli bir e-posta girin."
+                          phone: "Telefon +90 ile başlayan 13 haneli olmalı."
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "401":
           description: Kimlik bilgileri hatalı
@@ -200,7 +200,7 @@ paths:
                     success: false
                     error:
                       code: UNAUTHORIZED
-                      message: "E-posta veya parola hatalı."
+                      message: "Telefon numarası veya parola hatalı."
                       details: null
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "429":
@@ -242,7 +242,8 @@ paths:
       operationId: listProducts
       summary: Ürünleri listele veya ara
       description: |
-        Fiyat ve stok mağaza kapsamlı olduğu için `darkStoreId` zorunludur.
+        Stok mağaza kapsamlı olduğu için `darkStoreId` zorunludur; FİYAT
+        mağazadan bağımsızdır (tek liste fiyatı, bkz. `Product.price`).
         `q` verilirse arama yapılır; `categoryId` ile birlikte kullanılabilir.
       security: []
       parameters:
@@ -267,7 +268,7 @@ paths:
             type: string
             minLength: 2
             maxLength: 64
-        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageTokenParam"
         - $ref: "#/components/parameters/PageSizeParam"
       responses:
         "200":
@@ -768,10 +769,10 @@ paths:
                       message: "Minimum sepet tutarının altındasınız."
                       details:
                         minBasket:
-                          amount: 15000
+                          amountMinor: 15000
                           currency: TRY
                         subtotal:
-                          amount: 9250
+                          amountMinor: 9250
                           currency: TRY
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "429":
@@ -1018,19 +1019,26 @@ components:
         type: string
         format: uuid
 
-    PageParam:
-      name: page
+    PageTokenParam:
+      name: pageToken
       in: query
       required: false
+      description: |
+        Bir onceki cevaptan gelen `page.nextPageToken`. Ilk sayfa icin bos birakilir.
+        Opak degerdir: istemci icerigini yorumlamaz, oldugu gibi geri gonderir.
+        Sayfa NUMARASI kullanilmaz - katalog siralamasi stok ve kampanya ile
+        surekli degistigi icin offset kayar ve ayni urun iki sayfada gorunur.
+        Ayni karar gRPC tarafinda da gecerlidir (getir.common.v1.PageRequest).
       schema:
-        type: integer
-        minimum: 1
-        default: 1
+        type: string
 
     PageSizeParam:
       name: pageSize
       in: query
       required: false
+      description: |
+        Sayfa basina kayit sayisi. Sinir disi degerler REDDEDILMEZ, ust sinira
+        kirpilir (gRPC tarafiyla ayni davranis).
       schema:
         type: integer
         minimum: 1
@@ -1207,19 +1215,22 @@ components:
       description: |
         Tutar minor unit (kuruş) cinsinden TAM SAYIDIR. Float kullanılmaz;
         1 TL = 100. Gösterim bölmesi yalnızca istemcide yapılır.
-      required: [amount, currency]
+      required: [amountMinor, currency]
       properties:
-        amount:
+        amountMinor:
           type: integer
           format: int64
           minimum: 0
-          description: Kuruş cinsinden tutar.
+          description: |
+            Kuruş cinsinden tutar. Alan adı `getir.common.v1.Money.amount_minor`
+            ile birebir aynıdır (gateway yalnızca camelCase'e çevirir). "amount"
+            tek başına major/minor belirsizliği taşıdığı için kullanılmaz.
           examples: [15000]
         currency:
           type: string
           enum: [TRY]
       examples:
-        - amount: 15000
+        - amountMinor: 15000
           currency: TRY
 
     GeoPoint:
@@ -1241,30 +1252,38 @@ components:
 
     Page:
       type: object
-      description: Sayfalama üst verisi; liste cevaplarında `items` ile birlikte döner.
-      required: [page, pageSize, total, hasNext]
+      description: |
+        Sayfalama ust verisi; liste cevaplarinda `items` ile birlikte doner.
+        Imlec (cursor) tabanlidir ve `getir.common.v1.PageResponse` ile birebir
+        ayni anlami tasir: gateway alan adlarini camelCase'e cevirmekten baska
+        bir donusum yapmaz.
+      required: [nextPageToken, totalSize]
       properties:
-        page:
-          type: integer
-          minimum: 1
-        pageSize:
-          type: integer
-          minimum: 1
-          maximum: 100
-        total:
+        nextPageToken:
+          type: string
+          description: |
+            Bir sonraki sayfanin imleci. BOS ise liste bitmistir; istemci dongusunu
+            bu alanin bosluguna gore sonlandirir, kayit sayisina gore degil.
+        totalSize:
           type: integer
           minimum: 0
-        hasNext:
-          type: boolean
+          description: |
+            Filtreye uyan toplam kayit sayisi. Pahali sayim gereken durumlarda
+            sunucu 0 dondurebilir; bu "sonuc yok" DEGIL, "sayilmadi" demektir.
 
     # --- Kimlik -------------------------------------------------------------
     RegisterRequest:
       type: object
-      required: [email, password, fullName]
+      description: |
+        Kimlik doğrulama telefon + şifre ile yapılır (ADR-012). E-posta
+        toplanmaz: SMS/OTP altyapısı kurulmadığı için doğrulanamayan bir alan
+        kimlik alanı olarak kullanılamaz.
+      required: [phone, password, fullName]
       properties:
-        email:
+        phone:
           type: string
-          format: email
+          pattern: "^\\+90[0-9]{10}$"
+          description: E.164 biçimi. `users.phone` üzerinde unique indeks vardır.
         password:
           type: string
           minLength: 8
@@ -1273,17 +1292,14 @@ components:
           type: string
           minLength: 2
           maxLength: 80
-        phone:
-          type: string
-          pattern: "^\\+90[0-9]{10}$"
 
     LoginRequest:
       type: object
-      required: [email, password]
+      required: [phone, password]
       properties:
-        email:
+        phone:
           type: string
-          format: email
+          pattern: "^\\+90[0-9]{10}$"
         password:
           type: string
           minLength: 8
@@ -1307,32 +1323,31 @@ components:
 
     UserProfile:
       type: object
-      required: [id, email, fullName]
+      required: [id, phone, fullName]
       properties:
         id:
           type: string
           format: uuid
-        email:
+        phone:
           type: string
-          format: email
+          pattern: "^\\+90[0-9]{10}$"
         fullName:
           type: string
 
     # --- Katalog ------------------------------------------------------------
     Category:
       type: object
+      description: |
+        Kategoriler DÜZ listedir; ağaç yapısı yoktur (proto `Category` ile aynı).
+        Sıralama `sortOrder` ile yapılır.
       required: [id, name, slug]
       properties:
         id:
           type: string
-          format: uuid
         name:
           type: string
         slug:
           type: string
-        parentId:
-          type: [string, "null"]
-          format: uuid
         imageUrl:
           type: string
           format: uri
@@ -1341,32 +1356,50 @@ components:
 
     Product:
       type: object
-      required: [id, name, categoryId, price, availableQuantity]
+      description: |
+        Katalog verisi catalog-svc'den, `availableQuantity` ise inventory-svc'den
+        gelir; gateway iki cevabı BİRLEŞTİRİR. Bu yüzden proto tarafındaki
+        `getir.catalog.v1.Product` mesajında stok alanı YOKTUR (B27).
+      required: [id, sku, name, categoryId, price, availableQuantity]
       properties:
         id:
           type: string
-          format: uuid
+        sku:
+          type: string
+          description: |
+            Servisler arası birleştirme anahtarı; Redis stok anahtarında
+            (`stock:{store}:avail:{sku}`) ve stock_ledger'da da bu değer geçer.
+            Biçim kuralı tek kaynakta: `packages/core` → `SKU_PATTERN`.
         name:
           type: string
         description:
           type: string
         categoryId:
           type: string
-          format: uuid
         imageUrl:
           type: string
           format: uri
         price:
-          $ref: "#/components/schemas/Money"
-        listPrice:
-          $ref: "#/components/schemas/Money"
+          allOf:
+            - $ref: "#/components/schemas/Money"
+          description: |
+            Liste fiyatı; kampanya/indirim UYGULANMAMIŞ hâlidir ve mağazadan
+            BAĞIMSIZDIR. İndirim hesabı `packages/pricing` içinde sepet
+            düzeyinde yapılır, ürün düzeyinde değil.
         unit:
           type: string
-          description: Satış birimi etiketi (adet, kg, lt...).
+          enum: [PIECE, KILOGRAM, LITER, PACK]
+          description: |
+            `getir.common.v1.Unit` ile birebir aynı sözlük. Türkçe etiket
+            (adet / kg / lt / paket) istemcide üretilir; sunucu çevrilmiş metin
+            göndermez.
         availableQuantity:
           type: integer
           minimum: 0
-          description: Sorgulanan mağazadaki rezerve edilmemiş stok.
+          description: |
+            `darkStoreId` kapsamında satılabilir adet. Kaynağı inventory-svc'dir
+            ve TOPLU sorgulanır (`CheckAvailability(darkStoreId, sku[])`, B27);
+            gateway ürün listesi için tek çağrı yapar.
 
     # --- Karanlık mağaza ----------------------------------------------------
     ResolveDarkStoreRequest:
@@ -1378,19 +1411,27 @@ components:
 
     DarkStore:
       type: object
+      description: |
+        Minimum sepet ve teslimat ücreti BU ŞEMADA TUTULMAZ: değerler
+        `packages/pricing` içindeki sabitlerden (MIN_BASKET_MINOR,
+        DELIVERY_FEE_MINOR, FREE_DELIVERY_THRESHOLD_MINOR) gelir ve tek kaynak
+        orasıdır. Mağaza başına farklılaştırma bu fazda kapsam dışıdır.
       required: [id, name, location]
       properties:
         id:
           type: string
-          format: uuid
         name:
           type: string
         location:
           $ref: "#/components/schemas/GeoPoint"
-        minBasket:
-          $ref: "#/components/schemas/Money"
-        deliveryFee:
-          $ref: "#/components/schemas/Money"
+        deliveryRadiusMeters:
+          type: integer
+          description: Yarıçap dışındaki konum NO_STORE alır.
+        isOpen:
+          type: boolean
+          description: |
+            Kapalı mağaza da NO_STORE ile sonuçlanır; sebep hata
+            `details.reason = "STORE_CLOSED"` alanında taşınır.
 
     DarkStoreMatch:
       type: object

@@ -258,7 +258,7 @@ Konteyner healthy olduğunda replica set de hazırdır, yani transaction'lar ça
 pnpm verify
 ```
 
-`pnpm verify`, CI ile aynı zinciri koşar: `lint` → `lint:style` → `format:check` → `typecheck` → `build` → `test:unit`. (Script adı bilerek `ci` değil: `pnpm ci`, pnpm'in kendi komutudur ve
+`pnpm verify`, CI ile aynı zinciri koşar: `lint` → `lint:style` → `lint:proto` → `format:check` → `typecheck` → `build` → `test:unit`. (Script adı bilerek `ci` değil: `pnpm ci`, pnpm'in kendi komutudur ve
 package.json script'ini çalıştırmaz.) Bu komut Gün 1
 itibarıyla geçmelidir; geçmiyorsa kurulum tamamlanmamıştır, devam etme.
 
@@ -280,30 +280,31 @@ pnpm seed                        # Gün 4'te Mongo'ya başlangıç verisini yük
 Hepsi depo kökünden `pnpm <komut>` ile çalışır. `make` bu projede zorunlu değildir; Windows'ta
 `make` kurulu olmadığı için Makefile hedeflerinin karşılığı pnpm script'i olarak tanımlanmıştır.
 
-| Komut          | Arkasındaki iş                                                          | Ne yapar                                                      | Durum                                |
-| -------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------ |
-| `dev`          | `turbo run dev`                                                         | Tüm uygulamaları izleme modunda paralel başlatır              | `apps/` Gün 3'te geldiğinde iş yapar |
-| `build`        | `turbo run build`                                                       | Tüm paketleri derler                                          | Çalışıyor                            |
-| `typecheck`    | `turbo run typecheck`                                                   | Çıktı üretmeden tip denetimi                                  | Çalışıyor                            |
-| `lint`         | `eslint .`                                                              | ESLint 9 flat config ile tüm depo                             | Çalışıyor                            |
-| `lint:fix`     | `eslint . --fix`                                                        | Otomatik düzeltilebilen lint hatalarını giderir               | Çalışıyor                            |
-| `lint:style`   | `stylelint "apps/web/**/*.css"`                                         | CSS denetimi; `--allow-empty-input` ile dosya yokken de yeşil | Çalışıyor                            |
-| `format`       | `prettier --write .`                                                    | Tüm depoyu biçimlendirir                                      | Çalışıyor                            |
-| `format:check` | `prettier --check .`                                                    | Biçim farkı varsa hata verir                                  | Çalışıyor                            |
-| `test`         | `pnpm run test:unit`                                                    | Birim testleri (tek koşucu: kökteki vitest yapılandırması)    | Çalışıyor                            |
-| `test:unit`    | `vitest run`                                                            | Birim testleri; altyapı gerektirmez                           | Çalışıyor (`--passWithNoTests`)      |
-| `test:int`     | `vitest run --config vitest.integration.config.ts`                      | Testcontainers ile Mongo/Redis entegrasyon testleri           | Çalışıyor (henüz test yok)           |
-| `race`         | `node -e "..."`                                                         | Yarış koşulu senaryosu: aynı stok için eş zamanlı rezervasyon | **Placeholder — Gün 6**              |
-| `demo`         | `node -e "..."`                                                         | Uçtan uca demo: sipariş → ödeme → kurye akışı                 | **Placeholder — Gün 7**              |
-| `seed`         | `node -e "..."`                                                         | Mongo'ya market / ürün / stok başlangıç verisi                | **Placeholder — Gün 4**              |
-| `proto:gen`    | `node -e "..."`                                                         | `.proto` dosyalarından TS ve Go kodu üretir                   | **Placeholder — Gün 2**              |
-| `verify`       | `lint && lint:style && format:check && typecheck && build && test:unit` | CI kapısının birebir aynısı                                   | Çalışıyor                            |
-| `infra:up`     | `docker compose -f infra/docker/… up -d`                                | Mongo (replica set) + Redis'i başlatır                        | Çalışıyor                            |
-| `infra:ps`     | `docker compose … ps`                                                   | Konteyner ve sağlık durumu                                    | Çalışıyor                            |
-| `infra:logs`   | `docker compose … logs -f`                                              | Altyapı günlüklerini izler                                    | Çalışıyor                            |
-| `infra:down`   | `docker compose … down`                                                 | Konteynerleri durdurur (veri kalır)                           | Çalışıyor                            |
-| `infra:reset`  | `docker compose … down -v`                                              | Konteyner **ve** veriyi siler, sıfırdan kurar                 | Çalışıyor                            |
-| `clean`        | `turbo run clean`                                                       | Derleme çıktılarını ve önbellekleri siler                     | Çalışıyor                            |
+| Komut          | Arkasındaki iş                                                                        | Ne yapar                                                       | Durum                                |
+| -------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------ |
+| `dev`          | `turbo run dev`                                                                       | Tüm uygulamaları izleme modunda paralel başlatır               | `apps/` Gün 3'te geldiğinde iş yapar |
+| `build`        | `turbo run build`                                                                     | Tüm paketleri derler                                           | Çalışıyor                            |
+| `typecheck`    | `turbo run typecheck`                                                                 | Çıktı üretmeden tip denetimi                                   | Çalışıyor                            |
+| `lint`         | `eslint .`                                                                            | ESLint 9 flat config ile tüm depo                              | Çalışıyor                            |
+| `lint:fix`     | `eslint . --fix`                                                                      | Otomatik düzeltilebilen lint hatalarını giderir                | Çalışıyor                            |
+| `lint:style`   | `stylelint "apps/web/**/*.css"`                                                       | CSS denetimi; `--allow-empty-input` ile dosya yokken de yeşil  | Çalışıyor                            |
+| `lint:proto`   | `buf lint` + `buf format --diff --exit-code`                                          | gRPC sözleşmesinin kural ve biçim kapısı (`buf` kurulu olmalı) | Çalışıyor                            |
+| `format`       | `prettier --write .`                                                                  | Tüm depoyu biçimlendirir                                       | Çalışıyor                            |
+| `format:check` | `prettier --check .`                                                                  | Biçim farkı varsa hata verir                                   | Çalışıyor                            |
+| `test`         | `pnpm run test:unit`                                                                  | Birim testleri (tek koşucu: kökteki vitest yapılandırması)     | Çalışıyor                            |
+| `test:unit`    | `vitest run`                                                                          | Birim testleri; altyapı gerektirmez                            | Çalışıyor (`--passWithNoTests`)      |
+| `test:int`     | `vitest run --config vitest.integration.config.ts`                                    | Testcontainers ile Mongo/Redis entegrasyon testleri            | Çalışıyor (henüz test yok)           |
+| `race`         | `node -e "..."`                                                                       | Yarış koşulu senaryosu: aynı stok için eş zamanlı rezervasyon  | **Placeholder — Gün 6**              |
+| `demo`         | `node -e "..."`                                                                       | Uçtan uca demo: sipariş → ödeme → kurye akışı                  | **Placeholder — Gün 7**              |
+| `seed`         | `node -e "..."`                                                                       | Mongo'ya market / ürün / stok başlangıç verisi                 | **Placeholder — Gün 4**              |
+| `proto:gen`    | `node -e "..."`                                                                       | `.proto` dosyalarından TS ve Go kodu üretir                    | **Placeholder — Gün 2**              |
+| `verify`       | `lint && lint:style && lint:proto && format:check && typecheck && build && test:unit` | CI kapısının birebir aynısı                                    | Çalışıyor                            |
+| `infra:up`     | `docker compose -f infra/docker/… up -d`                                              | Mongo (replica set) + Redis'i başlatır                         | Çalışıyor                            |
+| `infra:ps`     | `docker compose … ps`                                                                 | Konteyner ve sağlık durumu                                     | Çalışıyor                            |
+| `infra:logs`   | `docker compose … logs -f`                                                            | Altyapı günlüklerini izler                                     | Çalışıyor                            |
+| `infra:down`   | `docker compose … down`                                                               | Konteynerleri durdurur (veri kalır)                            | Çalışıyor                            |
+| `infra:reset`  | `docker compose … down -v`                                                            | Konteyner **ve** veriyi siler, sıfırdan kurar                  | Çalışıyor                            |
+| `clean`        | `turbo run clean`                                                                     | Derleme çıktılarını ve önbellekleri siler                      | Çalışıyor                            |
 
 ### Kalite kapısı nerede?
 

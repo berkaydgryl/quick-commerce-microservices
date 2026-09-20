@@ -22,6 +22,25 @@ export const ORDER_STATUS = {
 
 export type OrderStatus = (typeof ORDER_STATUS)[keyof typeof ORDER_STATUS];
 
+/**
+ * SKU bicim kurali.
+ *
+ * sku, servisler arasi BIRLESTIRME ANAHTARIDIR: catalog urununu, Redis stok
+ * sayacini (stock:{store}:avail:{sku}) ve stock_ledger kaydini ayni degerle
+ * baglar. Bu yuzden bicimi tek yerde tanimlanir ve her giris noktasinda
+ * (REST, gRPC, seed) ayni desenle dogrulanir.
+ *
+ * Susleme parantezi, iki nokta ve bosluk BILEREK disaridadir: bunlar Redis
+ * anahtarinda ayirici ve hash-tag karakteridir; sku icinde gecerse anahtar
+ * duzeni bozulur ve yanlis slot'a duser.
+ */
+export const SKU_PATTERN = /^[A-Z0-9][A-Z0-9-]{2,31}$/;
+
+/** Bir degerin gecerli sku olup olmadigini soyler. */
+export function isSku(value: string): boolean {
+  return SKU_PATTERN.test(value);
+}
+
 /** Olay adlari (event bus konu adlari). */
 export const EVENTS = {
   ORDER_CREATED: 'order.created',

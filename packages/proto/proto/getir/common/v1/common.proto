@@ -1,0 +1,150 @@
+syntax = "proto3";
+
+// getir.common.v1 -- TUM servislerin paylastigi ortak ilkel tipler.
+//
+// KAPSAM KURALI: bu dosyaya IS MANTIGI GIRMEZ. Burada yalnizca her servisin
+// (catalog, inventory, order, payment, risk, courier...) ayni sekilde anladigi
+// ilkel veri tasiyicilari durur: para, konum, sayfalama, hata ayrinti ve zaman
+// araligi. Bir mesaj tek bir alana (ornegin sadece siparise) aitse o alanin
+// kendi proto dosyasinda tanimlanir, burada degil.
+//
+// Bu dosya cok sayida servis tarafindan import edildigi icin degisikligi
+// PAHALIDIR: alan numaralari asla yeniden kullanilmaz, silinen alanlar
+// "reserved" ile isaretlenir, anlam degisikligi yerine yeni alan eklenir.
+
+package getir.common.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/common/v1;commonv1";
+
+// Para tutari.
+//
+// Tutar KURUS (minor unit) cinsinden TAM SAYIDIR; 45,99 TL -> amount_minor = 4599.
+// Float/double ile para tasimak YASAKTIR (ikilik kayan nokta 0,1 + 0,2 gibi
+// toplamlarda yuvarlama hatasi uretir ve sepet toplami ile odenen tutar tutmaz).
+// 100'e bolme islemi yalnizca GOSTERIM aninda istemcide yapilir; sunucu tarafi
+// hesaplamalarin tamami tam sayi aritmetigidir.
+message Money {
+  // Kurus cinsinden tutar. Negatif deger yalnizca indirim/iade gibi acikca
+  // tanimlanmis baglamlarda anlamlidir; aksi halde alan >= 0 beklenir.
+  int64 amount_minor = 1;
+
+  // ISO-4217 para birimi kodu (ornegin "TRY"). Bos birakilirsa "TRY" varsayilir.
+  // proto3'te string varsayilani bos oldugu icin varsayilan ATAMA yapilamaz;
+  // bosluk doldurma sorumlulugu sunucu tarafindadir.
+  string currency = 2;
+}
+
+// Yeryuzu uzerinde bir nokta.
+//
+// WGS84 referans sistemi kullanilir (GPS ile ayni). Mongo 2dsphere indeksli
+// sorgular bu degerleri okur; Mongo GeoJSON'da sira [longitude, latitude]
+// oldugu icin donusum sirasinda alan sirasi KARISTIRILMAMALIDIR.
+message GeoPoint {
+  // Enlem, derece cinsinden. Gecerli aralik [-90, 90].
+  //
+  // AD SECIMI: "latitude" degil "lat". Gerekce, buf.yaml'daki WIRE_JSON kurali:
+  // gateway bu mesaji JSON'a cevirirken alan ADINI oldugu gibi tasir ve REST
+  // sozlesmesi (openapi.yaml) ile socket sozlesmesi zaten lat/lng kullaniyor.
+  // Iki tarafta iki ad olsaydi gateway'de elle esleme kodu gerekirdi ve bir gun
+  // biri degisince digeri sessizce undefined okurdu.
+  double lat = 1;
+
+  // Boylam, derece cinsinden. Gecerli aralik [-180, 180].
+  double lng = 2;
+}
+
+// Sayfali listeleme istegi icin ortak parametreler.
+//
+// TOKEN TABANLI sayfalama secildi (offset/limit degil): katalog siralamasi
+// stok, kampanya ve populerlik ile surekli degistigi icin offset kayar; ayni
+// urun iki sayfada gorunur ya da hic gorunmez. Token, sunucunun urettigi
+// opak bir imlectir; istemci icerigini YORUMLAMAZ, oldugu gibi geri gonderir.
+message PageRequest {
+  // Sayfa basina kayit sayisi. 0 veya negatif gonderilirse VARSAYILAN 20
+  // uygulanir; 100'den buyuk degerler UST SINIR olan 100'e kirpilir
+  // (istek reddedilmez, sessizce kirpilir).
+  int32 page_size = 1;
+
+  // Onceki cevaptan gelen next_page_token. Ilk sayfa icin bos birakilir.
+  // Opak deger: bicimi sunucuya aittir ve haber verilmeden degisebilir.
+  string page_token = 2;
+}
+
+// Sayfali listeleme cevabi icin ortak alanlar.
+message PageResponse {
+  // Bir sonraki sayfanin imleci. BOS ise liste bitmistir; istemci dongusunu
+  // bu alanin bosluguna gore sonlandirir, kayit sayisina gore degil.
+  string next_page_token = 1;
+
+  // Filtreye uyan toplam kayit sayisi. Pahali sayim gereken durumlarda sunucu
+  // 0 dondurebilir; bu "sonuc yok" DEMEK DEGILDIR, "sayilmadi" demektir.
+  int32 total_size = 2;
+}
+
+// Makine tarafindan okunabilir hata ayrintisi.
+//
+// gRPC status koduna cevirme tablosu ve kodlarin tam listesi packages/core
+// icindeki ERROR_CODES sozlugundedir (VALIDATION_FAILED, STOCK_INSUFFICIENT,
+// RESERVATION_EXPIRED, RISK_BLOCKED, NO_STORE, ...). TEK KAYNAK oradadir;
+// burada enum olarak TEKRAR EDILMEZ, aksi halde yeni bir hata kodu eklemek
+// tum servislerin yeniden uretilmesini gerektirirdi.
+// SKU FORMAT KURALI (tip olarak ifade edilemedigi icin yaziya dokuldu):
+// sku; catalog urununu, Redis stok anahtarini (stock:{store}:avail:{sku}) ve
+// stock_ledger kaydini birlestiren anahtardir. Bicim: buyuk harf, rakam ve
+// tire; 3-32 karakter. Tek kaynak: packages/core icindeki SKU_PATTERN sabiti.
+// Redis anahtarinda gectigi icin bosluk, iki nokta ve susleme karakteri iceremez.
+
+message ErrorDetail {
+  // ERROR_CODES sozlugunden bir anahtar (ornegin "STOCK_INSUFFICIENT").
+  string code = 1;
+
+  // Gelistiriciye yonelik, Ingilizce ve teknik aciklama. Son kullaniciya
+  // gosterilecek metin istemcide code'dan uretilir; bu alan cevrilmez.
+  string message = 2;
+
+  // Hataya baglama ozgu ek bilgi (ornegin {"product_id": "...",
+  // "requested": "5", "available": "2"}). Yalnizca string->string tutulur ki
+  // her dilde ayni sekilde gunluklenebilsin; sayisal degerler metne cevrilir.
+  map<string, string> metadata = 3;
+}
+
+// Satis/stok birimi.
+//
+// NEDEN COMMON'DA: ayni birim bilgisini catalog (urun tanimi), inventory
+// (stok sayaci ve rezervasyon), order (siparis kalemi) ve courier (tasima)
+// tasiyor. Enum catalog paketinde kalsaydi inventory.proto katalog paketini
+// import etmek zorunda kalir, sozlesmeler arasinda tek yonlu olmasi gereken
+// bagimlilik cift yonlu olurdu.
+enum Unit {
+  UNIT_UNSPECIFIED = 0;
+  UNIT_PIECE = 1;
+  UNIT_KILOGRAM = 2;
+  UNIT_LITER = 3;
+  UNIT_PACK = 4;
+}
+
+// Miktar: deger + birim.
+//
+// Deger TAM SAYIDIR. Kilogram/litre gibi bolunebilir birimlerde de kesir
+// kullanilmaz; bu urunler sabit gramajli paket olarak satilir (ornegin
+// "1 kg domates" tek kalemdir). Boylece stok sayaci Redis'te tam sayi
+// kalir ve DECRBY ile atomik dusulebilir.
+message Quantity {
+  int32 value = 1;
+  Unit unit = 2;
+}
+
+// Kapali-acik bir zaman araligi: [start_at, end_at).
+//
+// Bitis ucu DISLAYICIDIR; boylece ardisik araliklar (teslimat slotlari,
+// kampanya pencereleri) ust uste binmeden sinirda birlesir. Tum zamanlar
+// UTC'dir; yerel saat dilimine cevirme gosterim aninda yapilir.
+message TimeRange {
+  // Aralik baslangici (dahil). Bos ise "baslangic siniri yok" anlamindadir.
+  google.protobuf.Timestamp start_at = 1;
+
+  // Aralik bitisi (haric). Bos ise "bitis siniri yok" anlamindadir.
+  google.protobuf.Timestamp end_at = 2;
+}

@@ -1,0 +1,63 @@
+# @getir/proto - buf modul yapilandirmasi. Config semasi: v2 (buf 1.73).
+#
+# v2 neden: buf 1.32'den itibaren tek bir buf.yaml birden cok modul tanimlayabiliyor.
+# Bugun tek modul var (proto/), ama ileride ornek/deney protolari ayri bir modul
+# olarak eklenirse dosyayi bolmek gerekmez. v1'de her modul kendi buf.yaml'ini ister.
+version: v2
+
+# --- Moduller ----------------------------------------------------------------
+# "path: proto" ayni zamanda IMPORT KOKUDUR. Yani proto/getir/common/v1/common.proto
+# dosyasi baska bir protodan su sekilde import edilir:
+#     import "getir/common/v1/common.proto";
+# "packages/proto/proto/..." diye DEGIL. Boylece .proto dosyalarinin icindeki import
+# satirlari deponun klasor duzeninden bagimsizdir; paket baska yere tasinsa bile
+# tek satir proto degismez.
+modules:
+  - path: proto
+
+# --- Lint --------------------------------------------------------------------
+# STANDARD, buf'in en siki hazir kural setidir (BASIC + dosya/dizin duzeni kurallari).
+# Bilerek en sikisi secildi; sozlesme katmaninda gevseklik en pahali yerdir, cunku
+# hata uretilen kodun kullanildigi baska bir serviste ortaya cikar. Bize asil lazim
+# olan kurallar sunlar:
+#
+#   * PACKAGE_DIRECTORY_MATCH - paket adi ile dizin yolu birebir ayni olmali:
+#     "package getir.catalog.v1" -> proto/getir/catalog/v1/ altinda durmak zorunda.
+#     Yanlis yere konmus bir dosya, derleme zamaninda degil lint'te yakalanir.
+#
+#   * RPC_REQUEST_RESPONSE_UNIQUE + RPC_REQUEST_STANDARD_NAME - her RPC'nin kendi
+#     istek/yanit mesaji olur: ListProducts -> ListProductsRequest / ListProductsResponse.
+#     Paylasilan mesaj yasak. Gerekcesi somut: iki RPC ayni mesaji paylasirsa birine
+#     alan eklemek digerinin sozlesmesini de sessizce degistirir.
+#
+#   * ENUM_ZERO_VALUE_SUFFIX + ENUM_VALUE_PREFIX - enum'un 0 degeri ..._UNSPECIFIED
+#     olmali ve deger adlari enum adinin UPPER_SNAKE hali ile baslamali. proto3'te 0
+#     kablo uzerinde hic gonderilmez; "alan set edilmedi" ile "gercekten ilk deger"
+#     ayrimini ancak ayrilmis bir UNSPECIFIED degeri ile yapabiliriz.
+#
+#   * PACKAGE_VERSION_SUFFIX - paket adi v1 ile bitmeli. Kirici degisiklik gerekirse
+#     v2 paketi acilir, v1 bir sure yasamaya devam eder.
+#
+# Kural devre disi birakilacaksa (except/ignore) gerekcesi bir ADR'ye yazilir;
+# tek tek dosyada susturulmaz.
+lint:
+  use:
+    - STANDARD
+
+# --- Breaking ----------------------------------------------------------------
+# WIRE_JSON = WIRE (tel formati uyumu) + JSON alan adlari uyumu.
+#
+# Yalniz WIRE yeterli DEGIL. apps/gateway (Go) gRPC yanitlarini REST/JSON'a cevirir
+# ve tarayici bu JSON'u ALAN ADIYLA okur:
+#   * WIRE alan NUMARASINI ve tipini korur  -> ikili mesajlar uyumlu kalir.
+#   * JSON alan ADINI korur                 -> "amountMinor" bir gun "priceMinor"
+#     olursa web istemcisi sessizce undefined okur. WIRE bunu gormez; WIRE_JSON gorur.
+#
+# Daha kati olan FILE/PACKAGE setleri secilmedi: bir mesaji baska dosyaya tasimak ya da
+# dosyayi yeniden adlandirmak ne teli ne JSON'u bozar, ama FILE bunu kirici sayar ve
+# zararsiz yeniden duzenlemeyi gereksizce kilitler.
+#
+# Karsilastirma tabani main dalidir; CI'daki "contract" isi bunu PR'larda kosar.
+breaking:
+  use:
+    - WIRE_JSON

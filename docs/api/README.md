@@ -74,7 +74,7 @@ Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci 
 ## Değişmez sözleşme kuralları
 
 - **Para** her yerde minor unit (kuruş) cinsinden **tam sayıdır**. `Money` şeması
-  `{ amount: integer, currency: "TRY" }` biçimindedir; float hiçbir katmanda
+  `{ amountMinor: integer, currency: "TRY" }` biçimindedir; float hiçbir katmanda
   kullanılmaz, 100'e bölme yalnızca gösterim anında istemcide yapılır.
 - **Zarf**: her cevap `{ success: true, data }` veya `{ success: false, error }`
   biçimindedir. `error` alanı `code`, `message`, `details` ve `requestId` taşır.

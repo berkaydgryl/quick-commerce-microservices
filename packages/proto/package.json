@@ -1,0 +1,13 @@
+{
+  "name": "@getir/proto",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Servisler arasi gRPC sozlesmeleri: .proto kaynaklari, buf yapilandirmasi ve uretilen TS/Go kodu",
+  "scripts": {
+    "lint": "buf lint",
+    "breaking": "buf breaking --against \"../../.git#branch=main,subdir=packages/proto\"",
+    "generate": "buf generate",
+    "clean": "node -e \"require('node:fs').rmSync('gen', { recursive: true, force: true })\""
+  }
+}
