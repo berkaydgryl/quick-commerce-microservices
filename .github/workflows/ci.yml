@@ -116,6 +116,8 @@ jobs:
       #   baseline -> MAIN dalinda packages/proto var mi
       # baseline kontrolu olmadan, paketi main'e ilk tasiyan PR kesin kirmizi
       # olurdu: buf breaking bos bir tabanla "Module had no .proto files" der.
+      # Asagidaki fetch'te --depth=1 YOK: sig bir fetch .git/shallow dosyasi
+      # yazip yukaridaki "fetch-depth: 0" ile alinan tam gecmisi geri budar.
       - name: proto klasoru ve karsilastirma tabani var mi?
         id: detect
         run: |
@@ -125,7 +127,7 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "packages/proto bu dalda yok; buf adimlari atlandi." >> "$GITHUB_STEP_SUMMARY"
           fi
-          git fetch --no-tags --depth=1 origin main:refs/remotes/origin/main || true
+          git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main" || true
           if git cat-file -e refs/remotes/origin/main:packages/proto/buf.yaml 2>/dev/null; then
             echo "baseline=true" >> "$GITHUB_OUTPUT"
           else
@@ -155,6 +157,13 @@ jobs:
         run: buf format --diff --exit-code packages/proto
 
       # Geriye uyum yalnizca PR'da ve taban varken anlamlidir.
+      #
+      # "ref=origin/main" - "branch=main" DEGIL: buf, .git girdisini okumak icin
+      # depoyu `git clone file://...` ile kopyalar ve clone YALNIZCA refs/heads/*
+      # altindaki yerel dallari tasir. Pull request kosusunda actions/checkout
+      # merge commit'ini detached HEAD olarak alir; yerel bir "main" dali hic
+      # olusmaz, main sadece refs/remotes/origin/main olarak durur. Bu yuzden
+      # "branch=main" `fatal: couldn't find remote ref main` ile duser.
       - name: buf breaking
         if: steps.detect.outputs.exists == 'true' && steps.detect.outputs.baseline == 'true' && github.event_name == 'pull_request'
-        run: buf breaking packages/proto --against ".git#branch=main,subdir=packages/proto"
+        run: buf breaking packages/proto --against ".git#ref=origin/main,subdir=packages/proto"
