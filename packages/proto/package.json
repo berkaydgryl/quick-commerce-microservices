@@ -4,10 +4,35 @@
   "private": true,
   "type": "module",
   "description": "Servisler arasi gRPC sozlesmeleri: .proto kaynaklari, buf yapilandirmasi ve uretilen TS/Go kodu",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "lint": "buf lint",
     "breaking": "buf breaking --against \"../../.git#branch=main,subdir=packages/proto\"",
-    "generate": "buf generate",
-    "clean": "node -e \"require('node:fs').rmSync('gen', { recursive: true, force: true })\""
+    "generate:ts": "buf generate --template buf.gen.ts.yaml && node scripts/write-barrel.mjs",
+    "generate:go": "buf generate --template buf.gen.go.yaml",
+    "generate": "pnpm run generate:ts && pnpm run generate:go",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "check:go": "pnpm run generate:go && go build ./...",
+    "clean": "node -e \"const { rmSync } = require('node:fs'); for (const d of ['gen', 'dist']) rmSync(d, { recursive: true, force: true });\""
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.15.0",
+    "@grpc/grpc-js": "^1.14.5"
+  },
+  "devDependencies": {
+    "ts-proto": "^2.12.4",
+    "typescript": "^5.5.0"
   }
 }

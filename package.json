@@ -24,13 +24,15 @@
     "race": "node -e \"console.log('TODO Gun 11 (T11.1): yaris kosulu (race) senaryosu henuz yok. Ayni stok icin 100 es zamanli rezervasyon denenecek; tam 1 basari, 99 STOCK_INSUFFICIENT beklenir.')\"",
     "demo": "node -e \"console.log('TODO Gun 15 (T15.1): uctan uca demo senaryosu henuz yok. Siparis-odeme-kurye akisini tek komutta kosturacak.')\"",
     "seed": "node -e \"console.log('TODO Gun 4: seed betigi henuz yok. Gun 4, Mongo icin market/urun/stok baslangic verisini yukleyecek.')\"",
-    "proto:gen": "node -e \"console.log('TODO Gun 2: proto kod uretimi henuz yok. Gun 2, packages/proto altinda .proto dosyalarindan TS ve Go kodu uretecek.')\"",
+    "proto:gen": "pnpm --filter @getir/proto generate",
+    "proto:gen:ts": "pnpm --filter @getir/proto generate:ts",
+    "proto:check": "pnpm --filter @getir/proto generate:ts && pnpm --filter @getir/proto typecheck && pnpm --filter @getir/proto check:go",
     "infra:up": "docker compose -f infra/docker/docker-compose.dev.yml up -d",
     "infra:ps": "docker compose -f infra/docker/docker-compose.dev.yml ps",
     "infra:logs": "docker compose -f infra/docker/docker-compose.dev.yml logs -f",
     "infra:down": "docker compose -f infra/docker/docker-compose.dev.yml down",
     "infra:reset": "docker compose -f infra/docker/docker-compose.dev.yml down -v",
-    "verify": "pnpm lint && pnpm lint:style && pnpm lint:proto && pnpm format:check && pnpm typecheck && pnpm build && pnpm test:unit",
+    "verify": "pnpm proto:gen:ts && pnpm lint && pnpm lint:style && pnpm lint:proto && pnpm format:check && pnpm typecheck && pnpm build && pnpm test:unit",
     "clean": "turbo run clean"
   },
   "devDependencies": {

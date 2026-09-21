@@ -1,0 +1,18 @@
+{
+  // Yalnizca derleme: gen/ts -> dist.
+  //
+  // rootDir neden "gen/ts"? Cunku paketin KAYNAGI burasidir. dist icinde
+  // dist/index.js ve dist/getir/catalog/v1/catalog.js olusur; package.json
+  // "exports" alani da bu duzene gore yazilmistir.
+  //
+  // Bu gorev turbo'da "generate:ts" gorevine BAGLIDIR (turbo.json). Sebebi:
+  // gen/ts depoya girmez, temiz bir klonda hic yoktur; uretim once kosmazsa
+  // tsc "No inputs were found" ile duser.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "gen/ts",
+    "paths": {}
+  },
+  "include": ["gen/ts"]
+}

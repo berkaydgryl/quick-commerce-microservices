@@ -1,0 +1,39 @@
+# @getir/proto - Go kod uretimi. Config semasi: v2.
+#
+# Bu sablon AYRI tutulur; gerekcesi buf.gen.ts.yaml basindaki nottadir. Ozeti:
+# buradaki eklentiler "go install" ile gelir, Go kurulu olmayan makinede yoktur
+# ve TypeScript uretimini kilitlememelidir.
+#
+# Eklentiler ve surumleri: go.mod + tools.go. Kurulum icin README'deki
+# "Eklenti kurulumu" bolumune bakin; "@latest" yerine go.mod surumu kullanilir,
+# boylece herkes ayni eklenti surumuyle uretir.
+version: v2
+
+# --- Managed mode ------------------------------------------------------------
+# Kapali. Gerekce: go_package secenegi proje sozlesmesi geregi her .proto dosyasinin
+# ICINE elle yaziliyor. Managed mode acik olsaydi buf bu secenegi uretim aninda ezerdi
+# ve ayni bilginin iki kaynagi olurdu: dosyadaki satir ile buradaki kural. Ikisi
+# ayrisinca hata, uretilen kodun import yolunda -yani en gec fark edilen yerde- cikar.
+managed:
+  enabled: false
+
+plugins:
+  # --- Mesaj tipleri -----------------------------------------------------------
+  - local: protoc-gen-go
+    out: gen/go
+    # paths=source_relative
+    # Cikti agaci kaynak agacini birebir izler:
+    #     proto/getir/common/v1/common.proto -> gen/go/getir/common/v1/common.pb.go
+    # Varsayilan "import" modunda eklenti, go_package icindeki TAM modul yolunu klasor
+    # olarak acar ve gen/go/github.com/berkaydgryl/... seklinde ic ice bir agac cikar.
+    # Bu ayarin go.mod ile birlikte okunmasi gerekir: modul packages/proto'da durdugu
+    # icin gen/go/getir/... tam olarak go_package'teki import yoluna denk duser.
+    opt: paths=source_relative
+
+  # --- gRPC istemci/sunucu iskeletleri ------------------------------------------
+  # Ayri bir eklenti olmasinin sebebi protoc-gen-go'nun BILEREK yalnizca mesaj
+  # uretmesidir: mesaj tiplerini kullanip gRPC kullanmayan projelere grpc bagimliligi
+  # bulasmasin diye ikiye ayrilmistir.
+  - local: protoc-gen-go-grpc
+    out: gen/go
+    opt: paths=source_relative
