@@ -1,0 +1,60 @@
+---
+description: quick-commerce-microservices proje kurallari (her istekte gecerli)
+alwaysApply: true
+---
+
+# Proje kurallari
+
+Bu repo, quick-commerce (Getir tipi) bir sistemin 20 gunluk plana gore kurulan dagitik simulasyonudur.
+Tek dogru kaynak `docs/roadmap.md`'dir. Her ise baslamadan once ilgili gorevin (T<gun>.<no>) satirini ve
+"Bitti sayilir" olcutunu oku. Mimari kararlar `docs/adr/` altindadir; bir karara aykiri is yapma, gerekirse
+yeni ADR oner.
+
+## Calisma bicimi
+
+- Bir seferde TEK gorev (ornegin T2.1). Gorev tek alana dokunur; baska alanin klasorune tasma.
+- Gorev bitince "Bitti sayilir" olcutunu kendin dogrula, sonra `pnpm verify` calistir. Yesil degilse bitmis sayilmaz.
+- Proto degisikliginde ek olarak: `pnpm lint:proto` ve PR'da `buf breaking` (CI yapar).
+- Kodu yazmadan once kisa bir plan yaz: hangi dosyalar, hangi ciktilar, nasil dogrulanacak.
+- Placeholder script'leri (`proto:gen`, `seed`, `race`, `demo`) ilgili gorevde gercek komuta baglanir.
+
+## Git
+
+- Dal adi: `feat/<alan>-<kisa-aciklama>` (ornek: `feat/contract-order-proto`, `feat/platform-service-kit`).
+- Commit: conventional commits, Turkce aciklama, sonunda gorev kimligi:
+  `feat(contract): order ve payment proto sozlesmeleri (T2.1)`.
+- Alan etiketleri: contract, platform, gateway, catalog, inventory, order, payment, risk, courier, realtime, web.
+- Git kancasi yok (Windows/WSL gerekcesi); kapi `pnpm verify` + CI'dir. `main`'e dogrudan push yok, PR ile.
+
+## Mimari degismezler
+
+- Monorepo: `apps/*` birbirini import etmez; ortak kod `packages/*` altindadir; `packages/*` hicbir `apps/*`'i tanimaz.
+- Node servis yapisi: `src/domain` (saf is kurali, I/O importu yok) · `src/application` (bir dosya = bir use-case)
+  · `src/infrastructure` (Mongo/Redis/gRPC istemcileri) · `src/interfaces/grpc` (en fazla ~15 satir handler)
+  · `src/interfaces/workers` · `src/config` (env.ts + constants.ts) · `bootstrap.ts` · `main.ts`.
+- Her servis kendi Mongo koleksiyonlarinin tek sahibidir; baska servisin verisi yalnizca onun RPC'si ile okunur.
+- Servisler arasi senkron: gRPC. Asenkron: outbox -> Redis Streams (`EventBus` arayuzu arkasinda).
+- Stok kilidi ve rezervasyon yalnizca Redis Lua script'i ile, tek atomik adimda. Redlock yok (ADR-01).
+- Tum mutasyon uclari `Idempotency-Key` ister (ADR-08).
+
+## Kod kurallari
+
+- TypeScript strict, ESM (`"type": "module"`), Node 22. `any` yok.
+- Dogrulama tek kutuphane: Zod (ADR-10). Tipler semadan turetilir: `z.infer<typeof schema>`; ayni sekil icin elle `interface` yazma.
+- Para her yerde KURUS cinsinden tam sayi (`amountMinor: 4599`). Float yasak.
+- `process.env` yalnizca `src/config/env.ts` icinde okunur; eksik degisken processi baslangicta oldurur.
+- Koda ciplak sayi yazma; is sabitleri `config/constants.ts`, paylasilanlar `@getir/core` icinde.
+- Hata tek tip: `AppError` (`@getir/core`); gRPC status'a tek yerde cevrilir.
+- Log: pino, yapilandirilmis (`logger.info({ orderId }, 'mesaj')`). `console.log` yok.
+- REST cevaplari tek zarf: `{ success, data }` / `{ success: false, message, error: { code, details, requestId } }`.
+- Proto: buf STANDARD lint; her RPC'nin kendi Request/Response mesaji; enum 0 degeri `_UNSPECIFIED`;
+  silinen alan `reserved`; `go_package` her dosyada elle yazilir (managed mode kapali); import koku `proto/`.
+- Frontend: renk/olcu/golge yalnizca `tokens.css` degiskenleriyle (stylelint kapisi). Sunucu verisi TanStack
+  Query, istemci durumu Zustand; ikisi karistirilmaz. Bilesen icinde hesap yok, `services/` icinde.
+
+## Ortam
+
+- Gelistirici Windows kullanir: komutlari PowerShell uyumlu ver (`Copy-Item`, `;` ayraci). Bash'e ozgu
+  sozdizimi gerekiyorsa belirt.
+- Altyapi: `pnpm infra:up` (Mongo replica set + Redis), `pnpm infra:down`, `pnpm infra:reset`.
+- Makefile yok; roadmap'te `make X` goren yer `pnpm X` karsiligini kullanir.
