@@ -1,0 +1,23 @@
+{
+  // Yalnizca derleme: src -> dist. Testler bilincli olarak disaridadir.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+
+    // paths BILEREK BOSALTILDI.
+    //
+    // tsconfig.base.json icindeki "@getir/core" esleme, paketi KAYNAK dosyasina
+    // (packages/core/src/index.ts) baglar. Bu editor ve typecheck icin
+    // kullanislidir: core'da bir alan degisince contracts aninda kirilir.
+    // Ama DERLEMEDE ayni esleme core'un kaynaklarini bu paketin derlemesine
+    // sokar ve "rootDir disinda dosya" (TS6059) hatasi verir.
+    //
+    // Bosaltilinca cozum node_modules uzerinden yapilir: workspace sembolik
+    // baglantisi core'un package.json "exports" alanina, o da dist/index.d.ts
+    // dosyasina goturur. Turbo'daki build gorevi zaten ^build'e bagli oldugu
+    // icin core'un dist'i bu noktada hazirdir.
+    "paths": {}
+  },
+  "include": ["src"]
+}
