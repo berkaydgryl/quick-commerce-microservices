@@ -389,15 +389,15 @@ Sözleşmeler kodun öncesinde yazılır ve tek kaynaktan üretilir. Bir alan de
 
 ### gRPC servisleri (packages/proto)
 
-| Dosya           | RPC'ler                                                                        |
-| --------------- | ------------------------------------------------------------------------------ |
-| catalog.proto   | ListCategories, ListProducts, GetProduct, ResolveDarkStore(lat,lng)            |
-| inventory.proto | CheckAvailability, Reserve, Commit, Release, ExtendReservation, GetReservation |
-| order.proto     | CreateDraftOrder, CreateOrder, GetOrder, ListMyOrders, CancelOrder             |
-| payment.proto   | Charge, Confirm3DS, GetPayment                                                 |
-| risk.proto      | Evaluate(RiskContext), GetLastEvaluation                                       |
-| courier.proto   | AssignCourier, GetCourier, StartRoute                                          |
-| common.proto    | Money, GeoPoint, Page, ErrorDetail                                             |
+| Dosya           | RPC'ler                                                                               |
+| --------------- | ------------------------------------------------------------------------------------- |
+| catalog.proto   | ListCategories, ListProducts, GetProduct, BatchGetProducts, ResolveDarkStore(lat,lng) |
+| inventory.proto | CheckAvailability, Reserve, Commit, Release, ExtendReservation, GetReservation        |
+| order.proto     | CreateDraftOrder, CreateOrder, GetOrder, ListMyOrders, CancelOrder                    |
+| payment.proto   | Charge, Confirm3Ds, GetPayment, Refund                                                |
+| risk.proto      | Evaluate(RiskContext), GetLastEvaluation                                              |
+| courier.proto   | AssignCourier, GetCourier, StartRoute                                                 |
+| common.proto    | Money, GeoPoint, Page, ErrorDetail                                                    |
 
 Kurallar: alan numaraları asla yeniden kullanılmaz, silinen alan reserved işaretlenir, her RPC'nin Request/Response mesajı ayrıdır, enum'lar _UNSPECIFIED = 0 ile başlar. buf breaking CI'da bu kuralları zorlar.
 
@@ -423,15 +423,15 @@ Cevap biçimi her yerde aynı zarftır: başarıda { success: true, data }, hata
 
 Oda adı order:{orderId}; istemci GET /v1/orders/{id}/token ile aldığı token'ı handshake'te gönderir, realtime-svc doğrulamadan odaya almaz.
 
-| Event                | Oda                 | Payload                                                                   |
-| -------------------- | ------------------- | ------------------------------------------------------------------------- |
-| order.status         | order:{orderId}     | { orderId, status, at }                                                   |
-| reservation.expiring | order:{orderId}     | { orderId, secondsLeft }                                                  |
-| reservation.released | order:{orderId}     | { orderId, reason }                                                       |
-| courier.assigned     | order:{orderId}     | { orderId, courier: { id, name }, etaSeconds }                            |
-| courier.location     | order:{orderId}     | { orderId, lat, lng, heading, at, seq }                                   |
-| order.delivered      | order:{orderId}     | { orderId, at }                                                           |
-| stock.changed        | store:{darkStoreId} | { productId, availableQuantity, at } — sku ic anahtardir, disariya cikmaz |
+| Event                | Oda                 | Payload                                                                                |
+| -------------------- | ------------------- | -------------------------------------------------------------------------------------- |
+| order.status         | order:{orderId}     | { orderId, status, at }                                                                |
+| reservation.expiring | order:{orderId}     | { orderId, secondsLeft }                                                               |
+| reservation.released | order:{orderId}     | { orderId, reason }                                                                    |
+| courier.assigned     | order:{orderId}     | { orderId, courier: { id, name }, etaSeconds }                                         |
+| courier.location     | order:{orderId}     | { orderId, lat, lng, heading, at, seq }                                                |
+| order.delivered      | order:{orderId}     | { orderId, at }                                                                        |
+| stock.changed        | store:{darkStoreId} | { darkStoreId, productId, availableQuantity, at } — sku ic anahtardir, disariya cikmaz |
 
 İki oda türü vardır: sipariş odasına yalnızca o siparişin sahibi girer, depo odası ise herkese açıktır ve yalnızca stok değişimi taşır (B11). Katalog ekranı rozetlerini bu odadan tazeler; abone olamadığı durumda staleTime: 10s yedeği devreye girer.
 
@@ -597,14 +597,14 @@ apps/web/src/
 
 ### Hook sözleşmeleri (senin bileşenlerin bunları kullanır)
 
-| Hook                    | Döndürür                           | Not                                       |
-| ----------------------- | ---------------------------------- | ----------------------------------------- |
-| useProducts(categoryId) | { data, isLoading, error }         | data[i].availableQty stok rozetini besler |
-| useCart()               | { items, add, remove, totalMinor } | Yerel durum, sunucuya yazılmaz            |
-| useReserveCart()        | mutate() → { orderId, expiresAt }  | Rezervasyon başlatır                      |
-| useCountdown(expiresAt) | { secondsLeft, expired }           | Geri sayım bileşenin içindir              |
-| useCreateOrder()        | mutate(payload)                    | Risk bandını hata koduyla döner           |
-| useOrderSocket(orderId) | { status, courier, position, eta } | Tek abonelik, tüm takip verisi            |
+| Hook                    | Döndürür                           | Not                                            |
+| ----------------------- | ---------------------------------- | ---------------------------------------------- |
+| useProducts(categoryId) | { data, isLoading, error }         | data[i].availableQuantity stok rozetini besler |
+| useCart()               | { items, add, remove, totalMinor } | Yerel durum, sunucuya yazılmaz                 |
+| useReserveCart()        | mutate() → { orderId, expiresAt }  | Rezervasyon başlatır                           |
+| useCountdown(expiresAt) | { secondsLeft, expired }           | Geri sayım bileşenin içindir                   |
+| useCreateOrder()        | mutate(payload)                    | Risk bandını hata koduyla döner                |
+| useOrderSocket(orderId) | { status, courier, position, eta } | Tek abonelik, tüm takip verisi                 |
 
 Tüm tipler @getir/contracts içindeki Zod şemalarından z.infer ile türetilir; frontend'de elle yazılmış API tipi bulunmaz. Form doğrulaması aynı şemayı zodResolver ile kullanır, böylece istemci ve sunucu kuralı tek yerde durur. Backend bir alan değiştirdiğinde TypeScript derlemesi kırılır — bu istenen davranıştır.
 
@@ -690,13 +690,17 @@ Gateway'den çıkan her cevap aynı zarftadır. İstemci tek bir yerde açar, he
 
 ```ts
 // packages/contracts/src/envelope.ts
+// Hata bilgisi error nesnesinde GRUPLUDUR; kokte ayri bir message alani yoktur.
 type ApiResponse<T> =
-  | { success: true; data: T; message?: string }
+  | { success: true; data: T; meta?: ResponseMeta }
   | {
       success: false;
-      data: null;
-      message: string;
-      error: { code: string; details?: unknown; requestId: string };
+      error: {
+        code: ErrorCode;
+        message: string;
+        details?: Record<string, unknown> | null;
+        requestId: string;
+      };
     };
 ```
 

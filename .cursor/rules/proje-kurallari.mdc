@@ -46,7 +46,8 @@ yeni ADR oner.
 - Koda ciplak sayi yazma; is sabitleri `config/constants.ts`, paylasilanlar `@getir/core` icinde.
 - Hata tek tip: `AppError` (`@getir/core`); gRPC status'a tek yerde cevrilir.
 - Log: pino, yapilandirilmis (`logger.info({ orderId }, 'mesaj')`). `console.log` yok.
-- REST cevaplari tek zarf: `{ success, data }` / `{ success: false, message, error: { code, details, requestId } }`.
+- REST cevaplari tek zarf: `{ success: true, data }` / `{ success: false, error: { code, message, details, requestId } }`.
+ Hata bilgisi `error` icinde GRUPLUDUR; kokte ayri bir `message` alani yoktur (T2.2).
 - Proto: buf STANDARD lint; her RPC'nin kendi Request/Response mesaji; enum 0 degeri `_UNSPECIFIED`;
   silinen alan `reserved`; `go_package` her dosyada elle yazilir (managed mode kapali); import koku `proto/`.
 - Frontend: renk/olcu/golge yalnizca `tokens.css` degiskenleriyle (stylelint kapisi). Sunucu verisi TanStack
