@@ -1,0 +1,272 @@
+syntax = "proto3";
+
+// order-svc sozlesmesi.
+//
+// Bu servis siparis gercegi ile checkout saga'sinin TEK sahibidir: orders ve
+// outbox koleksiyonlari. Siparis durumunu YAZABILEN tek yer burasidir; baska
+// bir servis durumu degistiremez, yalnizca bu servisin RPC'lerini cagirir.
+//
+// SAGA SIRASI (roadmap "Checkout saga adimlari"):
+//   1. CreateDraftOrder -> risk.Evaluate -> inventory.Reserve
+//   2. CreateOrder      -> risk.Evaluate -> payment.Charge -> inventory.Commit
+// Her adimin bir telafi hareketi vardir ve saga bunlari TERS SIRADA uygular.
+//
+// BANT AKSIYONU BURADA UYGULANIR: risk-svc yalnizca skor ve bant ONERIR.
+// "Kapida odeme kapali", "rezervasyon 2 dakika", "403 don" gibi kararlarin
+// tamami order-service/application/apply-risk-decision.ts icinde tek yerde
+// verilir. Bu ayrim yetki karisikligini onler.
+//
+// Bu servisin ISI DEGILDIR: stok sayaci (inventory-svc), kart cekimi
+// (payment-svc), skor hesabi (risk-svc), kurye atama (courier-svc).
+
+package getir.order.v1;
+
+import "getir/common/v1/common.proto";
+import "getir/payment/v1/payment.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/order/v1;orderv1";
+
+// Siparis servisi.
+service OrderService {
+  // Sepeti taslak siparise cevirir, riski degerlendirir ve stogu kilitler.
+  // Gateway karsiligi: POST /v1/cart/reserve
+  rpc CreateDraftOrder(CreateDraftOrderRequest) returns (CreateDraftOrderResponse);
+
+  // Taslak siparisi gercek siparise cevirir: ikinci risk gecisi, odeme ve
+  // stok dusumu. Gateway karsiligi: POST /v1/orders
+  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
+
+  // Tek siparis detayi; zaman cizelgesi dahil.
+  rpc GetOrder(GetOrderRequest) returns (GetOrderResponse);
+
+  // Kullanicinin siparis gecmisi, sayfali.
+  rpc ListMyOrders(ListMyOrdersRequest) returns (ListMyOrdersResponse);
+
+  // Kullanici iptali. Rezervasyon varsa serbest birakilir.
+  rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse);
+}
+
+// Siparis durumu.
+//
+// Gecisler order-service/domain icindeki tabloda tanimlidir ve TABLODA OLMAYAN
+// GECIS HATA FIRLATIR, sessizce gecilmez. Bu enum durum makinesindeki tum
+// dugumleri birebir tasir; buraya deger eklemek once diyagramin
+// guncellenmesini gerektirir.
+//
+// REVIEW, RISK_CHECK -> CANCELLED ve PAID -> CANCELLED gecisleri B20 ile
+// eklendi: ilki 66-85 bandinin kuyrugu, ikincisi stok yetersizligi, ucuncusu
+// commit sirasinda rezervasyonun dusmus olmasi (mock iade sonrasi) icindir.
+enum OrderStatus {
+  ORDER_STATUS_UNSPECIFIED = 0;
+
+  // Sepet rezerve edilmek uzere acildi; henuz stok kilitlenmedi.
+  ORDER_STATUS_DRAFT = 1;
+
+  // Risk degerlendirmesi suruyor.
+  ORDER_STATUS_RISK_CHECK = 2;
+
+  // 66-85 bandi: manuel inceleme kuyrugu (Shadow Capture).
+  ORDER_STATUS_REVIEW = 3;
+
+  // 86+ bandi ya da inceleme reddi.
+  ORDER_STATUS_REJECTED = 4;
+
+  // Stok kilitlendi, geri sayim basladi.
+  ORDER_STATUS_RESERVED = 5;
+
+  // Rezervasyon suresi doldu.
+  ORDER_STATUS_EXPIRED = 6;
+
+  ORDER_STATUS_AWAITING_PAYMENT = 7;
+  ORDER_STATUS_PAYMENT_FAILED = 8;
+  ORDER_STATUS_PAID = 9;
+  ORDER_STATUS_CANCELLED = 10;
+  ORDER_STATUS_PREPARING = 11;
+  ORDER_STATUS_ON_THE_WAY = 12;
+  ORDER_STATUS_DELIVERED = 13;
+}
+
+// Sepetten gelen ham satir.
+//
+// FIYAT TASIMAZ: istemcinin gonderdigi fiyata guvenmek, sepeti duzenleyip
+// bedava siparis acmaya izin verirdi. Tutarlar sunucuda catalog-svc'den
+// okunan liste fiyatindan hesaplanir.
+message CartLine {
+  string product_id = 1;
+
+  // Stok anahtari. inventory-svc ile ortak olan tek alandir.
+  string sku = 2;
+
+  int32 quantity = 3;
+}
+
+// Siparise yazilmis, fiyati DONDURULMUS kalem.
+//
+// Urun adi ve fiyati burada KOPYA olarak durur; katalogdaki kayit sonradan
+// degisse bile gecmis siparis oldugu gibi kalmalidir.
+message OrderItem {
+  string product_id = 1;
+  string sku = 2;
+  string name = 3;
+
+  // Adet + birim. Birim gosterim icindir ("2 paket"), stok hesabi icin degil.
+  getir.common.v1.Quantity quantity = 4;
+
+  // Siparis anindaki birim liste fiyati (kurus).
+  getir.common.v1.Money unit_price = 5;
+
+  // unit_price * adet (kurus). Istemcide tekrar carpilmasin diye tasinir;
+  // yuvarlama tek yerde, sunucuda yapilir.
+  getir.common.v1.Money line_total = 6;
+}
+
+// Durum degisikliginin zaman cizelgesindeki kaydi.
+//
+// GET /v1/orders/{id} bu listeyi oldugu gibi doner; istemci "Siparisin alindi
+// 14:02, hazirlaniyor 14:05" seridini bundan cizer.
+message OrderTimelineEntry {
+  OrderStatus status = 1;
+  google.protobuf.Timestamp at = 2;
+
+  // Istege bagli kisa aciklama (ornegin iptal gerekcesi anahtari).
+  string note = 3;
+}
+
+// Siparis kaydi.
+message Order {
+  string id = 1;
+  string user_id = 2;
+  string dark_store_id = 3;
+  OrderStatus status = 4;
+  repeated OrderItem items = 5;
+
+  // Kalemlerin toplami (kurus).
+  getir.common.v1.Money subtotal = 6;
+
+  getir.common.v1.Money delivery_fee = 7;
+
+  // Kupon indirimi. POZITIF bir tutardir ve toplamdan DUSULUR; isaret
+  // tasimamasi, iki tarafta iki farkli isaret yorumu olusmasini onler.
+  getir.common.v1.Money discount = 8;
+
+  // subtotal + delivery_fee - discount (kurus). Odenecek tutar budur.
+  getir.common.v1.Money total = 9;
+
+  getir.common.v1.GeoPoint delivery_location = 10;
+
+  // Kullanicinin girdigi serbest metin adres. Konum gercegi
+  // delivery_location'dadir; bu alan yalnizca gosterim icindir.
+  string delivery_address = 11;
+
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
+
+  // Rezervasyon bitis ani. Yalnizca RESERVED ve AWAITING_PAYMENT
+  // durumlarinda doludur; diger durumlarda bos birakilir.
+  google.protobuf.Timestamp reservation_expires_at = 14;
+
+  repeated OrderTimelineEntry timeline = 15;
+}
+
+message CreateDraftOrderRequest {
+  string user_id = 1;
+  string dark_store_id = 2;
+  repeated CartLine lines = 3;
+  getir.common.v1.GeoPoint delivery_location = 4;
+  string delivery_address = 5;
+
+  // ADR-08 geregi tum mutasyon uclari idempotency anahtari ister. Ayni
+  // anahtarla gelen ikinci istek YENI taslak acmaz, ilkinin cevabini doner.
+  string idempotency_key = 6;
+}
+
+// Taslak siparis cevabi.
+//
+// Risk bandi 86+ ise bu RPC hicbir sey yaratmadan PERMISSION_DENIED +
+// ErrorDetail.code = "RISK_BLOCKED" doner; rezervasyon hic acilmaz ve stok
+// dokunulmamis kalir. Stok yetmezse siparis CANCELLED'a cekilir ve
+// FAILED_PRECONDITION + "STOCK_INSUFFICIENT" doner.
+message CreateDraftOrderResponse {
+  string order_id = 1;
+  OrderStatus status = 2;
+
+  // Geri sayimin bitecegi an (UTC). Sure risk bandindan turer.
+  google.protobuf.Timestamp reservation_expires_at = 3;
+}
+
+message CreateOrderRequest {
+  // CreateDraftOrder'dan donen kimlik. Sepet burada TEKRAR GONDERILMEZ;
+  // gonderilseydi iki adim arasinda sepeti degistirip rezerve edilenden
+  // baskasini satin almak mumkun olurdu.
+  string order_id = 1;
+
+  string user_id = 2;
+
+  // Odeme yontemi tanimi payment-svc'ye aittir; iki dosyada iki ayri enum
+  // tutmak, bir gun birine deger eklendiginde digerinin sessizce eskimesine
+  // yol acardi. Kapida odeme yalnizca dusuk bantta secilebilir ve bu kural
+  // order-svc tarafinda uygulanir.
+  getir.payment.v1.PaymentMethod payment_method = 3;
+
+  // Kart yontemi icin saklanan kart jetonu. Ham kart verisi HICBIR ZAMAN bu
+  // sozlesmeden gecmez.
+  string card_token = 4;
+
+  string idempotency_key = 5;
+}
+
+// Siparis olusturma cevabi.
+//
+// Orta bantta (31-65) kart + 3DS zorunludur. Boyle bir durumda siparis
+// AWAITING_PAYMENT'ta kalir ve challenge_id dolu doner; istemci
+// POST /v1/orders/{id}/3ds ile dogrulamayi tamamlar.
+message CreateOrderResponse {
+  string order_id = 1;
+  OrderStatus status = 2;
+
+  // Bos DEGILSE 3DS dogrulamasi bekleniyor demektir. Ayrica bir bayrak alani
+  // tutulmaz; iki kaynak birbiriyle celisebilirdi.
+  string challenge_id = 3;
+}
+
+message GetOrderRequest {
+  string order_id = 1;
+
+  // Sahiplik kontrolu icin zorunludur: baskasinin siparisini okuma denemesi
+  // NOT_FOUND doner (PERMISSION_DENIED degil, cunku varlik bilgisi bile
+  // sizdirilmamalidir).
+  string user_id = 2;
+}
+
+message GetOrderResponse {
+  Order order = 1;
+}
+
+message ListMyOrdersRequest {
+  string user_id = 1;
+  getir.common.v1.PageRequest page = 2;
+}
+
+message ListMyOrdersResponse {
+  // Yeniden eskiye siralidir.
+  repeated Order orders = 1;
+
+  getir.common.v1.PageResponse page = 2;
+}
+
+message CancelOrderRequest {
+  string order_id = 1;
+  string user_id = 2;
+
+  // Iptal gerekcesi anahtari; zaman cizelgesine ve outbox olayina yazilir.
+  string reason = 3;
+}
+
+// Iptal cevabi.
+//
+// Iptal edilemeyecek bir durumdan (ornegin DELIVERED) iptal denenirse durum
+// makinesi hata firlatir: FAILED_PRECONDITION doner, siparis degismez.
+message CancelOrderResponse {
+  OrderStatus status = 1;
+}

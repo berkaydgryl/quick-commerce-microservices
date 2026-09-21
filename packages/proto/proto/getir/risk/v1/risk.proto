@@ -1,0 +1,156 @@
+syntax = "proto3";
+
+// risk-svc sozlesmesi.
+//
+// Bu servis risk_events koleksiyonunun TEK sahibidir ve tek bir is yapar:
+// verilen baglami puanlayip bir bant onerir.
+//
+// KARARI ONERIR, UYGULAMAZ. "Kapida odeme kapansin", "rezervasyon 2 dakika
+// olsun", "gateway 403 donsun" gibi aksiyonlarin hicbiri burada yer almaz;
+// hepsi order-service/application/apply-risk-decision.ts icinde tek yerde
+// uygulanir. Bu yuzden cevapta TTL, odeme yontemi ya da HTTP kodu gibi
+// alanlar BILEREK YOKTUR: olsalardi ayni karar iki serviste yasar ve bir gun
+// ikisi birbirinden ayrilirdi.
+//
+// KURAL = DOSYA ilkesi: yeni bir risk kurali eklemek bir dosya yazmak ve
+// agirligini config/risk.rules.json icine girmektir. Motor kodu ve BU
+// SOZLESME degismez; yeni kural yalnizca RuleHit listesine yeni bir rule_id
+// olarak dusar. Bu yuzden kural kimlikleri enum DEGIL, serbest metindir.
+
+package getir.risk.v1;
+
+import "getir/common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/risk/v1;riskv1";
+
+// Risk degerlendirme servisi.
+service RiskService {
+  // Baglami puanlar. Checkout saga'sinda IKI KEZ cagrilir: rezervasyon
+  // oncesi (bant -> TTL) ve siparis oncesi (dwell suresi + odeme sinyali).
+  rpc Evaluate(EvaluateRequest) returns (EvaluateResponse);
+
+  // Son degerlendirmeyi okur. Demo sirasinda "bu siparis neden engellendi"
+  // sorusunu tek cagriyla cevaplamak icin vardir.
+  rpc GetLastEvaluation(GetLastEvaluationRequest) returns (GetLastEvaluationResponse);
+}
+
+// Skor bandi.
+//
+// Esikler: 0-30 LOW, 31-65 MEDIUM, 66-85 HIGH, 86-100 CRITICAL. Sinir
+// degerleri domain/bands.ts icinde tek kaynakta durur; burada yalnizca
+// bandin ADI tasinir ki esik degistiginde sozlesme degismek zorunda kalmasin.
+enum RiskBand {
+  RISK_BAND_UNSPECIFIED = 0;
+
+  RISK_BAND_LOW = 1;
+  RISK_BAND_MEDIUM = 2;
+
+  // Siparis manuel inceleme kuyruguna dusur (Shadow Capture).
+  RISK_BAND_HIGH = 3;
+
+  // Gateway istegi reddeder; IP/cihaz gecici kara listeye alinir.
+  RISK_BAND_CRITICAL = 4;
+}
+
+// Tek bir kuralin sonucu.
+//
+// Tetiklenmeyen kurallar da listede DURUR (hit = false, score = 0). Boylece
+// "kural kosmadi" ile "kural kostu ama tetiklenmedi" ayrimi yapilabilir; bu
+// ayrim olmadan bir kuralin hata verip sessizce atlandigi fark edilmezdi.
+message RuleHit {
+  // Kural dosyasinin kimligi (ornegin "account-age").
+  string rule_id = 1;
+
+  bool hit = 2;
+
+  // config/risk.rules.json icindeki agirlik.
+  int32 weight = 3;
+
+  // Bu kuralin toplam skora kattigi puan.
+  int32 score = 4;
+
+  // Gelistiriciye yonelik kisa gerekce (ornegin "hesap 4 saatlik").
+  string reason = 5;
+}
+
+// Puanlanacak baglam.
+//
+// Alanlarin tamamini CAGIRAN TARAF doldurur; risk-svc baska servislere sorgu
+// atmaz. Gerekce hiz: bu RPC checkout'un kritik yolundadir ve buradan
+// acilacak ek cagrilar siparis gecikmesine dogrudan eklenirdi.
+//
+// Eksik birakilan alanlar ilgili kurali TETIKLEMEZ (hata degildir); kural
+// motoru eksik sinyali 0 puan olarak isler.
+message RiskContext {
+  string user_id = 1;
+  string order_id = 2;
+  string dark_store_id = 3;
+
+  // account-age kurali icin: hesabin acilis ani.
+  google.protobuf.Timestamp account_created_at = 4;
+
+  // order-history kurali icin: teslim edilen ve iptal edilen siparis sayilari.
+  int32 delivered_order_count = 5;
+  int32 cancelled_order_count = 6;
+
+  // basket-anomaly kurali icin: bu sepetin tutari ve kullanicinin ortalamasi
+  // (kurus). Ortalama bilinmiyorsa bos birakilir.
+  getir.common.v1.Money basket_total = 7;
+  getir.common.v1.Money user_average_basket = 8;
+
+  // checkout-dwell kurali icin: rezervasyon ile siparis arasinda gecen sure.
+  // SUNUCUDA olculur; istemciden gelen bir sure manipule edilebilirdi.
+  int32 checkout_dwell_ms = 9;
+
+  // geofence kurali icin: teslimat adresi ile oturumun konumu.
+  getir.common.v1.GeoPoint delivery_location = 10;
+  getir.common.v1.GeoPoint session_location = 11;
+
+  // ip-device kurali icin.
+  string ip_address = 12;
+  string ip_city = 13;
+  string device_id = 14;
+
+  // Ayni cihazda gorulmus hesap sayisi.
+  int32 accounts_on_device = 15;
+}
+
+// Degerlendirme sonucu.
+message RiskEvaluation {
+  // 0-100 arasi agirlikli skor.
+  int32 score = 1;
+
+  RiskBand band = 2;
+
+  // Kosan tum kurallarin sonucu. risk_events koleksiyonuna da bu liste yazilir.
+  repeated RuleHit hits = 3;
+
+  google.protobuf.Timestamp evaluated_at = 4;
+}
+
+message EvaluateRequest {
+  RiskContext context = 1;
+}
+
+// Degerlendirme cevabi.
+//
+// Tek bir kuralin hatasi TUM degerlendirmeyi dusurmez: hatali kural 0 puan
+// sayilir, uyari loglanir ve cevap yine doner. Risk motorunun ayakta
+// olmamasi yuzunden siparis akisinin durmasi kabul edilemez.
+message EvaluateResponse {
+  RiskEvaluation evaluation = 1;
+}
+
+message GetLastEvaluationRequest {
+  string user_id = 1;
+
+  // Bos birakilirsa kullanicinin en son degerlendirmesi doner; doluysa o
+  // siparise ait olan.
+  string order_id = 2;
+}
+
+// Son degerlendirme cevabi. Hic kayit yoksa NOT_FOUND doner.
+message GetLastEvaluationResponse {
+  RiskEvaluation evaluation = 1;
+}

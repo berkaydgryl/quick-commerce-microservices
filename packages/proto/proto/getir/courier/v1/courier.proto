@@ -1,0 +1,136 @@
+syntax = "proto3";
+
+// courier-svc sozlesmesi.
+//
+// Bu servis couriers koleksiyonunun TEK sahibidir. Gercek kurye yoktur; bir
+// worker sahte GPS uretir (2 saniyede bir nokta), Redis'e yazar ve
+// courier.location olayini yayinlar. Tarayici iki nokta arasini kendi
+// interpole eder; bu yuzden tick araligi sozlesmede yer almaz, sunucu
+// yapilandirmasidir (COURIER_TICK_MS).
+//
+// Bu servisin ISI DEGILDIR: siparis durumunu degistirmek (order-svc),
+// odayi yonetmek ve olayi istemciye itmek (realtime-svc).
+//
+// KONUM AKISI BU SOZLESMEDEN GECMEZ. Canli konum bir RPC ile degil,
+// courier.location olayi ve socket odasi uzerinden tasinir; saniyede bir
+// unary cagri ile konum cekmek hem gereksiz yuk hem de gecikmeli sonuc
+// uretirdi. Buradaki RPC'ler yalnizca atama ve rota baslatma gibi
+// DURUM DEGISTIREN adimlar icindir.
+
+package getir.courier.v1;
+
+import "getir/common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/courier/v1;courierv1";
+
+// Kurye servisi.
+service CourierService {
+  // Siparise uygun kuryeyi atar.
+  rpc AssignCourier(AssignCourierRequest) returns (AssignCourierResponse);
+
+  // Kuryenin o anki halini ve son bilinen konumunu okur.
+  rpc GetCourier(GetCourierRequest) returns (GetCourierResponse);
+
+  // Rotayi uretir ve GPS simulasyonunu baslatir.
+  rpc StartRoute(StartRouteRequest) returns (StartRouteResponse);
+}
+
+// Kuryenin musaitlik durumu.
+enum CourierStatus {
+  COURIER_STATUS_UNSPECIFIED = 0;
+
+  // Atanmaya hazir.
+  COURIER_STATUS_IDLE = 1;
+
+  // Bir siparise bagli, yolda.
+  COURIER_STATUS_BUSY = 2;
+
+  // Vardiya disi; atama havuzuna girmez.
+  COURIER_STATUS_OFFLINE = 3;
+}
+
+// Kurye kaydi.
+message Courier {
+  string id = 1;
+
+  // Istemcide gosterilecek ad (ornegin "Mehmet K.").
+  string name = 2;
+
+  // Kuryenin bagli oldugu depo. Atama yalnizca ayni depo icinde yapilir.
+  string dark_store_id = 3;
+
+  CourierStatus status = 4;
+
+  // BUSY ise tasidigi siparis; aksi halde bostur.
+  string current_order_id = 5;
+
+  // Son bilinen konum ve okundugu an. Kaynak Redis'teki
+  // courier:{courierId}:last anahtaridir.
+  getir.common.v1.GeoPoint last_location = 6;
+  google.protobuf.Timestamp last_location_at = 7;
+}
+
+// Depodan teslimat adresine cizilen rota.
+message Route {
+  // Duz polyline uzerindeki ara noktalar (20-40 adet). Ilk nokta depo, son
+  // nokta teslimat adresidir.
+  repeated getir.common.v1.GeoPoint points = 1;
+
+  // Toplam yol uzunlugu, METRE cinsinden.
+  int32 distance_meters = 2;
+
+  // Tahmini varis suresi, SANIYE cinsinden. Hesap basittir: kalan mesafe
+  // bolu sabit hiz (COURIER_SPEED_KMH). Her 10 tick'te bir guncellenir.
+  int32 eta_seconds = 3;
+}
+
+message AssignCourierRequest {
+  string order_id = 1;
+  string dark_store_id = 2;
+  getir.common.v1.GeoPoint delivery_location = 3;
+}
+
+// Atama cevabi.
+//
+// ATAMA ATOMIKTIR (B7): tek bir findOneAndUpdate ile deponun IDLE kuryesi
+// ayni anda BUSY isaretlenir ve siparise baglanir. Iki siparis ayni kuryeyi
+// kapamaz.
+//
+// Uygun kurye yoksa NOT_FOUND doner. Bu bir hata degil BEKLENEN bir durumdur:
+// siparis PREPARING'de kalir ve 30 saniye sonra yeniden denenir.
+message AssignCourierResponse {
+  Courier courier = 1;
+
+  // Atama anindaki ilk tahmin. courier.assigned olayiyla istemciye de gider.
+  int32 eta_seconds = 2;
+}
+
+message GetCourierRequest {
+  string courier_id = 1;
+}
+
+// Kurye okuma cevabi. Kayit yoksa NOT_FOUND doner.
+message GetCourierResponse {
+  Courier courier = 1;
+}
+
+message StartRouteRequest {
+  string order_id = 1;
+  string courier_id = 2;
+}
+
+// Rota baslatma cevabi.
+//
+// Ayni siparis icin ikinci cagri YENI rota uretmez ve simulasyonu bastan
+// baslatmaz; calisan rotayi oldugu gibi doner. Aksi halde yeniden denenen
+// bir worker, haritadaki ikonu basa isinlardi.
+message StartRouteResponse {
+  Route route = 1;
+
+  // Simulasyonun basladigi an. Istemci gecen sureyi buradan hesaplar.
+  google.protobuf.Timestamp started_at = 2;
+
+  // true ise rota bu cagridan ONCE de baslatilmisti.
+  bool already_started = 3;
+}

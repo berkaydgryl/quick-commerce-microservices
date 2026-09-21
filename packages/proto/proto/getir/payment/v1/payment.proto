@@ -1,0 +1,176 @@
+syntax = "proto3";
+
+// payment-svc sozlesmesi.
+//
+// Bu servis payments koleksiyonunun TEK sahibidir. Gercek bir odeme
+// saglayicisi yoktur; cekim, 3DS dogrulamasi ve iade MOCK'tur. Buna ragmen
+// sozlesme gercek bir saglayici takilabilecek sekilde yazilmistir: durum
+// makinesi, idempotency ve iade yolu bastan yerindedir.
+//
+// KART VERISI BU SOZLESMEDEN GECMEZ. Ham kart numarasi, CVV ve son kullanma
+// tarihi hicbir alanda tasinmaz; yalnizca saklanmis kart jetonu (card_token)
+// kullanilir. Bu, mock bir serviste bile bilincli bir sinirdir.
+//
+// Bu servisin ISI DEGILDIR: siparis durumunu degistirmek (order-svc), stok
+// dusurmek (inventory-svc), riski hesaplamak (risk-svc). Odeme basarisiz
+// olursa telafiyi saga yurutur; bu servis yalnizca sonucu bildirir.
+
+package getir.payment.v1;
+
+import "getir/common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/payment/v1;paymentv1";
+
+// Odeme servisi.
+service PaymentService {
+  // Tutari ceker. Orta bantta 3DS gerektirebilir.
+  rpc Charge(ChargeRequest) returns (ChargeResponse);
+
+  // 3DS kodunu dogrular ve cekimi tamamlar.
+  rpc Confirm3Ds(Confirm3DsRequest) returns (Confirm3DsResponse);
+
+  // Siparise ait odemenin son halini okur.
+  rpc GetPayment(GetPaymentRequest) returns (GetPaymentResponse);
+
+  // Cekilmis tutari geri verir (mock iade).
+  rpc Refund(RefundRequest) returns (RefundResponse);
+}
+
+// Odeme yontemi.
+//
+// TANIM BURADA DURUR ve order-svc bu enum'u import eder. Iki dosyada iki ayri
+// kopya tutulsaydi, bir gun birine deger eklendiginde digeri sessizce eskir
+// ve gateway'de elle esleme kodu gerekirdi.
+//
+// Kapida odeme YALNIZCA dusuk risk bandinda (0-30) secilebilir; bu kural
+// order-svc'de uygulanir, burada degil.
+enum PaymentMethod {
+  PAYMENT_METHOD_UNSPECIFIED = 0;
+  PAYMENT_METHOD_CARD = 1;
+  PAYMENT_METHOD_CASH_ON_DELIVERY = 2;
+}
+
+// Odemenin yasam dongusundeki yeri.
+enum PaymentStatus {
+  PAYMENT_STATUS_UNSPECIFIED = 0;
+
+  // Cekim baslatildi, sonuc henuz belli degil.
+  PAYMENT_STATUS_PENDING = 1;
+
+  // 3DS dogrulamasi bekleniyor; tutar henuz cekilmedi.
+  PAYMENT_STATUS_REQUIRES_3DS = 2;
+
+  PAYMENT_STATUS_SUCCEEDED = 3;
+  PAYMENT_STATUS_FAILED = 4;
+
+  // Iade edildi. Bu deger BASTAN vardir cunku saga'da somut bir yolu var:
+  // Commit sirasinda rezervasyon dusmusse (ZREM 0) odeme geri verilir ve
+  // siparis CANCELLED olur (B3, B20).
+  PAYMENT_STATUS_REFUNDED = 5;
+}
+
+// Odeme kaydi.
+message Payment {
+  string id = 1;
+
+  // Bir siparisin en fazla bir odemesi olur; eslesme bu alan uzerindendir.
+  string order_id = 2;
+
+  string user_id = 3;
+
+  // Cekilen tutar (kurus). Siparis toplamiyla birebir ayni olmalidir.
+  getir.common.v1.Money amount = 4;
+
+  PaymentMethod method = 5;
+  PaymentStatus status = 6;
+
+  // Basarisizlik nedeni; ERROR_CODES sozlugunden bir anahtar (ornegin
+  // "PAYMENT_DECLINED"). Yalnizca FAILED durumunda doludur.
+  string failure_code = 7;
+
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+message ChargeRequest {
+  string order_id = 1;
+  string user_id = 2;
+
+  // Cekilecek tutar (kurus). Istemciden GELMEZ; order-svc'nin hesapladigi
+  // siparis toplamidir.
+  getir.common.v1.Money amount = 3;
+
+  PaymentMethod method = 4;
+
+  // Saklanmis kart jetonu. CASH_ON_DELIVERY icin bos birakilir.
+  string card_token = 5;
+
+  // ADR-08: ayni anahtarla gelen ikinci cagri TEKRAR cekim yapmaz, ilk
+  // cekimin kaydini doner. Odeme tarafinda bu kural en kritik yerdedir.
+  string idempotency_key = 6;
+}
+
+// Cekim cevabi.
+//
+// Kart reddedilirse BOS CEVAP DONMEZ: payment.status = FAILED ve
+// failure_code = "PAYMENT_DECLINED" ile doner. Red, teknik bir hata degil
+// normal bir is sonucudur; saga bunu okuyup rezervasyonu serbest birakir ve
+// siparisi PAYMENT_FAILED yapar.
+message ChargeResponse {
+  Payment payment = 1;
+
+  // Bos DEGILSE 3DS dogrulamasi bekleniyor demektir (status = REQUIRES_3DS).
+  // Bu jeton Confirm3Ds cagrisina oldugu gibi geri verilir.
+  string challenge_id = 2;
+}
+
+message Confirm3DsRequest {
+  string order_id = 1;
+
+  // Charge cevabindan gelen jeton.
+  string challenge_id = 2;
+
+  // Kullanicinin girdigi dogrulama kodu. Mock saglayicida sabit bir kod
+  // beklenir; deger packages/core icindeki sabitlerden gelir.
+  string code = 3;
+}
+
+// 3DS dogrulama cevabi.
+//
+// Kod yanlissa payment.status = FAILED ve failure_code = "PAYMENT_DECLINED"
+// doner. Jeton bulunamaz ya da suresi dolmussa NOT_FOUND hatasi doner.
+message Confirm3DsResponse {
+  Payment payment = 1;
+}
+
+message GetPaymentRequest {
+  string order_id = 1;
+}
+
+// Odeme okuma cevabi. Kayit yoksa NOT_FOUND doner.
+message GetPaymentResponse {
+  Payment payment = 1;
+}
+
+message RefundRequest {
+  string order_id = 1;
+
+  // Iade gerekcesi anahtari (ornegin "reservation_expired"). Ledger ve
+  // outbox olayina oldugu gibi yazilir.
+  string reason = 2;
+
+  string idempotency_key = 3;
+}
+
+// Iade cevabi.
+//
+// Ayni siparis icin ikinci iade cagrisi TEKRAR para hareketi uretmez; zaten
+// REFUNDED olan kaydi doner. Bu, at-least-once olay teslimati altinda
+// tuketicilerin iadeyi birden fazla tetikleyebilmesi yuzunden zorunludur.
+message RefundResponse {
+  Payment payment = 1;
+
+  // true ise odeme bu cagridan ONCE de iade edilmisti.
+  bool already_refunded = 2;
+}
