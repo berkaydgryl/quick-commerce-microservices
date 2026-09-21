@@ -243,16 +243,29 @@ jobs:
         run: |
           go install google.golang.org/protobuf/cmd/protoc-gen-go
           go install google.golang.org/grpc/cmd/protoc-gen-go-grpc
+          # GOPATH/bin ACIKCA PATH'e ekleniyor. setup-go bunu genelde kendi
+          # yapar, ama "genelde" yeterli degil: buf, local eklentileri YALNIZCA
+          # PATH uzerinden bulur ve bulamazsa hata uretimin ortasinda
+          # "protoc-gen-go: executable file not found in $PATH" olarak cikar.
+          # Tek satirlik sigorta, teshisi zor bir hatayi bastan kapatiyor.
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      # Eklentiler gercekten cagrilabiliyor mu? Uretimden ONCE soruyoruz ki
+      # hata, uzun bir uretim ciktisinin icinde degil kendi adiminda gorunsun.
+      - name: Eklentiler PATH'te mi?
+        run: |
+          protoc-gen-go --version
+          protoc-gen-go-grpc --version
 
       # pnpm proto:check = generate:ts -> tsc -> generate:go -> go build
       - name: Uret ve iki dilde derle
         run: pnpm proto:check
 
       # go.mod/go.sum ile gercek bagimliliklar ayrisirsa burada yakalanir.
-      # "git diff --exit-code" kullanilmasinin sebebi: tidy sessizce duzeltir,
-      # biz duzeltmenin COMMIT EDILMEMIS olmasini hata saymak istiyoruz.
+      # "-diff" bayragi dosyalari DEGISTIRMEDEN farki basar ve fark varsa
+      # sifirdan farkli cikar. Once "go mod tidy" kosup sonra "git diff" bakmaya
+      # gore ustunlugu: is alanini kirletmez, bu yuzden sonraki adimlar
+      # (ya da yeniden kosumlar) tidy'nin yan etkisinden etkilenmez.
       - name: go.mod ve go.sum guncel mi?
         working-directory: packages/proto
-        run: |
-          go mod tidy
-          git diff --exit-code go.mod go.sum
+        run: go mod tidy -diff

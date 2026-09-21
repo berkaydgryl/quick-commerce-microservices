@@ -28,8 +28,8 @@
     "clean": "node -e \"const { rmSync } = require('node:fs'); for (const d of ['gen', 'dist']) rmSync(d, { recursive: true, force: true });\""
   },
   "dependencies": {
-    "@bufbuild/protobuf": "^2.10.2",
-    "@grpc/grpc-js": "^1.15.0"
+    "@bufbuild/protobuf": "^2.15.0",
+    "@grpc/grpc-js": "^1.14.5"
   },
   "devDependencies": {
     "ts-proto": "^2.12.4",
