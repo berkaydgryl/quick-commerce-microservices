@@ -1,0 +1,254 @@
+syntax = "proto3";
+
+// inventory-svc sozlesmesi.
+//
+// Bu servis stok gercegi ile rezervasyonun TEK sahibidir: Redis'teki
+// stock:{store}:avail:{sku} sayaclari, resv:{store}:{orderId} hash'leri,
+// resv:index:{store} zset'i ve Mongo'daki stock_ledger koleksiyonu.
+// Baska hicbir servis bu anahtarlara yazmaz; stok yalnizca buradaki RPC'ler
+// uzerinden hareket eder.
+//
+// Bu servisin ISI DEGILDIR:
+//   - urun adi, fiyati, kategorisi -> catalog-svc (getir.catalog.v1)
+//   - siparis durumu ve saga yonetimi -> order-svc (getir.order.v1)
+//   - rezervasyon suresinin NE KADAR olacagina karar vermek -> order-svc
+//     (risk bandindan turer ve ttl_seconds olarak buraya PARAMETRE gelir)
+//
+// ATOMIKLIK: Reserve/Commit/Release/ExtendReservation islemlerinin tamami tek
+// bir Redis Lua script'i icinde kosar (ADR-01). Redlock veya cok adimli
+// istemci tarafi kilit YOKTUR. Bu yuzden kismi rezervasyon imkansizdir:
+// ya sepetin tamami rezerve edilir ya hicbiri.
+
+package getir.inventory.v1;
+
+// getir/common/v1/common.proto BILEREK IMPORT EDILMIYOR: bu sozlesmede para,
+// konum ve sayfalama gecmiyor, adetler de tam sayi olarak tasiniyor. Kullanmadan
+// import etmek buf lint'in IMPORT_USED kuralina takilir.
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/inventory/v1;inventoryv1";
+
+// Stok ve rezervasyon servisi.
+service InventoryService {
+  // Toplu musaitlik sorgusu.
+  //
+  // BILEREK TOPLU: urun basina cagri yapmak B27'de yasaklandi. Sepet ve
+  // katalog listesi 50 kaleme kadar cikabildigi icin tekil sorgu N+1 uretirdi.
+  // Cagiran taraf (gateway) katalog cevabi ile bu cevabi BIRLESTIREREK
+  // istemciye tek gorunum sunar.
+  //
+  // Bu RPC bir REZERVASYON DEGILDIR ve hicbir sey kilitlemez; okudugu an
+  // dogrudur, bir milisaniye sonra baskasi ayni kutuyu alabilir. Gercek karar
+  // yalnizca Reserve'dedir.
+  rpc CheckAvailability(CheckAvailabilityRequest) returns (CheckAvailabilityResponse);
+
+  // Sepetin tamamini tek atomik adimda rezerve eder.
+  rpc Reserve(ReserveRequest) returns (ReserveResponse);
+
+  // Rezerve edilmis adedi kalici dususe cevirir (odeme onaylandiktan sonra).
+  rpc Commit(CommitRequest) returns (CommitResponse);
+
+  // Rezervasyonu serbest birakir ve sayaclari geri artirir.
+  rpc Release(ReleaseRequest) returns (ReleaseResponse);
+
+  // Rezervasyon suresini bir kez uzatir (odeme adimina girerken).
+  rpc ExtendReservation(ExtendReservationRequest) returns (ExtendReservationResponse);
+
+  // Rezervasyonun o anki halini okur.
+  rpc GetReservation(GetReservationRequest) returns (GetReservationResponse);
+}
+
+// Rezervasyonun yasam dongusundeki yeri.
+//
+// ACTIVE disindaki degerler ARTIK REDIS'TE DURMAYAN rezervasyonlari anlatir;
+// bu durumlar Mongo'daki stock_ledger kaydindan okunur. Redis hash'i sure
+// dolduktan 60 saniye sonra kendiliginden silinir, dolayisiyla "kayit yok"
+// ile "hic olmadi" ayrimi yalnizca ledger uzerinden yapilabilir.
+enum ReservationStatus {
+  RESERVATION_STATUS_UNSPECIFIED = 0;
+
+  // Sayaclar dusuk, sure devam ediyor.
+  RESERVATION_STATUS_ACTIVE = 1;
+
+  // Odeme onaylandi, dusum kalici hale geldi.
+  RESERVATION_STATUS_COMMITTED = 2;
+
+  // Kullanici iptali veya saga telafisi ile geri verildi.
+  RESERVATION_STATUS_RELEASED = 3;
+
+  // Sure doldu; supurucu sayaclari geri ekledi.
+  RESERVATION_STATUS_EXPIRED = 4;
+}
+
+// Rezervasyonu degistiren islemlerin (Commit, Release) sonucu.
+//
+// NEDEN HATA DEGIL DE SONUC ALANI: commit.lua ve release.lua ilk satirda
+// ZREM cagirir ve 1 donmezse hicbir sey yapmadan cikar. Supurucu, kullanici
+// iptali ve odeme onayi ayni rezervasyonu yaris halinde isleyebilir; bu
+// normal bir durumdur, istisna degildir (B3, B4). Cagiran tarafin hata
+// yakalamak yerine sonuca gore dallanmasi istendigi icin ayri bir enum.
+enum ReservationOutcome {
+  RESERVATION_OUTCOME_UNSPECIFIED = 0;
+
+  // Sahiplik bu cagriya verildi; sayaclar hareket etti.
+  RESERVATION_OUTCOME_APPLIED = 1;
+
+  // Ayni islem daha once uygulanmisti; sayaclar TEKRAR hareket etmedi.
+  // Cagiran taraf bunu basari saymalidir (at-least-once teslimat).
+  RESERVATION_OUTCOME_ALREADY_APPLIED = 2;
+
+  // Rezervasyon bulunamadi: suresi dolmus ve supurucu geri almis olabilir.
+  // Commit icin bu KRITIKTIR; order-svc mock iade baslatir ve siparisi
+  // CANCELLED'a cevirir, istemciye RESERVATION_EXPIRED doner (B20).
+  RESERVATION_OUTCOME_NOT_FOUND = 3;
+}
+
+// Tek bir kalem icin rezerve edilecek adet.
+message ReservationItem {
+  // Stok anahtari. Bicim kurali packages/core icindeki SKU_PATTERN'dedir.
+  string sku = 1;
+
+  // Adet TAM SAYIDIR ve birim tasimaz.
+  //
+  // NEDEN getir.common.v1.Quantity DEGIL: bu deger dogrudan Redis sayacina
+  // DECRBY ile yazilir; kilogram/litre gibi birimler katalogda zaten sabit
+  // gramajli pakete cevrilmis durumdadir. Birim bilgisini burada tasimak,
+  // stok motoruna hicbir sey katmadan iki kaynakta ayni gercegi tutardi.
+  int32 quantity = 2;
+}
+
+// Tek bir SKU icin musaitlik bilgisi.
+message AvailabilityItem {
+  string sku = 1;
+
+  // Rezerve edilmemis, satilabilir adet. Rezerve edilen adetler bu sayidan
+  // ZATEN dusulmustur; ayrica "rezerve" alani tutulmaz.
+  int32 available_quantity = 2;
+}
+
+// Bir siparise ait rezervasyonun tam hali.
+message Reservation {
+  // Rezervasyon kimligi AYRI DEGILDIR: order_id'nin kendisidir. Bir taslak
+  // siparisin en fazla bir rezervasyonu olur, bu yuzden ikinci bir kimlik
+  // uretmek yalnizca eslesme hatasi kaynagi olurdu.
+  string order_id = 1;
+
+  string dark_store_id = 2;
+  string user_id = 3;
+  repeated ReservationItem items = 4;
+
+  // Sona erme ani (UTC). Redis hash'i bundan 60 saniye SONRA silinir; bu pay,
+  // supurucunun gecikmeli tick'inde kaydi hala okuyabilmesi icindir.
+  google.protobuf.Timestamp expires_at = 5;
+
+  ReservationStatus status = 6;
+
+  // Sure bir kez uzatildi mi. Uzatma yalnizca BIR KEZ yapilabilir; aksi halde
+  // odeme ekraninda bekleyen bir kullanici stogu sinirsiz sure tutabilirdi.
+  bool extended = 7;
+}
+
+message CheckAvailabilityRequest {
+  string dark_store_id = 1;
+
+  // En fazla 100 SKU; fazlasi VALIDATION_FAILED ile reddedilir.
+  repeated string skus = 2;
+}
+
+message CheckAvailabilityResponse {
+  repeated AvailabilityItem items = 1;
+
+  // Bu depoda hic sayaci olmayan SKU'lar. SESSIZCE ATLANMAZ: cagiran taraf
+  // "bu depoda satilmiyor" ile "stogu bitti" ayrimini ancak boyle yapabilir.
+  repeated string unknown_skus = 2;
+}
+
+// Rezervasyon istegi.
+//
+// Yetersiz stokta BOS CEVAP DONMEZ, gRPC hatasi doner: FAILED_PRECONDITION +
+// ErrorDetail.code = "STOCK_INSUFFICIENT". Hangi kalemin yetmedigi
+// ErrorDetail.metadata icinde ("sku", "requested", "available") tasinir.
+message ReserveRequest {
+  // Taslak siparisin kimligi. Ayni order_id ile ikinci cagri sayaclari TEKRAR
+  // dusurmez (reserve.lua ilk satirda EXISTS ile doner); bu davranis
+  // ADR-08'deki idempotency kuralinin stok tarafindaki karsiligidir.
+  string order_id = 1;
+
+  string dark_store_id = 2;
+  string user_id = 3;
+  repeated ReservationItem items = 4;
+
+  // Rezervasyon suresi, SANIYE cinsinden.
+  //
+  // Degeri order-svc verir cunku sure risk bandindan turer (dusuk bant 10 dk,
+  // orta bant 2 dk). Bandi burada okumak, "karari risk onerir, order uygular"
+  // ayrimini bozardi.
+  int32 ttl_seconds = 5;
+}
+
+message ReserveResponse {
+  // Rezervasyonun sona erecegi an (UTC). Istemciye geri sayim bu degerden
+  // kurulur.
+  google.protobuf.Timestamp expires_at = 1;
+
+  // true ise bu order_id icin rezervasyon ZATEN vardi ve sayaclar tekrar
+  // dusurulmedi. Cagiran taraf bunu basari sayar.
+  bool already_reserved = 2;
+}
+
+message CommitRequest {
+  string order_id = 1;
+  string dark_store_id = 2;
+}
+
+message CommitResponse {
+  ReservationOutcome outcome = 1;
+}
+
+message ReleaseRequest {
+  string order_id = 1;
+  string dark_store_id = 2;
+
+  // Serbest birakma gerekcesi; stock.released olayina ve ledger kaydina
+  // oldugu gibi yazilir (ornegin "user_cancelled", "risk_rejected",
+  // "payment_failed"). Serbest metin DEGIL, cagiran taraflarin uzerinde
+  // anlastigi kisa bir anahtar beklenir.
+  string reason = 3;
+}
+
+message ReleaseResponse {
+  ReservationOutcome outcome = 1;
+}
+
+message ExtendReservationRequest {
+  string order_id = 1;
+  string dark_store_id = 2;
+
+  // Mevcut bitis anina EKLENECEK saniye. Mutlak bir zaman alinmaz; istemci
+  // saatine guvenmek, saat kaymasi olan bir cihazin sureyi istedigi kadar
+  // uzatmasina izin verirdi.
+  int32 additional_seconds = 3;
+}
+
+message ExtendReservationResponse {
+  // Uzatma sonrasi yeni bitis ani. Uzatma yapilmadiysa MEVCUT bitis ani doner.
+  google.protobuf.Timestamp expires_at = 1;
+
+  // true ise sure daha once zaten bir kez uzatilmisti ve bu cagri sureye
+  // dokunmadi. Hata degildir; odeme adimi tekrar denenmis olabilir.
+  bool already_extended = 2;
+}
+
+message GetReservationRequest {
+  string order_id = 1;
+  string dark_store_id = 2;
+}
+
+// Rezervasyon okuma cevabi.
+//
+// Kayit hic yoksa NOT_FOUND hatasi doner. Suresi dolmus ama ledger'da izi olan
+// bir rezervasyon ise hata DEGILDIR: status = EXPIRED ile doner, cunku istemci
+// "sepetin suresi doldu" ekranini ancak boyle gosterebilir.
+message GetReservationResponse {
+  Reservation reservation = 1;
+}
