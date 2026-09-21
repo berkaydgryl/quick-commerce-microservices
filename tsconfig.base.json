@@ -32,7 +32,7 @@
     "paths": {
       "@getir/core": ["packages/core/src/index.ts"],
       "@getir/contracts": ["packages/contracts/src/index.ts"],
-      "@getir/proto": ["packages/proto/src/index.ts"],
+      "@getir/proto": ["packages/proto/gen/ts/index.ts"],
       "@getir/pricing": ["packages/pricing/src/index.ts"],
       "@getir/redis-kit": ["packages/redis-kit/src/index.ts"],
       "@getir/mongo-kit": ["packages/mongo-kit/src/index.ts"],

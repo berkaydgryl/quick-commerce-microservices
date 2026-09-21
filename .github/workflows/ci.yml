@@ -45,6 +45,28 @@ jobs:
       - name: Bagimliliklari kur
         run: pnpm install --frozen-lockfile
 
+      # buf BU ISTE DE GEREKLI (T2.3'ten beri). Sebebi ilk bakista gorunmuyor:
+      # packages/proto'nun TypeScript kaynagi depoda YOKTUR, .proto dosyalarindan
+      # uretilir. turbo.json icinde "typecheck" ve "build" gorevleri "generate:ts"
+      # gorevine bagli; o da "buf generate" kosar. buf kurulmazsa asagidaki
+      # "Tip kontrolu" adimi "buf: command not found" ile duser.
+      # Go eklentileri burada GEREKMEZ: TS uretimi yalnizca node_modules'teki
+      # ts-proto'yu kullanir (bkz. buf.gen.ts.yaml). Go tarafi ayri "codegen" isinde.
+      - name: buf kur
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          version: 1.73.0
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Uretim, LINT'TEN ONCE kosmak zorunda. Sebebi: eslint turbo uzerinden
+      # degil dogrudan ("eslint .") kosar, yani turbo'daki "generate:ts"
+      # bagimliligi onu kapsamaz. packages/proto/test icindeki testler
+      # gen/ts'ten import eder; dosyalar yoksa tip bilgili kurallar tipi
+      # cozemez ve "Unsafe member access" yagmuruyla kirilir. Ayni sira yerelde
+      # "pnpm verify" icinde de var.
+      - name: Sozlesme kodunu uret (TypeScript)
+        run: pnpm proto:gen:ts
+
       # Adimlar bilerek ayri tutuldu: kirmizi olan asamayi is akisi ozetinde
       # tek bakista gormek icin.
       - name: Lint
@@ -167,3 +189,70 @@ jobs:
       - name: buf breaking
         if: steps.detect.outputs.exists == 'true' && steps.detect.outputs.baseline == 'true' && github.event_name == 'pull_request'
         run: buf breaking packages/proto --against ".git#ref=origin/main,subdir=packages/proto"
+
+  # T2.3'un kapisi: ".proto dosyalarindan uretilen kod IKI DILDE de derleniyor mu?"
+  #
+  # Neden "quality" isinden ayri: bu is Go kurulumu ve iki Go eklentisinin
+  # derlenmesini gerektirir. Bunu her ise yuklemek gereksiz; TypeScript tarafi
+  # "quality" icinde zaten typecheck ve build ile dogrulaniyor. Burada asil kazanc
+  # GO yarisidir - Go kodunu baska hicbir is derlemiyor.
+  #
+  # Neden gerekli: gen/ klasoru depoya GIRMEZ. Yani bir .proto degisikliginin
+  # uretilen kodu kirip kirmadigi ancak burada, uretim gercekten kosturularak
+  # anlasilir. Bu is olmadan "buf lint" gecer ama uretilen Go derlenmez halde
+  # main'e girebilir.
+  codegen:
+    name: Kod uretimi (TS + Go derlenir)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+
+      - name: pnpm kur
+        uses: pnpm/action-setup@v4
+
+      - name: Node kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # Surum TEK yerden gelir: packages/proto/go.mod. "go-version-file" ayari
+      # oradaki "go" satirini okur; boylece go.mod yukseltilince CI kendiliginden
+      # dogru surume gecer ve burada ikinci bir surum numarasi bakimi kalmaz.
+      - name: Go kur
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/proto/go.mod
+          cache-dependency-path: packages/proto/go.sum
+
+      - name: buf kur
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          version: 1.73.0
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bagimliliklari kur
+        run: pnpm install --frozen-lockfile
+
+      # "@latest" YOK: surumler packages/proto/go.mod icinden gelir (tools.go o
+      # satirlari canli tutar). Boylece CI ile gelistirici makinesi ayni eklenti
+      # surumunu kullanir ve uretilen kod ikisinde de birebir ayni cikar.
+      - name: protoc eklentilerini kur
+        working-directory: packages/proto
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc
+
+      # pnpm proto:check = generate:ts -> tsc -> generate:go -> go build
+      - name: Uret ve iki dilde derle
+        run: pnpm proto:check
+
+      # go.mod/go.sum ile gercek bagimliliklar ayrisirsa burada yakalanir.
+      # "git diff --exit-code" kullanilmasinin sebebi: tidy sessizce duzeltir,
+      # biz duzeltmenin COMMIT EDILMEMIS olmasini hata saymak istiyoruz.
+      - name: go.mod ve go.sum guncel mi?
+        working-directory: packages/proto
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum

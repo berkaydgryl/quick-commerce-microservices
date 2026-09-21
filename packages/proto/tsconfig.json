@@ -1,0 +1,21 @@
+{
+  // Editor + typecheck projesi. Bu pakette ELLE YAZILMIS TypeScript yoktur;
+  // denetlenen sey tamamen uretilen koddur (gen/ts). Amac su soruyu yanitlamak:
+  // ".proto dosyalarindan cikan tipler projenin strict ayarlariyla derleniyor mu?"
+  //
+  // Not: gevsetilmis hicbir derleyici secenegi YOK. tsconfig.base.json'daki tum
+  // strict bayraklari (noUncheckedIndexedAccess, exactOptionalPropertyTypes,
+  // verbatimModuleSyntax, noUnusedLocals...) uretilen kod icin de gecerlidir ve
+  // sifir hatayla gecer. Bunu mumkun kilan iki ts-proto secenegi buf.gen.ts.yaml
+  // icinde aciklanmistir: importSuffix=.js ve useExactTypes=false.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+
+    // paths BILEREK BOSALTILDI: tsconfig.base.json "@getir/proto" adini bu paketin
+    // kendi gen/ts/index.ts dosyasina esler. Burada birakilsaydi paket kendi kendini
+    // takma adla import edebilir, ayni dosya iki ayri modul kimligiyle gorunurdu.
+    "paths": {}
+  },
+  "include": ["gen/ts", "test"]
+}

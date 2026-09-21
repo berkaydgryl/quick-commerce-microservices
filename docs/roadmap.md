@@ -884,10 +884,10 @@ Tek komutla ayağa kalkma hedefi ilk günden geçerlidir: make dev Redis ve Mong
 | --------------------------------- | ---------- | -------------------------- |
 | Node                              | 22 LTS     | node -v                    |
 | pnpm                              | 9+         | corepack enable && pnpm -v |
-| Go                                | 1.23+      | go version                 |
+| Go                                | 1.25+      | go version                 |
 | Docker                            | Compose v2 | docker compose version     |
-| buf                               | 1.4x       | buf --version              |
-| protoc-gen-go, protoc-gen-go-grpc | güncel     | go install ile             |
+| buf                               | 1.73       | buf --version              |
+| protoc-gen-go, protoc-gen-go-grpc | go.mod'dan | go install ile             |
 
 ### Kurulum adımları
 
@@ -895,7 +895,7 @@ Tek komutla ayağa kalkma hedefi ilk günden geçerlidir: make dev Redis ve Mong
 - corepack enable && pnpm install — tüm workspace bağımlılıkları.
 - cd apps/gateway && go mod tidy — Go bağımlılıkları.
 - docker compose -f infra/docker/docker-compose.dev.yml up -d — Mongo (replica set) + Redis.
-- pnpm proto:gen — .proto dosyalarından TS ve Go kodu üretir.
+- pnpm proto:gen — .proto dosyalarından TS ve Go kodu üretir (T2.3'te gerçek üretime bağlandı; Go kurulu değilse pnpm proto:gen:ts yeterlidir).
 - pnpm seed — kategori, ürün, 2 dark store, 3 kurye ekler.
 - make dev — tüm servisler + web izleme modunda başlar. (Windows'ta karşılığı pnpm dev'dir.)
 

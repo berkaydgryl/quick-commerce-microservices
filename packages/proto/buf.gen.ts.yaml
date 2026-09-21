@@ -1,0 +1,66 @@
+# @getir/proto - TypeScript kod uretimi. Config semasi: v2.
+#
+# NEDEN IKI AYRI SABLON (buf.gen.ts.yaml / buf.gen.go.yaml)?
+# Eklentilerin GELDIGI YER farkli:
+#   * protoc-gen-ts_proto  -> node_modules; "pnpm install" ile herkeste var.
+#   * protoc-gen-go, -go-grpc -> "go install"; Go kurulu olmayan makinede YOK.
+# Tek dosyada dursalardi, Go'su olmayan bir gelistiricide (ve CI'daki "quality"
+# isinde, orada Go kurulmuyor) "buf generate" eksik eklenti yuzunden patlardi -
+# TypeScript tarafinin Go ile hicbir isi olmamasina ragmen. Ayirinca
+# "pnpm typecheck" yalnizca bu sablonu kosar ve Go'dan bagimsiz yesil kalir.
+#
+# Ikisinin ortak yani yok, bu yuzden tekrar da yok: her sablon tek bir eklenti
+# ailesini yapilandirir.
+version: v2
+
+# Managed mode kapali. Gerekcesi buf.gen.go.yaml icinde (go_package elle yazilir);
+# TypeScript tarafini ilgilendiren bir ayar degil, ama iki sablonun ayni sekilde
+# davranmasi icin burada da acikca kapatiliyor.
+managed:
+  enabled: false
+
+plugins:
+  # ts-proto duz TypeScript arayuzleri uretir (sinif/wrapper katmani yok), bu yuzden
+  # uretilen tipler packages/contracts icindeki Zod semalarindan cikan tiplerle yan
+  # yana durabilir; arada bir donusturucu katmani gerekmez.
+  - local: protoc-gen-ts_proto
+    out: gen/ts
+    opt:
+      # esModuleInterop=true
+      # Monorepo bastan sona ESM ("type": "module"). Bu secenek olmadan ts-proto,
+      # @grpc/grpc-js gibi CommonJS paketleri icin namespace-import bicimi uretir;
+      # ESM altinda bu "X is not a constructor" gibi CALISMA ZAMANI hatasina doner,
+      # derlemede gorunmez.
+      - esModuleInterop=true
+      # outputServices=grpc-js
+      # Istemci/sunucu iskeletleri dogrudan @grpc/grpc-js icin uretilir. Servislerin
+      # kullandigi kutuphane bu. "generic-definitions" veya "nice-grpc" secilseydi
+      # arada elle yazilan bir adaptor katmani tasimak gerekirdi.
+      - outputServices=grpc-js
+      # useOptionals=messages
+      # Yalnizca IC ICE MESAJ alanlari "?" ile isaretlenir; skaler alanlar zorunlu kalir.
+      # Dogru olani budur: proto3'te her skalerin varsayilani vardir (int64 -> 0,
+      # string -> ""), yani skaleri "opsiyonel" diye yazmak yaniltici olur. Ic ice
+      # mesajlar ise gercekten undefined gelebilir - ornegin Money set edilmemisse.
+      - useOptionals=messages
+      # snakeToCamel=true
+      # .proto icinde amount_minor, TypeScript'te amountMinor. Bu protobuf'un resmi
+      # JSON esleme kuralidir; gateway'in urettigi REST JSON ile Node tarafindaki alan
+      # adlari boylece birebir ortusur ve arada isim cevirisi yapmak gerekmez.
+      - snakeToCamel=true
+      # importSuffix=.js  (T2.3'te eklendi)
+      # Uretilen dosyalar birbirini goreli yolla import eder. Varsayilan davranis
+      # uzantisiz yazmaktir ("../../common/v1/common") ve bu, NodeNext cozumlemesi
+      # kullanan bu monorepoda TS2835 ile derlemeyi kirar: ESM'de goreli import
+      # uzantili olmak ZORUNDADIR. ".js" yazilir, ".ts" degil - kaynakta .ts olsa
+      # bile calisma zamaninda cozulen dosya derlenmis .js dosyasidir.
+      - importSuffix=.js
+      # useExactTypes=false  (T2.3'te eklendi)
+      # Varsayilan "Exact<...>" sarmalayicisi fromPartial/create imzalarini oyle bir
+      # kosullu tipe cevirir ki TypeScript geri cikarim yapamaz: uretilen kodda
+      # "object.points?.map((e) => ...)" satirindaki "e" ortulu any olur ve strict
+      # derleme TS7006 ile kirilir. Kapatinca imza duz "DeepPartial<T>" olur, cikarim
+      # calisir ve uretilen kod projenin TAM strict ayarlariyla sifir hatayla derlenir.
+      # Kaybedilen sey yalnizca fazladan alan yazmaya karsi uyari; bedeli, uretilen
+      # kod icin tsconfig'i gevsetmek olurdu - bu daha pahali.
+      - useExactTypes=false
