@@ -318,19 +318,24 @@ Hepsi depo kökünden `pnpm <komut>` ile çalışır. `make` bu projede zorunlu 
 | `infra:reset`  | `docker compose … down -v`                                                                            | Konteyner **ve** veriyi siler, sıfırdan kurar                      | Çalışıyor                               |
 | `clean`        | `turbo run clean`                                                                                     | Derleme çıktılarını ve önbellekleri siler                          | Çalışıyor                               |
 
-### İlk servisi çalıştırma (T3.1)
+### Servisleri çalıştırma
 
 ```bash
-pnpm --filter @getir/catalog-service build
-pnpm --filter @getir/catalog-service start    # 50051 portunda gRPC
+pnpm --filter @getir/catalog-service build && pnpm --filter @getir/catalog-service start  # :50051
+pnpm --filter @getir/order-service   build && pnpm --filter @getir/order-service   start  # :50053
 
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/catalog.proto \
   localhost:50051 getir.catalog.v1.CatalogService/ListCategories
 ```
 
-Katalog verisi bugün bellekten gelir (sahte veri); Mongo bağımlılığı T4.1'de eklenecek, bu
-yüzden servis `pnpm infra:up` olmadan da ayağa kalkar. Ayrıntı ve Docker imajı:
-[`apps/catalog-service/README.md`](apps/catalog-service/README.md).
+| Servis                                                     | Port  | Bugün ne yapıyor                                        |
+| ---------------------------------------------------------- | ----- | ------------------------------------------------------- |
+| [`catalog-service`](apps/catalog-service/README.md) (T3.1) | 50051 | `ListCategories`, `ListProducts` — sahte veriyle        |
+| [`order-service`](apps/order-service/README.md) (T3.2)     | 50053 | `CreateDraftOrder`, `CreateOrder` — bellekte, ödeme yok |
+
+İkisi de veri deposuna bağlanmaz: katalog verisi bellekten gelir, siparişler bellekte
+tutulur. Bu yüzden `pnpm infra:up` olmadan da ayağa kalkarlar. Mongo bağımlılığı T4.1
+(katalog) ve T4.5 (sipariş) ile gelecek.
 
 ### Entegrasyon testleri ve Docker
 
@@ -392,9 +397,9 @@ Tek repo, üç üst klasör: `apps/` çalışan process'ler, `packages/` paylaş
 quick-commerce-microservices/
 ├── apps/                      # Çalışan process'ler (Gün 3'ten itibaren doluyor)
 │   ├── gateway/               # Go - tek dış kapı
-│   ├── catalog-service/       # Node - ürün, kategori, dark store  ← ilk servis (T3.1)
+│   ├── catalog-service/       # Node - ürün, kategori, dark store  (T3.1)
 │   ├── inventory-service/     # Node - stok, rezervasyon, süpürücü
-│   ├── order-service/         # Node - durum makinesi, saga, outbox
+│   ├── order-service/         # Node - durum makinesi, saga, outbox  (T3.2 iskelet)
 │   ├── payment-service/       # Node - mock kart + 3DS
 │   ├── risk-service/          # Node - kural motoru
 │   ├── courier-service/       # Node - atama + GPS simülatörü

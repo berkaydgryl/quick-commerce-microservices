@@ -1,0 +1,76 @@
+/**
+ * Use-case testi: sahte depo (bellek) ile, ag ve veritabani olmadan.
+ */
+
+import { AppError, ERROR_CODES, ORDER_STATUS, systemClock } from '@getir/core';
+import { beforeEach, describe, expect, it } from 'vitest';
+
+import { createCreateDraftOrder } from '../../src/application/create-draft-order.js';
+import { createCreateOrder } from '../../src/application/create-order.js';
+import { InMemoryOrderRepository } from '../../src/infrastructure/in-memory-order-repository.js';
+
+let repository: InMemoryOrderRepository;
+let draft: ReturnType<typeof createCreateDraftOrder>;
+let create: ReturnType<typeof createCreateOrder>;
+
+const input = {
+  userId: 'usr_1',
+  darkStoreId: 'ds_kadikoy',
+  lines: [{ productId: 'prd_01', sku: 'SUT-1L', quantity: 1 }],
+  deliveryLocation: { lat: 40.99, lng: 29.02 },
+  deliveryAddress: 'Kadıköy',
+};
+
+beforeEach(() => {
+  repository = new InMemoryOrderRepository();
+  draft = createCreateDraftOrder({ repository, clock: systemClock });
+  create = createCreateOrder({ repository, clock: systemClock });
+});
+
+describe('createDraftOrder use-case', () => {
+  it('siparisi kaydeder ve kimligini doner', async () => {
+    const order = await draft(input);
+
+    expect(repository.size).toBe(1);
+    await expect(repository.findById(order.id)).resolves.toMatchObject({
+      status: ORDER_STATUS.DRAFT,
+    });
+  });
+});
+
+describe('createOrder use-case', () => {
+  it('taslagi AWAITING_PAYMENT durumuna gecirir', async () => {
+    const { id } = await draft(input);
+
+    const order = await create({ orderId: id, userId: 'usr_1' });
+
+    expect(order.status).toBe(ORDER_STATUS.AWAITING_PAYMENT);
+    // Yeni kayit acilmaz, ayni siparis guncellenir.
+    expect(repository.size).toBe(1);
+  });
+
+  it('olmayan sipariste NOT_FOUND verir', async () => {
+    const failing = create({ orderId: 'ord_yok', userId: 'usr_1' });
+
+    await expect(failing).rejects.toBeInstanceOf(AppError);
+    await expect(failing).rejects.toMatchObject({ code: ERROR_CODES.NOT_FOUND });
+  });
+
+  it('baskasinin siparisinde de NOT_FOUND verir (varlik bilgisi sizmasin)', async () => {
+    const { id } = await draft(input);
+
+    // PERMISSION_DENIED donseydi "bu kimlikte siparis var" bilgisi sizardi.
+    await expect(create({ orderId: id, userId: 'usr_2' })).rejects.toMatchObject({
+      code: ERROR_CODES.NOT_FOUND,
+    });
+  });
+
+  it('ayni siparis iki kez olusturulamaz', async () => {
+    const { id } = await draft(input);
+    await create({ orderId: id, userId: 'usr_1' });
+
+    await expect(create({ orderId: id, userId: 'usr_1' })).rejects.toMatchObject({
+      code: ERROR_CODES.ORDER_STATE_INVALID,
+    });
+  });
+});
