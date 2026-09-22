@@ -16,8 +16,8 @@
  * ile duserdi.
  */
 
-import { commonEnvSchema, envInt } from '@getir/core';
-import { z } from 'zod';
+import { commonEnvSchema, envInt, envString } from '@getir/core';
+import type { z } from 'zod';
 
 import { DEFAULT_GRPC_HOST, DEFAULT_SHUTDOWN_TIMEOUT_MS } from './constants.js';
 
@@ -27,23 +27,6 @@ const MAX_SHUTDOWN_TIMEOUT_MS = 120_000;
 /** En kucuk ve en buyuk TCP port numarasi. */
 export const MIN_PORT = 1;
 export const MAX_PORT = 65_535;
-
-/**
- * Metin ortam degiskeni.
- *
- * Tanimsiz VE bos metin ayni sayilir: docker-compose'da "GRPC_HOST=" yazmak
- * degiskeni bos string olarak gecirir; zod'un `.default()` bunu tanimli kabul
- * edip varsayilani uygulamaz ve servis bos adrese baglanmaya calisirdi.
- */
-export function envString(defaultValue: string) {
-  return z
-    .string()
-    .optional()
-    .transform((raw) => {
-      const text = raw?.trim() ?? '';
-      return text === '' ? defaultValue : text;
-    });
-}
 
 /** Ortak + gRPC ortam degiskenleri. Servisler bunu `.extend()` ile genisletir. */
 export const serviceEnvSchema = commonEnvSchema.extend({

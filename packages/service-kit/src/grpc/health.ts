@@ -1,10 +1,14 @@
 /**
- * Standart gRPC health servisi (grpc.health.v1.Health).
+ * Standart gRPC health servisi (grpc.health.v1.Health) - TASIMA katmani.
  *
  * NEDEN STANDART SOZLESME: durum sorgusunu kendimiz uydursaydik (orn.
  * getir.common.v1.Ping) grpcurl'un, Kubernetes'in grpc probe'unun ve Go
  * istemcisinin hazir arayuzleri ise yaramazdi. Bu paketin proto/health.proto
  * dosyasi yukari akistaki dosyanin birebir kopyasidir.
+ *
+ * SORUMLULUK SINIRI: bu dosya DURUM TUTMAZ. Durum HealthRegistry'dedir
+ * (src/health/registry.ts); burasi yalnizca o defteri gRPC'ye acar ve Watch
+ * akislarinin yasam dongusunu yonetir.
  *
  * DURUM NEREDEN GELIR: sunucu acilisinda SERVING, kapanis basladiginda
  * NOT_SERVING yazilir (bkz. server.ts). Servisler ayrica kendi bagimliliklarina
@@ -24,6 +28,7 @@ import { z } from 'zod';
 
 import { HEALTH_SERVICE_NAME, OVERALL_HEALTH_KEY, SERVING_STATUS } from '../config/constants.js';
 import type { ServingStatus } from '../config/constants.js';
+import type { HealthRegistry, Unsubscribe } from '../health/registry.js';
 import type { Logger } from '../logger.js';
 import { unaryHandler } from './handler.js';
 import { loadServiceDefinition } from './proto.js';
@@ -48,50 +53,25 @@ export const healthServiceDefinition: ServiceDefinition = loadServiceDefinition(
   HEALTH_SERVICE_NAME,
 );
 
-/**
- * Sunucudaki servislerin ayakta olma durumunu tutar ve health RPC'sini uygular.
- */
-export class HealthService {
-  private readonly statuses = new Map<string, ServingStatus>();
-  private readonly watchers = new Map<string, Set<HealthWatchStream>>();
+/** Health RPC'sinin gRPC uygulamasi ve acik akislarinin sahibi. */
+export class HealthGrpcService {
+  private readonly registry: HealthRegistry;
   private readonly logger: Logger | undefined;
+  /** Acik Watch akislari ve her birinin dinleme iptali. */
+  private readonly streams = new Map<HealthWatchStream, Unsubscribe>();
 
-  constructor(logger?: Logger) {
+  constructor(registry: HealthRegistry, logger?: Logger) {
+    this.registry = registry;
     this.logger = logger;
-    // Sunucu daha dinlemeye baslamadan "ayakta" demek YANLIS olurdu; ilk durum
-    // NOT_SERVING'dir, bind basarili olunca SERVING'e cevrilir.
-    this.statuses.set(OVERALL_HEALTH_KEY, SERVING_STATUS.NOT_SERVING);
-  }
-
-  /** Servisin (veya bos anahtarla butun sunucunun) durumunu gunceller. */
-  setStatus(service: string, status: ServingStatus): void {
-    if (this.statuses.get(service) === status) {
-      return;
-    }
-    this.statuses.set(service, status);
-    // Alan adi "service" DEGIL: sunucunun gunlukcusu zaten { service: 'catalog' }
-    // baglamiyla geliyor ve ayni JSON'da iki "service" anahtari olusuyordu.
-    this.logger?.info({ target: service || '(sunucu)', status }, 'health durumu degisti');
-
-    for (const stream of this.watchers.get(service) ?? []) {
-      stream.write({ status });
-    }
-  }
-
-  /** Kayitli durum; servis hic bildirilmediyse undefined. */
-  getStatus(service: string): ServingStatus | undefined {
-    return this.statuses.get(service);
   }
 
   /** Tum Watch akislarini kapatir. Kapanista cagrilmazsa sunucu asla bosalmaz. */
   closeWatchers(): void {
-    for (const streams of this.watchers.values()) {
-      for (const stream of streams) {
-        stream.end();
-      }
-      streams.clear();
+    for (const [stream, unsubscribe] of this.streams) {
+      unsubscribe();
+      stream.end();
     }
-    this.watchers.clear();
+    this.streams.clear();
   }
 
   /** grpc-js'e verilecek uygulama nesnesi. */
@@ -101,7 +81,7 @@ export class HealthService {
         name: 'Health.Check',
         schema: healthCheckRequestSchema,
         handle: ({ service }): HealthCheckResponse => {
-          const status = this.statuses.get(service);
+          const status = this.registry.getStatus(service);
           if (status === undefined) {
             // Standart boyle ister: bilinmeyen servis Check'te NOT_FOUND ile
             // duser (Watch'ta ise SERVICE_UNKNOWN mesaji yazilir).
@@ -114,15 +94,18 @@ export class HealthService {
 
       Watch: (stream: HealthWatchStream): void => {
         const service = stream.request.service ?? OVERALL_HEALTH_KEY;
-        const current = this.statuses.get(service) ?? SERVING_STATUS.SERVICE_UNKNOWN;
-        stream.write({ status: current });
+        stream.write({
+          status: this.registry.getStatus(service) ?? SERVING_STATUS.SERVICE_UNKNOWN,
+        });
 
-        const streams = this.watchers.get(service) ?? new Set<HealthWatchStream>();
-        streams.add(stream);
-        this.watchers.set(service, streams);
+        const unsubscribe = this.registry.subscribe(service, (status) => {
+          stream.write({ status });
+        });
+        this.streams.set(stream, unsubscribe);
 
         const forget = (): void => {
-          streams.delete(stream);
+          unsubscribe();
+          this.streams.delete(stream);
         };
         stream.on('cancelled', forget);
         stream.on('close', forget);

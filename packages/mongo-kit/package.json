@@ -1,0 +1,32 @@
+{
+  "name": "@getir/mongo-kit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MongoDB baglantisi, repository tabani, indeks yonetimi ve transaction yardimcisi",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\""
+  },
+  "dependencies": {
+    "@getir/core": "workspace:*",
+    "mongodb": "^7.6.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@testcontainers/mongodb": "^12.1.0"
+  }
+}

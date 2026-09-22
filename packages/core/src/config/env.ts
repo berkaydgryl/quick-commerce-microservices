@@ -62,6 +62,32 @@ export function envBoolean(defaultValue: boolean = DEFAULT_MOCK) {
     });
 }
 
+/**
+ * Metin ortam degiskeni.
+ *
+ * Tanimsiz VE bos metin ayni sayilir: docker-compose'da "GRPC_HOST=" yazmak
+ * degiskeni bos string olarak gecirir; zod'un `.default()` bunu TANIMLI kabul
+ * edip varsayilani uygulamaz ve uygulama bos adrese baglanmaya calisirdi.
+ *
+ * Varsayilan verilmezse degisken ZORUNLUDUR (envInt ile ayni kural).
+ */
+export function envString(defaultValue?: string) {
+  return z
+    .string()
+    .optional()
+    .transform((raw, ctx) => {
+      const text = raw?.trim() ?? '';
+      if (text !== '') {
+        return text;
+      }
+      if (defaultValue !== undefined) {
+        return defaultValue;
+      }
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'zorunlu alan eksik' });
+      return z.NEVER;
+    });
+}
+
 export interface EnvIntOptions {
   readonly min?: number;
   readonly max?: number;

@@ -28,7 +28,8 @@ import {
 } from '../config/constants.js';
 import type { Logger } from '../logger.js';
 import { silentLogger } from '../logger.js';
-import { healthServiceDefinition, HealthService } from './health.js';
+import { HealthRegistry } from '../health/registry.js';
+import { healthServiceDefinition, HealthGrpcService } from './health.js';
 
 /** Sunucuya baglanacak tek bir servis. */
 export interface GrpcServiceRegistration {
@@ -62,7 +63,7 @@ export interface GrpcServerHandle {
   /** Gercekten baglanilan port (port 0 verildiginde isletim sisteminin sectigi). */
   readonly port: number;
   /** Durum tablosu; servis kendi bagimliliklarina gore guncelleyebilir. */
-  readonly health: HealthService;
+  readonly health: HealthRegistry;
   /** Zarif kapanis. Birden cok kez cagrilabilir; ilk cagri disindakiler ayni sozu bekler. */
   shutdown(reason: string): Promise<void>;
 }
@@ -74,8 +75,9 @@ export async function startGrpcServer(options: GrpcServerOptions): Promise<GrpcS
   const shutdownTimeoutMs = options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS;
 
   const server = new Server();
-  const health = new HealthService(logger);
-  server.addService(healthServiceDefinition, health.implementation);
+  const health = new HealthRegistry(logger);
+  const healthGrpc = new HealthGrpcService(health, logger);
+  server.addService(healthServiceDefinition, healthGrpc.implementation);
 
   for (const registration of options.services) {
     server.addService(registration.definition, registration.implementation);
@@ -102,6 +104,7 @@ export async function startGrpcServer(options: GrpcServerOptions): Promise<GrpcS
     shutdownPromise ??= runShutdown({
       server,
       health,
+      healthGrpc,
       services: options.services,
       logger,
       reason,
@@ -135,7 +138,8 @@ function bind(server: Server, host: string, port: number): Promise<number> {
 
 interface ShutdownParams {
   readonly server: Server;
-  readonly health: HealthService;
+  readonly health: HealthRegistry;
+  readonly healthGrpc: HealthGrpcService;
   readonly services: readonly GrpcServiceRegistration[];
   readonly logger: Logger;
   readonly reason: string;
@@ -144,7 +148,7 @@ interface ShutdownParams {
 }
 
 async function runShutdown(params: ShutdownParams): Promise<void> {
-  const { server, health, logger, reason, timeoutMs } = params;
+  const { server, health, healthGrpc, logger, reason, timeoutMs } = params;
   logger.info({ reason, timeoutMs }, 'zarif kapanis basladi');
 
   health.setStatus(OVERALL_HEALTH_KEY, SERVING_STATUS.NOT_SERVING);
@@ -153,7 +157,7 @@ async function runShutdown(params: ShutdownParams): Promise<void> {
       health.setStatus(registration.name, SERVING_STATUS.NOT_SERVING);
     }
   }
-  health.closeWatchers();
+  healthGrpc.closeWatchers();
 
   const drained = await drain(server, timeoutMs);
   if (!drained) {

@@ -119,6 +119,28 @@ jobs:
       # verilemedigi icin rs.initiate() ve replica set'in PRIMARY'e gecmesini
       # bekleme adimlari elle disaridan yazilmak zorunda kalir; Testcontainers'in
       # Mongo modulu bunu kendi yapar.
+
+      # DERLEME BU ISTE DE GEREKLI (T2.5'ten beri). Sebebi ilk bakista
+      # gorunmuyor: entegrasyon testleri kendi paketlerinin src/ dosyalarini
+      # dogrudan import eder, ama paketler arasi import (@getir/core) workspace
+      # sembolik baglantisindan gecer ve o da package.json "exports" uzerinden
+      # dist/index.js dosyasina bakar. dist yoksa vitest
+      # "Failed to resolve entry for package @getir/core" ile duser.
+      # Is artifact paylasmiyor (needs: quality yalnizca SIRA kurar, dosya
+      # tasimaz), bu yuzden burada yeniden derleniyor.
+      # buf da bu yuzden gerekli: build gorevi turbo'da generate:ts'e bagli.
+      - name: buf kur
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          version: 1.73.0
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sozlesme kodunu uret (TypeScript)
+        run: pnpm proto:gen:ts
+
+      - name: Derleme
+        run: pnpm build
+
       - name: Entegrasyon testleri
         run: pnpm test:int
 

@@ -1,13 +1,14 @@
 /**
- * Yapilandirilmis gunlukleme (pino).
+ * Yapilandirilmis gunlukleme (pino uygulamasi).
  *
  * Kural: `console.log` yasaktir (eslint kapisi), her kayit JSON'dur ve baglam
  * alanlari mesajdan ONCE gelir: `logger.info({ orderId }, 'siparis olusturuldu')`.
  *
- * NEDEN ARAYUZ VAR: `Logger` pino'nun tipini degil, KULLANDIGIMIZ kadarini
- * tanimlar. Cagiran taraflar (handler'lar, sunucu, ileride repository'ler) bu
- * arayuzu ister; testler tek satirlik bir sahte nesne verebilir ve gunluk
- * kutuphanesi degisirse yalnizca bu dosya degisir.
+ * ARAYUZ BURADA DEGIL: `Logger` ve `silentLogger` @getir/core icindedir
+ * (T2.5'te tasindi). Sebebi, mongo-kit ve redis-kit'in de bir gunlukcu istemesi;
+ * arayuz burada kalsaydi veri katmani paketleri gRPC paketine bagimli olurdu.
+ * Bu dosya yalnizca UYGULAMAYI (pino) saglar ve arayuzu yeniden disari verir,
+ * boylece cagiran taraflar tek yerden import etmeye devam eder.
  *
  * KAPSAM NOTU: roadmap'te gunlukleme + metrik icin ayri bir `packages/
  * observability` paketi planli (pino logger, request-id, prom-client). O paket
@@ -19,19 +20,10 @@
 
 import { pino } from 'pino';
 
-/** Gunluk kaydina eklenen yapilandirilmis baglam alanlari. */
-export type LogFields = Record<string, unknown>;
+import type { Logger } from '@getir/core';
 
-/** Kod tabaninin gordugu gunlukcu yuzeyi. */
-export interface Logger {
-  debug(fields: LogFields, message: string): void;
-  info(fields: LogFields, message: string): void;
-  warn(fields: LogFields, message: string): void;
-  error(fields: LogFields, message: string): void;
-  fatal(fields: LogFields, message: string): void;
-  /** Verilen alanlari her kayda ekleyen alt gunlukcu (orn. { rpc, requestId }). */
-  child(fields: LogFields): Logger;
-}
+export type { LogFields, Logger } from '@getir/core';
+export { silentLogger } from '@getir/core';
 
 export interface CreateLoggerOptions {
   /** Servis adi; her kayitta `name` alani olarak gorunur. */
@@ -58,16 +50,3 @@ export function createLogger(options: CreateLoggerOptions): Logger {
     },
   });
 }
-
-/**
- * Hicbir sey yazmayan gunlukcu. Testler ve "gunluk istemiyorum" diyen
- * cagirilar icin; uretimde kullanilmaz.
- */
-export const silentLogger: Logger = {
-  debug: () => undefined,
-  info: () => undefined,
-  warn: () => undefined,
-  error: () => undefined,
-  fatal: () => undefined,
-  child: () => silentLogger,
-};
