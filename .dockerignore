@@ -36,3 +36,11 @@ docker-compose*.yml
 **/*.spec.ts
 **/*.test.ts
 **/test/**
+
+# Uretilen sozlesme kodu imaj icinde yeniden uretilir (buf generate, T3.1).
+**/gen/
+
+# Belgeler ve altyapi tanimlari imaja girmez (imajin kendisi degil, onu
+# calistiran seyler).
+docs/
+infra/
