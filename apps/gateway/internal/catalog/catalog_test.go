@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"net/url"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	catalogv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/catalog/v1"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/assets"
 )
 
 // stubServer, gercek gRPC sunucusunda calisan sahte katalog. Sahte istemci
@@ -48,7 +50,10 @@ func (s *stubServer) ListCategories(ctx context.Context, _ *catalogv1.ListCatego
 	return &catalogv1.ListCategoriesResponse{Categories: s.categories}, nil
 }
 
-const testTimeout = 200 * time.Millisecond
+const (
+	testTimeout   = 200 * time.Millisecond
+	testAssetBase = "https://cdn.example"
+)
 
 // startStub, bellek ici baglantida sunucuyu kurar ve adaptoru dondurur.
 func startStub(t *testing.T, stub *stubServer) *Service {
@@ -71,7 +76,18 @@ func startStub(t *testing.T, stub *stubServer) *Service {
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 
-	return New(catalogv1.NewCatalogServiceClient(conn), testTimeout)
+	return New(catalogv1.NewCatalogServiceClient(conn), testTimeout, testResolver(t))
+}
+
+// testResolver, gercek cozumleyici: ceviri kuralinin kendisi assets paketinde
+// test edilir; burada adaptorun onu GERCEKTEN uyguladigi dogrulanir.
+func testResolver(t *testing.T) assets.Resolver {
+	t.Helper()
+	base, err := url.Parse(testAssetBase)
+	if err != nil {
+		t.Fatalf("kok adres: %v", err)
+	}
+	return assets.NewResolver(base)
 }
 
 func appErrorOf(t *testing.T, err error) *apperror.Error {
@@ -85,7 +101,8 @@ func appErrorOf(t *testing.T, err error) *apperror.Error {
 
 func TestListCategoriesMapsFields(t *testing.T) {
 	service := startStub(t, &stubServer{categories: []*catalogv1.Category{
-		{Id: "cat_1", Name: "Süt", Slug: "sut", SortOrder: 1, ImageUrl: "https://cdn.example/sut.png"},
+		// Veri GORELI yol tasir (catalog seed'i boyle yazar); cevaba mutlak gider.
+		{Id: "cat_1", Name: "Süt", Slug: "sut", SortOrder: 1, ImageUrl: "/img/cat/sut.png"},
 		{Id: "cat_2", Name: "Manav", Slug: "manav", SortOrder: 2},
 	}})
 
@@ -97,7 +114,7 @@ func TestListCategoriesMapsFields(t *testing.T) {
 	encoded, _ := json.Marshal(list)
 	// Bos imageUrl HIC yazilmamali (sozlesmede url() dogrulamasi var); alan
 	// adlari camelCase olmali.
-	want := `{"items":[{"id":"cat_1","name":"Süt","slug":"sut","imageUrl":"https://cdn.example/sut.png","sortOrder":1},{"id":"cat_2","name":"Manav","slug":"manav","sortOrder":2}]}`
+	want := `{"items":[{"id":"cat_1","name":"Süt","slug":"sut","imageUrl":"https://cdn.example/img/cat/sut.png","sortOrder":1},{"id":"cat_2","name":"Manav","slug":"manav","sortOrder":2}]}`
 	if string(encoded) != want {
 		t.Errorf("JSON:\n got %s\nwant %s", encoded, want)
 	}

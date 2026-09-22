@@ -1392,6 +1392,9 @@ components:
         imageUrl:
           type: string
           format: uri
+          description: |
+            Her zaman MUTLAK URL. Veri göreli yol saklar; gateway `ASSET_BASE_URL`
+            kökünü ekler. Görsel yoksa alan hiç gönderilmez.
         sortOrder:
           type: integer
 
@@ -1420,6 +1423,9 @@ components:
         imageUrl:
           type: string
           format: uri
+          description: |
+            Her zaman MUTLAK URL. Veri göreli yol saklar; gateway `ASSET_BASE_URL`
+            kökünü ekler. Görsel yoksa alan hiç gönderilmez.
         price:
           allOf:
             - $ref: "#/components/schemas/Money"

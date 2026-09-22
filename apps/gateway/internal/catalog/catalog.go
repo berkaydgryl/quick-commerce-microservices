@@ -24,15 +24,22 @@ type RPC interface {
 	ListCategories(ctx context.Context, in *catalogv1.ListCategoriesRequest, opts ...grpc.CallOption) (*catalogv1.ListCategoriesResponse, error)
 }
 
+// ImageResolver, verideki goreli gorsel yolunu mutlak URL'ye cevirir
+// (assets.Resolver). Arayuz kullanan tarafta: test kendi cozumleyicisini verir.
+type ImageResolver interface {
+	Resolve(path string) string
+}
+
 // Service, katalog uclarinin gateway tarafi.
 type Service struct {
 	rpc     RPC
 	timeout time.Duration
+	images  ImageResolver
 }
 
 // New, adaptoru kurar. timeout, TEK bir gRPC cagrisinin ust siniridir.
-func New(rpc RPC, timeout time.Duration) *Service {
-	return &Service{rpc: rpc, timeout: timeout}
+func New(rpc RPC, timeout time.Duration, images ImageResolver) *Service {
+	return &Service{rpc: rpc, timeout: timeout, images: images}
 }
 
 // ListCategories, kategori listesini REST bicimiyle dondurur.
@@ -53,5 +60,5 @@ func (s *Service) ListCategories(ctx context.Context) (CategoryList, error) {
 		return CategoryList{}, apperror.FromGRPC(fmt.Errorf("catalog ListCategories: %w", err), trailer)
 	}
 
-	return toCategoryList(response.GetCategories()), nil
+	return toCategoryList(response.GetCategories(), s.images), nil
 }

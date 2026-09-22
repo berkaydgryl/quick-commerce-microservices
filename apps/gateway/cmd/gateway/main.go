@@ -24,6 +24,7 @@ import (
 
 	catalogv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/catalog/v1"
 
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/assets"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/catalog"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/clients"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/config"
@@ -91,9 +92,13 @@ func run(cfg config.Config, logger *slog.Logger) error {
 	}
 
 	app := httpapi.New(httpapi.Deps{
-		Health:     health.New(healthClients, cfg.RequestTimeout, cfg.Mock),
-		Categories: catalog.New(catalogv1.NewCatalogServiceClient(catalogConn), cfg.RequestTimeout),
-		Logger:     logger,
+		Health: health.New(healthClients, cfg.RequestTimeout, cfg.Mock),
+		Categories: catalog.New(
+			catalogv1.NewCatalogServiceClient(catalogConn),
+			cfg.RequestTimeout,
+			assets.NewResolver(cfg.AssetBaseURL),
+		),
+		Logger: logger,
 	})
 
 	// SIGINT/SIGTERM: orkestrator once nazikce ister, sonra oldurur. O pencereyi

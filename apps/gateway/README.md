@@ -18,6 +18,7 @@ testleri, statik derleme).
 | Zarif kapanış        | ✅ SIGINT/SIGTERM → devam eden istekler beklenir                |
 | `GET /v1/categories` | ✅ catalog `ListCategories`; bilinmeyen sorgu parametresi 400   |
 | gRPC hata çevirisi   | ✅ `x-app-error` trailer'ı, yoksa durum kodu (`apperror`)       |
+| Görsel adresleri     | ✅ Göreli yol → mutlak URL (`ASSET_BASE_URL`, `internal/assets`) |
 | `GET /v1/products`   | ⏳ T8.4 (stok birleştirmesiyle)                                 |
 | JWT, rate limit      | ⏳ T8.1, T8.2                                                   |
 
@@ -29,7 +30,7 @@ yoktur. İlk derlemeden (ve her `.proto` değişikliğinden) önce Go kodu üret
 ```bash
 pnpm proto:gen                       # TS + Go (Go icin buf + protoc eklentileri gerekir)
 cd apps/gateway
-go run ./cmd/gateway                 # :8080
+ASSET_BASE_URL=http://localhost:5173 go run ./cmd/gateway   # :8080 (ASSET_BASE_URL zorunlu)
 curl -s localhost:8080/v1/categories | jq
 curl -s localhost:8080/healthz | jq
 go test -race ./...
@@ -40,6 +41,7 @@ Docker (build bağlamı **depo köküdür**):
 ```bash
 docker build -f apps/gateway/Dockerfile -t getir/gateway .
 docker run --rm -p 8080:8080 \
+  -e ASSET_BASE_URL=http://localhost:5173 \
   -e CATALOG_GRPC_ADDR=host.docker.internal:50051 \
   -e ORDER_GRPC_ADDR=host.docker.internal:50053 \
   getir/gateway
@@ -52,6 +54,7 @@ docker run --rm -p 8080:8080 \
 
 | Değişken                     | Varsayılan        | Anlamı                                          |
 | ---------------------------- | ----------------- | ----------------------------------------------- |
+| `ASSET_BASE_URL`             | **yok — zorunlu** | Görsel adreslerinin kökü (aşağıda)              |
 | `GATEWAY_PORT`               | `8080`            | Dinlenen HTTP portu                             |
 | `CATALOG_GRPC_ADDR`          | `localhost:50051` | catalog-service adresi (`host:port`)            |
 | `ORDER_GRPC_ADDR`            | `localhost:50053` | order-service adresi                            |
@@ -60,6 +63,28 @@ docker run --rm -p 8080:8080 \
 | `LOG_LEVEL`                  | `info`            | `trace/debug/info/warn/error/fatal` (Node ile ortak) |
 | `MOCK`                       | `false`           | `/healthz` cevabında bildirilir (B16)           |
 | `NODE_ENV`                   | `development`     | `development/test/production`                   |
+
+## Görsel adresleri (`ASSET_BASE_URL`)
+
+Veri görseli **göreli yol** olarak saklar (`/img/cat/sut.png`), çünkü mutlak adres ortama
+bağlıdır. Sözleşme ise mutlak URL ister (`imageUrl: z.string().url()`). Çeviriyi gateway (BFF)
+yapar: CDN değişirse yalnızca bu değişken değişir, veri ve istemci değişmez.
+
+| Veride                  | Cevapta (`ASSET_BASE_URL=https://cdn.x/static`) |
+| ----------------------- | ----------------------------------------------- |
+| `/img/cat/sut.png`      | `https://cdn.x/static/img/cat/sut.png`          |
+| `""`                    | alan hiç yazılmaz                               |
+| `https://baska.cdn/a.png` | olduğu gibi                                   |
+| `javascript:…`, `data:…` | alan hiç yazılmaz (`<img src>`'ye zararlı adres gitmez) |
+| `/img/../../x.png`      | `https://cdn.x/static/x.png` (kökün üstüne çıkamaz) |
+
+**Zorunludur, varsayılanı yoktur (fail fast).** Görsellerin nerede barınacağı henüz
+kararlaştırılmadı; bir varsayılan bu kararı koda gömer ve canlıda unutulursa istemciye sessizce
+`localhost` adresleri gider. Verilmezse gateway açılışta durur:
+
+```text
+ortam degiskenleri gecersiz: ASSET_BASE_URL: zorunlu, ornek: http://localhost:5173
+```
 
 ## `/healthz` sözleşmesi
 
