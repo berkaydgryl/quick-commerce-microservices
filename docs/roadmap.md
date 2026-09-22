@@ -75,7 +75,7 @@ Yığının tamamı tek monorepo içinde yaşar: Node tarafı pnpm workspace, Go
 
 | Katman      | Seçim                                           | Neden                                                              |
 | ----------- | ----------------------------------------------- | ------------------------------------------------------------------ |
-| Gateway     | Go 1.23 + Fiber v2                              | Düşük gecikmeli edge; middleware zinciri auth/rate-limit için sade |
+| Gateway     | Go 1.25 + Fiber v3                              | Düşük gecikmeli edge; middleware zinciri auth/rate-limit için sade |
 | Servisler   | Node 22 LTS + TypeScript 5 strict               | Hızlı iterasyon; tipler proto'dan üretilir                         |
 | RPC         | gRPC + protobuf, buf ile yönetim                | Tek kaynak sözleşme; buf breaking geriye uyum kapısı               |
 | Kalıcı veri | MongoDB 7, tek düğümlü replica set              | Esnek şema + çoklu doküman transaction (outbox için şart)          |

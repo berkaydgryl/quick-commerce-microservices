@@ -291,3 +291,62 @@ jobs:
       - name: go.mod ve go.sum guncel mi?
         working-directory: packages/proto
         run: go mod tidy -diff
+
+  # T3.3'un kapisi: apps/gateway (Go) derleniyor, bicimli ve testleri geciyor mu?
+  #
+  # Neden "codegen" isinden ayri: o is packages/proto modulunu dogrular;
+  # gateway ise KENDI modulu olan ayri bir uygulamadir (bkz. apps/gateway/go.mod).
+  # Bugun proto'ya bagli degil, bu yuzden Node, pnpm ve buf kurmaya gerek yok -
+  # is yalnizca Go ile birkac saniyede biter. T3.4'te packages/proto "replace"
+  # ile baglandiginda bu is uretim adimini da kazanacak.
+  #
+  # Neden gerekli: "pnpm verify" Go kodunu KAPSAMAZ (README: Go yerelde
+  # opsiyoneldir). Bu is olmadan kirik bir gateway main'e girebilir.
+  gateway:
+    name: Gateway (Go - fmt, vet, test, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/gateway
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+
+      # Surum TEK yerden gelir: apps/gateway/go.mod (Dockerfile'daki
+      # golang:1.25 taban imajiyla ayni satir).
+      - name: Go kur
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/gateway/go.mod
+          cache-dependency-path: apps/gateway/go.sum
+
+      # gofmt hata kodu DONDURMEZ; yalnizca bicimsiz dosyalari listeler. Liste
+      # bos degilse isi biz dusururuz.
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "Bicimlenmemis dosyalar (gofmt -w ile duzeltin):"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      # go.mod/go.sum ile gercek bagimliliklar ayrisirsa burada yakalanir
+      # (ayni gerekce: "codegen" isindeki tidy adimi). T3.3'te tum
+      # bagimliliklarin "// indirect" isaretli kalmasi tam olarak boyle bir
+      # ayrismaydi.
+      - name: go.mod ve go.sum guncel mi?
+        run: go mod tidy -diff
+
+      # -race: /healthz servisleri paralel goroutine'lerle sorgular; yaris
+      # dedektoru o paylasilan dilimi her kosuda denetler.
+      # -count=1: test onbellegi kapali, her kosu gercekten calisir.
+      - name: Testler (race dedektoru acik)
+        run: go test -race -count=1 ./...
+
+      # Dockerfile ile ayni bayraklar: CI'da derlenen ikili imajdakiyle ayni olsun.
+      - name: Derle (statik ikili)
+        run: CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /tmp/gateway ./cmd/gateway
