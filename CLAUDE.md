@@ -35,6 +35,23 @@ Kurallar bu dosyada TEKRAR EDILMEZ; iki yerde duran kural, bir gun birbirinden a
 - **Testing & Git:** Write deterministic unit and integration tests. Follow Conventional
   Commits (`feat:`, `fix:`, `refactor:`).
 
+## CSS, Design System & Frontend Rules
+
+- **No Hardcoded Values:** Never use hardcoded hex colors or static pixel widths. Always use
+  CSS Variables/Design Tokens (e.g., `var(--color-brand-primary)`).
+- **Fluid & Responsive:** Use relative units (`rem`, `%`, `vw`) instead of fixed `px`.
+  Layouts must be fluid and responsive.
+- **Naming Standard:** Enforce BEM naming convention (`.c-block__element--modifier`) and
+  state prefixes (`.is-active`, `.is-disabled`).
+- **Accessibility:** Never disable focus outlines (`outline: none`). Include
+  `prefers-reduced-motion` support for animations.
+- **Modular CSS:** Keep `global.css` strictly for CSS Reset, Tokens, and Typography. Scope
+  component styles to their respective modules.
+
+**Scope note:** these rules govern HOW frontend code is written. WHAT gets designed (palette,
+screens, component list, the contents of `tokens.css`) is the user's call — roadmap web rows
+are a starting point, not a contract. Ask before designing.
+
 Her kuralin bu repodaki karsiligi (hangi dosya, hangi ADR, hangi istisna) icin bkz.
 `.cursor/rules/proje-kurallari.mdc`. Ozellikle **Redis TTL istisnasi** oraya gerekcesiyle
 yazilmistir: stok sayaci ve rezervasyon indeksi bilincli olarak TTL'sizdir (ADR-03).

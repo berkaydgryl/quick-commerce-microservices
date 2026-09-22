@@ -78,8 +78,7 @@ ya hatayi cevirir; ucunu birden degil.
  Hata bilgisi `error` icinde GRUPLUDUR; kokte ayri bir `message` alani yoktur (T2.2).
 - Proto: buf STANDARD lint; her RPC'nin kendi Request/Response mesaji; enum 0 degeri `_UNSPECIFIED`;
   silinen alan `reserved`; `go_package` her dosyada elle yazilir (managed mode kapali); import koku `proto/`.
-- Frontend: renk/olcu/golge yalnizca `tokens.css` degiskenleriyle (stylelint kapisi). Sunucu verisi TanStack
-  Query, istemci durumu Zustand; ikisi karistirilmaz. Bilesen icinde hesap yok, `services/` icinde.
+- Frontend kurallari ayri bolumde: "Frontend, tasarim sistemi ve CSS".
 
 ## TypeScript
 
@@ -196,6 +195,51 @@ Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicid
   port olarak 0 verilip isletim sisteminin sectigi bos port kullanilir.
 - Yalnizca mutlu yol degil; sinir kosullari ve hata yollari da test edilir (bos liste, yetkisiz
   erisim, gecersiz gecis, sure asimi).
+
+## Frontend, tasarim sistemi ve CSS
+
+Bu bolum "NASIL yazilir" kuralidir. "NE tasarlanir" (renk paleti, ekran duzeni, bilesen
+listesi, tokens.css'in icerigi) KULLANICININ KARARIDIR ve roadmap'teki web satirlari
+baglayici degildir; bir ekrana gelindiginde kapsam kullaniciya sorulur.
+
+### Tek dogruluk kaynagi ve token'lar
+
+- Koda ciplak renk, olcu, font ya da golge YAZILMAZ (`#5d3ebc`, `rgb(...)`, `14px`).
+  Her deger CSS degiskeninden gelir: `var(--color-brand-primary)`. Kapi stylelint'tir
+  (`pnpm lint:style`).
+- Token adi RENGI degil ISLEVI anlatir: `--purple` degil `--color-brand-primary`,
+  `--bg-surface`, `--text-muted`. Boylece marka rengi degisince ad yalan olmaz.
+- Renkler semantik degiskenlere bagli oldugu icin tema degisimi (dark mode) mimariden
+  gelir; ayri bir stil dosyasi cikarmak gerekmez.
+
+### Akiskan duzen (fluid layout)
+
+- Kapsayici, kart ve butonda sabit piksel genislik (`width: 300px`) kullanilmaz.
+- Yazi tipi ve bosluklar `rem` (kullanicinin tarayici ayarina uyar; erisilebilirlik).
+  Genislik ve duzen `%`, `vw/vh`, `flex`, `grid`.
+- Ekrana gore orantili buyuyen deger icin `clamp()` ve esnek kirilim noktalari tercih
+  edilir; her olcu icin ayri media query yazilmaz.
+
+### Isimlendirme (BEM + onek)
+
+- `c-` bilesen (`.c-card`, `.c-button`) · `u-` yardimci (`.u-container`) ·
+  `is-` / `has-` durum (`.is-active`, `.is-disabled`).
+- Yapi: `block__element--modifier` (`.c-card__title--highlighted`).
+
+### Erisilebilirlik ve performans
+
+- `outline: none` YASAK. Klavye gezintisi icin `:focus-visible` stili her zaman gorunur
+  olur; ozellestirilebilir ama kaldirilamaz.
+- Animasyonlar `@media (prefers-reduced-motion: reduce)` altinda sifirlanir.
+- `global.css` YALNIZCA reset, token ve temel tipografi tasir. Bilesene ozel stil, o
+  bilesenin modulunde durur (CSS Modules / bilesen dosyasi).
+
+### Veri katmani (degismez)
+
+Gorsel taraf esnektir ama veri tarafi sozlesmedir: sunucu verisi TanStack Query, istemci
+durumu Zustand (karistirilmaz) · tipler `@getir/contracts` icindeki Zod semalarindan
+`z.infer` ile turer, elle API tipi yazilmaz · hesap bilesende degil `services/` icinde ·
+sepet yalnizca tarayicida (ADR-13) · para KURUS, 100'e bolme yalnizca gosterimde.
 
 ## Ortam
 
