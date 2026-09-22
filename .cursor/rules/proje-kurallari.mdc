@@ -25,6 +25,8 @@ yeni ADR oner.
   `feat(contract): order ve payment proto sozlesmeleri (T2.1)`.
 - Alan etiketleri: contract, platform, gateway, catalog, inventory, order, payment, risk, courier, realtime, web.
 - Git kancasi yok (Windows/WSL gerekcesi); kapi `pnpm verify` + CI'dir. `main`'e dogrudan push yok, PR ile.
+- PR tek amaca hizmet eder; gorev disi degisiklik ayri dala alinir. Devasa PR acilmaz.
+- `main` korumalidir: merge icin CI yesil olmali ve en az bir inceleme onayi bulunmalidir.
 
 ## Mimari degismezler
 
@@ -78,6 +80,122 @@ ya hatayi cevirir; ucunu birden degil.
   silinen alan `reserved`; `go_package` her dosyada elle yazilir (managed mode kapali); import koku `proto/`.
 - Frontend: renk/olcu/golge yalnizca `tokens.css` degiskenleriyle (stylelint kapisi). Sunucu verisi TanStack
   Query, istemci durumu Zustand; ikisi karistirilmaz. Bilesen icinde hesap yok, `services/` icinde.
+
+## TypeScript
+
+- `any` YASAK. Tipi belirsiz deger once `unknown` olur, sonra tip daraltma (type guard) ile
+  kullanilir. Ornek: `service-kit/src/grpc/status.ts` metadata JSON'unu `unknown` alir,
+  `isErrorCode` ve `typeof` kontrolleriyle daraltir.
+- Dis dunyadan gelen veri (gRPC mesaji, HTTP govdesi, Redis cikti, ortam degiskeni) `as` ile
+  ZORLANMAZ; Zod semasindan gecirilir (ADR-10). `as` yalnizca tip tesisati icindir
+  (ornegin surucunun `Filter<TDoc>` beklentisi), veri dogrulamak icin degil.
+- Disari acilan sozlesmeler ve model tipleri `interface`; birlesim (union), ilkel esleme ve
+  yardimci tipler `type`.
+- Eksik esleme DERLEMEDE yakalansin: sozluk cevirileri `Readonly<Record<K, V>>` ile yazilir
+  (ornek: `interfaces/grpc/mappers.ts`). Yeni bir deger eklenince derleme kirilir.
+
+## Node.js ve surec yonetimi
+
+- Asenkron is `async/await` ile yazilir; her `await` zinciri ya try/catch ile ya da merkezi
+  bir sarmalayici ile korunur (`service-kit` icindeki `unaryHandler` bu sarmalayicidir).
+- Event loop bloklanmaz. CPU yogun is (toplu hesap, sifreleme, buyuk JSON) ana is parcaciginda
+  calistirilmaz; worker thread ya da arka plan isine devredilir.
+- Dinleyici birakilmaz: `on(...)` ile eklenen her dinleyicinin `off(...)` karsiligi olmalidir.
+  Ornek: `HealthGrpcService` her Watch akisinda abonelik acar ve akis kapaninca iptal eder;
+  `installProcessHandlers` geri alma fonksiyonu dondurur.
+- Buyuk veri bellege tek seferde alinmaz; akis (stream) ile islenir.
+- Her servis SIGTERM ve SIGINT yakalar ve zarif kapanir: health NOT_SERVING -> acik akislar
+  kapanir -> devam eden cagrilar beklenir -> sure asiminda zorla kapanir -> EN SON veritabani
+  baglantilari kapanir (`service-kit/src/grpc/graceful-shutdown.ts`).
+
+## Go
+
+Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicidir.
+
+- Hata yok sayilmaz; `_` ile gecistirilmez. Hata olustugu yerde sarmalanir:
+  `fmt.Errorf("katalog cagrisi: %w", err)`.
+- Ag, I/O ve veritabani cagrilarinin ILK parametresi `context.Context`'tir. Goroutine
+  sizintisini onlemek icin timeout/cancel kurulur.
+- Boyutu bilinen dilimler `make([]T, 0, kapasite)` ile acilir.
+- Arayuz KULLANAN tarafta tanimlanir ve kucuk tutulur (tek metotlu arayuz tercih edilir).
+
+## API ve gRPC
+
+- REST: dogru fiil ve dogru durum kodu. Kod -> HTTP/gRPC eslemesi TEK tabloda
+  (`@getir/core/error-codes.ts`); baska yerde eslenmez.
+- Tum mutasyon uclari `Idempotency-Key` ister (ADR-08). Anahtar bugun dogrulanir; tekrar
+  korumasi `idem:{key}` ile gelecek, uc degismeyecek.
+- Liste donen her uc sayfalidir. Imlec (cursor) tercih edilir: katalog siralamasi degistigi
+  icin offset ile ayni kayit iki kez gorunebilir (`catalog-service/src/domain/pagination.ts`).
+- Proto geriye donuk uyumlu kalir: alan numarasi degistirilmez, silinen alan `reserved`.
+- Hata cevabi tek bicimdedir: `code`, `message`, `details`, `requestId`. gRPC tarafinda
+  `x-app-error` metadata'si ayni yuku tasir.
+
+## Redis ve onbellek
+
+- Anahtar isim alani zorunludur: `alan:varlik:kimlik`. Bicim TEK yerde uretilir
+  (`packages/redis-kit/src/keys.ts`), elle string birlestirilmez.
+- TTL kuraldir: her anahtara mantikli bir omur verilir. ISTISNALAR yalnizca sunlardir ve
+  gerekcesi ADR-03'tedir: `stock:{store}:avail:{sku}` (stok sayaci) ve `resv:index:{store}`
+  (rezervasyon indeksi). Bunlar sure dolunca silinirse stok gercegi kaybolur ve supurucu
+  suresi dolmus rezervasyonu bulamaz. Yeni bir TTL'siz anahtar ancak yeni bir ADR ile eklenir.
+- Ayni anda dolan populer onbellek icin TTL'e rastgelelik (jitter) eklenir; gerekiyorsa
+  dagitik kilit kullanilir. Sicak yoldaki stok dusumunde kilit YOKTUR, tek Lua script'i vardir
+  (ADR-01).
+- Dogru veri yapisi secilir: sayac icin string/hash, sirali kayit icin sorted set, olay akisi
+  icin stream.
+- `KEYS *` YASAK; tarama gerekiyorsa `SCAN`.
+
+## Docker
+
+- Cok asamali imaj: derleme araclari (buf, devDependencies, kaynak) calisma imajina girmez.
+- Kucuk taban imaj (alpine/distroless/scratch).
+- Konteyner root ile calismaz; `USER node` (ya da ozel kullanici) zorunludur.
+- Katman sirasi: az degisen once. Bagimlilik indirmesi `pnpm fetch` ile yapilir ve o katmana
+  `pnpm-lock.yaml` ile birlikte kok `package.json` kopyalanir - aksi halde corepack
+  `packageManager` surumunu okuyamaz ve baska bir pnpm indirir (T3.2'de yasandi).
+- Sir (secret) imaja gomulmez; ortam degiskeni olarak verilir.
+
+## Veritabani
+
+- N+1 sorgu yasak: capraz veri toplu uclarla alinir (`BatchGetProducts`,
+  `CheckAvailability(store, sku[])` - B27).
+- Sema degisikligi elle yapilmaz; versiyonlanmis ve geri alinabilir migration ile yapilir.
+- Indeksler koda BILDIRILIR (`MongoRepository.indexes()`), elle `mongosh` ile acilmaz.
+  Sik sorgulanan alana indeks eklenir; gereksiz indeks yazma maliyetini artirir.
+- Is kritigi veride fiziksel silme yerine durum alani kullanilir (`products.isActive`:
+  urun silinmez, gizlenir - gecmis siparisler bozulmasin).
+
+## Guvenlik
+
+- Kodda sir YOK: anahtar, parola, baglanti dizesi yalnizca ortam degiskeninden gelir.
+- Her giris noktasi girdiyi dogrular (Zod); dogrulanmamis veri application katmanina giremez.
+- En az yetki: veritabani kullanicisi, jeton ve CI izinleri isin gerektirdigi kadar
+  (ornek: `.github/workflows/ci.yml` icinde `permissions: contents: read`).
+- Gunluk ve hata cevabi KISISEL VERI TASIMAZ. Ornekler: Mongo benzersiz indeks ihlalinde
+  yalnizca alan ADI disari verilir, deger verilmez (`mongo-kit/src/errors.ts`); baglanti
+  dizesindeki parola gunluge maskelenerek yazilir (`redactUri` / `redactUrl`).
+- Beklenmeyen hatanin ic mesaji istemciye gitmez; yalnizca gunluge yazilir.
+
+## Gozlemlenebilirlik
+
+- Gunluk JSON'dur (pino) ve baglam alanlari mesajdan ONCE gelir.
+- Seviye sozlesmesi: `debug` yerel ayrinti · `info` is akisi kilometre taslari · `warn`
+  sistem calisiyor ama siradisi durum (beklenen is hatasi) · `error` mudahale gerektiren,
+  akisi bozan hata.
+- Korelasyon kimligi (`x-request-id`) her cagrida tasinir; gelmezse uretilir ve gunluge
+  yazilir (`service-kit/src/grpc/context.ts`). Servisler arasi cagrida ayni deger
+  GECIRILIR, yenisi uretilmez.
+- Metrik ucu servis portu + 1000'dedir (roadmap port haritasi).
+
+## Test
+
+- Test piramidi: is mantigi icin cok sayida hizli birim testi, Mongo/Redis icin
+  Testcontainers ile entegrasyon testi, kritik akislar icin az sayida uctan uca test.
+- Testler belirlenebilir olmalidir: zaman `Clock` ile sabitlenir, dis cagrilar taklit edilir,
+  port olarak 0 verilip isletim sisteminin sectigi bos port kullanilir.
+- Yalnizca mutlu yol degil; sinir kosullari ve hata yollari da test edilir (bos liste, yetkisiz
+  erisim, gecersiz gecis, sure asimi).
 
 ## Ortam
 

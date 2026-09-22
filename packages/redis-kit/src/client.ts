@@ -74,12 +74,14 @@ export async function connectRedis(options: RedisConnectionOptions): Promise<Red
 
   // Dinleyici SART: ioredis'te 'error' olayinin dinleyicisi yoksa Node
   // yakalanmamis hata olarak processi devirir - Redis kisa bir an duserse bile.
-  redis.on('error', (error: Error) => {
+  const onError = (error: Error): void => {
     logger.error({ err: error }, 'redis baglanti hatasi');
-  });
-  redis.on('reconnecting', () => {
+  };
+  const onReconnecting = (): void => {
     logger.warn({}, 'redis yeniden baglaniyor');
-  });
+  };
+  redis.on('error', onError);
+  redis.on('reconnecting', onReconnecting);
 
   try {
     await waitUntilReady(redis, options.connectTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS, logger);
@@ -99,6 +101,12 @@ export async function connectRedis(options: RedisConnectionOptions): Promise<Red
     redis,
     ping: async () => (await redis.ping()) === 'PONG',
     close: async () => {
+      // Dinleyiciler ONCE kaldirilir: kapanis sirasinda gelen "baglanti koptu"
+      // hatasi, zaten istedigimiz sey - gunluge hata olarak yazilmasi yaniltir
+      // ve yeniden baglanma uyarisi bosuna kaydedilir.
+      redis.off('error', onError);
+      redis.off('reconnecting', onReconnecting);
+
       try {
         // quit: kuyruktaki komutlar bitsin, sonra kapan. disconnect anida keser.
         await redis.quit();

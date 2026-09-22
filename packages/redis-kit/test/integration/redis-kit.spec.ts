@@ -48,6 +48,18 @@ describe('connectRedis', () => {
     await expect(connection.ping()).resolves.toBe(true);
   });
 
+  it('kapanista kendi ekledigi dinleyicileri birakir', async () => {
+    // Ayri bir baglanti: paylasilan baglantiyi kapatmadan olcum yapabilmek icin.
+    const short = await connectRedis({ url: container.getConnectionUrl() });
+    expect(short.redis.listenerCount('error')).toBeGreaterThan(0);
+
+    await short.close();
+
+    // Dinleyici birakmak, uzun omurlu proceslerde sessiz bir sizintidir.
+    expect(short.redis.listenerCount('error')).toBe(0);
+    expect(short.redis.listenerCount('reconnecting')).toBe(0);
+  });
+
   it('ulasilamayan adrese baglanmayi AppError ile bildirir', async () => {
     // Kapali bir port: surucu kendi hata tipini firlatmamali, AppError gelmeli.
     await expect(
