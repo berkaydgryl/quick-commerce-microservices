@@ -11,6 +11,8 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/requestid"
 
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/catalog"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
 )
 
@@ -26,10 +28,16 @@ type HealthReporter interface {
 	Check(ctx context.Context) health.Report
 }
 
+// CategoryLister, GET /v1/categories ucunun ihtiyaci olan tek davranis.
+type CategoryLister interface {
+	ListCategories(ctx context.Context) (catalog.CategoryList, error)
+}
+
 // Deps, yonlendiricinin disaridan aldigi her sey.
 type Deps struct {
-	Health HealthReporter
-	Logger *slog.Logger
+	Health     HealthReporter
+	Categories CategoryLister
+	Logger     *slog.Logger
 }
 
 // New, Fiber uygulamasini kurar.
@@ -40,12 +48,16 @@ func New(deps Deps) *fiber.App {
 		ErrorHandler: errorHandler(deps.Logger),
 		// Sunucu adini disariya bildirmek gereksiz bilgi sizdirir.
 		ServerHeader: "",
+		JSONEncoder:  encodeJSON,
 	})
 
 	app.Use(requestid.New(requestid.Config{Header: RequestIDHeader}))
 	app.Use(requestLogger(deps.Logger))
 
 	app.Get("/healthz", healthzHandler(deps.Health))
+
+	v1 := app.Group("/v1")
+	v1.Get("/categories", listCategoriesHandler(deps.Categories))
 
 	return app
 }
@@ -60,7 +72,7 @@ func healthzHandler(reporter HealthReporter) fiber.Handler {
 		if report.Healthy() {
 			return ok(c, http.StatusOK, report)
 		}
-		return fail(c, http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "Bagimli servisler hazir degil", report)
+		return fail(c, apperror.CodeServiceUnavailable, report)
 	}
 }
 
@@ -91,33 +103,49 @@ func requestLogger(logger *slog.Logger) fiber.Handler {
 }
 
 // errorHandler, yakalanmamis her hatayi tek zarfa cevirir.
+//
+// Iki kaynak vardir: bizim urettigimiz *apperror.Error (dogrulama, bagimli
+// servis hatasi) ve Fiber'in kendi hatalari (bilinmeyen yol, yanlis fiil).
+// Ikisi de sozlukteki bir koda iner; ic mesaj ve sebep istemciye GITMEZ,
+// yalnizca gunluge yazilir.
 func errorHandler(logger *slog.Logger) fiber.ErrorHandler {
 	return func(c fiber.Ctx, err error) error {
-		rawStatus := http.StatusInternalServerError
-		var fiberErr *fiber.Error
-		if errors.As(err, &fiberErr) {
-			rawStatus = fiberErr.Code
-		}
+		appErr := toAppError(err)
 
-		// Ic mesaj istemciye GITMEZ; yalnizca gunluge yazilir. Gunluge Fiber'in
-		// HAM kodu gider (405, 431): teshis icin ayrinti orada lazim.
-		logger.Error("istek hatayla dondu",
+		// 4xx istemcinin hatasidir, gateway'in degil: ERROR seviyesi alarm
+		// gurultusu uretirdi.
+		level := slog.LevelWarn
+		if apperror.HTTPStatus(appErr.Code) >= http.StatusInternalServerError {
+			level = slog.LevelError
+		}
+		logger.Log(c.Context(), level, "istek hatayla dondu",
 			slog.String("path", c.Path()),
-			slog.Int("status", rawStatus),
+			slog.String("code", string(appErr.Code)),
 			slog.String("requestId", requestIDOf(c)),
 			slog.Any("err", err),
 		)
 
-		mapped := classify(rawStatus)
-		return fail(c, mapped.status, mapped.code, mapped.message, nil)
+		// nil harita "details": {} degil, alan yok olarak cikmali.
+		var details any
+		if len(appErr.Details) > 0 {
+			details = appErr.Details
+		}
+		return fail(c, appErr.Code, details)
 	}
 }
 
-// fiberFailure, Fiber'in ham hatasinin sozlesmedeki karsiligi.
-type fiberFailure struct {
-	status  int
-	code    string
-	message string
+// toAppError, herhangi bir hatayi sozluk koduna indirir.
+func toAppError(err error) *apperror.Error {
+	var appErr *apperror.Error
+	if errors.As(err, &appErr) && apperror.Known(appErr.Code) {
+		return appErr
+	}
+
+	var fiberErr *fiber.Error
+	if errors.As(err, &fiberErr) {
+		return &apperror.Error{Code: classify(fiberErr.Code), Cause: err}
+	}
+	return &apperror.Error{Code: apperror.CodeInternal, Cause: err}
 }
 
 // classify, Fiber'in ham HTTP kodunu hata sozlugundeki bir koda indirir.
@@ -126,19 +154,21 @@ type fiberFailure struct {
 // (@getir/core/error-codes.ts) ve istemci durumu koddan cozer. Sozlukte
 // METHOD_NOT_ALLOWED ya da HEADER_TOO_LARGE yok; "405 + INTERNAL" gibi bir
 // cevap hem tabloyu hem istemciyi yaniltir (istemci 5xx gorup yeniden dener).
-// Bu yuzden cevaptaki HTTP kodu HER ZAMAN secilen kodun tablodaki karsiligidir:
+// Cevaptaki HTTP kodu HER ZAMAN secilen kodun tablodaki karsiligidir:
 //
-//	404, 405     -> NOT_FOUND 404          (bu yol + fiil ikilisi yok)
-//	diger 4xx    -> VALIDATION_FAILED 400  (istek bicimsel olarak kabul edilemez)
-//	5xx ve digeri -> INTERNAL 500
-func classify(rawStatus int) fiberFailure {
+//	404, 405      -> NOT_FOUND          (bu yol + fiil ikilisi yok)
+//	diger 4xx     -> VALIDATION_FAILED  (istek bicimsel olarak kabul edilemez)
+//	5xx ve digeri -> INTERNAL
+//
+// Ham kod kaybolmaz: gunlukteki "err" alaninda durur.
+func classify(rawStatus int) apperror.Code {
 	switch {
 	case rawStatus == http.StatusNotFound || rawStatus == http.StatusMethodNotAllowed:
-		return fiberFailure{status: http.StatusNotFound, code: "NOT_FOUND", message: "Uc bulunamadi"}
+		return apperror.CodeNotFound
 	case rawStatus >= http.StatusBadRequest && rawStatus < http.StatusInternalServerError:
-		return fiberFailure{status: http.StatusBadRequest, code: "VALIDATION_FAILED", message: "Istek gecersiz"}
+		return apperror.CodeValidationFailed
 	default:
-		return fiberFailure{status: http.StatusInternalServerError, code: "INTERNAL", message: "Beklenmeyen bir hata olustu"}
+		return apperror.CodeInternal
 	}
 }
 

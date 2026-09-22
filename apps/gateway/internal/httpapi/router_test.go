@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
 )
 
@@ -154,24 +155,25 @@ func TestWrongMethodMapsToErrorTable(t *testing.T) {
 	}
 }
 
-func TestClassifyKeepsCodeAndStatusConsistent(t *testing.T) {
+func TestClassifyMapsToErrorTable(t *testing.T) {
 	cases := []struct {
 		raw        int
+		wantCode   apperror.Code
 		wantStatus int
-		wantCode   string
 	}{
-		{http.StatusNotFound, http.StatusNotFound, "NOT_FOUND"},
-		{http.StatusMethodNotAllowed, http.StatusNotFound, "NOT_FOUND"},
-		{http.StatusRequestHeaderFieldsTooLarge, http.StatusBadRequest, "VALIDATION_FAILED"},
-		{http.StatusBadRequest, http.StatusBadRequest, "VALIDATION_FAILED"},
-		{http.StatusInternalServerError, http.StatusInternalServerError, "INTERNAL"},
-		{http.StatusBadGateway, http.StatusInternalServerError, "INTERNAL"},
+		{http.StatusNotFound, apperror.CodeNotFound, http.StatusNotFound},
+		{http.StatusMethodNotAllowed, apperror.CodeNotFound, http.StatusNotFound},
+		{http.StatusRequestHeaderFieldsTooLarge, apperror.CodeValidationFailed, http.StatusBadRequest},
+		{http.StatusBadRequest, apperror.CodeValidationFailed, http.StatusBadRequest},
+		{http.StatusInternalServerError, apperror.CodeInternal, http.StatusInternalServerError},
+		{http.StatusBadGateway, apperror.CodeInternal, http.StatusInternalServerError},
 	}
 
 	for _, tc := range cases {
 		got := classify(tc.raw)
-		if got.status != tc.wantStatus || got.code != tc.wantCode {
-			t.Errorf("%d: %d/%s bekleniyordu, %d/%s geldi", tc.raw, tc.wantStatus, tc.wantCode, got.status, got.code)
+		// Cevap kodu tablodan gelir; classify yalnizca sozluk kodunu secer.
+		if got != tc.wantCode || apperror.HTTPStatus(got) != tc.wantStatus {
+			t.Errorf("%d: %s/%d bekleniyordu, %s/%d geldi", tc.raw, tc.wantCode, tc.wantStatus, got, apperror.HTTPStatus(got))
 		}
 	}
 }

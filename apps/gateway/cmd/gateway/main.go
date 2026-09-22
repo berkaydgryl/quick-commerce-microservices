@@ -1,17 +1,19 @@
 // gateway, tarayicinin konustugu TEK dis kapidir.
 //
-// Bugunku sorumlulugu (T3.3): ayaga kalkmak, bagimli gRPC servislerine baglanti
-// havuzu kurmak, /healthz uzerinden durumlarini bildirmek ve sinyalde zarifce
-// kapanmak. Ilk proxy ucu (GET /v1/categories) T3.4'te gelecek.
+// Bugunku sorumlulugu: ayaga kalkmak, bagimli gRPC servislerine baglanti
+// havuzu kurmak, /healthz uzerinden durumlarini bildirmek (T3.3), ilk proxy
+// ucunu (GET /v1/categories, T3.4) sunmak ve sinyalde zarifce kapanmak.
 //
 // Calistirma:
 //
 //	go run ./cmd/gateway            (apps/gateway icinden)
 //	curl -s localhost:8080/healthz | jq
+//	curl -s localhost:8080/v1/categories | jq
 package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -20,6 +22,9 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
+	catalogv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/catalog/v1"
+
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/catalog"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/clients"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/config"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
@@ -80,9 +85,15 @@ func run(cfg config.Config, logger *slog.Logger) error {
 		healthClients[target.Name] = grpc_health_v1.NewHealthClient(conn)
 	}
 
+	catalogConn, ok := pool.Conn(config.CatalogService)
+	if !ok {
+		return fmt.Errorf("%s baglantisi havuzda yok", config.CatalogService)
+	}
+
 	app := httpapi.New(httpapi.Deps{
-		Health: health.New(healthClients, cfg.RequestTimeout, cfg.Mock),
-		Logger: logger,
+		Health:     health.New(healthClients, cfg.RequestTimeout, cfg.Mock),
+		Categories: catalog.New(catalogv1.NewCatalogServiceClient(catalogConn), cfg.RequestTimeout),
+		Logger:     logger,
 	})
 
 	// SIGINT/SIGTERM: orkestrator once nazikce ister, sonra oldurur. O pencereyi

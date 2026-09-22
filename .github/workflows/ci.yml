@@ -84,6 +84,15 @@ jobs:
       - name: Derleme
         run: pnpm build
 
+      # T3.4: gateway (Go) hata kodu tablosunu @getir/core ve @getir/contracts'tan
+      # URETILMIS bir dosyadan okur (apps/gateway/internal/apperror/codes_gen.go).
+      # Kaynak degisip dosya yeniden uretilmezse gateway yeni kodu tanimaz ya da
+      # yanlis HTTP koduyla doner. Kontrol dist'ten okudugu icin derlemeden SONRA.
+      # Bu adim "gateway" isinde degil burada, cunku Node ve derlenmis paketler
+      # yalnizca bu iste var.
+      - name: Gateway hata tablosu guncel mi?
+        run: pnpm codes:go:check
+
       - name: Birim testleri
         run: pnpm test:unit
 
@@ -294,11 +303,10 @@ jobs:
 
   # T3.3'un kapisi: apps/gateway (Go) derleniyor, bicimli ve testleri geciyor mu?
   #
-  # Neden "codegen" isinden ayri: o is packages/proto modulunu dogrular;
-  # gateway ise KENDI modulu olan ayri bir uygulamadir (bkz. apps/gateway/go.mod).
-  # Bugun proto'ya bagli degil, bu yuzden Node, pnpm ve buf kurmaya gerek yok -
-  # is yalnizca Go ile birkac saniyede biter. T3.4'te packages/proto "replace"
-  # ile baglandiginda bu is uretim adimini da kazanacak.
+  # Neden "codegen" isinden ayri: o is packages/proto modulunun KENDISINI
+  # dogrular (TS + Go derlenir); bu is gateway'i. Gateway T3.4'ten beri uretilen
+  # Go koduna "replace" ile bagli, o yuzden once Go kodunu uretir - ama yalnizca
+  # Go'yu: Node ve pnpm kurmaz, buf generate'i dogrudan Go sablonuyla calistirir.
   #
   # Neden gerekli: "pnpm verify" Go kodunu KAPSAMAZ (README: Go yerelde
   # opsiyoneldir). Bu is olmadan kirik bir gateway main'e girebilir.
@@ -313,12 +321,37 @@ jobs:
         uses: actions/checkout@v4
 
       # Surum TEK yerden gelir: apps/gateway/go.mod (Dockerfile'daki
-      # golang:1.25 taban imajiyla ayni satir).
+      # golang:1.25 taban imajiyla ayni satir). Iki go.sum de onbellek anahtarina
+      # girer: eklentiler packages/proto'dan, gateway bagimliliklari kendi
+      # modulunden iner.
       - name: Go kur
         uses: actions/setup-go@v5
         with:
           go-version-file: apps/gateway/go.mod
-          cache-dependency-path: apps/gateway/go.sum
+          cache-dependency-path: |
+            apps/gateway/go.sum
+            packages/proto/go.sum
+
+      - name: buf kur
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          version: 1.73.0
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      # "codegen" isiyle ayni kurulum: surumler packages/proto/go.mod'dan,
+      # GOPATH/bin acikca PATH'e (gerekcesi o isteki yorumda).
+      - name: protoc eklentilerini kur
+        working-directory: packages/proto
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      # gen/ depoya girmez; uretilmezse gateway
+      # "no required module provides package .../gen/go/getir/catalog/v1" ile duser.
+      - name: Sozlesme kodunu uret (Go)
+        working-directory: packages/proto
+        run: buf generate --template buf.gen.go.yaml
 
       # gofmt hata kodu DONDURMEZ; yalnizca bicimsiz dosyalari listeler. Liste
       # bos degilse isi biz dusururuz.

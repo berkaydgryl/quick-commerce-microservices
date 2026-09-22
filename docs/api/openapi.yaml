@@ -211,6 +211,10 @@ paths:
       tags: [catalog]
       operationId: listCategories
       summary: Kategori ağacını listele
+      description: |
+        Sorgu parametresi ALMAZ. Tanınmayan her parametre sessizce yok sayılmaz,
+        `400 VALIDATION_FAILED` ile reddedilir ve `details` parametre adını taşır:
+        yazım hatalı bir filtre filtrelenmemiş listeyi filtrelenmiş sandırmasın.
       security: []
       responses:
         "200":
@@ -233,8 +237,27 @@ paths:
                             type: array
                             items:
                               $ref: "#/components/schemas/Category"
+        "400":
+          description: Tanınmayan sorgu parametresi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                unknownQuery:
+                  summary: VALIDATION_FAILED
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        categoryID: "bu uc bu parametreyi kabul etmiyor"
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /v1/products:
     get:
@@ -1112,6 +1135,24 @@ components:
                   message: "Çok fazla istek gönderdiniz."
                   details:
                     retryAfterSeconds: 30
+                  requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+
+    ServiceUnavailable:
+      description: |
+        Bağımlı servise ulaşılamadı ya da süre içinde cevap vermedi. Yeniden
+        denenebilir; iç ayrıntı (adres, sürücü mesajı) cevaba konmaz, günlüktedir.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          examples:
+            serviceUnavailable:
+              summary: SERVICE_UNAVAILABLE
+              value:
+                success: false
+                error:
+                  code: SERVICE_UNAVAILABLE
+                  message: "Servise şu an ulaşamıyoruz. Birazdan tekrar dene."
                   requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
 
   schemas:
