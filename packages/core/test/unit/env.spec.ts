@@ -7,6 +7,7 @@ import {
   commonEnvSchema,
   envBoolean,
   envInt,
+  envString,
   isAppError,
   loadEnv,
   requireEnv,
@@ -129,6 +130,25 @@ describe('envBoolean / envInt', () => {
     const schema = z.object({ TICK_MS: envInt({ defaultValue: 2_000 }) });
     expect(loadEnv(schema, {}).TICK_MS).toBe(2_000);
     expect(() => loadEnv(schema, { TICK_MS: '1.5' })).toThrowError(/TICK_MS/);
+  });
+});
+
+describe('envString', () => {
+  it('varsayilan verilirse tanimsiz ve BOS deger ayni sayilir', () => {
+    // docker-compose'da "GRPC_HOST=" yazmak degiskeni bos string olarak gecirir;
+    // zod'un .default() bunu tanimli kabul edip varsayilani uygulamazdi.
+    const schema = z.object({ HOST: envString('0.0.0.0') });
+
+    expect(loadEnv(schema, {}).HOST).toBe('0.0.0.0');
+    expect(loadEnv(schema, { HOST: '   ' }).HOST).toBe('0.0.0.0');
+    expect(loadEnv(schema, { HOST: ' 127.0.0.1 ' }).HOST).toBe('127.0.0.1');
+  });
+
+  it('varsayilan yoksa degisken zorunludur', () => {
+    const schema = z.object({ MONGO_URI: envString() });
+
+    expect(() => loadEnv(schema, {})).toThrowError(/MONGO_URI/);
+    expect(() => loadEnv(schema, { MONGO_URI: '' })).toThrowError(/MONGO_URI/);
   });
 });
 

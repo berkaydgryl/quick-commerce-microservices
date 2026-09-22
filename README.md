@@ -303,9 +303,9 @@ Hepsi depo kökünden `pnpm <komut>` ile çalışır. `make` bu projede zorunlu 
 | `format:check` | `prettier --check .`                                                                                  | Biçim farkı varsa hata verir                                       | Çalışıyor                            |
 | `test`         | `pnpm run test:unit`                                                                                  | Birim testleri (tek koşucu: kökteki vitest yapılandırması)         | Çalışıyor                            |
 | `test:unit`    | `vitest run`                                                                                          | Birim testleri; altyapı gerektirmez                                | Çalışıyor (`--passWithNoTests`)      |
-| `test:int`     | `vitest run --config vitest.integration.config.ts`                                                    | Testcontainers ile Mongo/Redis entegrasyon testleri                | Çalışıyor (henüz test yok)           |
-| `race`         | `node -e "..."`                                                                                       | Yarış koşulu senaryosu: aynı stok için eş zamanlı rezervasyon      | **Placeholder — Gün 6**              |
-| `demo`         | `node -e "..."`                                                                                       | Uçtan uca demo: sipariş → ödeme → kurye akışı                      | **Placeholder — Gün 7**              |
+| `test:int`     | `vitest run --config vitest.integration.config.ts`                                                    | Testcontainers ile Mongo/Redis entegrasyon testleri                | Çalışıyor (T2.5)                     |
+| `race`         | `node -e "..."`                                                                                       | Yarış koşulu senaryosu: aynı stok için eş zamanlı rezervasyon      | **Placeholder — Gün 11 (T11.1)**     |
+| `demo`         | `node -e "..."`                                                                                       | Uçtan uca demo: sipariş → ödeme → kurye akışı                      | **Placeholder — Gün 15 (T15.1)**     |
 | `seed`         | `node -e "..."`                                                                                       | Mongo'ya market / ürün / stok başlangıç verisi                     | **Placeholder — Gün 4**              |
 | `proto:gen`    | `pnpm --filter @getir/proto generate`                                                                 | `.proto` dosyalarından **TS ve Go** kodu üretir (Go kurulu olmalı) | Çalışıyor (T2.3)                     |
 | `proto:gen:ts` | `pnpm --filter @getir/proto generate:ts`                                                              | Yalnızca TypeScript çıktısı; Go gerektirmez                        | Çalışıyor (T2.3)                     |
@@ -317,6 +317,26 @@ Hepsi depo kökünden `pnpm <komut>` ile çalışır. `make` bu projede zorunlu 
 | `infra:down`   | `docker compose … down`                                                                               | Konteynerleri durdurur (veri kalır)                                | Çalışıyor                            |
 | `infra:reset`  | `docker compose … down -v`                                                                            | Konteyner **ve** veriyi siler, sıfırdan kurar                      | Çalışıyor                            |
 | `clean`        | `turbo run clean`                                                                                     | Derleme çıktılarını ve önbellekleri siler                          | Çalışıyor                            |
+
+### Entegrasyon testleri ve Docker
+
+`pnpm test:int` Mongo ve Redis'i **kendi ayağa kaldırır** (Testcontainers); `pnpm infra:up`
+ile açtığınız geliştirme konteynerlerine dokunmaz, onların verisini kirletmez. Tek şart
+çalışan bir Docker daemon'ı:
+
+| Ortam                      | Ne gerekiyor                                                         |
+| -------------------------- | -------------------------------------------------------------------- |
+| CI (ubuntu runner)         | Hazır gelir, ek adım yok                                             |
+| Docker Desktop (Win/macOS) | Açık olması yeterli                                                  |
+| colima (macOS)             | `colima start` — soket otomatik bulunur, elle `DOCKER_HOST` gerekmez |
+
+colima kurulumunda soket `~/.colima/default/docker.sock` altındadır ve Testcontainers onu
+kendiliğinden bulamaz; ayrıca temizlik konteyneri (Ryuk) soketi **konteyner içindeki**
+yoluyla ister. İkisi de `vitest.integration.config.ts` içinde tek yerde çözülür
+(`DOCKER_HOST` + `TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE`), `/var/run/docker.sock` varsa
+hiçbir şey yapılmaz.
+
+Testler bittiğinde konteynerler otomatik silinir.
 
 ### Kalite kapısı nerede?
 

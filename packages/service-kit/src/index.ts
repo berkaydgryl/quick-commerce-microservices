@@ -11,6 +11,7 @@ export * from './config/constants.js';
 export * from './config/env.js';
 export * from './logger.js';
 export * from './shutdown.js';
+export * from './health/registry.js';
 export * from './grpc/context.js';
 export * from './grpc/handler.js';
 export * from './grpc/health.js';

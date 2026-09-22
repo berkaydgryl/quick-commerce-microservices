@@ -8,5 +8,6 @@ export * from './error-codes.js';
 export * from './errors.js';
 export * from './id.js';
 export * from './clock.js';
+export * from './logger.js';
 export * from './constants.js';
 export * from './config/env.js';

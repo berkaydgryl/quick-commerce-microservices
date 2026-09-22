@@ -37,6 +37,32 @@ yeni ADR oner.
 - Stok kilidi ve rezervasyon yalnizca Redis Lua script'i ile, tek atomik adimda. Redlock yok (ADR-01).
 - Tum mutasyon uclari `Idempotency-Key` ister (ADR-08).
 
+## Tek sorumluluk (SRP)
+
+Her sinif, dosya ve fonksiyonun DEGISMEK ICIN TEK BIR SEBEBI olmalidir. Kod yazildiktan sonra
+su soru acikca cevaplanir: "bu dosya hem veri sorgusu, hem is kurali, hem de dis dunya
+(HTTP/gRPC/Redis) isi yapiyor mu?" Cevap evetse dosya bolunur.
+
+Katman sorumluluklari (bu repodaki karsiliklariyla):
+
+| Katman                 | Klasor                    | Yapar                                             | YAPMAZ                                  |
+| ---------------------- | ------------------------- | ------------------------------------------------- | --------------------------------------- |
+| Controller / Handler   | `src/interfaces/grpc`     | Istegi alir, dogrular, cevabi doner (~15 satir)   | Is kurali yurutmez, sorgu yazmaz        |
+| Service (use-case)     | `src/application`         | Uygulama kurallarini yurutur, bir dosya = bir is  | ORM/Redis komutu yazmaz, DTO islemez    |
+| Domain                 | `src/domain`              | Saf is kurali                                     | I/O importu YOK (mongodb, ioredis, grpc)|
+| Repository / Data      | `src/infrastructure`      | Mongo/Redis okur-yazar                            | Is karari vermez, baska servise gitmez  |
+| Client (dis servis)    | `src/infrastructure`      | Diger servislerin gRPC uclarini cagirir           | Veritabanina dokunmaz                   |
+
+Sorumluluk karmasasi isaretleri - gorulurse kod bolunur:
+
+- Tek fonksiyonda hem dis cagri (grpc/fetch), hem `if/else` is kurali, hem `insertOne`.
+- Okuma amacli fonksiyonun gizli yan etkisi (`getUser` icinde guncelleme yapmak).
+- 300-400 satiri asan ve birbiriyle alakasiz isler ustlenen dosya. (Uretilen kod -
+  `packages/proto/gen` - bu sayimin disindadir.)
+
+Paketler de ayni kurala tabidir: `packages/*` icinde bir dosya ya baglantiyi, ya anahtari,
+ya hatayi cevirir; ucunu birden degil.
+
 ## Kod kurallari
 
 - TypeScript strict, ESM (`"type": "module"`), Node 22. `any` yok.
