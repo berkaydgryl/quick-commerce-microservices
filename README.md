@@ -323,7 +323,7 @@ Hepsi depo kökünden `pnpm <komut>` ile çalışır. `make` bu projede zorunlu 
 ```bash
 pnpm --filter @getir/catalog-service build && MOCK=true pnpm --filter @getir/catalog-service start  # :50051, Mongo'suz
 pnpm --filter @getir/order-service   build && pnpm --filter @getir/order-service   start  # :50053
-pnpm proto:gen && (cd apps/gateway && go run ./cmd/gateway)                               # :8080
+pnpm proto:gen && (cd apps/gateway && ASSET_BASE_URL=http://localhost:5173 go run ./cmd/gateway)  # :8080
 
 curl -s localhost:8080/healthz          # iki servisin durumu; biri dusukse 503
 curl -s localhost:8080/v1/categories    # catalog uzerinden kategori listesi
