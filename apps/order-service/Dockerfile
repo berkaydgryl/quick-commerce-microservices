@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1.7
 
-# Katalog servisi - cok asamali imaj.
+# Siparis servisi - cok asamali imaj.
 #
-# BUILD BAGLAMI DEPO KOKUDUR (apps/catalog-service degil):
-#   docker build -f apps/catalog-service/Dockerfile -t getir/catalog-service .
+# BUILD BAGLAMI DEPO KOKUDUR (apps/order-service degil):
+#   docker build -f apps/order-service/Dockerfile -t getir/order-service .
 # Sebebi pnpm workspace: servis @getir/core, @getir/proto ve @getir/service-kit
 # paketlerine "workspace:*" ile bagli; bu paketler depo kokunun altinda duruyor
 # ve baglam yalnizca app klasoru olsaydi kurulum cozumlenemezdi.
@@ -56,7 +56,7 @@ RUN pnpm install --offline --frozen-lockfile
 # depoda yoktur, .proto dosyalarindan uretilir). Duz pnpm filtresi bu bagimliligi
 # bilmez ve derleme "No inputs were found in config file" ile duser.
 # "...", servisin bagimli oldugu paketleri de kapsar.
-RUN pnpm exec turbo run build --filter=@getir/catalog-service...
+RUN pnpm exec turbo run build --filter=@getir/order-service...
 
 # Yalnizca URETIM bagimliliklari ve derlenmis cikti tek klasore toplanir:
 # workspace paketleri (@getir/core, @getir/proto, @getir/service-kit) gercek
@@ -65,7 +65,7 @@ RUN pnpm exec turbo run build --filter=@getir/catalog-service...
 # node-linker=hoisted GEREKLI: pnpm deploy'un varsayilan sembolik-baglantili
 # store duzeniyle calismasi mumkun degil (baglantilar hedef klasorun disina
 # isaret eder ve son imajda kirik kalirdi). Ayar yalnizca bu komut icindir.
-RUN pnpm --config.node-linker=hoisted deploy --filter=@getir/catalog-service --prod /app
+RUN pnpm --config.node-linker=hoisted deploy --filter=@getir/order-service --prod /app
 
 # ---------------------------------------------------------------------------
 # 3) runner - calisma zamani; derleme araclari (buf, kaynak, devDeps) YOK
@@ -80,7 +80,7 @@ COPY --from=builder --chown=node:node /app ./
 # calisirsa, imajdaki bir acik dogrudan host'a dogru genisler.
 USER node
 
-EXPOSE 50051
+EXPOSE 50053
 
 # Saglik kontrolu servisin KENDI health RPC'sini cagirir (grpc.health.v1).
 # start-period: acilis (port baglama) icin pay; bu sure icindeki basarisizlik
