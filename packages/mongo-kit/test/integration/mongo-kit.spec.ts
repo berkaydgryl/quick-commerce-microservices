@@ -156,6 +156,19 @@ describe('withTransaction', () => {
     await expect(products.count()).resolves.toBe(0);
   });
 
+  it('transaction icindeki benzersiz indeks ihlali CONFLICT olarak kalir', async () => {
+    // Onceki test INTERNAL firlattigi icin cift ceviriyi yakalayamiyordu:
+    // INTERNAL -> INTERNAL fark edilmez. Burada hata surucuden gelir, run()
+    // onu CONFLICT'e cevirir ve withTransaction'dan oyle cikmalidir.
+    const failing = connection.withTransaction(async (session) => {
+      await products.insertOne(product('prd_1', 'SUT-1L'), { session });
+      await products.insertOne(product('prd_2', 'SUT-1L'), { session });
+    });
+
+    await expect(failing).rejects.toMatchObject({ code: ERROR_CODES.CONFLICT });
+    await expect(products.count()).resolves.toBe(0);
+  });
+
   it('transaction sonucunu geri dondurur', async () => {
     const created = await connection.withTransaction(async (session) => {
       await products.insertOne(product('prd_3', 'CAY-500'), { session });

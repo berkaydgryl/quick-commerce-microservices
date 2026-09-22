@@ -73,14 +73,38 @@ export function sortCategories(categories: readonly Category[]): readonly Catego
  * arasinda sira kayar ve ayni urun iki kez gorunur ya da hic gorunmezdi.
  */
 export function sortProducts(products: readonly Product[]): readonly Product[] {
-  return [...products].sort((left, right) => left.id.localeCompare(right.id, 'en'));
+  // IKILI (binary) karsilastirma, localeCompare DEGIL: imlec "_id > token"
+  // ile ilerler (pagination.ts) ve Mongo da string'i ikili siralar. Yerel
+  // siralama kullanilsaydi bellek ve Mongo uygulamasi farkli sayfa kesebilirdi.
+  return [...products].sort((left, right) => compareIds(left.id, right.id));
+}
+
+function compareIds(left: string, right: string): number {
+  if (left === right) {
+    return 0;
+  }
+  return left < right ? -1 : 1;
+}
+
+/**
+ * Aramada karsilastirilacak bicim: Turkce kurallariyla kucuk harf.
+ *
+ * NEDEN AYRI FONKSIYON: bellek ve Mongo uygulamasi AYNI normalizasyonu
+ * kullanmak zorunda. Mongo'nun regex "i" bayragi Turkce'yi bilmez ("İ" ile "i"
+ * eslesmez); bu yuzden Mongo tarafi bu fonksiyonun ciktisini YAZIM ANINDA
+ * saklar (products.searchTerms) ve aramayi o alanda yapar.
+ */
+export function searchKey(text: string): string {
+  return text.trim().toLocaleLowerCase('tr');
+}
+
+/** Bir urunun aranan metinleri: ad ve aciklama, normalize edilmis. */
+export function searchTermsOf(product: Product): readonly string[] {
+  return [searchKey(product.name), searchKey(product.description)];
 }
 
 /** Serbest metin aramasi: ad ve aciklamada, buyuk/kucuk harf duyarsiz. */
 export function matchesQuery(product: Product, query: string): boolean {
-  const needle = query.trim().toLocaleLowerCase('tr');
-  return (
-    product.name.toLocaleLowerCase('tr').includes(needle) ||
-    product.description.toLocaleLowerCase('tr').includes(needle)
-  );
+  const needle = searchKey(query);
+  return searchTermsOf(product).some((term) => term.includes(needle));
 }

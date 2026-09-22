@@ -1,20 +1,29 @@
 /**
- * T3.1 sahte katalog verisi (bellekte).
+ * Katalog demo verisi - TEK KAYNAK (T4.1).
  *
- * NEDEN BURADA: bu gorevin "bitti sayilir" olcutu grpcurl ile liste donmesi;
- * Mongo semasi, indeksler ve gercek seed verisi T4.1'in isi. O gun geldiginde
- * bu dosya `infra/seed/fixtures.ts` ile degistirilecek ve MOCK=1 modu ayni
- * veriyi kullanacak (ADR-09).
+ * Iki moda birden hizmet eder:
+ *   - MOCK=true : InMemoryCatalogRepository bu veriyi dogrudan dondurur,
+ *   - seed      : `pnpm seed` ayni veriyi Mongo'ya yazar (src/seed.ts).
+ * Iki ayri kopya olsaydi MOCK modu ile gercek mod zamanla farkli katalog
+ * gosterirdi ve frontend "mock'ta calisiyordu" hatasiyla karsilasirdi.
  *
- * Veri sekli bilincli olarak T4.1'in hedefiyle ayni: 5 kategori, 15 urun,
- * 2 dark store. Boylece gercek seed geldiginde miktar degil yalnizca KAYNAK
- * degisir.
+ * NEDEN infra/seed ALTINDA DEGIL (roadmap boyle ciziyordu): (1) veri bu
+ * servisin koleksiyonlarinin verisidir ve ADR-05 geregi onlara yalnizca bu
+ * servis yazar; (2) .dockerignore infra/'yi imaja almaz - MOCK modundaki
+ * konteyner veriyi bulamazdi.
  *
+ * Miktar: 5 kategori, 15 urun, 2 dark store (T4.1 olcutu).
  * Fiyatlar KURUS cinsinden tam sayidir (2999 = 29,99 TL).
+ *
+ * GORSELLER GORELI YOLDUR ("/img/cat/sut.png"), bilerek: mutlak adres ortama
+ * baglidir (yerel, demo, canli). Veri yolu saklar; istemciye giden mutlak URL'yi
+ * gateway (BFF) kendi ASSET_BASE_URL ayariyla kurar. Bu yuzden buraya alan adi
+ * YAZILMAZ.
  */
 
 import type { Category, DarkStore, Product } from '../domain/catalog.js';
 import { PRODUCT_UNIT } from '../domain/catalog.js';
+import type { CatalogSnapshot } from '../domain/catalog-snapshot.js';
 
 export const CATEGORIES: readonly Category[] = [
   {
@@ -168,12 +177,16 @@ export const DARK_STORES: readonly DarkStore[] = [
     isOpen: true,
   },
   {
+    // ACIK, bilerek (T4.1): roadmap'in adres tablosunda "Is" adresi bu depoya
+    // duser ve demoda farkli bir cesit gosterir. Kapali olsaydi o adres de
+    // NO_STORE alirdi ve iki depolu demonun anlami kalmazdi. Kapali depo
+    // davranisi (STORE_CLOSED) T4.2'de kendi test verisiyle sinanir.
     id: 'ds_besiktas',
     name: 'Beşiktaş Deposu',
     lat: 41.0422,
     lng: 29.0093,
     deliveryRadiusMeters: 2000,
-    isOpen: false,
+    isOpen: true,
   },
 ];
 
@@ -188,6 +201,14 @@ export const DARK_STORES: readonly DarkStore[] = [
 export const STORE_ASSORTMENT: Readonly<Record<string, readonly string[]>> = {
   ds_kadikoy: PRODUCTS.map((item) => item.id),
   ds_besiktas: ['prd_01', 'prd_05', 'prd_09', 'prd_12'],
+};
+
+/** Katalogun tamami: MOCK modu ve seed ayni degeri kullanir. */
+export const CATALOG_SNAPSHOT: CatalogSnapshot = {
+  categories: CATEGORIES,
+  products: PRODUCTS,
+  darkStores: DARK_STORES,
+  assortment: STORE_ASSORTMENT,
 };
 
 function product(

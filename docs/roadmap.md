@@ -285,19 +285,19 @@ README ilk gün boş şablonla değil, o günün çalışan komutlarıyla doldur
 
 Tek veritabanı (getir), koleksiyon bazında sahiplik. Mongo tek düğümlü replica set olarak çalışır çünkü outbox yazımı transaction ister.
 
-| Koleksiyon   | Sahibi               | Kritik alanlar                                                           | İndeks                                   |
-| ------------ | -------------------- | ------------------------------------------------------------------------ | ---------------------------------------- |
-| categories   | catalog              | _id, name, slug, sortOrder                                               | slug unique                              |
-| products     | catalog              | _id, sku, name, price, categoryId, unit, imageUrl, isActive              | sku unique, categoryId+isActive          |
-| darkstores   | catalog              | _id, name, location(GeoJSON), deliveryRadiusMeters, isOpen               | location 2dsphere                        |
-| stock        | inventory            | darkStoreId, sku, onHand, version, updatedAt                             | darkStoreId+sku unique                   |
-| stock_ledger | inventory            | sku, darkStoreId, delta, reason, orderId, createdAt                      | (orderId, sku, reason) unique, createdAt |
-| orders       | order                | _id, userId, darkStoreId, items[], totals, status, riskScore, timeline[] | userId+createdAt, status                 |
-| outbox       | order (ve diğerleri) | _id, aggregateId, type, payload, publishedAt                             | publishedAt sparse                       |
-| payments     | payment              | _id, orderId, amount, method, status, threeDS, attempts[]                | orderId unique                           |
-| risk_events  | risk                 | _id, userId, orderId, score, band, rules[], createdAt                    | userId+createdAt                         |
-| users        | gateway              | _id, phone, passwordHash, createdAt, deviceIds[], addresses[]            | phone unique                             |
-| couriers     | courier              | _id, name, status, darkStoreId, currentOrderId, lastLocation             | status+darkStoreId                       |
+| Koleksiyon   | Sahibi               | Kritik alanlar                                                                             | İndeks                                       |
+| ------------ | -------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------- |
+| categories   | catalog              | _id, name, slug, sortOrder                                                                 | slug unique                                  |
+| products     | catalog              | _id, sku, name, price, categoryId, unit, imageUrl, isActive, darkStoreIds[], searchTerms[] | sku unique, categoryId+_id, darkStoreIds+_id |
+| darkstores   | catalog              | _id, name, location(GeoJSON), deliveryRadiusMeters, isOpen                                 | location 2dsphere                            |
+| stock        | inventory            | darkStoreId, sku, onHand, version, updatedAt                                               | darkStoreId+sku unique                       |
+| stock_ledger | inventory            | sku, darkStoreId, delta, reason, orderId, createdAt                                        | (orderId, sku, reason) unique, createdAt     |
+| orders       | order                | _id, userId, darkStoreId, items[], totals, status, riskScore, timeline[]                   | userId+createdAt, status                     |
+| outbox       | order (ve diğerleri) | _id, aggregateId, type, payload, publishedAt                                               | publishedAt sparse                           |
+| payments     | payment              | _id, orderId, amount, method, status, threeDS, attempts[]                                  | orderId unique                               |
+| risk_events  | risk                 | _id, userId, orderId, score, band, rules[], createdAt                                      | userId+createdAt                             |
+| users        | gateway              | _id, phone, passwordHash, createdAt, deviceIds[], addresses[]                              | phone unique                                 |
+| couriers     | courier              | _id, name, status, darkStoreId, currentOrderId, lastLocation                               | status+darkStoreId                           |
 
 ### Önemli detaylar
 
@@ -732,16 +732,21 @@ Hata kodu → kullanıcı mesajı eşleme tablosu packages/contracts/src/errors.
 
 Demo, ağır veritabanı hazırlığı beklemeden çalışabilmelidir. Bu yüzden veri tek bir fixture dosyasından gelir ve iki moda birden hizmet eder.
 
+T4.1'de uygulanan düzen (ilk plan `infra/seed/data/*.json` idi; iki sebeple değişti: bir
+koleksiyona yalnızca sahibi yazar — ADR-05 — ve `.dockerignore` `infra/`'yı imaja almadığı
+için MOCK modundaki konteyner veriyi bulamazdı):
+
 ```text
+apps/catalog-service/src/
+  infrastructure/fixtures.ts   # 5 kategori, 15 urun, 2 depo - MOCK modu VE seed ayni kaynak
+  seed.ts                      # pnpm seed: tek transaction'da bastan yazar
 infra/seed/
-  data/
-    categories.json      # 5 kategori
-    products.json        # 15 urun, kategoriye dagilmis
-    darkstores.json      # 2 depo (Kadikoy, Besiktas)
-    couriers.json        # 3 kurye
-  seed.ts                # Mongo'ya yazar + Redis sayaclarini kurar
-  fixtures.ts            # ayni veriyi bellekte dondurur (MOCK=1 modu)
+  data/addresses.json          # 3 hazir adres - sahibi gateway (users), T8.1'de yuklenir
+  README.md                    # kim neyi ne zaman yukler
 ```
+
+Stok (inventory, T9.1) ve kuryeler (courier, T13.1) kendi servislerinin seed'iyle gelir.
+Görseller göreli yol olarak saklanır; mutlak URL'yi gateway `ASSET_BASE_URL` ile kurar.
 
 | Kategori          | Örnek ürünler                      | Adet |
 | ----------------- | ---------------------------------- | ---- |
@@ -896,7 +901,7 @@ Tek komutla ayağa kalkma hedefi ilk günden geçerlidir: make dev Redis ve Mong
 - cd apps/gateway && go mod tidy — Go bağımlılıkları.
 - docker compose -f infra/docker/docker-compose.dev.yml up -d — Mongo (replica set) + Redis.
 - pnpm proto:gen — .proto dosyalarından TS ve Go kodu üretir (T2.3'te gerçek üretime bağlandı; Go kurulu değilse pnpm proto:gen:ts yeterlidir).
-- pnpm seed — kategori, ürün, 2 dark store, 3 kurye ekler.
+- pnpm seed — katalogu yükler: 5 kategori, 15 ürün, 2 dark store (T4.1). Kuryeler T13.1, stok T9.1 ile eklenir.
 - make dev — tüm servisler + web izleme modunda başlar. (Windows'ta karşılığı pnpm dev'dir.)
 
 ### Makefile hedefleri

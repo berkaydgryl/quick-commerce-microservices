@@ -3,7 +3,7 @@
  *
  * Arayuz domain'de, uygulamasi infrastructure'da durur. Kazanci somut:
  * use-case testleri sahte bir depo ile bedavaya kosar (Mongo, Docker, ag yok)
- * ve T4.1'de Mongo uygulamasi geldiginde use-case'lerin TEK SATIRI degismez.
+ * ve T4.1'de Mongo uygulamasi geldiginde use-case'lerin TEK SATIRI degismedi.
  */
 
 import type { Category, Product } from './catalog.js';

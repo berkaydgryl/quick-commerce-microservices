@@ -273,14 +273,15 @@ pnpm verify
 package.json script'ini çalıştırmaz.) Bu komut Gün 1
 itibarıyla geçmelidir; geçmiyorsa kurulum tamamlanmamıştır, devam etme.
 
-### Henüz gerekmeyen adımlar
-
-Bu adımlar yol haritasında vardır ama bugün çalıştırmanın bir etkisi yoktur; ilgili gün geldiğinde
-devreye girerler:
+### Katalogu Mongo'ya yüklemek (T4.1)
 
 ```bash
-pnpm seed                        # Gün 4'te Mongo'ya başlangıç verisini yükler
+pnpm infra:up     # Mongo (replica set) + Redis
+pnpm seed         # catalog'u derler; 5 kategori, 15 urun, 2 dark store yazar (tekrar kosmak guvenli)
 ```
+
+Seed kök `.env`'yi okur (yoksa ortam değişkenlerini). `NODE_ENV=production` iken reddeder.
+Ayrıntı: [`infra/seed/README.md`](infra/seed/README.md).
 
 ---
 
@@ -305,7 +306,7 @@ Hepsi depo kökünden `pnpm <komut>` ile çalışır. `make` bu projede zorunlu 
 | `test:int`     | `vitest run --config vitest.integration.config.ts`                                                    | Testcontainers ile Mongo/Redis entegrasyon testleri                | Çalışıyor (T2.5)                        |
 | `race`         | `node -e "..."`                                                                                       | Yarış koşulu senaryosu: aynı stok için eş zamanlı rezervasyon      | **Placeholder — Gün 11 (T11.1)**        |
 | `demo`         | `node -e "..."`                                                                                       | Uçtan uca demo: sipariş → ödeme → kurye akışı                      | **Placeholder — Gün 15 (T15.1)**        |
-| `seed`         | `node -e "..."`                                                                                       | Mongo'ya market / ürün / stok başlangıç verisi                     | **Placeholder — Gün 4**                 |
+| `seed`         | `turbo run build --filter=@getir/catalog-service... && pnpm --filter @getir/catalog-service seed`     | Katalogu (kategori, ürün, dark store) Mongo'ya bastan yazar        | Çalışıyor (T4.1: katalog)               |
 | `proto:gen`    | `pnpm --filter @getir/proto generate`                                                                 | `.proto` dosyalarından **TS ve Go** kodu üretir (Go kurulu olmalı) | Çalışıyor (T2.3)                        |
 | `proto:gen:ts` | `pnpm --filter @getir/proto generate:ts`                                                              | Yalnızca TypeScript çıktısı; Go gerektirmez                        | Çalışıyor (T2.3)                        |
 | `proto:check`  | `generate:ts && typecheck && check:go`                                                                | Üretilen kodun **iki dilde de** derlendiğini doğrular              | Çalışıyor (T2.3)                        |
@@ -320,7 +321,7 @@ Hepsi depo kökünden `pnpm <komut>` ile çalışır. `make` bu projede zorunlu 
 ### Servisleri çalıştırma
 
 ```bash
-pnpm --filter @getir/catalog-service build && pnpm --filter @getir/catalog-service start  # :50051
+pnpm --filter @getir/catalog-service build && MOCK=true pnpm --filter @getir/catalog-service start  # :50051, Mongo'suz
 pnpm --filter @getir/order-service   build && pnpm --filter @getir/order-service   start  # :50053
 pnpm proto:gen && (cd apps/gateway && go run ./cmd/gateway)                               # :8080
 
@@ -333,13 +334,13 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/cat
 
 | Servis                                                     | Port  | Bugün ne yapıyor                                        |
 | ---------------------------------------------------------- | ----- | ------------------------------------------------------- |
-| [`catalog-service`](apps/catalog-service/README.md) (T3.1) | 50051 | `ListCategories`, `ListProducts` — sahte veriyle        |
+| [`catalog-service`](apps/catalog-service/README.md) (T4.1) | 50051 | `ListCategories`, `ListProducts` — Mongo ya da `MOCK`   |
 | [`order-service`](apps/order-service/README.md) (T3.2)     | 50053 | `CreateDraftOrder`, `CreateOrder` — bellekte, ödeme yok |
 | [`gateway`](apps/gateway/README.md) (T3.4, Go)             | 8080  | `GET /healthz`, `GET /v1/categories`                    |
 
-İkisi de veri deposuna bağlanmaz: katalog verisi bellekten gelir, siparişler bellekte
-tutulur. Bu yüzden `pnpm infra:up` olmadan da ayağa kalkarlar. Mongo bağımlılığı T4.1
-(katalog) ve T4.5 (sipariş) ile gelecek.
+Katalog T4.1'den beri Mongo'dan okur: `MOCK=true` ise aynı demo verisini bellekten döndürür
+ve Mongo istemez, değilse `MONGO_URI` zorunludur (yoksa açılışta ölür). Kök `.env` varsa okunur;
+`.env.example`'da `MOCK=true`'dur. Siparişler hâlâ bellekte; Mongo bağımlılığı T4.5 ile gelecek.
 
 ### Entegrasyon testleri ve Docker
 
@@ -380,8 +381,8 @@ Yerine iki gerçek kapı var:
 `pnpm verify`, CI'daki `quality` işiyle **birebir aynı** zinciri koşar; yerelde yeşilse
 CI'da da yeşildir. Biçimlendirme için `pnpm format` yeterlidir.
 
-**Placeholder script'ler hakkında dürüst not:** `race`, `demo` ve `seed` bugün
-gerçek iş yapmaz (`proto:gen` T2.3'te gerçek üretime bağlandı). Her biri hangi günde ne yapacağını anlatan tek satırlık bir TODO mesajı basar ve
+**Placeholder script'ler hakkında dürüst not:** `race` ve `demo` bugün
+gerçek iş yapmaz (`proto:gen` T2.3'te, `seed` T4.1'de gerçek komuta bağlandı). Her biri hangi günde ne yapacağını anlatan tek satırlık bir TODO mesajı basar ve
 **sıfır çıkış koduyla** biter; böylece `pnpm verify` var olmayan bir özellik yüzünden kırmızıya
 düşmez. Bunları boş şablon değil, tarihi belli ve sahibi belli birer TODO olarak okuyun —
 tablodaki gün numarası hangi görevde dolacaklarını söyler.
@@ -422,7 +423,7 @@ quick-commerce-microservices/
 │   └── testing/               # @getir/testing - fixture'lar, testcontainers yardımcıları
 ├── infra/                     # Çalıştırma ortamı
 │   ├── docker/                # docker-compose.dev.yml, redis.conf (+ kendi README'si)
-│   ├── seed/                  # seed verisi ve MOCK modu fixture'ları        [Gün 4]
+│   ├── seed/                  # seed düzeni + henüz sahibi olmayan veri (adresler)  (T4.1)
 │   └── scripts/               # geliştirme ve kod üretimi betikleri          [Gün 2]
 ├── docs/
 │   ├── adr/                   # Numaralı mimari karar kayıtları (14 adet + dizin)

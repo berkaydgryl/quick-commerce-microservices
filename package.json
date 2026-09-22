@@ -23,7 +23,7 @@
     "test:int": "vitest run --passWithNoTests --config vitest.integration.config.ts",
     "race": "node -e \"console.log('TODO Gun 11 (T11.1): yaris kosulu (race) senaryosu henuz yok. Ayni stok icin 100 es zamanli rezervasyon denenecek; tam 1 basari, 99 STOCK_INSUFFICIENT beklenir.')\"",
     "demo": "node -e \"console.log('TODO Gun 15 (T15.1): uctan uca demo senaryosu henuz yok. Siparis-odeme-kurye akisini tek komutta kosturacak.')\"",
-    "seed": "node -e \"console.log('TODO Gun 4: seed betigi henuz yok. Gun 4, Mongo icin market/urun/stok baslangic verisini yukleyecek.')\"",
+    "seed": "turbo run build --filter=@getir/catalog-service... && pnpm --filter @getir/catalog-service seed",
     "codes:go": "node packages/contracts/scripts/write-go-error-codes.mjs",
     "codes:go:check": "node packages/contracts/scripts/write-go-error-codes.mjs --check",
     "proto:gen": "pnpm --filter @getir/proto generate",
