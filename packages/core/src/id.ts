@@ -15,6 +15,9 @@ export const ID_PREFIX = {
   PAYMENT: 'pay',
   COURIER: 'crr',
   RESERVATION: 'rsv',
+  /** Istek korelasyon kimligi: gunluk kaydi, gRPC metadata'si ve REST hata
+   *  zarfindaki `error.requestId` ayni degeri tasir. */
+  REQUEST: 'req',
 } as const;
 
 export type IdPrefix = (typeof ID_PREFIX)[keyof typeof ID_PREFIX];

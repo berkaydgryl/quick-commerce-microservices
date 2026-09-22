@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+// getir.example.v1 -- YALNIZCA service-kit'in ornek sunucusu icin.
+//
+// Bu sozlesme urun kodunda KULLANILMAZ ve packages/proto icinde DE DURMAZ:
+// gercek servis sozlesmeleri oradadir ve buf lint/breaking kapisindan gecer.
+// Buradaki amac tek: "gRPC bootstrap + Zod dogrulama + AppError cevirisi"
+// zincirinin ucundan ucuna calistigini grpcurl ile gozle gorulebilir kilmak
+// (T2.4 "Bitti sayilir" olcutu). Bir gun catalog-service ayaga kalkinca bu
+// dosya silinebilir; hicbir sey ona bagli degildir.
+
+package getir.example.v1;
+
+option go_package = "github.com/berkaydgryl/quick-commerce-microservices/packages/service-kit/proto/example/v1;examplev1";
+
+message EchoRequest {
+  // 1-280 karakter. Sinir Zod semasinda (src/example/echo-service.ts) durur;
+  // proto3 alan kisitlamasi tasiyamaz, bu yuzden dogrulama ara katmandadir.
+  string message = 1;
+
+  // Kac kez tekrarlanacagi. 1-5 arasi; 0 gonderilirse 1 varsayilir.
+  int32 repeat = 2;
+}
+
+message EchoResponse {
+  // Tekrarlanmis metin.
+  string message = 1;
+
+  // Cevabi ureten ornegin adi; birden fazla ornek kosarken hangisinin
+  // cevapladigini gosterir.
+  string served_by = 2;
+}
+
+// Ornek servis: dogrulama basarisiz olursa INVALID_ARGUMENT, "bom" mesaji
+// gonderilirse bilincli olarak INTERNAL doner.
+service EchoService {
+  rpc Echo(EchoRequest) returns (EchoResponse);
+}

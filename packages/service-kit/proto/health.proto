@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+// gRPC Health Checking Protocol - standart sozlesmenin BIREBIR kopyasi.
+// Kaynak: https://github.com/grpc/grpc-proto/blob/master/grpc/health/v1/health.proto
+// (Apache-2.0, Copyright 2015 The gRPC Authors)
+//
+// NEDEN BURADA, packages/proto ICINDE DEGIL:
+// Bu dosya bizim sozlesmemiz DEGIL, ekosistemin ortak sozlesmesi. packages/proto
+// yalnizca "getir.*" paketlerini tasir ve oradaki her dosya buf lint/breaking
+// kapisindan gecer; disaridan alinan bir dosyayi o kapiya sokmak, bir gun
+// yukari akista degisirse bizim "breaking" raporumuzu kirletirdi. Ayrica
+// icerigi DEGISTIRILEMEZ: grpcurl, Kubernetes probe'lari, Go ve Node
+// istemcileri tam olarak bu paket adini ve bu alan numaralarini bekler.
+//
+// Calisma zamaninda @grpc/proto-loader ile okunur (src/grpc/health.ts); bu
+// yuzden paketin "files" listesinde dist ile birlikte "proto" da vardir.
+
+package grpc.health.v1;
+
+option go_package = "google.golang.org/grpc/health/grpc_health_v1";
+
+message HealthCheckRequest {
+  // Sorgulanan servisin tam adi (ornegin "getir.catalog.v1.CatalogService").
+  // BOS string, sunucunun BUTUNUNU sorar; ayakta olma probe'lari bunu kullanir.
+  string service = 1;
+}
+
+message HealthCheckResponse {
+  enum ServingStatus {
+    UNKNOWN = 0;
+    SERVING = 1;
+    NOT_SERVING = 2;
+    // Yalnizca Watch cevabinda kullanilir; Check bilinmeyen servis icin
+    // NOT_FOUND status kodu ile duser.
+    SERVICE_UNKNOWN = 3;
+  }
+  ServingStatus status = 1;
+}
+
+service Health {
+  // Anlik durum sorgusu.
+  rpc Check(HealthCheckRequest) returns (HealthCheckResponse);
+
+  // Durum akisi: once mevcut durum, sonra her degisimde yeni bir mesaj.
+  rpc Watch(HealthCheckRequest) returns (stream HealthCheckResponse);
+}
