@@ -10,4 +10,5 @@ export * from './id.js';
 export * from './clock.js';
 export * from './logger.js';
 export * from './constants.js';
+export * from './config/env-values.js';
 export * from './config/env.js';

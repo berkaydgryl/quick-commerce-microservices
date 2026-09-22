@@ -17,8 +17,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { connectRedis } from '../../src/client.js';
 import type { RedisConnection } from '../../src/client.js';
 import { reservationIndexKey, reservationKey, stockAvailKey } from '../../src/keys.js';
-import { loadLuaScripts } from '../../src/scripts.js';
-import type { LuaScriptRegistry } from '../../src/scripts.js';
+import { loadLuaScripts } from '../../src/scripts/registry.js';
+import type { LuaScriptRegistry } from '../../src/scripts/registry.js';
 
 /** infra/docker/docker-compose.dev.yml ile ayni surum. */
 const REDIS_IMAGE = 'redis:7-alpine';

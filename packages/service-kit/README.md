@@ -5,12 +5,14 @@ Her Node servisinin **aynı şekilde** ayağa kalkması, **aynı şekilde** hata
 `application`, `infrastructure`) buraya girmez; burada yalnızca her serviste birebir
 tekrarlanacak olan dört parça durur:
 
-| Parça                     | Dosya                 | Ne yapar                                              |
-| ------------------------- | --------------------- | ----------------------------------------------------- |
-| gRPC bootstrap            | `src/grpc/server.ts`  | Sunucuyu kurar, portu açar, zarif kapanışı yönetir    |
-| Health RPC                | `src/grpc/health.ts`  | Standart `grpc.health.v1.Health` (Check + Watch)      |
-| Zod doğrulama ara katmanı | `src/grpc/handler.ts` | Gelen mesajı doğrular, handler'a **tipli** veri verir |
-| Hata çevirisi             | `src/grpc/status.ts`  | `AppError` ⇄ gRPC status; yığın izi dışarı çıkmaz     |
+| Parça                     | Dosya                           | Ne yapar                                                 |
+| ------------------------- | ------------------------------- | -------------------------------------------------------- |
+| gRPC bootstrap            | `src/grpc/server.ts`            | Sunucuyu kurar, portu açar, SERVING'e çevirir            |
+| Zarif kapanış             | `src/grpc/graceful-shutdown.ts` | Beş adımlık kapanış sırası ve drenaj                     |
+| Health durumu             | `src/health/registry.ts`        | Kim ayakta? Durum tablosu + abonelik (gRPC'den bağımsız) |
+| Health RPC                | `src/grpc/health.ts`            | Standart `grpc.health.v1.Health` (Check + Watch)         |
+| Zod doğrulama ara katmanı | `src/grpc/handler.ts`           | Gelen mesajı doğrular, handler'a **tipli** veri verir    |
+| Hata çevirisi             | `src/grpc/status.ts`            | `AppError` ⇄ gRPC status; yığın izi dışarı çıkmaz        |
 
 Sınır: **sözleşme** burada değil. gRPC sözleşmeleri `packages/proto`, REST/socket
 şemaları `packages/contracts` içindedir (ADR-09).
@@ -27,15 +29,19 @@ packages/service-kit/
 │   │   ├── constants.ts    # metadata anahtarları, varsayılanlar, ServingStatus
 │   │   └── env.ts          # serviceEnvSchema, grpcPort()
 │   ├── grpc/
-│   │   ├── context.ts      # HandlerContext, requestId çözümü
-│   │   ├── handler.ts      # unaryHandler (Zod + hata + günlük)
-│   │   ├── health.ts       # HealthService
-│   │   ├── proto.ts        # çalışma zamanında .proto yükleme
-│   │   ├── server.ts       # startGrpcServer, zarif kapanış
-│   │   └── status.ts       # toServiceError / fromServiceError
-│   ├── example/            # örnek servis (üründe kullanılmaz)
-│   ├── logger.ts           # pino tabanlı Logger
-│   └── shutdown.ts         # sinyaller, yakalanmamış hata
+│   │   ├── context.ts             # HandlerContext, requestId çözümü
+│   │   ├── graceful-shutdown.ts   # kapanış sırası + drenaj
+│   │   ├── handler.ts             # unaryHandler (Zod + hata + günlük)
+│   │   ├── health.ts              # HealthGrpcService (taşıma)
+│   │   ├── proto.ts               # çalışma zamanında .proto yükleme
+│   │   ├── server.ts              # startGrpcServer (açılış)
+│   │   ├── status.ts              # toServiceError / fromServiceError
+│   │   └── types.ts               # sunucu seçenekleri ve tutamağı
+│   ├── health/
+│   │   └── registry.ts            # HealthRegistry (durum + abonelik)
+│   ├── example/                   # örnek servis (üründe kullanılmaz)
+│   ├── logger.ts                  # pino tabanlı Logger
+│   └── shutdown.ts                # sinyaller, yakalanmamış hata
 └── test/unit/
 ```
 

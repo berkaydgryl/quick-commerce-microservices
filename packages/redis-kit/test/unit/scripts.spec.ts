@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { AppError } from '@getir/core';
 import { describe, expect, it } from 'vitest';
 
-import { readLuaDirectory } from '../../src/scripts.js';
+import { readLuaDirectory } from '../../src/scripts/source.js';
 
 /** Entegrasyon testlerinin kullandigi ornek script klasoru. */
 const LUA_DIR = fileURLToPath(new URL('../integration/lua', import.meta.url));

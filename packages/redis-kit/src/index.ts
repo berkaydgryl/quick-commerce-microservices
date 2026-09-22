@@ -9,4 +9,5 @@
 export * from './client.js';
 export * from './env.js';
 export * from './keys.js';
-export * from './scripts.js';
+export * from './scripts/registry.js';
+export * from './scripts/source.js';

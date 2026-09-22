@@ -17,4 +17,5 @@ export * from './grpc/handler.js';
 export * from './grpc/health.js';
 export * from './grpc/proto.js';
 export * from './grpc/server.js';
+export * from './grpc/types.js';
 export * from './grpc/status.js';
