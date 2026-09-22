@@ -279,7 +279,6 @@ Bu adımlar yol haritasında vardır ama bugün çalıştırmanın bir etkisi yo
 devreye girerler:
 
 ```bash
-cd apps/gateway && go mod tidy   # apps/gateway Gün 3'te geliyor
 pnpm seed                        # Gün 4'te Mongo'ya başlangıç verisini yükler
 ```
 
@@ -323,6 +322,9 @@ Hepsi depo kökünden `pnpm <komut>` ile çalışır. `make` bu projede zorunlu 
 ```bash
 pnpm --filter @getir/catalog-service build && pnpm --filter @getir/catalog-service start  # :50051
 pnpm --filter @getir/order-service   build && pnpm --filter @getir/order-service   start  # :50053
+(cd apps/gateway && go run ./cmd/gateway)                                                 # :8080
+
+curl -s localhost:8080/healthz   # iki servisin durumu; biri dusukse 503
 
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/catalog.proto \
   localhost:50051 getir.catalog.v1.CatalogService/ListCategories
@@ -332,6 +334,7 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/cat
 | ---------------------------------------------------------- | ----- | ------------------------------------------------------- |
 | [`catalog-service`](apps/catalog-service/README.md) (T3.1) | 50051 | `ListCategories`, `ListProducts` — sahte veriyle        |
 | [`order-service`](apps/order-service/README.md) (T3.2)     | 50053 | `CreateDraftOrder`, `CreateOrder` — bellekte, ödeme yok |
+| [`gateway`](apps/gateway/README.md) (T3.3, Go)             | 8080  | `GET /healthz` — bağımlı servislerin durumu             |
 
 İkisi de veri deposuna bağlanmaz: katalog verisi bellekten gelir, siparişler bellekte
 tutulur. Bu yüzden `pnpm infra:up` olmadan da ayağa kalkarlar. Mongo bağımlılığı T4.1
@@ -396,7 +399,7 @@ Tek repo, üç üst klasör: `apps/` çalışan process'ler, `packages/` paylaş
 ```text
 quick-commerce-microservices/
 ├── apps/                      # Çalışan process'ler (Gün 3'ten itibaren doluyor)
-│   ├── gateway/               # Go - tek dış kapı
+│   ├── gateway/               # Go - tek dış kapı  (T3.3 iskelet)
 │   ├── catalog-service/       # Node - ürün, kategori, dark store  (T3.1)
 │   ├── inventory-service/     # Node - stok, rezervasyon, süpürücü
 │   ├── order-service/         # Node - durum makinesi, saga, outbox  (T3.2 iskelet)
