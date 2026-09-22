@@ -1,17 +1,12 @@
 /**
- * Lua script yukleyici.
+ * Lua script'lerini REDIS'E yukler ve calistirir. Dosya sistemini tanimaz;
+ * kaynaklari source.ts'ten alir.
  *
- * NEDEN VAR (ADR-01): sicak yoldaki stok dusumu tek bir Lua script'i ile
- * yapilir. Script'ler kaynakta .lua dosyasi olarak durur - TypeScript icine
- * gomulu string olarak DEGIL. Gerekce: sozdizimi vurgulamasi ve
- * `redis-cli --eval` ile elle deneyebilme; ayrica script'in tarihcesi git'te
- * ayri bir dosya olarak okunur.
- *
- * NASIL CALISIR: acilista her dosya SCRIPT LOAD ile Redis'e yuklenir ve SHA'si
- * saklanir; cagrilar EVALSHA ile gider (script govdesi her cagrida tel uzerinden
- * gitmez). Redis yeniden baslar ya da SCRIPT FLUSH calisirsa SHA kaybolur;
- * EVALSHA "NOSCRIPT" doner. Bu durum YENIDEN YUKLEME ile sessizce toparlanir -
- * servisin bundan haberi olmaz, sadece bir uyari gunlugu birakir.
+ * NASIL CALISIR: acilista her script SCRIPT LOAD ile yuklenir ve SHA'si
+ * saklanir; cagrilar EVALSHA ile gider (script govdesi her cagrida tel
+ * uzerinden gitmez). Redis yeniden baslar ya da SCRIPT FLUSH calisirsa SHA
+ * kaybolur ve EVALSHA "NOSCRIPT" doner. Bu durum YENIDEN YUKLEME ile sessizce
+ * toparlanir; servisin haberi olmaz, geriye bir uyari gunlugu kalir.
  *
  * NEDEN ioredis'in defineCommand'i degil: defineCommand ayni isi yapar ama
  * script'i istemci nesnesine dinamik bir metot olarak ekler; tip tarafinda
@@ -19,14 +14,12 @@
  * Burada script'ler adi ve SHA'si acikca gorunen tipli nesneler olarak duruyor.
  */
 
-import { readdirSync, readFileSync } from 'node:fs';
-import { basename, extname, join } from 'node:path';
-
 import { AppError, silentLogger } from '@getir/core';
 import type { Logger } from '@getir/core';
 import type { Redis } from 'ioredis';
 
-import { sameHashTag } from './keys.js';
+import { sameHashTag } from '../keys.js';
+import { readLuaDirectory } from './source.js';
 
 /** Script cagrisinda gecilebilecek argumanlar. */
 export type LuaArgument = string | number;
@@ -40,13 +33,6 @@ export interface LuaScript {
   run(keys: readonly string[], args?: readonly LuaArgument[]): Promise<unknown>;
 }
 
-/** Diskten okunmus, henuz Redis'e yuklenmemis script. */
-export interface LuaSource {
-  /** Dosya adi (uzantisiz): reserve.lua -> "reserve". */
-  readonly name: string;
-  readonly source: string;
-}
-
 export interface LuaScriptRegistry {
   /** Yuklenmis script'i ada gore verir; yoksa AppError firlatir. */
   get(name: string): LuaScript;
@@ -54,32 +40,8 @@ export interface LuaScriptRegistry {
   readonly names: readonly string[];
 }
 
-const LUA_EXTENSION = '.lua';
-
 /** Redis'in yuklu olmayan SHA icin dondurdugu hata isareti. */
 const NOSCRIPT_MARKER = 'NOSCRIPT';
-
-/**
- * Klasordeki .lua dosyalarini okur. REDIS'E DOKUNMAZ.
- *
- * Ayri bir fonksiyon olmasinin sebebi tek sorumluluk: burasi yalnizca dosya
- * sistemini bilir, asagidaki yukleyici yalnizca Redis'i. Boylece "klasorde ne
- * var" sorusu baglanti olmadan da test edilebiliyor.
- */
-export function readLuaDirectory(directory: string): readonly LuaSource[] {
-  const sources = readdirSync(directory)
-    .filter((file) => extname(file) === LUA_EXTENSION)
-    .sort()
-    .map((file) => ({
-      name: basename(file, LUA_EXTENSION),
-      source: readFileSync(join(directory, file), 'utf8'),
-    }));
-
-  if (sources.length === 0) {
-    throw AppError.internal(`Lua klasorunde script yok: ${directory}`);
-  }
-  return sources;
-}
 
 /**
  * Klasordeki tum .lua dosyalarini Redis'e yukler.

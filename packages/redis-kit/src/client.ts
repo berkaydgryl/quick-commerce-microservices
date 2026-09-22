@@ -26,23 +26,24 @@ const RETRY_DELAY_STEP_MS = 100;
 const MAX_RETRIES_PER_REQUEST = 3;
 
 /**
- * ILK baglanti icin deneme sayisi ve bekleme adimi.
+ * ILK baglanti icin TOPLAM sure butcesi (ms).
  *
- * NEDEN GEREKLI: ioredis'in retryStrategy'si KOPAN baglantiyi toparlar, ama
- * `connect()` ilk ECONNREFUSED'da reddeder. Servis ile Redis ayni anda ayaga
- * kalkiyorsa (docker compose, Testcontainers, k8s) bu yaris kaybedilir ve
- * servis, Redis bir saniye sonra hazir olacak olmasina ragmen oler.
- * Testcontainers ile bu yaris gercekten gozlendi: ayni test bir kosuda gecip
- * digerinde "baglanti kurulamadi" ile dustu.
+ * NEDEN GEREKLI: ioredis'in `connect()` sozu ilk ECONNREFUSED'da reddeder, ama
+ * arkada retryStrategy calismaya devam eder. Servis ile Redis ayni anda ayaga
+ * kalkiyorsa (docker compose, Testcontainers, k8s) ilk deneme kaybedilir ve
+ * servis, Redis yarim saniye sonra hazir olacakken olurdu. Bu yaris
+ * Testcontainers ile gercekten gozlendi (uc kosudan birinde).
+ *
+ * Bu yuzden `connect()` sozu BEKLENMEZ; 'ready' olayi bu butce icinde beklenir
+ * ve yeniden deneme isi kutuphanenin kendi retryStrategy'sine birakilir.
  */
-const CONNECT_ATTEMPTS = 5;
-const CONNECT_RETRY_STEP_MS = 200;
+const DEFAULT_READY_TIMEOUT_MS = 5_000;
 
 export interface RedisConnectionOptions {
   /** redis://host:port[/db] */
   readonly url: string;
   readonly logger?: Logger;
-  /** Ilk baglanti icin beklenecek en uzun sure (ms). */
+  /** Ilk baglantinin hazir olmasi icin TOPLAM sure butcesi (ms). */
   readonly connectTimeoutMs?: number;
   /** Gunlukte gorunen ad; hangi servisin baglantisi oldugunu soyler. */
   readonly name?: string;
@@ -81,7 +82,7 @@ export async function connectRedis(options: RedisConnectionOptions): Promise<Red
   });
 
   try {
-    await connectWithRetry(redis, logger);
+    await waitUntilReady(redis, options.connectTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS, logger);
     await redis.ping();
   } catch (error: unknown) {
     redis.disconnect();
@@ -109,30 +110,42 @@ export async function connectRedis(options: RedisConnectionOptions): Promise<Red
   };
 }
 
-/** Ilk baglantiyi artan beklemeyle birkac kez dener; son hatayi firlatir. */
-async function connectWithRetry(redis: Redis, logger: Logger): Promise<void> {
-  let lastError: unknown;
+/**
+ * Baglantiyi baslatir ve 'ready' olayini verilen butce icinde bekler.
+ *
+ * `connect()` sozu bilincli olarak BEKLENMEZ: ilk deneme basarisiz olsa bile
+ * ioredis retryStrategy ile denemeye devam eder ve basarili olunca 'ready'
+ * yayinlar. Butce dolarsa son gorulen hata firlatilir.
+ */
+function waitUntilReady(redis: Redis, budgetMs: number, logger: Logger): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let lastError: Error | undefined;
 
-  for (let attempt = 1; attempt <= CONNECT_ATTEMPTS; attempt += 1) {
-    try {
-      await redis.connect();
-      return;
-    } catch (error: unknown) {
+    const onReady = (): void => {
+      cleanup();
+      resolve();
+    };
+    const onError = (error: Error): void => {
       lastError = error;
-      if (attempt === CONNECT_ATTEMPTS) {
-        break;
-      }
-      logger.warn({ attempt, of: CONNECT_ATTEMPTS }, 'redis henuz hazir degil, yeniden denenecek');
-      await delay(attempt * CONNECT_RETRY_STEP_MS);
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(lastError ?? new Error(`Redis ${budgetMs} ms icinde hazir olmadi`));
+    }, budgetMs);
+
+    function cleanup(): void {
+      clearTimeout(timer);
+      redis.off('ready', onReady);
+      redis.off('error', onError);
     }
-  }
 
-  throw lastError;
-}
+    redis.once('ready', onReady);
+    redis.on('error', onError);
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
+    redis.connect().catch(() => {
+      // Ilk deneme dustu; retryStrategy devrede, butce dolana kadar bekliyoruz.
+      logger.warn({}, 'redis ilk baglanti denemesi basarisiz, yeniden deneniyor');
+    });
   });
 }
 

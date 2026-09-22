@@ -1,17 +1,22 @@
 /**
- * Ortam degiskeni yukleme ve dogrulama.
+ * Ortam degiskeni YUKLEME POLITIKASI.
  *
- * KURAL: `process.env` tum kod tabaninda YALNIZCA bu dosyada okunur. Baska hicbir
- * modul process.env'e dokunmaz; ihtiyaci olan yapilandirmayi loadEnv'in dondurdugu
- * tipli nesneden alir. Boylece:
+ * KURAL: `process.env` tum kod tabaninda YALNIZCA bu dosyada okunur. Baska
+ * hicbir modul process.env'e dokunmaz; ihtiyaci olan yapilandirmayi loadEnv'in
+ * dondurdugu tipli nesneden alir. Boylece:
  *  - hangi degiskenin zorunlu oldugu tek yerde gorunur,
  *  - eksik degisken uygulamanin ilk saniyesinde patlar (gec kalmis surpriz yok),
  *  - testler gercek ortami kirletmeden kendi kaynagini verebilir.
+ *
+ * Tek tek degerlerin nasil ayristirildigi ayri dosyadadir: env-values.ts.
+ * Ikisi ayri sebeplerle degisir - biri yeni bir tip (envUrl, envList) eklemek,
+ * digeri hata/cikis politikasini degistirmek.
  */
 
 import { z } from 'zod';
 
 import { AppError } from '../errors.js';
+import { envBoolean } from './env-values.js';
 
 /** Ortam kaynagi; varsayilani process.env, testte duz nesne verilir. */
 export type EnvSource = Record<string, string | undefined>;
@@ -30,111 +35,8 @@ export const LOG_LEVELS = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] a
 
 const DEFAULT_NODE_ENV = 'development';
 const DEFAULT_LOG_LEVEL = 'info';
+/** Sahte mod varsayilani: dis dunyaya cikilir. */
 const DEFAULT_MOCK = false;
-
-const TRUE_LITERALS = new Set(['1', 'true', 'yes', 'on']);
-const FALSE_LITERALS = new Set(['0', 'false', 'no', 'off']);
-const INTEGER_PATTERN = /^-?\d+$/;
-
-const DECIMAL_RADIX = 10;
-
-/** "1" / "true" / "on" gibi metinleri boolean'a cevirir. */
-export function envBoolean(defaultValue: boolean = DEFAULT_MOCK) {
-  return z
-    .string()
-    .optional()
-    .transform((raw, ctx) => {
-      const text = raw?.trim().toLowerCase() ?? '';
-      if (text === '') {
-        return defaultValue;
-      }
-      if (TRUE_LITERALS.has(text)) {
-        return true;
-      }
-      if (FALSE_LITERALS.has(text)) {
-        return false;
-      }
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `boolean bekleniyor (1/0, true/false, yes/no, on/off), alinan: "${raw ?? ''}"`,
-      });
-      return z.NEVER;
-    });
-}
-
-/**
- * Metin ortam degiskeni.
- *
- * Tanimsiz VE bos metin ayni sayilir: docker-compose'da "GRPC_HOST=" yazmak
- * degiskeni bos string olarak gecirir; zod'un `.default()` bunu TANIMLI kabul
- * edip varsayilani uygulamaz ve uygulama bos adrese baglanmaya calisirdi.
- *
- * Varsayilan verilmezse degisken ZORUNLUDUR (envInt ile ayni kural).
- */
-export function envString(defaultValue?: string) {
-  return z
-    .string()
-    .optional()
-    .transform((raw, ctx) => {
-      const text = raw?.trim() ?? '';
-      if (text !== '') {
-        return text;
-      }
-      if (defaultValue !== undefined) {
-        return defaultValue;
-      }
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'zorunlu alan eksik' });
-      return z.NEVER;
-    });
-}
-
-export interface EnvIntOptions {
-  readonly min?: number;
-  readonly max?: number;
-  /** Verilmezse degisken zorunludur. */
-  readonly defaultValue?: number;
-}
-
-/** Tam sayi ortam degiskeni (port, TTL, aralik...). Float kabul edilmez. */
-export function envInt(options: EnvIntOptions = {}) {
-  const { min, max, defaultValue } = options;
-  return z
-    .string()
-    .optional()
-    .transform((raw, ctx) => {
-      const text = raw?.trim() ?? '';
-      if (text === '') {
-        if (defaultValue !== undefined) {
-          return defaultValue;
-        }
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'zorunlu alan eksik' });
-        return z.NEVER;
-      }
-      if (!INTEGER_PATTERN.test(text)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `tam sayi bekleniyor, alinan: "${text}"`,
-        });
-        return z.NEVER;
-      }
-      const parsed = Number.parseInt(text, DECIMAL_RADIX);
-      if (min !== undefined && parsed < min) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `en az ${min} olmali, alinan: ${parsed}`,
-        });
-        return z.NEVER;
-      }
-      if (max !== undefined && parsed > max) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `en fazla ${max} olmali, alinan: ${parsed}`,
-        });
-        return z.NEVER;
-      }
-      return parsed;
-    });
-}
 
 /** Her serviste bulunan ortak ortam parcalari. */
 export const commonEnvSchema = z.object({

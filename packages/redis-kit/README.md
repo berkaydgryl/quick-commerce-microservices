@@ -46,7 +46,9 @@ bulunamaz, geçersiz değer `AppError` (VALIDATION_FAILED) ile reddedilir.
 ## Lua yükleyici
 
 Script'ler kaynakta `.lua` dosyası olarak durur, TypeScript içinde string olarak değil —
-böylece sözdizimi vurgulanır ve `redis-cli --eval` ile elle denenebilir.
+böylece sözdizimi vurgulanır ve `redis-cli --eval` ile elle denenebilir. İki modül: dosya
+sistemini yalnızca `src/scripts/source.ts` bilir (`readLuaDirectory`), Redis'i yalnızca
+`src/scripts/registry.ts` (`loadLuaScripts`).
 
 ```ts
 const scripts = await loadLuaScripts(connection.redis, luaDir, logger);
@@ -71,6 +73,12 @@ await redis.close(); // kuyruktaki komutlar bitsin diye quit, disconnect değil
 
 `error` olayının dinleyicisi **her zaman** bağlanır: ioredis'te dinleyici yoksa Redis bir
 an düştüğünde Node süreci yakalanmamış hatayla ölür.
+
+İlk bağlantıda `connect()` sözü **beklenmez**, `ready` olayı bir süre bütçesi içinde
+beklenir (varsayılan 5 sn, `REDIS_CONNECT_TIMEOUT_MS`). Sebebi: `connect()` ilk
+`ECONNREFUSED`'da reddeder ama ioredis arkada `retryStrategy` ile denemeye devam eder.
+Servis ile Redis aynı anda ayağa kalkıyorsa (compose, Testcontainers, k8s) ilk deneme
+kaybedilir ve servis, Redis yarım saniye sonra hazır olacakken ölürdü.
 
 ## Test
 

@@ -22,7 +22,7 @@ import {
 } from '../../src/example/echo-service.js';
 import { healthServiceDefinition } from '../../src/grpc/health.js';
 import { startGrpcServer } from '../../src/grpc/server.js';
-import type { GrpcServerHandle } from '../../src/grpc/server.js';
+import type { GrpcServerHandle } from '../../src/grpc/types.js';
 import { firstMessage, streamCall, unaryCall } from './support/grpc-client.js';
 
 /** Isletim sistemi bos bir port secsin; testler paralel kosarken cakismaz. */
