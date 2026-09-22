@@ -3,7 +3,10 @@
  *
  * Calistirma:
  *   pnpm --filter @getir/catalog-service build
- *   pnpm --filter @getir/catalog-service start
+ *   pnpm --filter @getir/catalog-service start      (kok .env varsa okunur)
+ *
+ * Veri kaynagi MOCK ile secilir: MOCK=true -> bellek (Mongo gerekmez),
+ * aksi halde MONGO_URI zorunlu. Mongo'yu doldurmak icin: pnpm seed
  *
  * Dogrulama (grpcurl):
  *   grpcurl -plaintext -import-path packages/proto/proto \
@@ -13,11 +16,14 @@
 
 import { createLogger, installProcessHandlers, startGrpcServer } from '@getir/service-kit';
 
-import { buildCatalogService } from './bootstrap.js';
+import { buildCatalogService, openCatalogSource } from './bootstrap.js';
 import { SERVICE_NAME } from './config/constants.js';
-import { env } from './config/env.js';
+import { loadServiceEnv } from './config/env.js';
 
+const env = loadServiceEnv();
 const logger = createLogger({ name: SERVICE_NAME, level: env.LOG_LEVEL });
+
+const source = await openCatalogSource(env.mongo, logger);
 
 const handle = await startGrpcServer({
   serviceName: SERVICE_NAME,
@@ -25,14 +31,13 @@ const handle = await startGrpcServer({
   port: env.CATALOG_GRPC_PORT,
   shutdownTimeoutMs: env.GRPC_SHUTDOWN_TIMEOUT_MS,
   logger,
-  services: [buildCatalogService({ logger })],
+  services: [buildCatalogService({ logger, repository: source.repository })],
+  // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti kesilmesin.
+  onShutdown: () => source.close(),
 });
 
 installProcessHandlers({ shutdown: (reason) => handle.shutdown(reason), logger });
 
-// Veri kaynagi bilincli olarak gunluge yaziliyor: bugun bellekteki sahte veri
-// okunuyor (T3.1). T4.1'de Mongo gelince bu satir kaynagi ayirt etmeyi saglar.
-logger.info(
-  { port: handle.port, mock: env.MOCK, source: 'bellek (T3.1 sahte veri)' },
-  'katalog servisi hazir',
-);
+// Veri kaynagi bilincli olarak gunluge yaziliyor: "neden bos liste?" sorusunun
+// ilk cevabi hangi modda calisildigidir.
+logger.info({ port: handle.port, mock: env.MOCK, source: source.name }, 'katalog servisi hazir');

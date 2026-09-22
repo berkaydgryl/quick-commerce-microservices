@@ -55,6 +55,15 @@ describe('toMongoAppError', () => {
     expect((error as { cause?: unknown }).cause).toBe(cause);
     expect(JSON.stringify(error)).not.toContain('bozuk');
   });
+
+  it('zaten cevrilmis AppError i OLDUGU GIBI birakir (cift ceviri yok)', () => {
+    // withTransaction, repository.run()'in cevirdigi hatayi tekrar buraya
+    // verir; CONFLICT'in INTERNAL'a donmesi transaction icindeki her hatanin
+    // kodunu kaybettirirdi.
+    const conflict = toMongoAppError(duplicateKeyError(), { operation: 'insertOne' });
+
+    expect(toMongoAppError(conflict, { operation: 'withTransaction' })).toBe(conflict);
+  });
 });
 
 describe('isDuplicateKeyError', () => {

@@ -12,7 +12,7 @@
  * olabilir ve ayni urun iki kez gorunur. Imlec "en son gordugun kimlik"
  * bilgisidir; kayitlar kimlige gore sirali oldugu icin sonraki sayfa
  * "kimligi bundan buyuk olanlar" ile deterministik bicimde bulunur. Ayni
- * mantik T4.1'de Mongo'da `_id > token` sorgusuna birebir cevrilir.
+ * mantik Mongo'da `_id > token` sorgusuna birebir cevrilir (mongo/product-repository.ts).
  */
 
 export const DEFAULT_PAGE_SIZE = 20;

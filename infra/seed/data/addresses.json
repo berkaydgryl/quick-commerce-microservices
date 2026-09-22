@@ -1,0 +1,20 @@
+[
+  {
+    "title": "Ev",
+    "line": "Caferağa Mah. Moda Cad. No:12, Kadıköy",
+    "location": { "lat": 40.9885, "lng": 29.0262 },
+    "note": "Kadıköy deposuna düşer: normal akış"
+  },
+  {
+    "title": "İş",
+    "line": "Sinanpaşa Mah. Barbaros Blv. No:40, Beşiktaş",
+    "location": { "lat": 41.0431, "lng": 29.0071 },
+    "note": "Beşiktaş deposuna düşer: farklı çeşit"
+  },
+  {
+    "title": "Yazlık",
+    "line": "Ağva Mah. Sahil Yolu No:3, Şile",
+    "location": { "lat": 41.1363, "lng": 29.8539 },
+    "note": "Hiçbir deponun yarıçapında değil: NO_STORE"
+  }
+]

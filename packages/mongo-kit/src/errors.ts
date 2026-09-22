@@ -26,6 +26,15 @@ export interface MongoErrorContext {
  * - digerleri -> INTERNAL (mesaji disari sizmaz)
  */
 export function toMongoAppError(error: unknown, context: MongoErrorContext = {}): AppError {
+  // ZATEN cevrilmis hata oldugu gibi gecer. Ornek: repository.run() icindeki
+  // benzersiz indeks ihlali CONFLICT'e cevrilir, sonra withTransaction ayni
+  // hatayi yakalayip buraya TEKRAR verir. Bu satir olmadan CONFLICT, INTERNAL
+  // olarak yeniden sarilir ve transaction icindeki her hata kodunu kaybederdi
+  // (T4.1'de catalog seed testinde yakalandi).
+  if (error instanceof AppError) {
+    return error;
+  }
+
   const details: Record<string, string> = {};
   if (context.operation !== undefined) {
     details.operation = context.operation;
