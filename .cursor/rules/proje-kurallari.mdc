@@ -121,7 +121,9 @@ Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicid
 ## API ve gRPC
 
 - REST: dogru fiil ve dogru durum kodu. Kod -> HTTP/gRPC eslemesi TEK tabloda
-  (`@getir/core/error-codes.ts`); baska yerde eslenmez.
+  (`@getir/core/error-codes.ts`); baska yerde eslenmez. Go gateway'in kopyasi
+  (`apps/gateway/internal/apperror/codes_gen.go`) ELLE DUZENLENMEZ, `pnpm codes:go` ile
+  uretilir; kullanici mesaji da `@getir/contracts/errors.ts`'ten gelir, handler yazamaz.
 - Tum mutasyon uclari `Idempotency-Key` ister (ADR-08). Anahtar bugun dogrulanir; tekrar
   korumasi `idem:{key}` ile gelecek, uc degismeyecek.
 - Liste donen her uc sayfalidir. Imlec (cursor) tercih edilir: katalog siralamasi degistigi

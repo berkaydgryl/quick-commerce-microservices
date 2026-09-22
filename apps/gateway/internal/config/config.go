@@ -24,6 +24,13 @@ const (
 	defaultLogLevel        = slog.LevelInfo
 )
 
+// Servis adlari: havuzdaki anahtar, gunluk alani ve /healthz'deki "name".
+// Tek yerde tanimli; main ayni adla havuzdan baglanti ister.
+const (
+	CatalogService = "catalog"
+	OrderService   = "order"
+)
+
 const (
 	minPort = 1
 	maxPort = 65535
@@ -98,8 +105,8 @@ func Load(getenv Getenv) (Config, error) {
 	// taniyor. Yeni servis geldiginde buraya bir satir eklenir; adres yine
 	// ortamdan gelir.
 	services := []ServiceTarget{
-		{Name: "catalog", Address: readString(getenv, "CATALOG_GRPC_ADDR", defaultCatalogAddress)},
-		{Name: "order", Address: readString(getenv, "ORDER_GRPC_ADDR", defaultOrderAddress)},
+		{Name: CatalogService, Address: readString(getenv, "CATALOG_GRPC_ADDR", defaultCatalogAddress)},
+		{Name: OrderService, Address: readString(getenv, "ORDER_GRPC_ADDR", defaultOrderAddress)},
 	}
 
 	if len(problems) > 0 {

@@ -2,24 +2,43 @@
 #
 # BUILD BAGLAMI DEPO KOKUDUR (Node servisleriyle ayni kural):
 #   docker build -f apps/gateway/Dockerfile -t getir/gateway .
-# Bugun gateway yalnizca kendi modulune bagli, ama T3.4'te packages/proto
-# "replace" ile baglanacak; baglami simdiden kok tutmak o gun Dockerfile'i
-# yeniden yazmaktan ucuzdur.
+# Gateway, packages/proto'nun uretilen Go koduna "replace" ile bagli (T3.4);
+# o klasor baglamin icinde olmak zorunda.
 
 # ---------------------------------------------------------------------------
-# 1) builder - bagimliliklar ve derleme
+# 1) builder - sozlesme uretimi, bagimliliklar ve derleme
 # ---------------------------------------------------------------------------
 # Surum go.mod ile ayni tabandan gelir (1.25); CI ile yerelin ayni derleyiciyi
 # kullanmasi icin sabitleniyor.
 FROM golang:1.25-alpine AS builder
 WORKDIR /src
 
-# Once yalnizca modul dosyalari: kaynak degistiginde bagimlilik indirmesi
-# onbellekten gelsin.
+# buf: gen/ depoya da imaja da GIRMEZ (.dockerignore: **/gen/), burada uretilir.
+# Surum CI ile ayni (1.73.0).
+COPY --from=bufbuild/buf:1.73.0 /usr/local/bin/buf /usr/local/bin/buf
+
+# Once YALNIZCA modul dosyalari: kaynak degistiginde bagimlilik indirmesi ve
+# eklenti derlemesi onbellekten gelsin. packages/proto/go.mod gateway icin de
+# sart - "replace" hedefinin go.mod'u yoksa "go mod download" duser.
+COPY packages/proto/go.mod packages/proto/go.sum ./packages/proto/
 COPY apps/gateway/go.mod apps/gateway/go.sum ./apps/gateway/
+
+# Eklenti surumleri packages/proto/go.mod'dan (tools.go); "@latest" yok, yani
+# imajda uretilen kod CI'dakiyle birebir ayni cikar.
+WORKDIR /src/packages/proto
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go \
+ && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc
+
 WORKDIR /src/apps/gateway
 RUN go mod download
 
+# Sozlesme kaynaklari ve Go uretimi. Yalnizca Go sablonu: TS eklentisi
+# node_modules'ten gelir ve bu imajda Node yok.
+COPY packages/proto /src/packages/proto
+WORKDIR /src/packages/proto
+RUN buf generate --template buf.gen.go.yaml
+
+WORKDIR /src/apps/gateway
 COPY apps/gateway ./
 
 # CGO_ENABLED=0: tamamen statik ikili. distroless/static icinde libc YOKTUR;

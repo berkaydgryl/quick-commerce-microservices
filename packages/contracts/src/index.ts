@@ -8,7 +8,9 @@
  * Web uygulamasi ve Node servisleri bu paketi dogrudan import eder. Go ile
  * yazilan gateway import edemez; o, ayni sozlesmeyi docs/api/openapi.yaml
  * uzerinden izler ve iki yuzey elle hizali tutulur (ADR-09'daki kabul edilen
- * borc).
+ * borc). TEK ISTISNA hata sozlugudur: kod -> HTTP ve kod -> mesaj tablosu
+ * gateway'e elle kopyalanmaz, scripts/write-go-error-codes.mjs ile uretilir
+ * (T3.4) ve "pnpm codes:go:check" farki yakalar.
  *
  * Bu pakette IS MANTIGI YOKTUR: fiyat hesabi, risk karari ya da durum gecisi
  * burada bulunmaz. Yalnizca "bu ucun govdesi neye benziyor" sorusunu
