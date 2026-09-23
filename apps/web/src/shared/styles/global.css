@@ -1,0 +1,71 @@
+/*
+ * global.css YALNIZCA reset, token ve temel tipografi tasir (proje kurali).
+ * Bilesene ozel stil bilesenin kendi modulundedir (*.module.css).
+ * Yukleme sirasi main.tsx'tedir: tokens.css -> breakpoints.css -> global.css.
+ */
+
+/* --- Reset --- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+ul[role='list'] {
+  padding: 0;
+  list-style: none;
+}
+
+/* --- Temel tipografi --- */
+body {
+  min-height: 100dvh;
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-base);
+  color: var(--text-default);
+  background: var(--bg-page);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+}
+
+/* --- Erisilebilirlik --- */
+
+/* Odak halkasi KALDIRILMAZ; yalnizca klavye gezintisinde gorunur. */
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

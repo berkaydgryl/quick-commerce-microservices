@@ -1,0 +1,19 @@
+/* Mobil oncelikli: taban stil telefon icindir, kirilimlar yalnizca genisletir. */
+.c-page-container {
+  width: 100%;
+  max-width: var(--container-max-sm);
+  margin-inline: auto;
+  padding-inline: var(--space-gutter);
+}
+
+@media (--bp-md) {
+  .c-page-container {
+    max-width: var(--container-max-md);
+  }
+}
+
+@media (--bp-lg) {
+  .c-page-container {
+    max-width: var(--container-max-lg);
+  }
+}

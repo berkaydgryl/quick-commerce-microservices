@@ -1,0 +1,90 @@
+/*
+ * Design token'lari (ADR-11). Bilesenler ciplak renk, olcu ya da font yazmaz;
+ * her deger buradaki bir degiskenden gelir. Adlar RENGI degil ISLEVI anlatir:
+ * marka rengi degisirse ad yalan soylemez, tema (dark mode) degisimi de
+ * yalnizca bu dosyada yeni bir blokla yapilir.
+ */
+
+:root {
+  /* --- Marka paleti (ham degerler; bilesen dogrudan KULLANMAZ) --- */
+  --palette-purple-600: #5d3ebc;
+  --palette-purple-700: #4c339e;
+  --palette-purple-50: #f3effc;
+  --palette-yellow-400: #ffd300;
+  --palette-gray-100: #f5f5f5;
+  --palette-gray-300: #dcdcdc;
+  --palette-gray-600: #6b6b6b;
+  --palette-gray-900: #191919;
+  --palette-white: #fff;
+  --palette-red-600: #c62828;
+
+  /* --- Semantik renkler (bilesenler BUNLARI kullanir) --- */
+  --color-brand-primary: var(--palette-purple-600);
+  --color-brand-primary-strong: var(--palette-purple-700);
+  --color-brand-primary-subtle: var(--palette-purple-50);
+  --color-brand-accent: var(--palette-yellow-400);
+  --bg-page: var(--palette-gray-100);
+  --bg-surface: var(--palette-white);
+  --text-default: var(--palette-gray-900);
+  --text-muted: var(--palette-gray-600);
+  --text-on-brand: var(--palette-white);
+  --text-on-accent: var(--palette-purple-600);
+  --text-danger: var(--palette-red-600);
+  --border-subtle: var(--palette-gray-300);
+  --focus-ring-color: var(--palette-purple-600);
+
+  /* --- Tipografi --- */
+  --font-family-base: 'Nunito', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-weight-regular: 400;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+  --line-height-tight: 1.2;
+  --line-height-base: 1.5;
+
+  /* Akiskan yazi olcegi: dar ekranda alt sinir, genis ekranda ust sinir, arada
+     ekran genisligiyle orantili (roadmap P6). */
+  --font-size-xs: clamp(0.75rem, 0.72rem + 0.15vw, 0.8125rem);
+  --font-size-sm: clamp(0.8125rem, 0.78rem + 0.2vw, 0.875rem);
+  --font-size-md: clamp(0.9375rem, 0.9rem + 0.2vw, 1rem);
+  --font-size-lg: clamp(1.125rem, 1.05rem + 0.4vw, 1.375rem);
+  --font-size-xl: clamp(1.5rem, 1.35rem + 0.75vw, 2rem);
+
+  /* --- Bosluk (4'luk olcek, rem) --- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  /* Sayfa kenar boslugu ekranla buyur. */
+  --space-gutter: clamp(1rem, 0.6rem + 2vw, 2rem);
+
+  /* --- Duzen: mobilde kapsayici ekrani doldurur (en fazla 30rem = 480px);
+     48rem ve 64rem kirilimlarinda ortalanip 45rem ve 64rem'e genisler. --- */
+  --container-max-sm: 30rem;
+  --container-max-md: 45rem;
+  --container-max-lg: 64rem;
+
+  /* Kategori kutucugu: ikon kutusunun kenari. */
+  --size-category-icon: clamp(3.5rem, 3rem + 2vw, 4.5rem);
+  --size-logo-badge: 1.75em;
+
+  /* --- Kenar, yaricap, golge --- */
+  --border-width-thin: 0.0625rem;
+  --focus-ring-width: 0.1875rem;
+  --focus-ring-offset: 0.125rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-pill: 999rem;
+  --shadow-surface: 0 0.0625rem 0.25rem rgb(25 25 25 / 8%);
+
+  /* --- Hareket --- */
+  --duration-fast: 150ms;
+  --easing-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* --- Katman sirasi --- */
+  --z-header: 10;
+}

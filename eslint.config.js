@@ -2,6 +2,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
+import reactHooks from 'eslint-plugin-react-hooks';
 
 /**
  * ESLint 9 flat config.
@@ -61,6 +62,20 @@ export default tseslint.config(
       eqeqeq: ['error', 'always', { null: 'ignore' }],
       'no-var': 'error',
       'prefer-const': 'error',
+    },
+  },
+
+  {
+    // Tarayici kodu: Node globals'i yerine tarayicininkiler; process/Buffer gibi
+    // Node API'leri burada tanimsiz sayilir. Hook kurallari React'in sartidir.
+    name: 'getir/web-browser',
+    files: ['apps/web/src/**/*.{ts,tsx}'],
+    plugins: { 'react-hooks': reactHooks },
+    languageOptions: {
+      globals: { ...globals.browser },
+    },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
     },
   },
 

@@ -1,0 +1,3 @@
+# Derleme ciktisi kaynak degildir; token kurali yalnizca yazilan CSS icin gecerli.
+**/dist/**
+**/node_modules/**
