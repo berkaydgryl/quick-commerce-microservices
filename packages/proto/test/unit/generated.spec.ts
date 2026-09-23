@@ -80,8 +80,9 @@ describe('uretilen TypeScript - kodlama/cozme', () => {
   it('ic ice mesaj tasiyan bir istek turu bozulmadan gidip gelir', () => {
     // Sayfalama IMLEC tabanlidir (pageSize + pageToken), sayfa numarasi degil.
     const request: catalogV1.ListProductsRequest = {
-      darkStoreId: 'store-1',
-      categoryId: 'cat-1',
+      darkStoreId: '',
+      marketId: 'mkt_migros-jet-moda',
+      categoryId: 'cat_1',
       query: '',
       page: { pageSize: 20, pageToken: '' },
     };
@@ -91,7 +92,7 @@ describe('uretilen TypeScript - kodlama/cozme', () => {
     );
 
     expect(decoded.page).toEqual({ pageSize: 20, pageToken: '' });
-    expect(decoded.darkStoreId).toBe('store-1');
+    expect(decoded.marketId).toBe('mkt_migros-jet-moda');
   });
 
   it('set edilmeyen ic ice mesaj undefined kalir, bos nesne olmaz', () => {
@@ -100,7 +101,8 @@ describe('uretilen TypeScript - kodlama/cozme', () => {
     // davranis gerektirir (varsayilan sayfa boyutu uygulanir / uygulanmaz).
     const decoded = catalogV1.ListProductsRequest.decode(
       catalogV1.ListProductsRequest.encode({
-        darkStoreId: 'store-1',
+        darkStoreId: '',
+        marketId: 'mkt_migros-jet-moda',
         categoryId: '',
         query: '',
       }).finish(),
@@ -114,5 +116,52 @@ describe('uretilen TypeScript - kodlama/cozme', () => {
     // deger" ayrimi ancak ayrilmis bir sifir degeriyle yapilabilir (buf.yaml
     // ENUM_ZERO_VALUE_SUFFIX kurali).
     expect(commonV1.Unit.UNIT_UNSPECIFIED).toBe(0);
+  });
+});
+
+describe('pazaryeri sozlesmesi (ADR-15)', () => {
+  it('Market ve fiyat kurallari telden bozulmadan gidip gelir; puan tam sayidir', () => {
+    const market: catalogV1.Market = {
+      id: 'mkt_migros-jet-moda',
+      name: 'Migros Jet - Moda',
+      brand: 'Migros Jet',
+      logoUrl: '/img/market/migros-jet.png',
+      location: { lat: 40.9867, lng: 29.0258 },
+      deliveryRadiusMeters: 2500,
+      isOpen: true,
+      deliveryTime: { minMinutes: 15, maxMinutes: 25 },
+      rating: { averageTenths: 47, count: 1200 },
+      pricingRules: {
+        minBasket: { amountMinor: 4000, currency: 'TRY' },
+        deliveryFee: { amountMinor: 2490, currency: 'TRY' },
+        freeDeliveryThreshold: { amountMinor: 30000, currency: 'TRY' },
+      },
+    };
+
+    const decoded = catalogV1.Market.decode(catalogV1.Market.encode(market).finish());
+
+    expect(decoded).toEqual(market);
+    expect(Number.isInteger(decoded.rating?.averageTenths)).toBe(true);
+  });
+
+  it('fiyat urunde degil teklifte: Offer.price markete ozeldir', () => {
+    const offer: catalogV1.Offer = {
+      id: 'ofr_a101-caferaga-sut-1l',
+      marketId: 'mkt_a101-caferaga',
+      productId: 'prd_sut-1l',
+      sku: 'SUT-1L',
+      name: 'Sut 1 L',
+      description: '',
+      categoryId: 'cat_sut-kahvaltilik',
+      unit: 0,
+      imageUrl: '',
+      price: { amountMinor: 3190, currency: 'TRY' },
+      isActive: true,
+    };
+
+    const decoded = catalogV1.Offer.decode(catalogV1.Offer.encode(offer).finish());
+
+    expect(decoded.price?.amountMinor).toBe(3190);
+    expect(decoded.marketId).toBe('mkt_a101-caferaga');
   });
 });

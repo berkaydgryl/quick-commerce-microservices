@@ -50,6 +50,8 @@ function errorCodeOf(error: ServiceError | undefined): string | undefined {
 const draftRequest: orderV1.CreateDraftOrderRequest = {
   userId: 'usr_1',
   darkStoreId: 'ds_kadikoy',
+  // T4.7: yeni alan (ADR-15); order-service market_id'ye gecisi kendi gorevinde.
+  marketId: '',
   lines: [{ productId: 'prd_01', sku: 'SUT-1L', quantity: 2 }],
   deliveryLocation: { lat: 40.99, lng: 29.02 },
   deliveryAddress: 'Kadıköy, İstanbul',

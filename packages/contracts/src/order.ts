@@ -8,7 +8,13 @@
 import { ORDER_STATUS } from '@getir/core';
 import { z } from 'zod';
 
-import { geoPointSchema, idSchema, isoDateTimeSchema, moneySchema } from './common.js';
+import {
+  geoPointSchema,
+  idSchema,
+  isoDateTimeSchema,
+  marketIdSchema,
+  moneySchema,
+} from './common.js';
 import { reservationLineSchema } from './cart.js';
 import { ADDRESS_LINE_MAX_LENGTH, ADDRESS_NOTE_MAX_LENGTH, OTP_PATTERN } from './constants.js';
 
@@ -80,7 +86,8 @@ export const courierSummarySchema = z.object({
 export const orderSchema = z.object({
   id: idSchema,
   status: orderStatusSchema,
-  darkStoreId: idSchema,
+  /** Siparisin verildigi market (ADR-15); kurye buradan alir. */
+  marketId: marketIdSchema,
   /** Satirlar rezervasyondaki ile ayni sekildedir; fiyat dondurulmustur. */
   lines: z.array(reservationLineSchema),
   subtotal: moneySchema.optional(),

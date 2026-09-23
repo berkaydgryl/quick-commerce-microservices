@@ -7,12 +7,49 @@
  * (amount_minor -> amountMinor, next_page_token -> nextPageToken).
  */
 
+import { ID_PREFIX } from '@getir/core';
 import { z } from 'zod';
 
-import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX, PAGE_SIZE_MIN } from './constants.js';
+import {
+  CATALOG_ID_BODY_PATTERN,
+  CATALOG_ID_MAX_LENGTH,
+  CATALOG_ID_PREFIX,
+  PAGE_SIZE_DEFAULT,
+  PAGE_SIZE_MAX,
+  PAGE_SIZE_MIN,
+} from './constants.js';
 
-/** UUID v4 kimlik. */
-export const idSchema = z.string().uuid();
+/**
+ * Calisma aninda uretilen kimlik: @getir/core ID_PREFIX + "_" + 32 onaltilik
+ * karakter ("ord_db77f4c0e24f49919cc1d78a649c9c94").
+ *
+ * DUZELTME (ADR-15): ilk surum UUID bekliyordu; oysa sistemin urettigi hicbir
+ * kimlik UUID degildi - siparis kimlikleri bu semadan gecemezdi. Onek sozlugu
+ * core'dan okunur, burada tekrar yazilmaz.
+ */
+export const idSchema = z
+  .string()
+  .regex(new RegExp(`^(?:${Object.values(ID_PREFIX).join('|')})_[0-9a-f]{32}$`), {
+    message: 'gecersiz kimlik bicimi',
+  });
+
+/**
+ * Katalog kimligi semasi uretir: "<onek>_<okunabilir-govde>" (ADR-15).
+ * Seed ile gelen kimlikler icindir; UUID ya da 32 hex DEGILDIR.
+ */
+function catalogIdSchema(prefix: string) {
+  return z
+    .string()
+    .max(CATALOG_ID_MAX_LENGTH)
+    .regex(new RegExp(`^${prefix}_${CATALOG_ID_BODY_PATTERN}$`), {
+      message: `${prefix}_ onekli kimlik bekleniyor`,
+    });
+}
+
+export const marketIdSchema = catalogIdSchema(CATALOG_ID_PREFIX.MARKET);
+export const productIdSchema = catalogIdSchema(CATALOG_ID_PREFIX.PRODUCT);
+export const categoryIdSchema = catalogIdSchema(CATALOG_ID_PREFIX.CATEGORY);
+export const offerIdSchema = catalogIdSchema(CATALOG_ID_PREFIX.OFFER);
 
 /**
  * ISO 8601 UTC zaman damgasi.
@@ -71,6 +108,10 @@ export const pageQuerySchema = z.object({
 });
 
 export type Id = z.infer<typeof idSchema>;
+export type MarketId = z.infer<typeof marketIdSchema>;
+export type ProductId = z.infer<typeof productIdSchema>;
+export type CategoryId = z.infer<typeof categoryIdSchema>;
+export type OfferId = z.infer<typeof offerIdSchema>;
 export type IsoDateTime = z.infer<typeof isoDateTimeSchema>;
 export type Money = z.infer<typeof moneySchema>;
 export type GeoPoint = z.infer<typeof geoPointSchema>;

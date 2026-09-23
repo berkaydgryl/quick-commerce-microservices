@@ -15,21 +15,21 @@ import {
   storeRoom,
 } from '../../src/index.js';
 
-const ORDER_ID = '2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e';
-const STORE_ID = '9f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f';
-const PRODUCT_ID = '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d';
-const COURIER_ID = '3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f';
+const ORDER_ID = 'ord_db77f4c0e24f49919cc1d78a649c9c94';
+const MARKET_ID = 'mkt_migros-jet-moda';
+const PRODUCT_ID = 'prd_sut-1l';
+const COURIER_ID = 'crr_0a1b2c3d4e5f60718293a4b5c6d7e8f9';
 const AT = '2026-09-21T10:00:00.000Z';
 
 describe('oda adlari', () => {
   it('iki oda turu icin onek uretir', () => {
     expect(orderRoom(ORDER_ID)).toBe(`order:${ORDER_ID}`);
-    expect(storeRoom(STORE_ID)).toBe(`store:${STORE_ID}`);
+    expect(storeRoom(MARKET_ID)).toBe(`store:${MARKET_ID}`);
   });
 
   it('tanimsiz onekli odayi reddeder', () => {
     expect(roomSchema.safeParse(orderRoom(ORDER_ID)).success).toBe(true);
-    expect(roomSchema.safeParse(storeRoom(STORE_ID)).success).toBe(true);
+    expect(roomSchema.safeParse(storeRoom(MARKET_ID)).success).toBe(true);
     expect(roomSchema.safeParse(`admin:${ORDER_ID}`).success).toBe(false);
   });
 
@@ -47,7 +47,7 @@ describe('oda adlari', () => {
 
 describe('room.join', () => {
   it('store odasi icin jeton istemez', () => {
-    expect(roomJoinPayloadSchema.safeParse({ room: storeRoom(STORE_ID) }).success).toBe(true);
+    expect(roomJoinPayloadSchema.safeParse({ room: storeRoom(MARKET_ID) }).success).toBe(true);
   });
 
   it('jeton verilirse tasir', () => {
@@ -107,14 +107,14 @@ describe('siparis odasi olaylari', () => {
 
 describe('stock.changed', () => {
   const event = {
-    darkStoreId: STORE_ID,
+    marketId: MARKET_ID,
     productId: PRODUCT_ID,
     availableQuantity: 3,
     at: AT,
   };
 
-  it('darkStoreId tasir', () => {
-    expect(stockChangedEventSchema.parse(event).darkStoreId).toBe(STORE_ID);
+  it('marketId tasir (ADR-15)', () => {
+    expect(stockChangedEventSchema.parse(event).marketId).toBe(MARKET_ID);
   });
 
   it('disariya sku CIKARMAZ, productId kullanir (B11)', () => {

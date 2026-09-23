@@ -2,8 +2,14 @@ syntax = "proto3";
 
 // catalog-svc sozlesmesi.
 //
-// Bu servis YALNIZCA katalog verisinin sahibidir: products, categories ve
-// darkstores koleksiyonlari. Baska hicbir servis bu koleksiyonlara yazmaz.
+// Bu servis YALNIZCA katalog verisinin sahibidir: markets, products, offers ve
+// categories koleksiyonlari. Baska hicbir servis bu koleksiyonlara yazmaz.
+//
+// IS MODELI PAZARYERIDIR (ADR-15): kullanici konumuna hizmet veren marketler
+// arasindan birini SECER; urun katalogu ortaktir, FIYAT markete ozeldir (Offer).
+// Market kurallari (minimum sepet, teslimat ucreti) marketin kaydindadir.
+// Dark store modelinden kalan RPC ve alanlar SILINMEZ (buf breaking WIRE_JSON);
+// deprecated olarak isaretlidir ve yeni istemci kullanmaz.
 //
 // Bu servisin ISI DEGILDIR:
 //   - stok / musaitlik  -> inventory-svc (getir.inventory.v1, T2.1)
@@ -31,8 +37,31 @@ service CatalogService {
   // Tek urun detayi; id veya sku ile erisilir.
   rpc GetProduct(GetProductRequest) returns (GetProductResponse);
 
-  // Musterinin konumuna hizmet veren dark store'u bulur.
-  rpc ResolveDarkStore(ResolveDarkStoreRequest) returns (ResolveDarkStoreResponse);
+  // DEPRECATED (ADR-15): sistem market ATAMAZ, kullanici secer. Yerine
+  // ListNearbyMarkets. Silinmez: tel ve JSON uyumu korunur.
+  rpc ResolveDarkStore(ResolveDarkStoreRequest) returns (ResolveDarkStoreResponse) {
+    option deprecated = true;
+  }
+
+  // Konuma hizmet veren marketler (teslimat yaricapi konumu kapsayanlar),
+  // YAKINDAN UZAGA. Kapali marketler de doner (istemci "Kapali" rozeti
+  // gosterir); hicbiri yoksa BOS liste - hata degil ("bolgende market yok").
+  rpc ListNearbyMarkets(ListNearbyMarketsRequest) returns (ListNearbyMarketsResponse);
+
+  // Market sayfasinin basligi: puan, teslimat suresi, fiyat kurallari.
+  // Market yoksa NOT_FOUND.
+  rpc GetMarket(GetMarketRequest) returns (GetMarketResponse);
+
+  // Marketin en az bir aktif teklifi olan kategoriler, sort_order ile.
+  // Manav yalnizca meyve-sebze kategorisini gosterir.
+  rpc ListMarketCategories(ListMarketCategoriesRequest) returns (ListMarketCategoriesResponse);
+
+  // Bir marketin verilen urunler icin tekliflerini (fiyat) TOPLU okur.
+  //
+  // NEDEN VAR: siparis dogrulamasi (T7.2) sepetteki her kalemin o marketteki
+  // fiyatini ister; teklifi donguyle okumak N+1 olurdu. Marketin satmadigi
+  // urun sessizce atlanmaz, missing listesinde doner.
+  rpc BatchGetOffers(BatchGetOffersRequest) returns (BatchGetOffersResponse);
 
   // Toplu urun okuma.
   //
@@ -80,8 +109,9 @@ message Product {
   string name = 3;
   string description = 4;
 
-  // Liste fiyati. Kurus cinsinden tam sayi; kampanya UYGULANMAMIS halidir.
-  getir.common.v1.Money price = 5;
+  // DEPRECATED (ADR-15): urun fiyat TASIMAZ; fiyat markete ozeldir ve
+  // Offer.price'tadir. Alan silinmez (tel ve JSON uyumu).
+  getir.common.v1.Money price = 5 [deprecated = true];
 
   string category_id = 6;
   getir.common.v1.Unit unit = 7;
@@ -92,7 +122,10 @@ message Product {
 }
 
 // Hizli teslimat deposu (dark store).
+// DEPRECATED (ADR-15): yerine Market.
 message DarkStore {
+  option deprecated = true;
+
   string id = 1;
   string name = 2;
 
@@ -122,10 +155,8 @@ message ListProductsRequest {
   // Bos birakilirsa kategori filtresi uygulanmaz.
   string category_id = 1;
 
-  // Verilirse YALNIZCA o depoda satilan urunler doner. Bu bir stok sorgusu
-  // DEGILDIR; yalnizca "bu urun bu depoda satiliyor mu" katalog bilgisidir.
-  // Adet bilgisi icin inventory-svc'ye toplu cagri yapilir (B27).
-  string dark_store_id = 2;
+  // DEPRECATED (ADR-15): yerine market_id.
+  string dark_store_id = 2 [deprecated = true];
 
   // Serbest metin aramasi. Kural: EN AZ 2 KARAKTER olmalidir; bos query tum
   // listeyi dondurur. Dogrulama gateway'de Zod ile yapilir, bu alan yalnizca
@@ -133,17 +164,25 @@ message ListProductsRequest {
   string query = 3;
 
   getir.common.v1.PageRequest page = 4;
+
+  // ZORUNLU (ADR-15): urunler bu marketin teklifleri olarak, o marketin
+  // fiyatiyla doner. Stok bilgisi burada DEGIL, inventory-svc'dedir (B27).
+  string market_id = 5;
 }
 
 // Urun listesi cevabi.
 //
-// dark_store_id verilmis ama boyle bir depo yoksa NOT_FOUND doner; depo var
+// market_id verilmis ama boyle bir market yoksa NOT_FOUND doner; market var
 // ama filtreye uyan urun yoksa BOS liste doner (hata degil). Bu ayrim,
-// istemcide "depo secimi bozuldu" ile "bu kategoride urun yok" ekranlarini
+// istemcide "market secimi bozuldu" ile "bu kategoride urun yok" ekranlarini
 // ayirabilmek icindir.
 message ListProductsResponse {
-  repeated Product products = 1;
+  // DEPRECATED (ADR-15): fiyatsiz urun listesi; yerine offers.
+  repeated Product products = 1 [deprecated = true];
   getir.common.v1.PageResponse page = 2;
+
+  // Marketin teklifleri: urun bilgisi + o marketteki fiyat.
+  repeated Offer offers = 3;
 }
 
 message GetProductRequest {
@@ -205,4 +244,146 @@ message ResolveDarkStoreResponse {
   // Konum ile depo merkezi arasindaki mesafe, METRE cinsinden.
   // Her zaman dark_store.delivery_radius_meters degerinden kucuk veya esittir.
   int32 distance_meters = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Pazaryeri (ADR-15)
+// ---------------------------------------------------------------------------
+
+// Pazaryerindeki bagimsiz satici (eski adiyla dark store).
+message Market {
+  // mkt_ onekli okunabilir kimlik: "mkt_migros-jet-moda".
+  string id = 1;
+
+  // Gorunen ad: "Migros Jet - Moda".
+  string name = 2;
+
+  // Marka: "Migros Jet". Ayni markanin birden cok subesi olabilir.
+  string brand = 3;
+
+  // Logo gorselinin GORELI yolu; mutlak URL'yi gateway kurar (ASSET_BASE_URL).
+  string logo_url = 4;
+
+  getir.common.v1.GeoPoint location = 5;
+
+  // Teslimat yaricapi, METRE. Bu yaricap disindaki adrese satis yapilmaz.
+  int32 delivery_radius_meters = 6;
+
+  // Kapali market listede gorunur ama siparis alinmaz.
+  bool is_open = 7;
+
+  DeliveryTime delivery_time = 8;
+
+  Rating rating = 9;
+
+  // Marketin kendi fiyat kurallari. Market paneli olmadigi icin bugun
+  // seed'den gelir (ADR-15); panel geldiginde yalnizca kaynak degisir.
+  PricingRules pricing_rules = 10;
+}
+
+// Tahmini teslimat suresi araligi, DAKIKA ("15-25 dk").
+message DeliveryTime {
+  int32 min_minutes = 1;
+  int32 max_minutes = 2;
+}
+
+// Market puani.
+//
+// NEDEN ONDALIK SAYI DEGIL: 4.7 gibi bir deger ikili kayan noktada tam
+// temsil edilmez ve diller arasinda farkli yuvarlanabilir. Onda bir
+// hassasiyetle TAM SAYI tasinir (47 = 4.7); REST'e gateway ceviri yapar.
+// Puanlar bugun seed'de sabittir; yorum sistemi kapsam disidir (ADR-15).
+message Rating {
+  // 0-50 arasi: 47 = 4.7.
+  int32 average_tenths = 1;
+
+  // Degerlendirme sayisi.
+  int32 count = 2;
+}
+
+// Bir marketin sepet kurallari. Tutarlar kurus cinsinden (Money).
+message PricingRules {
+  // Bunun altindaki sepet siparise donusmez.
+  getir.common.v1.Money min_basket = 1;
+
+  // Esik altindaki sepete eklenen teslimat ucreti.
+  getir.common.v1.Money delivery_fee = 2;
+
+  // Ara toplam (indirim ONCESI, B12) bu tutara ulasirsa teslimat ucretsizdir.
+  getir.common.v1.Money free_delivery_threshold = 3;
+}
+
+// Bir marketin bir urunu satisi: fiyat buradadir, urunde degil.
+//
+// Listeleme alanlari (ad, gorsel, kategori, birim) urun kaydindan KOPYALANIR:
+// market sayfasi tek sorguda, N+1 olmadan listelenir. Kopyalari yalnizca
+// catalog yazar.
+message Offer {
+  // ofr_ onekli kimlik.
+  string id = 1;
+  string market_id = 2;
+  string product_id = 3;
+  string sku = 4;
+  string name = 5;
+  string description = 6;
+  string category_id = 7;
+  getir.common.v1.Unit unit = 8;
+  string image_url = 9;
+
+  // Bu marketteki fiyat. Kurus; kampanya UYGULANMAMIS halidir.
+  getir.common.v1.Money price = 10;
+
+  // false ise market urunu satistan kaldirmistir (kayit silinmez).
+  bool is_active = 11;
+}
+
+// Konuma uzakligiyla birlikte market.
+message NearbyMarket {
+  Market market = 1;
+
+  // Konum ile market arasi, METRE. Her zaman delivery_radius_meters'tan
+  // kucuk veya esittir (yaricap disindaki market listelenmez).
+  int32 distance_meters = 2;
+}
+
+message ListNearbyMarketsRequest {
+  // Musterinin teslimat konumu. ZORUNLU: proto3'te eksik konum (0,0) gibi
+  // islenmemeli; dogrulama sunucudadir.
+  getir.common.v1.GeoPoint location = 1;
+}
+
+message ListNearbyMarketsResponse {
+  // Yakindan uzaga. Bos liste = "bolgende market yok" (hata degil).
+  repeated NearbyMarket markets = 1;
+}
+
+message GetMarketRequest {
+  string market_id = 1;
+}
+
+message GetMarketResponse {
+  Market market = 1;
+}
+
+message ListMarketCategoriesRequest {
+  string market_id = 1;
+}
+
+message ListMarketCategoriesResponse {
+  repeated Category categories = 1;
+}
+
+message BatchGetOffersRequest {
+  string market_id = 1;
+
+  // En fazla 100 kimlik; daha fazlasi VALIDATION_FAILED.
+  repeated string product_ids = 2;
+}
+
+message BatchGetOffersResponse {
+  // Bulunan teklifler. SIRA GARANTISI YOKTUR; cagiran product_id ile eslestirir.
+  repeated Offer offers = 1;
+
+  // Bu marketin satmadigi (ya da hic olmayan) urun kimlikleri.
+  repeated string missing = 2;
 }

@@ -9,12 +9,12 @@ istemci → sunucu olayı vardır (`room.join`), geri kalanı tek yönlüdür.
 
 ## Odalar
 
-| Oda                   | Kim girebilir                                                                                                    | Ne taşır                                                                                        |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `order:{orderId}`     | **Yalnızca siparişin sahibi.** Giriş için `GET /v1/orders/{id}/token` ile alınan kısa ömürlü oda jetonu şarttır. | Siparişin kendi yaşam döngüsü: durum, rezervasyon uyarıları, kurye ataması ve konumu, teslimat. |
-| `store:{darkStoreId}` | **Herkes.** Kimlik doğrulaması istenmez, anonim bağlantı da girebilir.                                           | Yalnızca stok değişimi (`stock.changed`). Başka hiçbir olay bu odaya yayınlanmaz.               |
+| Oda                | Kim girebilir                                                                                                    | Ne taşır                                                                                        |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `order:{orderId}`  | **Yalnızca siparişin sahibi.** Giriş için `GET /v1/orders/{id}/token` ile alınan kısa ömürlü oda jetonu şarttır. | Siparişin kendi yaşam döngüsü: durum, rezervasyon uyarıları, kurye ataması ve konumu, teslimat. |
+| `store:{marketId}` | **Herkes.** Kimlik doğrulaması istenmez, anonim bağlantı da girebilir.                                           | Yalnızca stok değişimi (`stock.changed`). Başka hiçbir olay bu odaya yayınlanmaz.               |
 
-**Anonim bağlantı yalnızca `store:{darkStoreId}` odasına girebilir.** Jetonsuz bir
+**Anonim bağlantı yalnızca `store:{marketId}` odasına girebilir.** Jetonsuz bir
 soket `order:*` odasına katılmayı denerse sunucu odaya almaz ve `FORBIDDEN`
 ile karşılık verir. Sipariş odaları kişisel veri (adres, kurye konumu, tutar)
 taşıdığı için bu sınır sunucu tarafında zorunlu tutulur; istemcinin "hangi odaya
@@ -26,16 +26,16 @@ alır. Geçersiz veya süresi dolmuş jeton `UNAUTHORIZED` döndürür.
 
 ## Olaylar
 
-| Olay                   | Oda                   | Yön              | Yetki                                             | Payload                                                                                                                  |
-| ---------------------- | --------------------- | ---------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `room.join`            | —                     | istemci → sunucu | `order:*` için oda jetonu; `store:*` için serbest | `{ room: string, token?: string }` — ack: `{ success: true, data: { room } }` veya `{ success: false, error: { code } }` |
-| `order.status`         | `order:{orderId}`     | sunucu → istemci | Sipariş sahibi                                    | `{ orderId, status, previousStatus, at, seq }`                                                                           |
-| `reservation.expiring` | `order:{orderId}`     | sunucu → istemci | Sipariş sahibi                                    | `{ orderId, expiresAt, remainingSeconds, seq }`                                                                          |
-| `reservation.released` | `order:{orderId}`     | sunucu → istemci | Sipariş sahibi                                    | `{ orderId, reason, releasedAt, seq }`                                                                                   |
-| `courier.assigned`     | `order:{orderId}`     | sunucu → istemci | Sipariş sahibi                                    | `{ orderId, courier: { id, name, location, etaMinutes }, at, seq }`                                                      |
-| `courier.location`     | `order:{orderId}`     | sunucu → istemci | Sipariş sahibi                                    | `{ orderId, courierId, location: { lat, lng }, etaMinutes, at, seq }`                                                    |
-| `order.delivered`      | `order:{orderId}`     | sunucu → istemci | Sipariş sahibi                                    | `{ orderId, deliveredAt, seq }`                                                                                          |
-| `stock.changed`        | `store:{darkStoreId}` | sunucu → istemci | Herkes (anonim dahil)                             | `{ darkStoreId, productId, availableQuantity, at }`                                                                      |
+| Olay                   | Oda                | Yön              | Yetki                                             | Payload                                                                                                                  |
+| ---------------------- | ------------------ | ---------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `room.join`            | —                  | istemci → sunucu | `order:*` için oda jetonu; `store:*` için serbest | `{ room: string, token?: string }` — ack: `{ success: true, data: { room } }` veya `{ success: false, error: { code } }` |
+| `order.status`         | `order:{orderId}`  | sunucu → istemci | Sipariş sahibi                                    | `{ orderId, status, previousStatus, at, seq }`                                                                           |
+| `reservation.expiring` | `order:{orderId}`  | sunucu → istemci | Sipariş sahibi                                    | `{ orderId, expiresAt, remainingSeconds, seq }`                                                                          |
+| `reservation.released` | `order:{orderId}`  | sunucu → istemci | Sipariş sahibi                                    | `{ orderId, reason, releasedAt, seq }`                                                                                   |
+| `courier.assigned`     | `order:{orderId}`  | sunucu → istemci | Sipariş sahibi                                    | `{ orderId, courier: { id, name, location, etaMinutes }, at, seq }`                                                      |
+| `courier.location`     | `order:{orderId}`  | sunucu → istemci | Sipariş sahibi                                    | `{ orderId, courierId, location: { lat, lng }, etaMinutes, at, seq }`                                                    |
+| `order.delivered`      | `order:{orderId}`  | sunucu → istemci | Sipariş sahibi                                    | `{ orderId, deliveredAt, seq }`                                                                                          |
+| `stock.changed`        | `store:{marketId}` | sunucu → istemci | Herkes (anonim dahil)                             | `{ marketId, productId, availableQuantity, at }`                                                                         |
 
 ### İç olay adı ↔ soket olay adı
 
