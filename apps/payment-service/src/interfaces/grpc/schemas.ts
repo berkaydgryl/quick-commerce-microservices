@@ -1,0 +1,87 @@
+/**
+ * gRPC istek semalari (Zod). Proto bicimi dogrular, KURALI dogrulamaz; kurallar
+ * (tutar pozitif, kartta jeton zorunlu, anahtar zorunlu) burada calisir (ADR-10).
+ */
+
+import { IDEMPOTENCY_KEY_MAX_LENGTH, IDEMPOTENCY_KEY_MIN_LENGTH } from '@getir/contracts';
+import { paymentV1 } from '@getir/proto';
+import { z } from 'zod';
+
+import { SUPPORTED_CURRENCY } from '../../config/constants.js';
+import { PAYMENT_METHOD } from '../../domain/payment.js';
+import type { PaymentMethod } from '../../domain/payment.js';
+
+const requiredText = (field: string) => z.string().trim().min(1, `${field} zorunlu`);
+
+/** Proto yontemi -> domain. UNSPECIFIED bilerek yok: gecersiz istek sayilir. */
+const METHOD_FROM_PROTO: ReadonlyMap<paymentV1.PaymentMethod, PaymentMethod> = new Map([
+  [paymentV1.PaymentMethod.PAYMENT_METHOD_CARD, PAYMENT_METHOD.CARD],
+  [paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY, PAYMENT_METHOD.CASH_ON_DELIVERY],
+]);
+
+const method = z.nativeEnum(paymentV1.PaymentMethod).transform((value, ctx) => {
+  const mapped = METHOD_FROM_PROTO.get(value);
+  if (mapped === undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'odeme yontemi zorunlu' });
+    return z.NEVER;
+  }
+  return mapped;
+});
+
+/**
+ * Tutar kurus cinsinden pozitif tam sayi. Istemciden GELMEZ; order-svc'nin
+ * hesapladigi siparis toplamidir. Bos para birimi sozlesmede TRY demektir.
+ */
+const amount = z.object(
+  {
+    amountMinor: z.number().int().positive('tutar pozitif olmali'),
+    currency: z
+      .string()
+      .transform((value) => (value === '' ? SUPPORTED_CURRENCY : value))
+      .refine(
+        (value) => value === SUPPORTED_CURRENCY,
+        `yalnizca ${SUPPORTED_CURRENCY} desteklenir`,
+      ),
+  },
+  { required_error: 'amount zorunlu' },
+);
+
+const idempotencyKey = z
+  .string()
+  .trim()
+  .min(IDEMPOTENCY_KEY_MIN_LENGTH, `en az ${IDEMPOTENCY_KEY_MIN_LENGTH} karakter olmali`)
+  .max(IDEMPOTENCY_KEY_MAX_LENGTH, `en fazla ${IDEMPOTENCY_KEY_MAX_LENGTH} karakter olmali`);
+
+export const chargeRequestSchema = z
+  .object({
+    orderId: requiredText('orderId'),
+    userId: requiredText('userId'),
+    amount,
+    method,
+    cardToken: z.string().trim(),
+    idempotencyKey,
+  })
+  .superRefine((input, ctx) => {
+    const isCard = input.method === PAYMENT_METHOD.CARD;
+    if (isCard && input.cardToken === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['cardToken'],
+        message: 'kartli odemede zorunlu',
+      });
+    }
+    // Kapida odemede jeton sessizce yok sayilmaz: istemci yontemi yanlis secmis olabilir.
+    if (!isCard && input.cardToken !== '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['cardToken'],
+        message: 'kapida odemede bos olmali',
+      });
+    }
+  })
+  .transform(({ cardToken, ...rest }) => ({
+    ...rest,
+    cardToken: cardToken === '' ? undefined : cardToken,
+  }));
+
+export type ChargeRequestInput = z.infer<typeof chargeRequestSchema>;

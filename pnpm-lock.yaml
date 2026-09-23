@@ -110,6 +110,27 @@ importers:
         specifier: ^12.1.0
         version: 12.1.0
 
+  apps/payment-service:
+    dependencies:
+      '@getir/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@getir/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@getir/proto':
+        specifier: workspace:*
+        version: link:../../packages/proto
+      '@getir/service-kit':
+        specifier: workspace:*
+        version: link:../../packages/service-kit
+      '@grpc/grpc-js':
+        specifier: ^1.14.5
+        version: 1.14.5
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
+
   apps/web:
     dependencies:
       '@getir/contracts':

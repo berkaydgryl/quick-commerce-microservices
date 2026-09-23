@@ -323,6 +323,7 @@ Hepsi depo kökünden `pnpm <komut>` ile çalışır. `make` bu projede zorunlu 
 ```bash
 pnpm --filter @getir/catalog-service build && MOCK=true pnpm --filter @getir/catalog-service start  # :50051, Mongo'suz
 pnpm --filter @getir/order-service   build && pnpm --filter @getir/order-service   start  # :50053
+pnpm --filter @getir/payment-service build && pnpm --filter @getir/payment-service start  # :50054, mock kart
 pnpm proto:gen && (cd apps/gateway && ASSET_BASE_URL=http://localhost:5173 go run ./cmd/gateway)  # :8080
 
 curl -s localhost:8080/healthz          # iki servisin durumu; biri dusukse 503
@@ -336,6 +337,7 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/cat
 | ---------------------------------------------------------- | ----- | ------------------------------------------------------------------------------ |
 | [`catalog-service`](apps/catalog-service/README.md) (T4.8) | 50051 | Pazaryeri: yakındaki marketler, market sayfası, teklifler — Mongo ya da `MOCK` |
 | [`order-service`](apps/order-service/README.md) (T3.2)     | 50053 | `CreateDraftOrder`, `CreateOrder` — bellekte, ödeme yok                        |
+| [`payment-service`](apps/payment-service/README.md) (T5.1) | 50054 | `Charge` — test kartına göre onay / ret / 3DS, idempotent; bellekte            |
 | [`gateway`](apps/gateway/README.md) (T3.4, Go)             | 8080  | `GET /healthz`, `GET /v1/categories`                                           |
 
 Katalog T4.1'den beri Mongo'dan okur: `MOCK=true` ise aynı demo verisini bellekten döndürür

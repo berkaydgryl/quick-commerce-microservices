@@ -1,0 +1,24 @@
+{
+  "name": "@getir/payment-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Odeme servisi: mock kart cekimi ve 3DS simulasyonu (gRPC), payments koleksiyonu",
+  "main": "./dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "dev": "node --env-file-if-exists=../../.env --watch dist/main.js",
+    "start": "node --env-file-if-exists=../../.env dist/main.js",
+    "healthcheck": "node dist/healthcheck.js",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\""
+  },
+  "dependencies": {
+    "@getir/contracts": "workspace:*",
+    "@getir/core": "workspace:*",
+    "@getir/proto": "workspace:*",
+    "@getir/service-kit": "workspace:*",
+    "@grpc/grpc-js": "^1.14.5",
+    "zod": "^3.23.8"
+  }
+}

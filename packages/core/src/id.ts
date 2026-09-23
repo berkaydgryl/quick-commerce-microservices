@@ -15,6 +15,8 @@ export const ID_PREFIX = {
   PAYMENT: 'pay',
   COURIER: 'crr',
   RESERVATION: 'rsv',
+  /** 3DS dogrulama jetonu: Charge uretir, Confirm3Ds geri alir (payment-svc). */
+  THREEDS_CHALLENGE: 'tds',
   /** Istek korelasyon kimligi: gunluk kaydi, gRPC metadata'si ve REST hata
    *  zarfindaki `error.requestId` ayni degeri tasir. */
   REQUEST: 'req',
