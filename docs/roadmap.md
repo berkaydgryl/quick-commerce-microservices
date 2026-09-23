@@ -1,13 +1,14 @@
-<!-- Bu dosya masaustundeki Word roadmap'inden uretilmistir; kaynak belge guncellenince
-     yeniden uretilir. Elle duzenleme yapma. -->
+<!-- Ilk surum masaustundeki Word roadmap'inden uretildi. T4.1'den beri TEK KAYNAK bu
+     dosyadir ve elle guncellenir (Word/PDF belge ilk surumdur, guncel degildir).
+     Degisiklikler PR ile yapilir; mimari kararlar docs/adr/ altina yazilir. -->
 
 # Getir Market Klonu — Mimari & 20 Günlük Roadmap (Opsiyon A + B)
 
-Kaynak: mimari & 20 günlük yol haritası belgesi · Son güncelleme: 2026-09-21
+Kaynak: mimari & 20 günlük yol haritası belgesi · Son güncelleme: 2026-09-23 (pazaryeri modeli, ADR-15)
 
 ## Yönetici Özeti
 
-Quick-commerce (Getir Market tipi) bir sistemin çalışan dağıtık simülasyonunu kuruyoruz: Opsiyon A 11. günde kapanan zorunlu taban (B19), Opsiyon B 20. günde teslim edilen taahhüt. Bu doküman kod yazılmadan önce tüm sözleşmeleri, klasör yapısını ve gün gün atomik görevleri sabitler.
+Quick-commerce (GetirMarket tipi) bir **pazaryerinin** çalışan dağıtık simülasyonunu kuruyoruz — kullanıcı konumuna hizmet veren marketleri (Migros Jet, A101, Kardeşler Manavı…) görür, birini seçer ve o marketin ürünlerini o marketin fiyat ve kurallarıyla sipariş eder (ADR-15): Opsiyon A 11. günde kapanan zorunlu taban (B19), Opsiyon B 20. günde teslim edilen taahhüt. Bu doküman kod yazılmadan önce tüm sözleşmeleri, klasör yapısını ve gün gün atomik görevleri sabitler.
 
 Sistemin kalbi üç şey: stok kilidi (aynı anda iki kişi son ürünü alamaz), rezervasyon TTL'i (ödeme yapılmazsa stok geri döner) ve canlı kurye takibi (WebSocket + interpolasyon). Geri kalan her şey bu üçünü taşıyan altyapıdır.
 
@@ -21,6 +22,27 @@ Sistemin kalbi üç şey: stok kilidi (aynı anda iki kişi son ürünü alamaz)
 Kapsam dışı (bilinçli): gerçek ödeme entegrasyonu, gerçek harita rotalama servisi (OSRM yerine sabit polyline), çoklu dil, mobil uygulama, Kubernetes.
 
 Tasarım sorumluluğu: Frontend'in görsel tasarımı ve bileşen stilleri sende. Bu roadmap frontend için sadece veri katmanını (tip üretimi, API istemcisi, socket hook'ları, state) tanımlar; senin tasarladığın bileşenler bu katmana takılır. Frontend, sözleşmeler donduktan sonra Gün 4'te MOCK=1 modu üzerinden başlar ve backend ile paralel ilerler; Gün 16-20 yalnızca tasarım, cila ve teslime ayrılır.
+
+## İş Modeli: Pazaryeri (ADR-15)
+
+İlk sürüm Getir'in kendi depolarını (dark store) kurguluyordu: sistem en yakın depoyu atar, tek katalog ve tek fiyat vardır. Ürünün ekran tasarımı ise bir **pazaryeri** gösteriyor: "Yakındaki Marketler" listesi, her marketin puanı, mesafesi, teslimat süresi, minimum tutarı ve kendi fiyatları. Model ADR-15 ile pazaryerine çevrildi. Bu bölüm dokümanın geri kalanını yorumlarken bağlayıcıdır: eski metinde "depo" ya da "dark store" geçen yerler **market** olarak okunur.
+
+| Kavram         | Pazaryerindeki anlamı                                                                                                                                                                                           |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Market         | Bağımsız satıcı (eski adı dark store): marka, logo, konum, teslimat yarıçapı, açık/kapalı, teslimat süresi aralığı, puan ve **kendi fiyat kuralları** (minimum sepet, teslimat ücreti, ücretsiz teslimat eşiği) |
+| Ürün           | Ortak katalog kaydı: sku, ad, birim, görsel, kategori. **Fiyat taşımaz**                                                                                                                                        |
+| Teklif (offer) | Bir marketin bir ürünü satışı: `(marketId, productId) → priceMinor, isActive`. Aynı süt Migros'ta ve A101'de farklı fiyattadır                                                                                  |
+| Kategori       | Platformun ortak sınıflandırması; market yalnızca teklifi olan kategorileri gösterir                                                                                                                            |
+| Stok           | Market + sku kapsamlıdır (inventory)                                                                                                                                                                            |
+| Sepet          | **Tek markettir**; market değiştirmek dolu sepeti boşaltmayı gerektirir (istemci onay ister)                                                                                                                    |
+| Kupon          | Platformundur (ILK10, KARGOBEDAVA): tüm marketlerde geçerli                                                                                                                                                     |
+| Market paneli  | **Kapsam dışı.** Marketlerin ürün, fiyat ve kural girdiği yönetim ekranı yok; seed onun yerini tutar. Puanlar seed'de sabittir, yorum sistemi yok                                                               |
+
+**Akış:** adres seçilir → konuma hizmet veren marketler listelenir (yakından uzağa; boşsa "bölgende market yok") → kullanıcı marketi seçer → market sayfası (puan, süre, min. tutar, kategoriler) → ürünler o marketin fiyatı ve stoğuyla → sepet o marketin kurallarıyla hesaplanır → rezervasyon, risk, ödeme ve kurye akışı aynen devam eder (kurye marketten alır).
+
+**Kimlik biçimi** (T8.4'ten önce açık kalan karar burada kapandı): katalog kimlikleri önekli ve okunabilirdir (`mkt_migros-jet-moda`, `prd_sut-1l`, `cat_sut-kahvaltilik`, `ofr_…`); sözleşme bunları UUID olarak değil bu biçimle doğrular. Çalışma anında üretilen kimlikler (sipariş, ödeme, kullanıcı) @getir/core'un önek + 32 hex üreticisinden gelir.
+
+**Mevcut kodun karşılığı:** T4.2'nin `listDarkStoresByDistance` sorgusu "yakındaki marketler"in kendisidir; T4.1'in `products.darkStoreIds` alanı teklif koleksiyonuna dönüşür; `ResolveDarkStore`'un kapalı/yarıçap kuralı market listesinde "Kapalı" rozeti ve rezervasyondaki NO_STORE olarak yaşar. Dönüşüm T4.7 (sözleşme) ve T4.8 (catalog) ile yapılır.
 
 ## Mimari Genel Bakış
 
@@ -56,16 +78,16 @@ flowchart LR
 
 Ok yönü bağımlılık yönüdür: order-svc diğerlerini çağırır, kimse order-svc'yi senkron çağırmaz — bu döngüsel bağımlılığı başından yasaklar.
 
-| Servis        | Dil        | Tek cümlelik sorumluluğu                              | Yazdığı veri                            |
-| ------------- | ---------- | ----------------------------------------------------- | --------------------------------------- |
-| gateway       | Go (Fiber) | REST→gRPC çeviri, JWT, rate limit, idempotency key    | yok (sadece Redis rate-limit)           |
-| catalog-svc   | Node/TS    | Ürün, kategori, dark store katalogları                | Mongo: products, categories, darkstores |
-| inventory-svc | Node/TS    | Stok gerçeği, atomik rezervasyon, TTL serbest bırakma | Mongo: stock; Redis: stock:_, resv:_    |
-| order-svc     | Node/TS    | Sipariş durum makinesi ve saga orkestrasyonu          | Mongo: orders, outbox                   |
-| payment-svc   | Node/TS    | Mock kart ödemesi + 3DS simülasyonu                   | Mongo: payments                         |
-| risk-svc      | Node/TS    | Kural motoru, skor üretimi, aksiyon bandı             | Mongo: risk_events                      |
-| courier-svc   | Node/TS    | Kurye atama, sahte GPS üretimi, rota ilerletme        | Mongo: couriers; Redis: courier:*       |
-| realtime-svc  | Node/TS    | Socket.io odaları, event fan-out, yetki kontrolü      | yok (sadece Redis okur)                 |
+| Servis        | Dil        | Tek cümlelik sorumluluğu                              | Yazdığı veri                                 |
+| ------------- | ---------- | ----------------------------------------------------- | -------------------------------------------- |
+| gateway       | Go (Fiber) | REST→gRPC çeviri, JWT, rate limit, idempotency key    | yok (sadece Redis rate-limit)                |
+| catalog-svc   | Node/TS    | Market, ürün, teklif (fiyat) ve kategori katalogları  | Mongo: markets, products, offers, categories |
+| inventory-svc | Node/TS    | Stok gerçeği, atomik rezervasyon, TTL serbest bırakma | Mongo: stock; Redis: stock:_, resv:_         |
+| order-svc     | Node/TS    | Sipariş durum makinesi ve saga orkestrasyonu          | Mongo: orders, outbox                        |
+| payment-svc   | Node/TS    | Mock kart ödemesi + 3DS simülasyonu                   | Mongo: payments                              |
+| risk-svc      | Node/TS    | Kural motoru, skor üretimi, aksiyon bandı             | Mongo: risk_events                           |
+| courier-svc   | Node/TS    | Kurye atama, sahte GPS üretimi, rota ilerletme        | Mongo: couriers; Redis: courier:*            |
+| realtime-svc  | Node/TS    | Socket.io odaları, event fan-out, yetki kontrolü      | yok (sadece Redis okur)                      |
 
 Üç iletişim kanalı vardır ve her biri tek bir iş için kullanılır: REST (tarayıcı→gateway), gRPC (servisler arası senkron komut/sorgu), Redis Streams (asenkron olay yayını). Bir akışı ikisiyle birden yapmak yasak.
 
@@ -95,7 +117,7 @@ Tek repo, üç üst klasör: apps/ çalışan process'ler, packages/ paylaşıla
 getir-clone/
   apps/
     gateway/                 # Go - tek dis kapi
-    catalog-service/         # Node - urun, kategori, dark store
+    catalog-service/         # Node - market, urun, teklif, kategori
     inventory-service/       # Node - stok, rezervasyon, supurucu
     order-service/           # Node - durum makinesi, saga, outbox
     payment-service/         # Node - mock kart + 3DS
@@ -285,19 +307,20 @@ README ilk gün boş şablonla değil, o günün çalışan komutlarıyla doldur
 
 Tek veritabanı (getir), koleksiyon bazında sahiplik. Mongo tek düğümlü replica set olarak çalışır çünkü outbox yazımı transaction ister.
 
-| Koleksiyon   | Sahibi               | Kritik alanlar                                                                             | İndeks                                       |
-| ------------ | -------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------- |
-| categories   | catalog              | _id, name, slug, sortOrder                                                                 | slug unique                                  |
-| products     | catalog              | _id, sku, name, price, categoryId, unit, imageUrl, isActive, darkStoreIds[], searchTerms[] | sku unique, categoryId+_id, darkStoreIds+_id |
-| darkstores   | catalog              | _id, name, location(GeoJSON), deliveryRadiusMeters, isOpen                                 | location 2dsphere                            |
-| stock        | inventory            | darkStoreId, sku, onHand, version, updatedAt                                               | darkStoreId+sku unique                       |
-| stock_ledger | inventory            | sku, darkStoreId, delta, reason, orderId, createdAt                                        | (orderId, sku, reason) unique, createdAt     |
-| orders       | order                | _id, userId, darkStoreId, items[], totals, status, riskScore, timeline[]                   | userId+createdAt, status                     |
-| outbox       | order (ve diğerleri) | _id, aggregateId, type, payload, publishedAt                                               | publishedAt sparse                           |
-| payments     | payment              | _id, orderId, amount, method, status, threeDS, attempts[]                                  | orderId unique                               |
-| risk_events  | risk                 | _id, userId, orderId, score, band, rules[], createdAt                                      | userId+createdAt                             |
-| users        | gateway              | _id, phone, passwordHash, createdAt, deviceIds[], addresses[]                              | phone unique                                 |
-| couriers     | courier              | _id, name, status, darkStoreId, currentOrderId, lastLocation                               | status+darkStoreId                           |
+| Koleksiyon   | Sahibi               | Kritik alanlar                                                                                                                                                                                              | İndeks                                                |
+| ------------ | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| categories   | catalog              | _id, name, slug, sortOrder                                                                                                                                                                                  | slug unique                                           |
+| markets      | catalog              | _id, name, brand, logoUrl, location(GeoJSON), deliveryRadiusMeters, isOpen, deliveryTimeMinutes{min,max}, rating{average,count}, pricingRules{minBasketMinor, deliveryFeeMinor, freeDeliveryThresholdMinor} | location 2dsphere                                     |
+| products     | catalog              | _id, sku, name, description, categoryId, unit, imageUrl — fiyat YOK (ADR-15)                                                                                                                                | sku unique                                            |
+| offers       | catalog              | _id, marketId, productId, sku, priceMinor, isActive + listeleme için kopyalanan categoryId, name, imageUrl, searchTerms[]                                                                                   | (marketId, productId) unique, marketId+categoryId+_id |
+| stock        | inventory            | marketId, sku, onHand, version, updatedAt                                                                                                                                                                   | marketId+sku unique                                   |
+| stock_ledger | inventory            | sku, marketId, delta, reason, orderId, createdAt                                                                                                                                                            | (orderId, sku, reason) unique, createdAt              |
+| orders       | order                | _id, userId, marketId, items[], totals, status, riskScore, timeline[]                                                                                                                                       | userId+createdAt, status                              |
+| outbox       | order (ve diğerleri) | _id, aggregateId, type, payload, publishedAt                                                                                                                                                                | publishedAt sparse                                    |
+| payments     | payment              | _id, orderId, amount, method, status, threeDS, attempts[]                                                                                                                                                   | orderId unique                                        |
+| risk_events  | risk                 | _id, userId, orderId, score, band, rules[], createdAt                                                                                                                                                       | userId+createdAt                                      |
+| users        | gateway              | _id, phone, passwordHash, createdAt, deviceIds[], addresses[]                                                                                                                                               | phone unique                                          |
+| couriers     | courier              | _id, name, status, marketId, currentOrderId, lastLocation                                                                                                                                                   | status+marketId                                       |
 
 ### Önemli detaylar
 
@@ -306,6 +329,8 @@ Tek veritabanı (getir), koleksiyon bazında sahiplik. Mongo tek düğümlü rep
 - orders.timeline[] durum geçişlerini zaman damgasıyla saklar; UI sipariş takip ekranını bundan çizer.
 - outbox kaydı sipariş yazımıyla aynı transaction içinde oluşur; publisher worker publishedAt: null olanları yayınlar.
 - Para birimi her yerde kuruş cinsinden tam sayıdır (priceMinor: 4599); float yasak.
+- offers, listeleme alanlarını (ad, görsel, kategori, arama terimleri) ürün kaydından **kopyalar**: market sayfası tek sorguda, N+1 olmadan listelenir. Kopyaları yalnızca catalog yazar (seed), tutarlılık tek yerde korunur.
+- markets.pricingRules, market panelinin gireceği değerlerin yerini tutar; bugün seed'den gelir (ADR-15).
 
 ## Redis Şeması ve Stok Motoru
 
@@ -324,7 +349,7 @@ Bu projenin en değerli parçası burada: iki müşteri aynı anda son kutu süt
 | rate:{ip}:{route}         | string        | İstek sayaçı                                                | 60 sn                          |
 | lock:reconcile            | string        | Süpürücü/reconcile liderliği                                | 3 sn, her tick yenilenir (B25) |
 
-{store} hash-tag olarak yazılır (stock:{ds_kadikoy}:avail:SKU1). Böylece bir depoya ait tüm anahtarlar aynı slot'a düşer ve ileride Redis Cluster'a geçilse bile Lua script'i çalışır.
+{store} hash-tag olarak yazılır (stock:{mkt_migros-jet-moda}:avail:SKU1). Böylece bir markete ait tüm anahtarlar aynı slot'a düşer ve ileride Redis Cluster'a geçilse bile Lua script'i çalışır.
 
 ### Rezervasyon: tek atomik Lua script'i
 
@@ -389,33 +414,35 @@ Sözleşmeler kodun öncesinde yazılır ve tek kaynaktan üretilir. Bir alan de
 
 ### gRPC servisleri (packages/proto)
 
-| Dosya           | RPC'ler                                                                               |
-| --------------- | ------------------------------------------------------------------------------------- |
-| catalog.proto   | ListCategories, ListProducts, GetProduct, BatchGetProducts, ResolveDarkStore(lat,lng) |
-| inventory.proto | CheckAvailability, Reserve, Commit, Release, ExtendReservation, GetReservation        |
-| order.proto     | CreateDraftOrder, CreateOrder, GetOrder, ListMyOrders, CancelOrder                    |
-| payment.proto   | Charge, Confirm3Ds, GetPayment, Refund                                                |
-| risk.proto      | Evaluate(RiskContext), GetLastEvaluation                                              |
-| courier.proto   | AssignCourier, GetCourier, StartRoute                                                 |
-| common.proto    | Money, GeoPoint, Page, ErrorDetail                                                    |
+| Dosya           | RPC'ler                                                                                                                                                                                                           |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| catalog.proto   | ListNearbyMarkets(lat,lng), GetMarket, ListMarketCategories, ListProducts(market_id), GetProduct, BatchGetOffers(market_id, product_id[]). ResolveDarkStore ve DarkStore **deprecated** — silinmez (buf breaking) |
+| inventory.proto | CheckAvailability, Reserve, Commit, Release, ExtendReservation, GetReservation                                                                                                                                    |
+| order.proto     | CreateDraftOrder, CreateOrder, GetOrder, ListMyOrders, CancelOrder                                                                                                                                                |
+| payment.proto   | Charge, Confirm3Ds, GetPayment, Refund                                                                                                                                                                            |
+| risk.proto      | Evaluate(RiskContext), GetLastEvaluation                                                                                                                                                                          |
+| courier.proto   | AssignCourier, GetCourier, StartRoute                                                                                                                                                                             |
+| common.proto    | Money, GeoPoint, Page, ErrorDetail                                                                                                                                                                                |
 
 Kurallar: alan numaraları asla yeniden kullanılmaz, silinen alan reserved işaretlenir, her RPC'nin Request/Response mesajı ayrıdır, enum'lar _UNSPECIFIED = 0 ile başlar. buf breaking CI'da bu kuralları zorlar.
 
 ### Gateway REST API
 
-| Metot  | Yol                                   | Kimlik     | Açıklama                                                                             |
-| ------ | ------------------------------------- | ---------- | ------------------------------------------------------------------------------------ |
-| POST   | /v1/auth/register                     | yok        | Telefon + şifre, JWT döner                                                           |
-| POST   | /v1/auth/login                        | yok        | JWT + refresh                                                                        |
-| GET    | /v1/categories                        | ops.       | Kategori listesi                                                                     |
-| GET    | /v1/products?categoryId&darkStoreId&q | ops.       | Stok bilgisiyle ürün listesi                                                         |
-| POST   | /v1/darkstores/resolve                | ops.       | Konumdan depo seçimi                                                                 |
-| POST   | /v1/cart/reserve                      | JWT + idem | Taslak sipariş açar, riski değerlendirir, stoku kilitler; orderId ve expiresAt döner |
-| DELETE | /v1/cart/reserve/{orderId}            | JWT        | Rezervasyonu serbest bırakır                                                         |
-| POST   | /v1/orders                            | JWT + idem | Risk → ödeme → sipariş zinciri                                                       |
-| POST   | /v1/orders/{id}/3ds                   | JWT        | 3DS kodu doğrulama                                                                   |
-| GET    | /v1/orders/{id}                       | JWT        | Sipariş, zaman çizelgesi, kurye rotası ve son konum                                  |
-| GET    | /v1/orders/{id}/token                 | JWT        | Socket odası için kısa ömürlü token                                                  |
+| Metot  | Yol                                          | Kimlik     | Açıklama                                                                                          |
+| ------ | -------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------- |
+| POST   | /v1/auth/register                            | yok        | Telefon + şifre, JWT döner                                                                        |
+| POST   | /v1/auth/login                               | yok        | JWT + refresh                                                                                     |
+| GET    | /v1/categories                               | ops.       | Platform kategori listesi                                                                         |
+| GET    | /v1/markets?lat&lng                          | ops.       | Konuma hizmet veren marketler, yakından uzağa (boşsa boş liste)                                   |
+| GET    | /v1/markets/{marketId}                       | ops.       | Market sayfası başlığı: puan, teslimat süresi, fiyat kuralları                                    |
+| GET    | /v1/markets/{marketId}/categories            | ops.       | Marketin teklifi olan kategoriler                                                                 |
+| GET    | /v1/markets/{marketId}/products?categoryId&q | ops.       | O marketin fiyatı ve stoğuyla ürün listesi                                                        |
+| POST   | /v1/cart/reserve                             | JWT + idem | Taslak sipariş açar (tek market), riski değerlendirir, stoku kilitler; orderId ve expiresAt döner |
+| DELETE | /v1/cart/reserve/{orderId}                   | JWT        | Rezervasyonu serbest bırakır                                                                      |
+| POST   | /v1/orders                                   | JWT + idem | Risk → ödeme → sipariş zinciri                                                                    |
+| POST   | /v1/orders/{id}/3ds                          | JWT        | 3DS kodu doğrulama                                                                                |
+| GET    | /v1/orders/{id}                              | JWT        | Sipariş, zaman çizelgesi, kurye rotası ve son konum                                               |
+| GET    | /v1/orders/{id}/token                        | JWT        | Socket odası için kısa ömürlü token                                                               |
 
 Cevap biçimi her yerde aynı zarftır: başarıda { success: true, data }, hatada { success: false, error: { code, message, details, requestId } }. Kodlar VALIDATION_FAILED, STOCK_INSUFFICIENT, RESERVATION_EXPIRED, RISK_BLOCKED, PAYMENT_DECLINED gibi sabit bir sözlükten gelir ve istemcide kullanıcı mesajına çevrilir.
 
@@ -423,17 +450,17 @@ Cevap biçimi her yerde aynı zarftır: başarıda { success: true, data }, hata
 
 Oda adı order:{orderId}; istemci GET /v1/orders/{id}/token ile aldığı token'ı handshake'te gönderir, realtime-svc doğrulamadan odaya almaz.
 
-| Event                | Oda                 | Payload                                                                                |
-| -------------------- | ------------------- | -------------------------------------------------------------------------------------- |
-| order.status         | order:{orderId}     | { orderId, status, at }                                                                |
-| reservation.expiring | order:{orderId}     | { orderId, secondsLeft }                                                               |
-| reservation.released | order:{orderId}     | { orderId, reason }                                                                    |
-| courier.assigned     | order:{orderId}     | { orderId, courier: { id, name }, etaSeconds }                                         |
-| courier.location     | order:{orderId}     | { orderId, lat, lng, heading, at, seq }                                                |
-| order.delivered      | order:{orderId}     | { orderId, at }                                                                        |
-| stock.changed        | store:{darkStoreId} | { darkStoreId, productId, availableQuantity, at } — sku ic anahtardir, disariya cikmaz |
+| Event                | Oda              | Payload                                                                             |
+| -------------------- | ---------------- | ----------------------------------------------------------------------------------- |
+| order.status         | order:{orderId}  | { orderId, status, at }                                                             |
+| reservation.expiring | order:{orderId}  | { orderId, secondsLeft }                                                            |
+| reservation.released | order:{orderId}  | { orderId, reason }                                                                 |
+| courier.assigned     | order:{orderId}  | { orderId, courier: { id, name }, etaSeconds }                                      |
+| courier.location     | order:{orderId}  | { orderId, lat, lng, heading, at, seq }                                             |
+| order.delivered      | order:{orderId}  | { orderId, at }                                                                     |
+| stock.changed        | store:{marketId} | { marketId, productId, availableQuantity, at } — sku ic anahtardir, disariya cikmaz |
 
-İki oda türü vardır: sipariş odasına yalnızca o siparişin sahibi girer, depo odası ise herkese açıktır ve yalnızca stok değişimi taşır (B11). Katalog ekranı rozetlerini bu odadan tazeler; abone olamadığı durumda staleTime: 10s yedeği devreye girer.
+İki oda türü vardır: sipariş odasına yalnızca o siparişin sahibi girer, market odası ise herkese açıktır ve yalnızca stok değişimi taşır (B11). Katalog ekranı rozetlerini bu odadan tazeler; abone olamadığı durumda staleTime: 10s yedeği devreye girer.
 
 seq alanı istemcinin geç gelen paketi atmasını sağlar. Tüm payload tipleri packages/contracts/src/socket.ts içinde Zod ile tanımlıdır ve web tarafında aynı tip import edilir.
 
@@ -567,7 +594,7 @@ ETA basitçe kalan mesafe bölü sabit hız (20 km/s) ile hesaplanır ve courier
 
 Simülatörün hızı COURIER_TICK_MS ve COURIER_SPEED_KMH ile ayarlanır; demo sırasında 5 dakikalık teslimat 40 saniyeye sıkıştırılabilir.
 
-Kurye atama kuralı bilinçli olarak basittir, ama atomik olmak zorundadır (B7): tek bir findOneAndUpdate ile deponun IDLE kuryesi aynı anda BUSY işaretlenir ve siparişe bağlanır. Sorgu null dönerse uygun kurye yok demektir; sipariş PREPARING kalır ve 30 saniye sonra yeniden denenir. Akıllı atama (mesafe, yük dengesi) AssignmentStrategy arayüzü arkasında bırakılır.
+Kurye atama kuralı bilinçli olarak basittir, ama atomik olmak zorundadır (B7): tek bir findOneAndUpdate ile marketin bölgesindeki IDLE kurye aynı anda BUSY işaretlenir ve siparişe bağlanır. Sorgu null dönerse uygun kurye yok demektir; sipariş PREPARING kalır ve 30 saniye sonra yeniden denenir. Akıllı atama (mesafe, yük dengesi) AssignmentStrategy arayüzü arkasında bırakılır.
 
 ## Frontend Veri Katmanı (tasarım sende)
 
@@ -587,7 +614,8 @@ apps/web/src/
       global.css       # reset + token uygulamasi
     ui/                # SENIN tasarim bilesenlerin (token kullanir)
   features/
-    catalog/           # useCategories, useProducts, useProductSearch (debounced)
+    markets/           # useNearbyMarkets, useMarket (puan, sure, fiyat kurallari)
+    catalog/           # useMarketCategories, useMarketProducts, useProductSearch (debounced)
     cart/              # useCartStore, services/cart.service.ts, useReserveCart
     checkout/          # services/checkout.service.ts, useCreateOrder, use3DS
     tracking/          # useOrderSocket, useSmoothPosition, harita katmani
@@ -597,14 +625,15 @@ apps/web/src/
 
 ### Hook sözleşmeleri (senin bileşenlerin bunları kullanır)
 
-| Hook                    | Döndürür                           | Not                                            |
-| ----------------------- | ---------------------------------- | ---------------------------------------------- |
-| useProducts(categoryId) | { data, isLoading, error }         | data[i].availableQuantity stok rozetini besler |
-| useCart()               | { items, add, remove, totalMinor } | Yerel durum, sunucuya yazılmaz                 |
-| useReserveCart()        | mutate() → { orderId, expiresAt }  | Rezervasyon başlatır                           |
-| useCountdown(expiresAt) | { secondsLeft, expired }           | Geri sayım bileşenin içindir                   |
-| useCreateOrder()        | mutate(payload)                    | Risk bandını hata koduyla döner                |
-| useOrderSocket(orderId) | { status, courier, position, eta } | Tek abonelik, tüm takip verisi                 |
+| Hook                                    | Döndürür                                     | Not                                                        |
+| --------------------------------------- | -------------------------------------------- | ---------------------------------------------------------- |
+| useNearbyMarkets(location)              | { data, isLoading, error }                   | Yakından uzağa; boş liste "bölgende market yok"            |
+| useMarketProducts(marketId, categoryId) | { data, isLoading, error }                   | Fiyat o marketin; availableQuantity stok rozetini besler   |
+| useCart()                               | { items, marketId, add, remove, totalMinor } | Yerel durum, tek market; başka marketten ekleme onay ister |
+| useReserveCart()                        | mutate() → { orderId, expiresAt }            | Rezervasyon başlatır                                       |
+| useCountdown(expiresAt)                 | { secondsLeft, expired }                     | Geri sayım bileşenin içindir                               |
+| useCreateOrder()                        | mutate(payload)                              | Risk bandını hata koduyla döner                            |
+| useOrderSocket(orderId)                 | { status, courier, position, eta }           | Tek abonelik, tüm takip verisi                             |
 
 Tüm tipler @getir/contracts içindeki Zod şemalarından z.infer ile türetilir; frontend'de elle yazılmış API tipi bulunmaz. Form doğrulaması aynı şemayı zodResolver ile kullanır, böylece istemci ve sunucu kuralı tek yerde durur. Backend bir alan değiştirdiğinde TypeScript derlemesi kırılır — bu istenen davranıştır.
 
@@ -650,11 +679,11 @@ Kural zinciri: şema → z.infer DTO → gateway girdi doğrulaması → gRPC ç
 
 Bir değer yanlış katmana konursa hata geç fark edilir. Ayrım tek tabloda sabittir.
 
-| Katman | Araç           | Ne durur                                         | Örnek                                                   |
-| ------ | -------------- | ------------------------------------------------ | ------------------------------------------------------- |
-| Yerel  | useState       | Sadece o bileşeni ilgilendiren geçici durum      | Modal açık mı, input metni, akordiyon                   |
-| Global | Zustand store  | Uygulama genelinde paylaşılan istemci durumu     | Oturum, sepet içeriği, seçili dark store, toast kuyruğu |
-| Sunucu | TanStack Query | Sunucudan gelen, önbelleklenen ve tazelenen veri | Ürünler, kategoriler, sipariş detayı                    |
+| Katman | Araç           | Ne durur                                         | Örnek                                               |
+| ------ | -------------- | ------------------------------------------------ | --------------------------------------------------- |
+| Yerel  | useState       | Sadece o bileşeni ilgilendiren geçici durum      | Modal açık mı, input metni, akordiyon               |
+| Global | Zustand store  | Uygulama genelinde paylaşılan istemci durumu     | Oturum, sepet içeriği, seçili market, toast kuyruğu |
+| Sunucu | TanStack Query | Sunucudan gelen, önbelleklenen ve tazelenen veri | Ürünler, kategoriler, sipariş detayı                |
 
 Kural: sunucudan gelen veri Zustand'a kopyalanmaz, sepet Query cache'ine yazılmaz, bileşene özgü toggle global store'a konmaz. Store'lar dar tutulur: useAuthStore, useCartStore, useUiStore — tek büyük store yok.
 
@@ -678,7 +707,7 @@ Uygulama şekli: TanStack Query mutasyonlarında onMutate ile önceki durum sakl
 | Girdi                         | Bekleme           | Ek önlem                                      |
 | ----------------------------- | ----------------- | --------------------------------------------- |
 | Aramada yazılan metin         | 300 ms            | AbortController ile önceki istek iptal edilir |
-| Adres veya konum değişimi     | 500 ms            | Depo çözümlemesi gereksiz tekrar etmez        |
+| Adres veya konum değişimi     | 500 ms            | Market listesi gereksiz tekrar sorgulanmaz    |
 | Adet artır/azalt butonları    | 250 ms (trailing) | Arayüz iyimser, istek tek seferde gider       |
 | Pencere yeniden boyutlandırma | 150 ms throttle   | Harita yeniden çizimi sınırlanır              |
 
@@ -738,12 +767,25 @@ için MOCK modundaki konteyner veriyi bulamazdı):
 
 ```text
 apps/catalog-service/src/
-  infrastructure/fixtures.ts   # 5 kategori, 15 urun, 2 depo - MOCK modu VE seed ayni kaynak
+  infrastructure/fixtures.ts   # kategoriler, urunler, marketler, teklifler - MOCK VE seed ayni kaynak
   seed.ts                      # pnpm seed: tek transaction'da bastan yazar
 infra/seed/
   data/addresses.json          # 3 hazir adres - sahibi gateway (users), T8.1'de yuklenir
   README.md                    # kim neyi ne zaman yukler
 ```
+
+**Pazaryeri demo verisi (T4.8):** 5 kategori, 15 ortak ürün ve iki semtte toplam 6 market. Her market kendi fiyatı, kuralı ve çeşidiyle gelir; manav yalnızca meyve-sebze satar, bir market kapalıdır ("Kapalı" rozeti ve STORE_CLOSED senaryosu).
+
+| Market                       | Semt     | Min. tutar | Teslimat | Ücretsiz eşik | Süre     | Not                  |
+| ---------------------------- | -------- | ---------- | -------- | ------------- | -------- | -------------------- |
+| Migros Jet – Moda            | Kadıköy  | 40 TL      | 24,90 TL | 300 TL        | 15-25 dk | Geniş çeşit          |
+| A101 – Caferağa              | Kadıköy  | 100 TL     | 19,90 TL | 250 TL        | 20-30 dk | En düşük fiyatlar    |
+| Kardeşler Manavı             | Kadıköy  | 60 TL      | 14,90 TL | 200 TL        | 10-20 dk | Yalnızca meyve-sebze |
+| Migros Jet – Beşiktaş        | Beşiktaş | 40 TL      | 24,90 TL | 300 TL        | 15-25 dk |                      |
+| Carrefour Express – Barbaros | Beşiktaş | 75 TL      | 29,90 TL | 250 TL        | 20-35 dk |                      |
+| A101 – Abbasağa              | Beşiktaş | 100 TL     | 19,90 TL | 250 TL        | —        | **Kapalı**           |
+
+Değerler seed'dedir ve market panelinin gireceği değerleri temsil eder; değiştirmek tek dosyadır.
 
 Stok (inventory, T9.1) ve kuryeler (courier, T13.1) kendi servislerinin seed'iyle gelir.
 Görseller göreli yol olarak saklanır; mutlak URL'yi gateway `ASSET_BASE_URL` ile kurar.
@@ -764,27 +806,29 @@ MOCK=1 ile başlatıldığında catalog servisi Mongo yerine fixtures.ts verisin
 
 Minimum sepet tutarı ve kademeli teslimat ücreti, quick-commerce hissini veren detaydır; bu yüzden taahhüde dahil edildi. Hesap kodu packages/pricing içinde tek kez yazılır ve hem web hem order-service aynı fonksiyonu çağırır — iki yerde ayrı hesap, iki farklı toplam demektir.
 
+**Pazaryeri (ADR-15): kurallar marketten gelir.** Minimum sepet, teslimat ücreti ve ücretsiz teslimat eşiği marketin kaydındadır (`markets.pricingRules`); pricing bunları **parametre** olarak alır, sabit okumaz. Web kuralları market sayfası cevabından, order-service CreateOrder'da catalog'dan (GetMarket) alır; toplam tutmazsa PRICE_CHANGED. Ürün fiyatı da o marketin teklifidir. Market paneli olmadığı için bugün değerler seed'den gelir; panel geldiğinde yalnızca kaynak değişir, hesap kodu değişmez.
+
 ```text
 total = subtotal - discount + deliveryFee
 ```
 
-| Kural                   | Değer          | Sabit                                 |
-| ----------------------- | -------------- | ------------------------------------- |
-| Minimum sepet tutarı    | 150 TL         | MIN_BASKET_MINOR = 15000              |
-| Teslimat ücreti         | 29,90 TL       | DELIVERY_FEE_MINOR = 2990             |
-| Ücretsiz teslimat eşiği | 250 TL         | FREE_DELIVERY_THRESHOLD_MINOR = 25000 |
-| Maksimum sepet kalemi   | 30 adet / ürün | MAX_ITEM_QTY = 30                     |
+| Kural                   | Kaynak                                           | Not                                     |
+| ----------------------- | ------------------------------------------------ | --------------------------------------- |
+| Minimum sepet tutarı    | `market.pricingRules.minBasketMinor`             | Markete özel (örnekler seed tablosunda) |
+| Teslimat ücreti         | `market.pricingRules.deliveryFeeMinor`           | Markete özel                            |
+| Ücretsiz teslimat eşiği | `market.pricingRules.freeDeliveryThresholdMinor` | Markete özel                            |
+| Maksimum sepet kalemi   | Platform sabiti MAX_ITEM_QTY = 30 / ürün         | Tüm marketlerde aynı                    |
 
-calculateCart(items, coupon) döndürür: subtotalMinor, discountMinor, deliveryFeeMinor, totalMinor, canCheckout, amountToFreeDeliveryMinor, amountToMinBasketMinor. Son iki alan arayüze “şunu daha ekle” mesajını yazdırır; bu cümle Getir deneyiminin karakteridir.
+calculateCart(items, coupon, rules, context) — `rules` marketin kuralları, `context` kuponun ihtiyaç duyduğu bilgi (örn. `isFirstOrder`; pricing bunu sorgulamaz, çağıran verir) — döndürür: subtotalMinor, discountMinor, deliveryFeeMinor, totalMinor, canCheckout, amountToFreeDeliveryMinor, amountToMinBasketMinor. Son iki alan arayüze “şunu daha ekle” mesajını yazdırır; bu cümle Getir deneyiminin karakteridir.
 
 ### Kupon mekanizması (sade tutulur)
 
 Kupon listesi packages/pricing/src/campaigns.ts içinde sabittir; veritabanı tablosu, kullanım sayısı takibi ve tarih aralığı yönetimi kapsam dışıdır.
 
-| Kod         | Etki                      | Koşul                            |
-| ----------- | ------------------------- | -------------------------------- |
-| ILK10       | %10 indirim, en çok 30 TL | Kullanıcının ilk siparişi olmalı |
-| KARGOBEDAVA | Teslimat ücreti 0         | Sepet 150 TL üzeri               |
+| Kod         | Etki                      | Koşul                                                    |
+| ----------- | ------------------------- | -------------------------------------------------------- |
+| ILK10       | %10 indirim, en çok 30 TL | Kullanıcının ilk siparişi olmalı                         |
+| KARGOBEDAVA | Teslimat ücreti 0         | Sepet 150 TL üzeri (platform kuralı, marketten bağımsız) |
 
 Kupon istemcide anında hesaplanır ama gerçek karar sunucudadır: CreateOrder toplamı yeniden hesaplar, istemciden gelen tutarı doğrulamak için kullanır ve uyuşmazsa PRICE_CHANGED döner. Geçersiz kupon COUPON_INVALID ile reddedilir. Bu, kupon özelliğini ucuz ve güvenli kılar.
 
@@ -808,7 +852,7 @@ Sayfa yenilendiğinde sepet ve oturum kaybolmaz. Zustand persist ara katmanı ku
 
 | Anahtar       | İçerik                                              | Yaşam süresi              |
 | ------------- | --------------------------------------------------- | ------------------------- |
-| getir.cart    | Sepet kalemleri, seçili depo, kupon kodu            | 24 saat, sonra temizlenir |
+| getir.cart    | Sepet kalemleri, seçili market, kupon kodu          | 24 saat, sonra temizlenir |
 | getir.auth    | Refresh token, kullanıcı adı ve telefonu            | Çıkışa kadar              |
 | getir.address | Seçili adres kimliği                                | Kalıcı                    |
 | Saklanmaz     | Rezervasyon expiresAt, sipariş durumu, ürün listesi | Sunucudan tazelenir       |
@@ -819,13 +863,13 @@ Anahtarlar getir. önekiyle ve bir version alanıyla yazılır; şema değişti�
 
 Gerçek adres arama servisi yok; kullanıcı hazır adresler arasından seçer. Adresler users.addresses[] içinde seed ile gelir.
 
-| Etiket | Konum          | Demodaki işlevi                                            |
-| ------ | -------------- | ---------------------------------------------------------- |
-| Ev     | Kadıköy merkez | Yakın depo, normal akış                                    |
-| İş     | Beşiktaş       | İkinci depoya düşer, farklı stok gösterir                  |
-| Yazlık | Şile           | Yarıçap dışı: NO_STORE ve geofence risk sinyali tetiklenir |
+| Etiket | Konum          | Demodaki işlevi                                                    |
+| ------ | -------------- | ------------------------------------------------------------------ |
+| Ev     | Kadıköy merkez | Kadıköy'deki 3 market listelenir (Migros Jet, A101, manav)         |
+| İş     | Beşiktaş       | Beşiktaş'taki marketler listelenir; biri "Kapalı" görünür          |
+| Yazlık | Şile           | Liste boş: "bölgende market yok"; geofence risk sinyali tetiklenir |
 
-Adres seçimi depo çözümlemesini, teslimat rotasını ve geofence risk kuralını birden besler; üçüncü adres demoda risk bandını göstermenin en hızlı yoludur.
+Adres seçimi market listesini, teslimat rotasını ve geofence risk kuralını birden besler; üçüncü adres demoda risk bandını göstermenin en hızlı yoludur. Sepet doluyken adres değişir ve seçili market yeni adrese hizmet vermiyorsa rezervasyon NO_STORE ile reddedilir.
 
 ### İskelet ekranlar ve mikro etkileşimler
 
@@ -847,8 +891,9 @@ Bu şema README'nin başına da konur; demoyu anlatan tek görsel odur.
 ```mermaid
 flowchart LR
   A[Giris / Kayit] --> B[Adres secimi]
-  B --> C[Depo cozumleme]
-  C --> D[Urun listesi + arama]
+  B --> C[Yakindaki marketler]
+  C --> C2[Market secimi]
+  C2 --> D[Market sayfasi: urunler + arama]
   D --> E[Sepet: min tutar, kurye ucreti, kupon]
   E --> F[Rezervasyon + geri sayim]
   F --> G[Risk degerlendirme]
@@ -901,7 +946,7 @@ Tek komutla ayağa kalkma hedefi ilk günden geçerlidir: make dev Redis ve Mong
 - cd apps/gateway && go mod tidy — Go bağımlılıkları.
 - docker compose -f infra/docker/docker-compose.dev.yml up -d — Mongo (replica set) + Redis.
 - pnpm proto:gen — .proto dosyalarından TS ve Go kodu üretir (T2.3'te gerçek üretime bağlandı; Go kurulu değilse pnpm proto:gen:ts yeterlidir).
-- pnpm seed — katalogu yükler: 5 kategori, 15 ürün, 2 dark store (T4.1). Kuryeler T13.1, stok T9.1 ile eklenir.
+- pnpm seed — katalogu yükler: kategoriler, ortak ürünler, marketler ve teklifler (T4.1; pazaryeri verisi T4.8). Kuryeler T13.1, stok T9.1 ile eklenir.
 - make dev — tüm servisler + web izleme modunda başlar. (Windows'ta karşılığı pnpm dev'dir.)
 
 ### Makefile hedefleri
@@ -983,28 +1028,32 @@ Her görev tek alana dokunur, tek çıktısı ve tek bitti tanımı vardır. Gü
 
 ### Faz 2 — İş Servisleri ve Çekirdek Risk (Gün 4-7)
 
-| ID   | Gün | Alan     | Görev                                                                                                                                                                                                                        | Bitti sayılır                                                                           |
-| ---- | --- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| T4.1 | 4   | catalog  | Mongo şemaları + indeksler + infra/seed ile fixtures ve seed verisi                                                                                                                                                          | 5 kategori, 15 ürün, 2 dark store, 3 hazır adres yüklü; MOCK=1 ile Mongo'suz da çalışır |
-| T4.2 | 4   | catalog  | ResolveDarkStore(lat,lng) 2dsphere sorgusu                                                                                                                                                                                   | Yarıçap dışında NO_STORE hatası döner                                                   |
-| T4.3 | 4   | platform | packages/pricing: min sepet, kademeli kurye ücreti, kupon hesabı                                                                                                                                                             | Birim testleri geçer; web ve order aynı fonksiyonu çağırır                              |
-| T4.4 | 4   | order    | Durum makinesi: geçiş tablosu + timeline[] yazımı                                                                                                                                                                            | Geçersiz geçiş birim testinde hata fırlatır                                             |
-| T4.5 | 4   | order    | orders repository + CreateOrder kalıcı hale gelir                                                                                                                                                                            | Sipariş Mongo'da görülür                                                                |
-| T4.6 | 4   | web      | Vite kurulumu, router, QueryClient, api wrapper (zarf açıcı), idempotency key üreteci, tokens.css iskeleti; MOCK=1 gateway'e bağlanır. **Ek (P6):** `@custom-media` kırılımları (rem) + `clamp()` akışkan tipografi iskeleti | pnpm dev açılır, kategori listesi mock cevapla ekranda görünür                          |
-| T5.1 | 5   | payment  | Charge mock: kart numarası son hanesine göre onay/ret                                                                                                                                                                        | 4242... onay, 4000... ret                                                               |
-| T5.2 | 5   | payment  | 3DS simülasyonu: Confirm3DS(code), 60 sn geçerlilik                                                                                                                                                                          | Yanlış kod THREEDS_FAILED döner                                                         |
-| T5.3 | 5   | payment  | payments kaydı + attempts[] denemeleri                                                                                                                                                                                       | Üç başarısız denemede kilit                                                             |
-| T5.4 | 5   | web      | useCategories, useProducts + isLoading/isFetching iskelet sinyalleri, ürün listesi kabuğu                                                                                                                                    | Liste mock veriyle render olur, yüklenirken iskelet kutucuk çıkar                       |
-| T6.1 | 6   | risk     | Rule arayüzü, registry, skor ve band hesabı                                                                                                                                                                                  | Sahte kurallarla birim test geçer                                                       |
-| T6.2 | 6   | risk     | Altı çekirdek kuralın uygulanması                                                                                                                                                                                            | Her kuralın ayrı testi var                                                              |
-| T6.3 | 6   | risk     | risk_events yazımı + Evaluate RPC                                                                                                                                                                                            | Değerlendirme kaydı sorgulanabilir                                                      |
-| T6.4 | 6   | web      | useCartStore + packages/pricing ile toplam, minimum sepet, kademeli kurye ücreti                                                                                                                                             | “X TL daha ekle” mesajı doğru hesaplanır; hesap bileşende değil serviste durur          |
-| T7.1 | 7   | order    | Saga: Risk → Payment zinciri + telafi adımları                                                                                                                                                                               | Kart reddinde sipariş PAYMENT_FAILED                                                    |
-| T7.2 | 7   | order    | Sunucu tarafı fiyat doğrulaması: pricing ile yeniden hesap, PRICE_CHANGED ve COUPON_INVALID                                                                                                                                  | İstemciden gelen sahte toplam reddedilir                                                |
-| T7.3 | 7   | order    | Outbox yazımı (transaction içinde) + publisher worker                                                                                                                                                                        | stream:events olayları görülür                                                          |
-| T7.4 | 7   | platform | event-bus paketi: publish/subscribe + consumer group                                                                                                                                                                         | İki tüketici aynı olayı iki kez işlemez                                                 |
-| T7.5 | 7   | gateway  | POST /v1/orders uçtan uca (stok hariç)                                                                                                                                                                                       | curl ile sipariş oluşturulur                                                            |
-| T7.6 | 7   | web      | localStorage persist (getir.cart), stok sınırı ön kontrolü, iyimser güncelleme ve geri alma                                                                                                                                  | Yenilemede sepet kalır, stok üstü adet seçilemez                                        |
+| ID   | Gün | Alan     | Görev                                                                                                                                                                                                                                                                                                 | Bitti sayılır                                                                                                                 |
+| ---- | --- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| T4.1 | 4   | catalog  | Mongo şemaları + indeksler + infra/seed ile fixtures ve seed verisi (dark store modeliyle yazıldı; pazaryeri verisi T4.8)                                                                                                                                                                             | 5 kategori, 15 ürün, 2 dark store, 3 hazır adres yüklü; MOCK=1 ile Mongo'suz da çalışır                                       |
+| T4.2 | 4   | catalog  | ResolveDarkStore(lat,lng) 2dsphere sorgusu (T4.8'de ListNearbyMarkets'in temeli olur)                                                                                                                                                                                                                 | Yarıçap dışında NO_STORE hatası döner                                                                                         |
+| T4.3 | 4   | platform | packages/pricing: kurallar PARAMETRE (market.pricingRules), minimum sepet, teslimat ücreti + ücretsiz eşik, platform kuponları; B12 hesap sırası                                                                                                                                                      | Birim testleri geçer; farklı iki market kuralıyla aynı sepet farklı toplam verir; web ve order aynı fonksiyonu çağırır        |
+| T4.4 | 4   | order    | Durum makinesi: geçiş tablosu + timeline[] yazımı                                                                                                                                                                                                                                                     | Geçersiz geçiş birim testinde hata fırlatır                                                                                   |
+| T4.5 | 4   | order    | orders repository + CreateOrder kalıcı hale gelir                                                                                                                                                                                                                                                     | Sipariş Mongo'da görülür                                                                                                      |
+| T4.6 | 4   | web      | Vite kurulumu, router, QueryClient, api wrapper (zarf açıcı), idempotency key üreteci, tokens.css iskeleti; MOCK=1 gateway'e bağlanır. **Ek (P6):** `@custom-media` kırılımları (rem) + `clamp()` akışkan tipografi iskeleti                                                                          | pnpm dev açılır, kategori listesi mock cevapla ekranda görünür                                                                |
+| T4.7 | 4   | contract | Pazaryeri sözleşmesi (ADR-15): catalog.proto Market ve Offer mesajları, ListNearbyMarkets, GetMarket, ListMarketCategories, ListProducts(market_id), BatchGetOffers; ResolveDarkStore/DarkStore/Product.price deprecated; contracts marketSchema + önekli kimlik şemaları; openapi /v1/markets uçları | buf lint + buf breaking temiz; contracts testleri geçer                                                                       |
+| T4.8 | 4   | catalog  | markets + offers koleksiyonları, indeksler, pazaryeri seed'i (6 market, markete özel fiyat ve çeşit, 1 kapalı market); ListNearbyMarkets (T4.2 sorgusu), GetMarket, ListMarketCategories, ListProducts teklifler üzerinden; dark store adlandırması market'e taşınır                                  | Ev adresi 3 market, Yazlık boş liste döner; aynı ürün iki markette farklı fiyatla listelenir; MOCK=1 ile Mongo'suz da çalışır |
+| T5.1 | 5   | payment  | Charge mock: kart numarası son hanesine göre onay/ret                                                                                                                                                                                                                                                 | 4242... onay, 4000... ret                                                                                                     |
+| T5.2 | 5   | payment  | 3DS simülasyonu: Confirm3DS(code), 60 sn geçerlilik                                                                                                                                                                                                                                                   | Yanlış kod THREEDS_FAILED döner                                                                                               |
+| T5.3 | 5   | payment  | payments kaydı + attempts[] denemeleri                                                                                                                                                                                                                                                                | Üç başarısız denemede kilit                                                                                                   |
+| T5.4 | 5   | web      | useNearbyMarkets, useMarket, useMarketCategories, useMarketProducts + isLoading/isFetching iskelet sinyalleri; market listesi ve market sayfası kabuğu                                                                                                                                                | Market listesi ve seçilen marketin ürünleri mock veriyle render olur, yüklenirken iskelet kutucuk çıkar                       |
+| T6.1 | 6   | risk     | Rule arayüzü, registry, skor ve band hesabı                                                                                                                                                                                                                                                           | Sahte kurallarla birim test geçer                                                                                             |
+| T6.2 | 6   | risk     | Altı çekirdek kuralın uygulanması                                                                                                                                                                                                                                                                     | Her kuralın ayrı testi var                                                                                                    |
+| T6.3 | 6   | risk     | risk_events yazımı + Evaluate RPC                                                                                                                                                                                                                                                                     | Değerlendirme kaydı sorgulanabilir                                                                                            |
+| T6.4 | 6   | web      | useCartStore (tek market; başka marketten ekleme onay ister) + packages/pricing ile toplam, minimum sepet, teslimat ücreti — kurallar seçili marketten                                                                                                                                                | “X TL daha ekle” mesajı doğru hesaplanır; hesap bileşende değil serviste durur                                                |
+| T7.1 | 7   | order    | Saga: Risk → Payment zinciri + telafi adımları                                                                                                                                                                                                                                                        | Kart reddinde sipariş PAYMENT_FAILED                                                                                          |
+| T7.2 | 7   | order    | Sunucu tarafı fiyat doğrulaması: market kuralları (GetMarket) ve teklif fiyatları (BatchGetOffers) catalog'dan, pricing ile yeniden hesap, PRICE_CHANGED ve COUPON_INVALID                                                                                                                            | İstemciden gelen sahte toplam reddedilir                                                                                      |
+| T7.3 | 7   | order    | Outbox yazımı (transaction içinde) + publisher worker                                                                                                                                                                                                                                                 | stream:events olayları görülür                                                                                                |
+| T7.4 | 7   | platform | event-bus paketi: publish/subscribe + consumer group                                                                                                                                                                                                                                                  | İki tüketici aynı olayı iki kez işlemez                                                                                       |
+| T7.5 | 7   | gateway  | POST /v1/orders uçtan uca (stok hariç)                                                                                                                                                                                                                                                                | curl ile sipariş oluşturulur                                                                                                  |
+| T7.6 | 7   | web      | localStorage persist (getir.cart), stok sınırı ön kontrolü, iyimser güncelleme ve geri alma                                                                                                                                                                                                           | Yenilemede sepet kalır, stok üstü adet seçilemez                                                                              |
+
+**Gün 4 uygulama sırası (ADR-15):** T4.7 → T4.8 → T4.3 → T4.4 → T4.5 → T4.6. Pricing (T4.3) marketin kural biçimine, web iskeleti (T4.6) market uçlarının sözleşmesine dayandığı için pazaryeri sözleşmesi ve catalog dönüşümü önce gelir. Numaralar tabloda sabit kalır (T4.1-T4.2 bitti, referanslar kırılmasın).
 
 Gün 7 kontrol noktası: Stok olmadan sipariş→risk→ödeme zinciri çalışıyor olmalı. Çalışmıyorsa Gün 8'e geçilmez; Faz 3 bu zincirin üzerine kurulur.
 
@@ -1012,26 +1061,26 @@ Gün 7 kontrol noktası: Stok olmadan sipariş→risk→ödeme zinciri çalış�
 
 ### Faz 3 — Gateway ve Stok Motoru (Gün 8-11)
 
-| ID    | Gün | Alan       | Görev                                                                                                                                                                       | Bitti sayılır                                                             |
-| ----- | --- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| T8.1  | 8   | gateway    | Auth: kayıt, giriş, JWT middleware, refresh                                                                                                                                 | Korumalı uç token'sız 401 döner                                           |
-| T8.2  | 8   | gateway    | Rate limit + Idempotency-Key middleware'i. **Ek (P2):** Redis kayan pencere (ZSET + Lua). **Ek (P5):** kompakt idem kaydı + istek parmak izi, checkout TTL 2 sa; ADR-08 eki | Aynı key ile iki istek tek sipariş yaratır                                |
-| T8.3  | 8   | gateway    | ApiResponse zarf middleware'i + global hata middleware'i                                                                                                                    | Her cevap aynı zarfta, requestId logla eşleşir                            |
-| T8.4  | 8   | gateway    | Ürün/kategori uçlarının tamamı + hata sözlüğü                                                                                                                               | Katalog ve kimlik uçları tamam; Opsiyon A'nın gateway ayağı kapanır (B19) |
-| T8.5  | 8   | web        | Auth akışı (kayıt/giriş formu, zodResolver), token saklama, korumalı rota                                                                                                   | 401 alınan istekte kullanıcı girişe yönlenir, token yenilenir             |
-| T9.1  | 9   | inventory  | stock şeması, seed, CheckAvailability RPC                                                                                                                                   | Ürün listesi gerçek stokla döner                                          |
-| T9.2  | 9   | inventory  | Açılışta Mongo'dan Redis sayaç seed'i + reseed komutu. **Ek (P1):** `noeviction` değilse servis açılmaz                                                                     | Redis silinip yeniden kurulur                                             |
-| T9.3  | 9   | catalog    | Depo bazında ürün filtresi                                                                                                                                                  | Başka depoda olmayan ürün listede yok                                     |
-| T9.4  | 9   | catalog    | Arama: q parametresi, name metin indeksi, Zod min(2)                                                                                                                        | Tek harflik sorgu 400 döner, eşleşme harf duyarsız                        |
-| T9.5  | 9   | web        | Arama kutusu (300 ms debounce + AbortController) ve hazır adres seçimi ekranı                                                                                               | Hızlı yazımda tek istek gider; adres değişince depo ve stok değişir       |
-| T10.1 | 10  | inventory  | reserve.lua + Reserve RPC + resv:index ZSET                                                                                                                                 | Kısmi rezervasyon imkansız, testle kanıtlı                                |
-| T10.2 | 10  | inventory  | release.lua, commit.lua, stock_ledger kaydı. **Ek (P3):** `version` çakışmasında 3 deneme + jitter'lı üstel bekleme (mongo-kit yardımcısı)                                  | Ledger toplamı onHand ile tutar                                           |
-| T10.3 | 10  | inventory  | Süpürücü worker + lock:reconcile liderliği                                                                                                                                  | Süre dolunca stok 2 sn içinde geri gelir                                  |
-| T11.1 | 11  | inventory  | Race testi: 100 paralel istek, stok 1                                                                                                                                       | Tam 1 başarı, 99 STOCK_INSUFFICIENT                                       |
-| T11.2 | 11  | order      | Saga'ya Reserve/Commit/Release adımlarının eklenmesi                                                                                                                        | Rezervasyon düşen sipariş iptal olur                                      |
-| T11.3 | 11  | order+risk | Band aksiyonları: orta riskte TTL 2 dk, kritikte 403                                                                                                                        | Üç band için ayrı test                                                    |
-| T11.4 | 11  | gateway    | POST /v1/cart/reserve ve serbest bırakma uçları                                                                                                                             | curl ile expiresAt döner; Opsiyon A kapanır, README'ye A notu düşer (B19) |
-| T11.5 | 11  | web        | useReserveCart + geri sayım bileşeni + rezervasyonu serbest bırakma                                                                                                         | Gerçek TTL ile sayım biter ve sepet kilidi çözülür                        |
+| ID    | Gün | Alan       | Görev                                                                                                                                                                       | Bitti sayılır                                                              |
+| ----- | --- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| T8.1  | 8   | gateway    | Auth: kayıt, giriş, JWT middleware, refresh                                                                                                                                 | Korumalı uç token'sız 401 döner                                            |
+| T8.2  | 8   | gateway    | Rate limit + Idempotency-Key middleware'i. **Ek (P2):** Redis kayan pencere (ZSET + Lua). **Ek (P5):** kompakt idem kaydı + istek parmak izi, checkout TTL 2 sa; ADR-08 eki | Aynı key ile iki istek tek sipariş yaratır                                 |
+| T8.3  | 8   | gateway    | ApiResponse zarf middleware'i + global hata middleware'i                                                                                                                    | Her cevap aynı zarfta, requestId logla eşleşir                             |
+| T8.4  | 8   | gateway    | Market, kategori ve ürün uçlarının tamamı (/v1/markets, /v1/markets/{id}, /categories, /products) + hata sözlüğü                                                            | Katalog ve kimlik uçları tamam; Opsiyon A'nın gateway ayağı kapanır (B19)  |
+| T8.5  | 8   | web        | Auth akışı (kayıt/giriş formu, zodResolver), token saklama, korumalı rota                                                                                                   | 401 alınan istekte kullanıcı girişe yönlenir, token yenilenir              |
+| T9.1  | 9   | inventory  | stock şeması (marketId + sku), seed, CheckAvailability(marketId, sku[]) RPC                                                                                                 | Ürün listesi gerçek stokla döner                                           |
+| T9.2  | 9   | inventory  | Açılışta Mongo'dan Redis sayaç seed'i + reseed komutu. **Ek (P1):** `noeviction` değilse servis açılmaz                                                                     | Redis silinip yeniden kurulur                                              |
+| T9.3  | 9   | catalog    | BatchGetOffers: sepet doğrulaması için market + ürün fiyatlarını toplu okuma (N+1 yok)                                                                                      | 50 kalemlik sepet tek çağrıyla fiyatlanır; başka marketin ürünü reddedilir |
+| T9.4  | 9   | catalog    | Arama: q parametresi, name metin indeksi, Zod min(2)                                                                                                                        | Tek harflik sorgu 400 döner, eşleşme harf duyarsız                         |
+| T9.5  | 9   | web        | Arama kutusu (300 ms debounce + AbortController) ve hazır adres seçimi → yakındaki marketler ekranı                                                                         | Hızlı yazımda tek istek gider; adres değişince market listesi değişir      |
+| T10.1 | 10  | inventory  | reserve.lua + Reserve RPC + resv:index ZSET                                                                                                                                 | Kısmi rezervasyon imkansız, testle kanıtlı                                 |
+| T10.2 | 10  | inventory  | release.lua, commit.lua, stock_ledger kaydı. **Ek (P3):** `version` çakışmasında 3 deneme + jitter'lı üstel bekleme (mongo-kit yardımcısı)                                  | Ledger toplamı onHand ile tutar                                            |
+| T10.3 | 10  | inventory  | Süpürücü worker + lock:reconcile liderliği                                                                                                                                  | Süre dolunca stok 2 sn içinde geri gelir                                   |
+| T11.1 | 11  | inventory  | Race testi: 100 paralel istek, stok 1                                                                                                                                       | Tam 1 başarı, 99 STOCK_INSUFFICIENT                                        |
+| T11.2 | 11  | order      | Saga'ya Reserve/Commit/Release adımlarının eklenmesi                                                                                                                        | Rezervasyon düşen sipariş iptal olur                                       |
+| T11.3 | 11  | order+risk | Band aksiyonları: orta riskte TTL 2 dk, kritikte 403                                                                                                                        | Üç band için ayrı test                                                     |
+| T11.4 | 11  | gateway    | POST /v1/cart/reserve ve serbest bırakma uçları Rezervasyonda tüm kalemler aynı marketten olmalı; değilse VALIDATION_FAILED                                                 | curl ile expiresAt döner; Opsiyon A kapanır, README'ye A notu düşer (B19)  |
+| T11.5 | 11  | web        | useReserveCart + geri sayım bileşeni + rezervasyonu serbest bırakma                                                                                                         | Gerçek TTL ile sayım biter ve sepet kilidi çözülür                         |
 
 ### Faz 4 — Gerçek Zamanlı Katman (Gün 12-15)
 
@@ -1042,7 +1091,7 @@ Gün 7 kontrol noktası: Stok olmadan sipariş→risk→ödeme zinciri çalış�
 | T12.3 | 12  | realtime | stream:events tüketicisi → order.status push                                                        | Durum değişimi 1 sn içinde istemcide                                  |
 | T12.4 | 12  | web      | Ödeme formu + 3DS adımı; hata kodları toast mesajına bağlanır                                       | Kart reddi ve yanlış 3DS kodu kullanıcıya anlaşılır şekilde görünür   |
 | T13.1 | 13  | courier  | couriers şeması, seed, AssignCourier                                                                | Sipariş PAID olunca kurye atanır                                      |
-| T13.2 | 13  | courier  | Rota üretici: depo→adres polyline + ETA                                                             | Rota noktaları eşit aralıklı                                          |
+| T13.2 | 13  | courier  | Rota üretici: market→adres polyline + ETA                                                           | Rota noktaları eşit aralıklı                                          |
 | T13.3 | 13  | courier  | GPS tick worker, courier.location olayı                                                             | 2 sn'de bir yeni nokta yayınlanır                                     |
 | T13.4 | 13  | web      | useOrderSocket: durum, kurye, konum ve ETA tek hook'ta                                              | Sipariş sayfası canlı güncellenir, tek abonelik kullanılır            |
 | T14.1 | 14  | courier  | Redis konum buffer (LPUSH + LTRIM 30). **Ek (P4):** sipariş kapsamlı anahtar + TTL                  | Geç bağlanan istemci geçmişi alır                                     |
@@ -1061,7 +1110,7 @@ Gün 15 kontrol noktası: Backend uçtan uca çalışır ve arayüz tüm akış�
 | ID    | Gün | Alan     | Görev                                                                                                                                                                           | Bitti sayılır                                                 |
 | ----- | --- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | T16.1 | 16  | web      | Tasarım sistemi: token setinin kesinleşmesi + shared/ui bileşen kütüphanesi (buton, kart, modal, toast, iskelet, rozet). **Ek (P6):** harita ve sepet kırılımları tek kaynaktan | stylelint geçer; bileşenlerde token dışı renk veya ölçü yok   |
-| T16.2 | 16  | web      | Katalog, kategori ve ürün kartı ekranlarının görsel tasarımı                                                                                                                    | Mobil ve masaüstü kırılımda düzen bozulmaz                    |
+| T16.2 | 16  | web      | Yakındaki marketler, market sayfası (puan, süre, min. tutar başlığı), kategori ve ürün kartı ekranlarının görsel tasarımı                                                       | Mobil ve masaüstü kırılımda düzen bozulmaz                    |
 | T16.3 | 16  | web      | Sepet ve adres ekranlarının görsel tasarımı                                                                                                                                     | Minimum sepet ve ücretsiz teslimat mesajları görünür durumda  |
 | T17.1 | 17  | web      | Ödeme, geri sayım ve 3DS ekranlarının görsel tasarımı                                                                                                                           | Geri sayım son 30 saniyede uyarı durumuna geçer               |
 | T17.2 | 17  | web      | Sipariş takip ekranı: harita düzeni + zaman çizelgesi bileşeni                                                                                                                  | Durum değişimi çizelgede anında görünür                       |
@@ -1078,16 +1127,18 @@ Gün 15 kontrol noktası: Backend uçtan uca çalışır ve arayüz tüm akış�
 
 ### 20 güne sığdırma ve kesme sırası
 
-Yeni eklenen sepet motoru, adres seçimi, kupon ve Postman koleksiyonu yeni gün açmadan mevcut görevlere yedirildi: pricing paketi Gün 4'e, sunucu fiyat doğrulaması Gün 7'ye, Postman ve dokümantasyon Gün 19-20'ye. Frontend veri katmanı ise tek blok halinde Faz 5'te beklemek yerine Gün 4-15 arasına günde bir görev olarak dağıtıldı; böylece Gün 16-20 tamamen tasarım ve cilaya kaldı ve tasarım süresi ilk kez takvimde yer buldu. Bunun bedeli, Gün 4-15 arasındaki her güne bir görev daha binmesi ve eski stretch slotunun (Risk DevTools) Gün 20'ye taşınmasıdır.
+Pazaryeri modeli (ADR-15) Gün 4'e iki görev ekledi (T4.7, T4.8); bedeli tampon görevlerden (T15.3, T19.3) karşılanır. Yeni eklenen sepet motoru, adres seçimi, kupon ve Postman koleksiyonu yeni gün açmadan mevcut görevlere yedirildi: pricing paketi Gün 4'e, sunucu fiyat doğrulaması Gün 7'ye, Postman ve dokümantasyon Gün 19-20'ye. Frontend veri katmanı ise tek blok halinde Faz 5'te beklemek yerine Gün 4-15 arasına günde bir görev olarak dağıtıldı; böylece Gün 16-20 tamamen tasarım ve cilaya kaldı ve tasarım süresi ilk kez takvimde yer buldu. Bunun bedeli, Gün 4-15 arasındaki her güne bir görev daha binmesi ve eski stretch slotunun (Risk DevTools) Gün 20'ye taşınmasıdır.
 
 Geri kalınırsa şu sırayla kesilir; üstteki önce gider:
 
 - Kupon mekanizması (T17.3'ün kupon kısmı) — sepet motoru kupon olmadan da tamdır.
+- Market puanı ve kapak görseli — liste ad, mesafe ve süreyle de çalışır (puan zaten sabit veridir).
+- Pazaryeri seed'inin genişliği — 6 market yerine her semtte 2 market (Kadıköy, Beşiktaş) yeterlidir; markete özel fiyat ve kural KESİLMEZ (ADR-15'in özü).
 - Üçüncü adres ve NO_STORE senaryosu — iki adresle demo yapılır.
 - Mikro etkileşim sinyalleri (T17.3'ün animasyon kısmı).
 - Arama ve debounce (T9.5) — kategori filtresi yeterlidir.
 - Postman koleksiyonu (T19.1) — README'deki curl örnekleri yerine geçer.
-  Asla kesilmeyenler: stok kilidi, TTL rezervasyon, risk bantları, canlı kurye takibi ve minimum sepet kontrolü. Bunlar projenin kimliğidir.
+  Asla kesilmeyenler: stok kilidi, TTL rezervasyon, risk bantları, canlı kurye takibi ve minimum sepet kontrolü, market seçimi ve markete özel fiyat. Bunlar projenin kimliğidir.
 
 ## Algoritma Denetimi — Bulunan Mantık Hataları
 
@@ -1112,7 +1163,7 @@ Roadmap'in akışlarını satır satır denetledim. Birinci turda 18 nokta buldu
 | No  | Hata                                                                                                                  | Düzeltme                                                                                                                                                               |
 | --- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | B10 | geofence risk kuralı ile NO_STORE çakışıyor: yarıçap dışı adres zaten reddedildiği için kural hiç tetiklenmiyor       | İki farklı eşik tanımlanır: teslimat yarıçapı sert kapıdır; risk sinyali ise teslimat adresi ile oturum konumu arasındaki uyuşmazlıktır                                |
-| B11 | Stok rozetleri Query önbelleğinde bayat kalıyor; stock.released olayı sipariş odasına gidiyor, katalog ekranına değil | store:{darkStoreId} odası ve stock.changed olayı eklenir; MVP tabanı olarak ürün sorgusunda staleTime: 10s + pencere odaklanınca refetch                               |
+| B11 | Stok rozetleri Query önbelleğinde bayat kalıyor; stock.released olayı sipariş odasına gidiyor, katalog ekranına değil | store:{marketId} odası ve stock.changed olayı eklenir; MVP tabanı olarak ürün sorgusunda staleTime: 10s + pencere odaklanınca refetch                                  |
 | B12 | Ücretsiz teslimat eşiğinin hangi tutara baktığı belirsiz; kargo kuponu ile eşik üstü sepet çift indirim üretebilir    | Hesap sırası sabitlenir: subtotal → ürün indirimi → teslimat ücreti (eşik indirim öncesi subtotal'a bakar) → kargo kuponu → max(0, total)                              |
 | B13 | PRICE_MISMATCH isteği sertçe reddediyor                                                                               | Sunucu kendi toplamını otorite sayar. Fark varsa 409 PRICE_CHANGED + güncel toplam döner, istemci onaylatır; istemci toplamı daha düşükse olay güvenlik loguna yazılır |
 | B14 | Outbox at-least-once olduğu için stock_ledger'a çift kayıt düşebilir                                                  | (orderId, sku, reason) üzerinde unique index; çift yazım E11000 ile sessizce yutulur                                                                                   |
@@ -1135,8 +1186,8 @@ Birinci turun düzeltmeleri uygulandıktan sonra akışlar bir kez daha okundu v
 | B24 | Reseed formülü en kritik anda yanlış                                | B1 "avail = onHand − aktif rezervasyon" diyor; ama rezervasyonlar da Redis'te tutulduğu için Redis kaybında ikisi birden gider ve formül avail = onHand'e iner. Asıl tehlike: ödeme onaylanmış ama Commit (onHand düşümü) yazılmadan Redis kaybolursa reseed stoku geri verir ve ürün iki kez satılır.                                                           | Reseed'in gerçek kaynağı stock_ledger'dır: avail = onHand − (PAID olup commit ledger kaydı olmayan siparişlerin adetleri) − (Redis'te yaşayan aktif rezervasyonlar). Fark raporlanır; reseed sonrası ledger toplamı ile onHand karşılaştırılır.           |
 | B25 | Süpürücü liderlik kilidi ters ölçekte                               | lock:reconcile TTL'i 30 sn, tarama periyodu 1 sn. Lider çökerse 30 sn boyunca süpürme durur; o aralıkta süresi dolan rezervasyonların hash'i TTL payıyla ölse bile sayaç geri gelmez, yani stok 30 sn boyunca kayıp görünür.                                                                                                                                     | TTL 3 sn'ye indirilir ve lider her tick'te kilidi yeniler (PEXPIRE). Lider düşerse en geç 3 sn içinde başka bir instance devralır. SWEEPER_LOCK_TTL_SECONDS=3.                                                                                            |
 | B26 | CI kapısı, entegrasyon testleri için replica set kurmayı varsayıyor | Outbox transaction'ı replica set ister; GitHub Actions services bloğunda servis konteynerine özel komut ve healthcheck verilemediği için rs.initiate ve PRIMARY bekleme adımları elle yazılmak zorunda kalır.                                                                                                                                                    | Entegrasyon testleri CI'da services yerine Testcontainers ile kendi konteynerini kaldırır (ubuntu runner'ında Docker hazırdır). Repo herkese açık olduğu için Actions dakikaları ücretsizdir; aynı kapılar ayrıca yerelde tek komutla koşar.              |
-| B27 | Ürün listesi için stok sorgusu N+1 üretiyor                         | Ürünler catalog-svc'den, availableQty ise inventory-svc'den gelir. CheckAvailability tekil tasarlanırsa 15 ürünlük bir liste 15 ayrı gRPC çağrısı demektir; ürün listesi projenin en sık açılan ekranıdır.                                                                                                                                                       | CheckAvailability toplu imza alır: CheckAvailability(darkStoreId, sku[]) → map<sku, availableQty>. Gateway ürün listesini tek çağrıyla zenginleştirir.                                                                                                    |
-| B28 | Depo odası "herkese açık" ama handshake token doğruluyor            | store:{darkStoreId} odası anonim kullanıcıya açık olmalı; oysa realtime-svc tüm bağlantılarda kısa ömürlü sipariş token'ı bekliyor. Kuralın iki modlu olduğu hiçbir yerde yazılı değil.                                                                                                                                                                          | Realtime iki yetki modu tanımlar: anonim bağlantı yalnızca store:* odasına katılabilir ve yalnızca stock.changed alır; order:* odası için handshake'te geçerli token zorunludur. Yetkisiz katılım denemesi FORBIDDEN ile reddedilir ve loglanır.          |
+| B27 | Ürün listesi için stok sorgusu N+1 üretiyor                         | Ürünler catalog-svc'den, availableQty ise inventory-svc'den gelir. CheckAvailability tekil tasarlanırsa 15 ürünlük bir liste 15 ayrı gRPC çağrısı demektir; ürün listesi projenin en sık açılan ekranıdır.                                                                                                                                                       | CheckAvailability toplu imza alır: CheckAvailability(marketId, sku[]) → map<sku, availableQty>. Gateway ürün listesini tek çağrıyla zenginleştirir.                                                                                                       |
+| B28 | Market odası "herkese açık" ama handshake token doğruluyor          | store:{marketId} odası anonim kullanıcıya açık olmalı; oysa realtime-svc tüm bağlantılarda kısa ömürlü sipariş token'ı bekliyor. Kuralın iki modlu olduğu hiçbir yerde yazılı değil.                                                                                                                                                                             | Realtime iki yetki modu tanımlar: anonim bağlantı yalnızca store:* odasına katılabilir ve yalnızca stock.changed alır; order:* odası için handshake'te geçerli token zorunludur. Yetkisiz katılım denemesi FORBIDDEN ile reddedilir ve loglanır.          |
 
 ### Üçüncü tur — prodüksiyon kör noktaları (P1-P6)
 
@@ -1272,7 +1323,7 @@ packages/event-bus içine KafkaEventBus yaz, bootstrap.ts içinde uygulamayı de
 
 ### Demo senaryosu (8 dakika)
 
-- Kayıt ol, konum seç → en yakın dark store belirlenir.
+- Kayıt ol, adres seç → yakındaki marketler listelenir; biri "Kapalı" görünür. Migros Jet seçilir; aynı ürünün A101'de farklı fiyatta olduğu gösterilir.
 - Ürün listesinde stok rozetleri görünür; sepete 3 ürün eklenir.
 - Ödeme ekranı açılır, geri sayım başlar; ikinci tarayıcıda aynı ürünün stokta azaldığı gösterilir.
 - Bekleyip sürenin dolması izlenir; stok geri gelir (bu sahne projenin vitrinidir).
@@ -1328,16 +1379,17 @@ Windows notu: make bu makinede kurulu değil ve .sh script'leri PowerShell'de do
 
 ### Kritik kararlar (ADR)
 
-| No     | Karar                                                                       | Gerekçe                                                                                                                                            |
-| ------ | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ADR-01 | Sıcak yoldaki stok düşümü Redlock ile değil, tek Lua script'i ile yapılır   | Redis tek thread'lidir, Lua zaten atomiktir. Redlock ağ gecikmesi ve saat kayması riski ekler; sadece reconciliation job liderliği için kullanılır |
-| ADR-02 | Rezervasyon süresi bitimi keyspace notification'a güvenmez                  | Redis expire event'leri kayıp verebilir. Gerçek kaynak resv:index ZSET'idir; süpürücü 1 sn'de bir tarar                                            |
-| ADR-03 | Stok gerçeği Mongo'da, hızlı sayaç Redis'te                                 | Redis düşerse veri kaybolmaz; açılışta stock koleksiyonundan seed edilir                                                                           |
-| ADR-04 | Servisler arası olaylar outbox üzerinden yayınlanır                         | Mongo'ya yazıldı ama event gitmedi durumunu imkansız kılar                                                                                         |
-| ADR-05 | Her servis kendi koleksiyonlarının tek sahibidir                            | Başka servisin koleksiyonuna doğrudan yazmak reddedilir; erişim gRPC ile olur                                                                      |
-| ADR-06 | Realtime, gateway'den ayrı bir process'tir                                  | Go'da Socket.io protokol uyumu zahmetli; WebSocket bağlantıları farklı ölçeklenir                                                                  |
-| ADR-07 | Olay hattı EventBus arayüzü arkasında durur                                 | Opsiyon D'de Kafka'ya geçiş tek dosya değişikliği olur                                                                                             |
-| ADR-08 | Tüm mutasyon endpoint'leri Idempotency-Key ister                            | Çift tıklama veya retry ikinci sipariş yaratmaz                                                                                                    |
-| ADR-09 | Sözleşme koddan önce yazılır (API-first)                                    | Frontend ve backend paralel ilerler; UI değişen sözleşme yüzünden iki kez yazılmaz                                                                 |
-| ADR-10 | Çalışma zamanı doğrulaması tek kütüphaneyle, Zod ile yapılır                | Şema ve TypeScript tipi tek kaynaktan türer, çift bakım ortadan kalkar                                                                             |
-| ADR-11 | Görsel değerler design token'larda, iş sabitleri config/constants.ts içinde | Tema veya eşik değişimi tek dosyayı etkiler                                                                                                        |
+| No     | Karar                                                                              | Gerekçe                                                                                                                                            |
+| ------ | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ADR-01 | Sıcak yoldaki stok düşümü Redlock ile değil, tek Lua script'i ile yapılır          | Redis tek thread'lidir, Lua zaten atomiktir. Redlock ağ gecikmesi ve saat kayması riski ekler; sadece reconciliation job liderliği için kullanılır |
+| ADR-02 | Rezervasyon süresi bitimi keyspace notification'a güvenmez                         | Redis expire event'leri kayıp verebilir. Gerçek kaynak resv:index ZSET'idir; süpürücü 1 sn'de bir tarar                                            |
+| ADR-03 | Stok gerçeği Mongo'da, hızlı sayaç Redis'te                                        | Redis düşerse veri kaybolmaz; açılışta stock koleksiyonundan seed edilir                                                                           |
+| ADR-04 | Servisler arası olaylar outbox üzerinden yayınlanır                                | Mongo'ya yazıldı ama event gitmedi durumunu imkansız kılar                                                                                         |
+| ADR-05 | Her servis kendi koleksiyonlarının tek sahibidir                                   | Başka servisin koleksiyonuna doğrudan yazmak reddedilir; erişim gRPC ile olur                                                                      |
+| ADR-06 | Realtime, gateway'den ayrı bir process'tir                                         | Go'da Socket.io protokol uyumu zahmetli; WebSocket bağlantıları farklı ölçeklenir                                                                  |
+| ADR-07 | Olay hattı EventBus arayüzü arkasında durur                                        | Opsiyon D'de Kafka'ya geçiş tek dosya değişikliği olur                                                                                             |
+| ADR-08 | Tüm mutasyon endpoint'leri Idempotency-Key ister                                   | Çift tıklama veya retry ikinci sipariş yaratmaz                                                                                                    |
+| ADR-09 | Sözleşme koddan önce yazılır (API-first)                                           | Frontend ve backend paralel ilerler; UI değişen sözleşme yüzünden iki kez yazılmaz                                                                 |
+| ADR-10 | Çalışma zamanı doğrulaması tek kütüphaneyle, Zod ile yapılır                       | Şema ve TypeScript tipi tek kaynaktan türer, çift bakım ortadan kalkar                                                                             |
+| ADR-11 | Görsel değerler design token'larda, iş sabitleri config/constants.ts içinde        | Tema veya eşik değişimi tek dosyayı etkiler                                                                                                        |
+| ADR-15 | İş modeli pazaryeridir: kullanıcı marketi seçer, fiyat ve kurallar markete özeldir | Ekran tasarımıyla birebir veri modeli; kurallar veri olarak taşınır, market paneli gelince yalnızca kaynak değişir                                 |
