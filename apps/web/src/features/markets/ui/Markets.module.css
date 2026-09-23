@@ -1,0 +1,70 @@
+/* Tasarimsiz kabuk (T5.4): yalnizca okunur yerlesim. Kart tasarimi T16.2'de. */
+.c-markets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-markets__title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: var(--font-size-lg);
+}
+
+.c-market-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.c-market-list__item {
+  padding-block-end: var(--space-3);
+  border-block-end: var(--border-width-thin) solid var(--border-subtle);
+}
+
+.c-market-list__item.is-closed {
+  color: var(--text-muted);
+}
+
+.c-market-list__link {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+}
+
+.c-market-list__meta {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.c-market-list__badge {
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-on-brand);
+  background: var(--text-muted);
+  border-radius: var(--radius-pill);
+}
+
+.c-market-summary__facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-1) var(--space-4);
+  font-size: var(--font-size-sm);
+}
+
+.c-market-summary__facts dt {
+  color: var(--text-muted);
+}
+
+.c-market-summary__facts dd {
+  margin: 0;
+}

@@ -1,4 +1,4 @@
-.c-home__header {
+.c-page-layout__header {
   position: sticky;
   top: 0;
   z-index: var(--z-header);
@@ -7,22 +7,23 @@
   box-shadow: var(--shadow-surface);
 }
 
-.c-home__brand {
+.c-page-layout__brand {
   display: flex;
   justify-content: center;
   font-size: var(--font-size-xl);
+  text-decoration: none;
 }
 
-.c-home__main {
+.c-page-layout__main {
   padding-block: var(--space-4);
 }
 
 @media (--bp-md) {
-  .c-home__brand {
+  .c-page-layout__brand {
     justify-content: flex-start;
   }
 
-  .c-home__main {
+  .c-page-layout__main {
     padding-block: var(--space-6);
   }
 }
