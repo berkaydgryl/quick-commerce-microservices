@@ -4,15 +4,14 @@
 
 import { AppError } from '@getir/core';
 
-import type {
-  CatalogRepository,
-  ProductFilter,
-  ProductPage,
-} from '../domain/catalog-repository.js';
+import type { DarkStoreReader } from '../domain/dark-store-reader.js';
 import { normalizePageSize } from '../domain/pagination.js';
+import type { ProductFilter, ProductPage, ProductReader } from '../domain/product-reader.js';
 
 export interface ListProductsDeps {
-  readonly repository: CatalogRepository;
+  readonly products: ProductReader;
+  /** Yalnizca depo varligi icin (NOT_FOUND ile bos liste ayrimi). */
+  readonly darkStores: DarkStoreReader;
 }
 
 export interface ListProductsInput {
@@ -31,14 +30,14 @@ export function createListProducts(deps: ListProductsDeps): ListProducts {
     // hata degil - istemcide "bu kategoride urun yok" ekrani cikar.
     if (
       filter.darkStoreId !== undefined &&
-      !(await deps.repository.darkStoreExists(filter.darkStoreId))
+      !(await deps.darkStores.darkStoreExists(filter.darkStoreId))
     ) {
       throw AppError.notFound('Depo bulunamadi', {
         details: { darkStoreId: filter.darkStoreId },
       });
     }
 
-    return deps.repository.listProducts(filter, {
+    return deps.products.listProducts(filter, {
       size: normalizePageSize(pageSize),
       token: pageToken ?? '',
     });

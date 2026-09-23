@@ -16,9 +16,10 @@
 
 import { createLogger, installProcessHandlers, startGrpcServer } from '@getir/service-kit';
 
-import { buildCatalogService, openCatalogSource } from './bootstrap.js';
+import { buildCatalogService } from './bootstrap.js';
 import { SERVICE_NAME } from './config/constants.js';
 import { loadServiceEnv } from './config/env.js';
+import { openCatalogSource } from './infrastructure/catalog-source.js';
 
 const env = loadServiceEnv();
 const logger = createLogger({ name: SERVICE_NAME, level: env.LOG_LEVEL });
@@ -31,7 +32,7 @@ const handle = await startGrpcServer({
   port: env.CATALOG_GRPC_PORT,
   shutdownTimeoutMs: env.GRPC_SHUTDOWN_TIMEOUT_MS,
   logger,
-  services: [buildCatalogService({ logger, repository: source.repository })],
+  services: [buildCatalogService({ logger, readers: source.readers })],
   // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti kesilmesin.
   onShutdown: () => source.close(),
 });

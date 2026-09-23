@@ -10,7 +10,7 @@
  * uzerinde calisir.
  */
 
-import { AppError, ERROR_CODES, silentLogger } from '@getir/core';
+import { AppError, ERROR_CODES, redactConnectionString, silentLogger } from '@getir/core';
 import type { Logger } from '@getir/core';
 import { MongoClient } from 'mongodb';
 import type { ClientSession, Db, TransactionOptions } from 'mongodb';
@@ -74,13 +74,16 @@ export async function connectMongo(options: MongoConnectionOptions): Promise<Mon
     await client.close().catch(() => undefined);
     throw new AppError(
       ERROR_CODES.SERVICE_UNAVAILABLE,
-      `Mongo baglantisi kurulamadi: ${redactUri(options.uri)}`,
+      `Mongo baglantisi kurulamadi: ${redactConnectionString(options.uri)}`,
       { cause: error },
     );
   }
 
   const db = client.db(options.dbName);
-  logger.info({ uri: redactUri(options.uri), db: options.dbName }, 'mongo baglantisi hazir');
+  logger.info(
+    { uri: redactConnectionString(options.uri), db: options.dbName },
+    'mongo baglantisi hazir',
+  );
 
   return {
     client,
@@ -113,9 +116,4 @@ export async function connectMongo(options: MongoConnectionOptions): Promise<Mon
       logger.info({}, 'mongo baglantisi kapandi');
     },
   };
-}
-
-/** Gunluge yazarken baglanti dizesindeki parolayi gizler. */
-function redactUri(uri: string): string {
-  return uri.replace(/\/\/([^@/]*)@/, '//***@');
 }

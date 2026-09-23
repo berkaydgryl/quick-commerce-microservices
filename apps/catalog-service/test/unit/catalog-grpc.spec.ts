@@ -15,6 +15,7 @@ import type { MethodDefinition, ServiceError } from '@grpc/grpc-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { buildCatalogService } from '../../src/bootstrap.js';
+import { demoLocation, EXPECTED_NEAREST } from '../support/demo-addresses.js';
 
 /** Isletim sistemi bos bir port secsin; testler paralel kosarken cakismaz. */
 const EPHEMERAL_PORT = 0;
@@ -152,13 +153,61 @@ describe('ListProducts', () => {
   });
 });
 
-describe('henuz yazilmamis RPC ler', () => {
-  it('UNIMPLEMENTED doner ve hangi gorevde gelecegini soyler', async () => {
-    const { error } = await call(catalogV1.CatalogServiceService.resolveDarkStore, {
-      location: { lat: 40.99, lng: 29.02 },
+describe('ResolveDarkStore', () => {
+  /** Hatanin x-app-error yukundeki ayrinti (NO_STORE: reason + mesafe). */
+  function detailsOf(error: ServiceError | undefined): Record<string, string> | undefined {
+    const raw = error?.metadata.get(ERROR_METADATA_KEY)[0];
+    return typeof raw === 'string'
+      ? (JSON.parse(raw) as { details?: Record<string, string> }).details
+      : undefined;
+  }
+
+  it('Ev adresi Kadikoy deposuna duser; mesafe tam sayi metre', async () => {
+    const { error, response } = await call(catalogV1.CatalogServiceService.resolveDarkStore, {
+      location: demoLocation('Ev'),
     });
 
+    expect(error).toBeUndefined();
+    expect(response?.darkStore?.id).toBe('ds_kadikoy');
+    expect(response?.darkStore?.location).toEqual({ lat: 40.9903, lng: 29.0275 });
+    expect(response?.distanceMeters).toBe(EXPECTED_NEAREST.Ev.meters);
+  });
+
+  it('yaricap disindaki konum NO_STORE (NOT_FOUND) + en yakin mesafe', async () => {
+    // T4.2 olcutu. Yazlik (Sile): en yakin depo ~71 km.
+    const { error } = await call(catalogV1.CatalogServiceService.resolveDarkStore, {
+      location: demoLocation('Yazlık'),
+    });
+
+    expect(error?.code).toBe(GRPC_STATUS.NOT_FOUND);
+    expect(errorCodeOf(error)).toBe(ERROR_CODES.NO_STORE);
+    expect(detailsOf(error)).toEqual({
+      reason: 'OUT_OF_RANGE',
+      nearest_distance_meters: String(EXPECTED_NEAREST.Yazlık.meters),
+    });
+  });
+
+  it('konum verilmezse INVALID_ARGUMENT - (0,0) gibi islenmez', async () => {
+    const { error } = await call(catalogV1.CatalogServiceService.resolveDarkStore, {});
+
+    expect(error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
+    expect(errorCodeOf(error)).toBe(ERROR_CODES.VALIDATION_FAILED);
+  });
+
+  it('WGS84 disindaki koordinat reddedilir', async () => {
+    const { error } = await call(catalogV1.CatalogServiceService.resolveDarkStore, {
+      location: { lat: 91, lng: 29 },
+    });
+
+    expect(error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
+  });
+});
+
+describe('henuz yazilmamis RPC ler', () => {
+  it('UNIMPLEMENTED doner ve hangi gorevde gelecegini soyler', async () => {
+    const { error } = await call(catalogV1.CatalogServiceService.getProduct, { id: 'prd_01' });
+
     expect(error?.code).toBe(GRPC_STATUS.UNIMPLEMENTED);
-    expect(error?.details).toContain('T4.2');
+    expect(error?.details).toContain('GetProduct');
   });
 });

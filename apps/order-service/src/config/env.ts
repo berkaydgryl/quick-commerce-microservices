@@ -5,6 +5,7 @@
 
 import { loadEnvOrExit } from '@getir/core';
 import { grpcPort, serviceEnvSchema } from '@getir/service-kit';
+import { z } from 'zod';
 
 import { DEFAULT_ORDER_GRPC_PORT } from './constants.js';
 
@@ -19,3 +20,14 @@ const envSchema = serviceEnvSchema.extend({
  * (orders repository) T4.5'te, durum makinesi tablosu T4.4'te gelecek.
  */
 export const env = loadEnvOrExit(envSchema);
+
+const healthcheckSchema = z.object({ ORDER_GRPC_PORT: grpcPort(DEFAULT_ORDER_GRPC_PORT) });
+
+/**
+ * Yalnizca saglik yoklamasinin ihtiyaci: port. Servisin TAM ortami
+ * yuklenmez - yoklama Mongo adresi gibi degiskenlere bagli olmamali; bir
+ * degisken eksikse servisin kendisi zaten acilista olmustur.
+ */
+export function loadHealthcheckEnv(): { readonly port: number } {
+  return { port: loadEnvOrExit(healthcheckSchema).ORDER_GRPC_PORT };
+}

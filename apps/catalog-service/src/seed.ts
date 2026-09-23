@@ -15,7 +15,11 @@ import { createSeedCatalog } from './application/seed-catalog.js';
 import { SERVICE_NAME } from './config/constants.js';
 import { loadSeedEnv } from './config/env.js';
 import { CATALOG_SNAPSHOT } from './infrastructure/fixtures.js';
-import { MongoCatalog } from './infrastructure/mongo/mongo-catalog.js';
+import {
+  createMongoCatalogRepositories,
+  ensureCatalogIndexes,
+} from './infrastructure/mongo/mongo-catalog.js';
+import { MongoCatalogSeeder } from './infrastructure/mongo/mongo-catalog-seeder.js';
 
 /** Seed basarisiz oldugunda cikis kodu. */
 const SEED_FAILURE_EXIT_CODE = 1;
@@ -32,13 +36,13 @@ const connection = await connectMongo({
 });
 
 try {
-  const catalog = new MongoCatalog(connection);
+  const repositories = createMongoCatalogRepositories(connection.db);
   // Indeks transaction icinde olusturulamaz; benzersizlik kurali ilk yazimdan
   // itibaren gecerli olsun diye yazimdan ONCE.
-  await catalog.ensureIndexes();
+  await ensureCatalogIndexes(repositories);
 
   const seed = createSeedCatalog({
-    writer: catalog,
+    writer: new MongoCatalogSeeder(connection, repositories),
     snapshot: CATALOG_SNAPSHOT,
     isProduction: env.NODE_ENV === 'production',
   });

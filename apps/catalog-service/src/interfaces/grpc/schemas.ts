@@ -47,3 +47,18 @@ export const listProductsRequestSchema = z.object({
 });
 
 export type ListProductsRequestInput = z.infer<typeof listProductsRequestSchema>;
+
+/**
+ * ResolveDarkStore istegi. Konum ZORUNLUDUR: proto3'te mesaj alani set
+ * edilmezse undefined gelir ve "konum yok" sessizce (0, 0) - Gine Korfezi -
+ * gibi islenmemeli. Alt alanlardaki sinirlar WGS84 araligidir.
+ */
+export const resolveDarkStoreRequestSchema = z.object({
+  location: z.object(
+    {
+      lat: z.number().finite().min(-90).max(90),
+      lng: z.number().finite().min(-180).max(180),
+    },
+    { required_error: 'zorunlu' },
+  ),
+});
