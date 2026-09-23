@@ -5,12 +5,12 @@ henüz sahibi ayakta olmayan veri ve bu düzenin açıklaması var.
 
 ## Kim neyi yükler
 
-| Veri                              | Sahibi (ADR-05) | Nerede                                                | Ne zaman yüklenir          |
-| --------------------------------- | --------------- | ----------------------------------------------------- | -------------------------- |
-| 5 kategori, 15 ürün, 2 dark store | catalog         | `apps/catalog-service/src/infrastructure/fixtures.ts` | `pnpm seed` (T4.1)         |
-| 3 hazır adres                     | gateway (users) | `infra/seed/data/addresses.json`                      | T8.1 — `users.addresses[]` |
-| Stok                              | inventory       | —                                                     | T9.1                       |
-| 3 kurye                           | courier         | —                                                     | T13.1                      |
+| Veri                                     | Sahibi (ADR-05) | Nerede                                              | Ne zaman yüklenir                  |
+| ---------------------------------------- | --------------- | --------------------------------------------------- | ---------------------------------- |
+| 5 kategori, 15 ürün, 6 market, 71 teklif | catalog         | `apps/catalog-service/src/infrastructure/fixtures/` | `pnpm seed` (T4.1, pazaryeri T4.8) |
+| 3 hazır adres                            | gateway (users) | `infra/seed/data/addresses.json`                    | T8.1 — `users.addresses[]`         |
+| Stok                                     | inventory       | —                                                   | T9.1                               |
+| 3 kurye                                  | courier         | —                                                   | T13.1                              |
 
 **Neden veri servisin içinde (roadmap `infra/seed/data/*.json` diyordu):**
 
@@ -25,15 +25,15 @@ henüz sahibi ayakta olmayan veri ve bu düzenin açıklaması var.
 `data/addresses.json`, `@getir/contracts` içindeki `deliveryAddressSchema` biçimindedir ve
 roadmap'in adres tablosunu izler:
 
-| Başlık | Konum          | Beklenen                                      |
-| ------ | -------------- | --------------------------------------------- |
-| Ev     | Kadıköy merkez | `ds_kadikoy` yarıçapında                      |
-| İş     | Beşiktaş       | `ds_besiktas` yarıçapında (farklı çeşit)      |
-| Yazlık | Şile           | Hiçbir deponun yarıçapında değil → `NO_STORE` |
+| Başlık | Konum          | Beklenen                                                                         |
+| ------ | -------------- | -------------------------------------------------------------------------------- |
+| Ev     | Kadıköy merkez | 3 market: A101 – Caferağa, Kardeşler Manavı, Migros Jet – Moda                   |
+| İş     | Beşiktaş       | 3 market: Migros Jet – Beşiktaş, Carrefour Express, A101 – Abbasağa (**kapalı**) |
+| Yazlık | Şile           | Boş liste: "bölgende market yok"                                                 |
 
 `users` koleksiyonu gateway'e aittir ve T8.1'de açılır; adresler o gün oraya yüklenecek. O güne
-kadar bu dosya, gerçek `ResolveDarkStore` use-case'ine seed edilmiş Mongo üzerinden verilir
-(`apps/catalog-service/test/integration/mongo-catalog.spec.ts`, T4.2): konum verisinde bir kayma
+kadar bu dosya, gerçek `ListNearbyMarkets` use-case'ine seed edilmiş Mongo üzerinden verilir
+(`apps/catalog-service/test/integration/mongo-catalog.spec.ts`, T4.8): konum verisinde bir kayma
 olursa demo senaryosu bozulmadan önce test kırmızı olur.
 
 ## Komutlar

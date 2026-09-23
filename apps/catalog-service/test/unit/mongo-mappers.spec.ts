@@ -7,46 +7,55 @@ import { describe, expect, it } from 'vitest';
 import { CATALOG_SNAPSHOT } from '../../src/infrastructure/fixtures.js';
 import {
   fromCategoryDocument,
-  fromDarkStoreDocument,
+  fromMarketDocument,
+  fromOfferDocument,
   fromProductDocument,
   toCategoryDocument,
-  toDarkStoreDocument,
+  toMarketDocument,
+  toOfferDocument,
   toProductDocument,
 } from '../../src/infrastructure/mongo/mappers.js';
 
 const [category] = CATALOG_SNAPSHOT.categories;
+const [market] = CATALOG_SNAPSHOT.markets;
 const chocolate = CATALOG_SNAPSHOT.products.find((product) => product.sku === 'CIKOLATA-80');
-const [kadikoy] = CATALOG_SNAPSHOT.darkStores;
 
 describe('mongo mappers', () => {
-  it('kategori gidis-donus ayni kalir', () => {
-    expect(category).toBeDefined();
-    if (category === undefined) return;
+  it('kategori ve urun gidis-donus ayni kalir', () => {
+    if (category === undefined || chocolate === undefined) throw new Error('demo verisi eksik');
 
     expect(fromCategoryDocument(toCategoryDocument(category))).toEqual(category);
+    expect(fromProductDocument(toProductDocument(chocolate))).toEqual(chocolate);
   });
 
-  it('urun belgesi sorgu alanlarini tasir ama domain e sizdirmaz', () => {
-    expect(chocolate).toBeDefined();
-    if (chocolate === undefined) return;
+  it('market konumu GeoJSON sirasiyla yazilir: [boylam, enlem]; kurallar korunur', () => {
+    if (market === undefined) throw new Error('demo verisi eksik');
 
-    const document = toProductDocument(chocolate, ['ds_besiktas', 'ds_kadikoy']);
+    const document = toMarketDocument(market);
 
-    expect(document._id).toBe(chocolate.id);
-    expect(document.darkStoreIds).toEqual(['ds_besiktas', 'ds_kadikoy']);
+    // Ters yazilirsa 2dsphere indeksi hata vermez ama market baska kitaya tasinir.
+    expect(document.location).toEqual({ type: 'Point', coordinates: [market.lng, market.lat] });
+    expect(fromMarketDocument(document)).toEqual(market);
+  });
+
+  it('teklif belgesi urun kopyasi ve arama alanlarini tasir ama domain e sizdirmaz', () => {
+    if (chocolate === undefined) throw new Error('demo verisi eksik');
+
+    const document = toOfferDocument(
+      { marketId: 'mkt_a101-caferaga', productId: chocolate.id, priceMinor: 3030, isActive: true },
+      chocolate,
+    );
+
+    expect(document._id).toBe('ofr_a101-caferaga-cikolata-80');
+    expect(document.categoryId).toBe(chocolate.categoryId);
     // Turkce kucuk harf: "Çikolata 80 g" -> "çikolata 80 g"
     expect(document.searchTerms).toEqual(['çikolata 80 g', 'sütlü çikolata']);
-    expect(fromProductDocument(document)).toEqual(chocolate);
-  });
-
-  it('konum GeoJSON sirasiyla yazilir: [boylam, enlem]', () => {
-    expect(kadikoy).toBeDefined();
-    if (kadikoy === undefined) return;
-
-    const document = toDarkStoreDocument(kadikoy);
-
-    // Ters yazilirsa 2dsphere indeksi hata vermez ama depo Iran'a tasinir.
-    expect(document.location).toEqual({ type: 'Point', coordinates: [kadikoy.lng, kadikoy.lat] });
-    expect(fromDarkStoreDocument(document)).toEqual(kadikoy);
+    expect(fromOfferDocument(document)).toEqual({
+      id: 'ofr_a101-caferaga-cikolata-80',
+      marketId: 'mkt_a101-caferaga',
+      product: chocolate,
+      priceMinor: 3030,
+      isActive: true,
+    });
   });
 });

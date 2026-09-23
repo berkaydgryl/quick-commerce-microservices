@@ -1,11 +1,13 @@
 /**
- * Katalog alanininin (domain) varliklari ve saf kurallari.
+ * Katalog alaninin (domain) varliklari ve saf kurallari - PAZARYERI (ADR-15).
  *
  * KURAL: bu dosya DISARI BAKMAZ. Icinde mongodb, ioredis, grpc ya da uretilen
- * proto tipi importu YOKTUR. Sebep: sozlesme (proto) ile is modeli ayni sey
- * degildir ve ayni hizda degismezler. Proto'ya bir alan eklendiginde domain
- * degismek zorunda kalmasin, domain'de bir kural degistiginde tel uzerindeki
- * bicim bozulmasin diye arada bir cevirici katman var (interfaces/grpc/mapper).
+ * proto tipi importu YOKTUR. Sozlesme (proto) ile is modeli ayni hizda
+ * degismez; aradaki ceviri interfaces/grpc/mappers.ts ve infrastructure'dadir.
+ *
+ * Model: urun ORTAKTIR ve fiyat tasimaz; bir marketin o urunu hangi fiyatla
+ * sattigi TEKLIFTIR (Offer). Market kendi kurallarini (minimum sepet, teslimat
+ * ucreti) tasir.
  */
 
 /** Satis birimi. Proto'daki Unit enum'unun domain karsiligi. */
@@ -25,39 +27,84 @@ export interface Category {
   readonly slug: string;
   /** Vitrinde gosterim sirasi; kucuk deger once gelir. */
   readonly sortOrder: number;
+  /** GORELI yol; mutlak URL'yi gateway kurar. */
   readonly imageUrl: string;
 }
 
+/** Ortak urun: marketten bagimsiz. Fiyat YOK (ADR-15). */
 export interface Product {
   readonly id: string;
   /** Stok tutma birimi; inventory-svc ile ortak anahtardir. */
   readonly sku: string;
   readonly name: string;
   readonly description: string;
-  /** Liste fiyati, KURUS cinsinden tam sayi. Float yasak. */
-  readonly priceMinor: number;
   readonly categoryId: string;
   readonly unit: ProductUnit;
   readonly imageUrl: string;
-  /** false ise katalogdan gizlenir; kayit silinmez (gecmis siparisler bozulmasin). */
-  readonly isActive: boolean;
 }
 
-export interface DarkStore {
+/** Marketin sepet kurallari. Tutarlar KURUS, tam sayi. */
+export interface PricingRules {
+  readonly minBasketMinor: number;
+  readonly deliveryFeeMinor: number;
+  /** Ara toplam (indirim ONCESI, B12) buna ulasirsa teslimat ucretsizdir. */
+  readonly freeDeliveryThresholdMinor: number;
+}
+
+export interface Market {
   readonly id: string;
   readonly name: string;
+  readonly brand: string;
+  /** GORELI yol; mutlak URL'yi gateway kurar. */
+  readonly logoUrl: string;
   readonly lat: number;
   readonly lng: number;
   readonly deliveryRadiusMeters: number;
+  /** Kapali market listede gorunur ama siparis almaz. */
   readonly isOpen: boolean;
+  readonly deliveryTime: { readonly minMinutes: number; readonly maxMinutes: number };
+  /** Onda bir hassasiyetle tam sayi: 47 = 4.7. Seed'de sabit (ADR-15). */
+  readonly rating: { readonly averageTenths: number; readonly count: number };
+  /** Market paneli olmadigi icin bugun seed'den gelir. */
+  readonly pricingRules: PricingRules;
+}
+
+/**
+ * Bir marketin bir urunu satisi: FIYATIN sahibi.
+ *
+ * Urun bilgisi teklifle birlikte tasinir; market sayfasi teklifleri listeler
+ * ve her satirda ad, gorsel ve fiyat birlikte lazimdir.
+ */
+export interface Offer {
+  readonly id: string;
+  readonly marketId: string;
+  readonly product: Product;
+  /** Bu marketteki liste fiyati, KURUS. Float yasak. */
+  readonly priceMinor: number;
+  /** false: market urunu satistan kaldirmis. Listeden GIZLENMEZ (istemci "satista degil" gosterir). */
+  readonly isActive: boolean;
+}
+
+/** Katalog kimliginin oneksiz govdesi: "mkt_migros-jet-moda" -> "migros-jet-moda". */
+function idBody(id: string): string {
+  const separator = id.indexOf('_');
+  return separator === -1 ? id : id.slice(separator + 1);
+}
+
+/**
+ * Teklif kimligi market ve urunden TURETILIR: "ofr_migros-jet-moda-sut-1l".
+ * Ayni ikili icin her zaman ayni kimlik: seed tekrar kosunca degismez.
+ */
+export function offerIdFor(marketId: string, productId: string): string {
+  return `ofr_${idBody(marketId)}-${idBody(productId)}`;
 }
 
 /**
  * Kategorileri vitrin sirasina dizer.
  *
  * Ayni sort_order'a sahip iki kategori olursa sira ADA gore belirlenir; aksi
- * halde liste her istekte farkli sirada donebilir ve kullanici "kategoriler
- * yer degistiriyor" diye gorur. Turkce siralama icin localeCompare('tr').
+ * halde liste her istekte farkli sirada donebilir. Turkce siralama icin
+ * localeCompare('tr').
  */
 export function sortCategories(categories: readonly Category[]): readonly Category[] {
   return [...categories].sort(
@@ -66,17 +113,14 @@ export function sortCategories(categories: readonly Category[]): readonly Catego
 }
 
 /**
- * Urunleri kararli (stable) sirada dizer: kimlige gore.
+ * Teklifleri kararli (stable) sirada dizer: kimlige gore, IKILI karsilastirma.
  *
- * NEDEN KIMLIK: sayfalama imleci bu siraya dayanir (bkz. pagination.ts).
- * Populerlik ya da fiyat gibi degisken bir alana gore siralansaydi, iki sayfa
- * arasinda sira kayar ve ayni urun iki kez gorunur ya da hic gorunmezdi.
+ * NEDEN IKILI: imlec "_id > token" ile ilerler (pagination.ts) ve Mongo da
+ * string'i ikili siralar. Yerel siralama kullanilsaydi bellek ve Mongo
+ * uygulamasi farkli sayfa kesebilirdi.
  */
-export function sortProducts(products: readonly Product[]): readonly Product[] {
-  // IKILI (binary) karsilastirma, localeCompare DEGIL: imlec "_id > token"
-  // ile ilerler (pagination.ts) ve Mongo da string'i ikili siralar. Yerel
-  // siralama kullanilsaydi bellek ve Mongo uygulamasi farkli sayfa kesebilirdi.
-  return [...products].sort((left, right) => compareIds(left.id, right.id));
+export function sortOffers(offers: readonly Offer[]): readonly Offer[] {
+  return [...offers].sort((left, right) => compareIds(left.id, right.id));
 }
 
 function compareIds(left: string, right: string): number {
@@ -89,10 +133,9 @@ function compareIds(left: string, right: string): number {
 /**
  * Aramada karsilastirilacak bicim: Turkce kurallariyla kucuk harf.
  *
- * NEDEN AYRI FONKSIYON: bellek ve Mongo uygulamasi AYNI normalizasyonu
- * kullanmak zorunda. Mongo'nun regex "i" bayragi Turkce'yi bilmez ("İ" ile "i"
- * eslesmez); bu yuzden Mongo tarafi bu fonksiyonun ciktisini YAZIM ANINDA
- * saklar (products.searchTerms) ve aramayi o alanda yapar.
+ * Bellek ve Mongo uygulamasi AYNI normalizasyonu kullanir. Mongo'nun regex
+ * "i" bayragi Turkce'yi bilmez ("İ" ile "i" eslesmez); bu yuzden Mongo tarafi
+ * bu fonksiyonun ciktisini YAZIM ANINDA saklar (offers.searchTerms).
  */
 export function searchKey(text: string): string {
   return text.trim().toLocaleLowerCase('tr');

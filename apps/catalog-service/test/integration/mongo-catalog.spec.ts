@@ -1,11 +1,12 @@
 /**
- * Katalogun Mongo uygulamasi - gercek Mongo (Testcontainers).
+ * Katalogun Mongo uygulamasi - gercek Mongo (Testcontainers). ADR-15.
  *
  * Sahte istemciyle dogrulanamayan seyler burada sinanir:
  *   1. Sozlesme testleri: bellek uygulamasiyla AYNI senaryolar gercek sorguda
- *      (kategori, urun, depo - her okuyucu kendi sozlesmesiyle).
+ *      (kategori, market, teklif - her okuyucu kendi sozlesmesiyle).
  *   2. Seed: sayilar, tekrar kosunun kopya uretmemesi, indeksler, tek transaction.
- *   3. ResolveDarkStore: 3 demo adresi ve kapali depo, 2dsphere uzerinden.
+ *   3. Pazaryeri: 3 demo adresi 2dsphere uzerinden beklenen marketleri listeler,
+ *      kapali market listede kalir.
  */
 
 import { AppError, ERROR_CODES } from '@getir/core';
@@ -13,9 +14,9 @@ import { connectMongo } from '@getir/mongo-kit';
 import type { MongoConnection } from '@getir/mongo-kit';
 import { MongoDBContainer } from '@testcontainers/mongodb';
 import type { StartedMongoDBContainer } from '@testcontainers/mongodb';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { createResolveDarkStore } from '../../src/application/resolve-dark-store.js';
+import { createListNearbyMarkets } from '../../src/application/list-nearby-markets.js';
 import { createSeedCatalog } from '../../src/application/seed-catalog.js';
 import type { CatalogSnapshot } from '../../src/domain/catalog-snapshot.js';
 import { CATALOG_SNAPSHOT } from '../../src/infrastructure/fixtures.js';
@@ -27,9 +28,9 @@ import {
 } from '../../src/infrastructure/mongo/mongo-catalog.js';
 import { MongoCatalogSeeder } from '../../src/infrastructure/mongo/mongo-catalog-seeder.js';
 import { describeCategoryReaderContract } from '../support/category-reader-contract.js';
-import { describeDarkStoreReaderContract } from '../support/dark-store-reader-contract.js';
-import { DEMO_ADDRESSES, demoLocation, EXPECTED_NEAREST } from '../support/demo-addresses.js';
-import { describeProductReaderContract } from '../support/product-reader-contract.js';
+import { DEMO_ADDRESSES, demoLocation, EXPECTED_NEARBY } from '../support/demo-addresses.js';
+import { describeMarketReaderContract } from '../support/market-reader-contract.js';
+import { describeOfferReaderContract } from '../support/offer-reader-contract.js';
 
 /** infra/docker/docker-compose.dev.yml ile ayni surum. */
 const MONGO_IMAGE = 'mongo:7';
@@ -51,7 +52,8 @@ async function countOf(name: string): Promise<number> {
 async function expectDemoCounts(): Promise<void> {
   expect(await countOf(COLLECTIONS.CATEGORIES)).toBe(5);
   expect(await countOf(COLLECTIONS.PRODUCTS)).toBe(15);
-  expect(await countOf(COLLECTIONS.DARK_STORES)).toBe(2);
+  expect(await countOf(COLLECTIONS.MARKETS)).toBe(6);
+  expect(await countOf(COLLECTIONS.OFFERS)).toBe(CATALOG_SNAPSHOT.offers.length);
 }
 
 beforeAll(async () => {
@@ -72,11 +74,11 @@ afterAll(async () => {
 });
 
 describeCategoryReaderContract('mongo', () => repositories.categories);
-describeProductReaderContract('mongo', () => repositories.products);
-describeDarkStoreReaderContract('mongo', () => repositories.darkStores);
+describeMarketReaderContract('mongo', () => repositories.markets);
+describeOfferReaderContract('mongo', () => repositories.offers);
 
 describe('seed', () => {
-  it('T4.1 olcutu: 5 kategori, 15 urun, 2 dark store yuklu', async () => {
+  it('5 kategori, 15 urun, 6 market ve tum teklifler yuklu', async () => {
     await expectDemoCounts();
   });
 
@@ -92,17 +94,25 @@ describe('seed', () => {
       (await connection.db.collection(name).indexes()).map((index) => index.name ?? '').sort();
 
     expect(await namesOf(COLLECTIONS.CATEGORIES)).toEqual(['_id_', 'slug_unique']);
-    expect(await namesOf(COLLECTIONS.PRODUCTS)).toEqual([
+    expect(await namesOf(COLLECTIONS.PRODUCTS)).toEqual(['_id_', 'sku_unique']);
+    expect(await namesOf(COLLECTIONS.MARKETS)).toEqual(['_id_', 'location_2dsphere']);
+    expect(await namesOf(COLLECTIONS.OFFERS)).toEqual([
       '_id_',
-      'category_cursor',
-      'sku_unique',
-      'store_cursor',
+      'market_category_cursor',
+      'market_cursor',
+      'market_product_unique',
     ]);
-    expect(await namesOf(COLLECTIONS.DARK_STORES)).toEqual(['_id_', 'location_2dsphere']);
+  });
+
+  it('eski dark store koleksiyonuna yazilmaz', async () => {
+    const names = (await connection.db.listCollections().toArray()).map(
+      (collection) => collection.name,
+    );
+
+    expect(names).not.toContain('darkstores');
   });
 
   it('benzersiz slug gercekten zorlanir (CONFLICT)', async () => {
-    // Ayni slug'i ("icecek") tasiyan ikinci kategori.
     const duplicate = {
       id: 'cat_kopya',
       name: 'Kopya',
@@ -121,61 +131,55 @@ describe('seed', () => {
   });
 
   it('basarisiz seed HICBIR koleksiyonu degistirmez (tek transaction)', async () => {
-    // Bir onceki testteki basarisiz yazim urunleri de silmis olsaydi burada 0
-    // gorurduk: kategori hatasi urun ve depo yazimini da geri almali.
+    await expectDemoCounts();
+  });
+
+  it('ayni market-urun ikilisine ikinci teklif CONFLICT (market_product_unique)', async () => {
+    const [first] = CATALOG_SNAPSHOT.offers;
+    if (first === undefined) throw new Error('demo verisinde teklif yok');
+
+    // Ayni ikili iki kez: turetilen _id de ayni oldugu icin cakisma zaten
+    // _id'de yakalanir; indeks, kimlik bicimi degisse bile ikiliyi korur.
+    const failing = seeder.replaceAll({
+      ...CATALOG_SNAPSHOT,
+      offers: [...CATALOG_SNAPSHOT.offers, first],
+    });
+
+    await expect(failing).rejects.toMatchObject({ code: ERROR_CODES.CONFLICT });
     await expectDemoCounts();
   });
 });
 
-describe('ResolveDarkStore - gercek Mongo', () => {
-  const resolve = (): ReturnType<typeof createResolveDarkStore> =>
-    createResolveDarkStore({ darkStores: repositories.darkStores });
-
-  afterEach(async () => {
-    // Kapali depo testi veriyi degistirir; sonraki testler demo verisini gorsun.
-    await seed();
-  });
+describe('ListNearbyMarkets - gercek Mongo', () => {
+  const listNearby = (): ReturnType<typeof createListNearbyMarkets> =>
+    createListNearbyMarkets({ markets: repositories.markets });
 
   it('adres dosyasi sozlesmedeki deliveryAddressSchema ya uyar ve 3 tanedir', () => {
     expect(DEMO_ADDRESSES.map((address) => address.title)).toEqual(['Ev', 'İş', 'Yazlık']);
   });
 
-  it.each(['Ev', 'İş'] as const)('%s -> beklenen depo', async (title) => {
-    const resolved = await resolve()(demoLocation(title));
+  it.each(['Ev', 'İş', 'Yazlık'] as const)(
+    '%s -> beklenen marketler, yakindan uzaga',
+    async (title) => {
+      const nearby = await listNearby()(demoLocation(title));
+      const expected = EXPECTED_NEARBY[title];
 
-    expect(resolved.store.id).toBe(EXPECTED_NEAREST[title].storeId);
-    expect(resolved.distanceMeters).toBeLessThanOrEqual(resolved.store.deliveryRadiusMeters);
-  });
+      expect(nearby.map((entry) => entry.market.id)).toEqual(
+        expected.map((entry) => entry.marketId),
+      );
+      nearby.forEach((entry, index) => {
+        expect(
+          Math.abs(entry.distanceMeters - (expected[index]?.meters ?? Number.NaN)),
+        ).toBeLessThanOrEqual(1);
+      });
+    },
+  );
 
-  it('Yazlik -> NO_STORE (T4.2 olcutu), en yakin mesafeyle', async () => {
-    const failing = resolve()(demoLocation('Yazlık'));
+  it('kapali market listede kalir (Is: A101 Abbasaga)', async () => {
+    const nearby = await listNearby()(demoLocation('İş'));
 
-    await expect(failing).rejects.toBeInstanceOf(AppError);
-    await expect(failing).rejects.toMatchObject({
-      code: ERROR_CODES.NO_STORE,
-      details: {
-        reason: 'OUT_OF_RANGE',
-        nearest_distance_meters: String(EXPECTED_NEAREST.Yazlık.meters),
-      },
-    });
-  });
-
-  it('kapsayan depo kapaliysa NO_STORE / STORE_CLOSED - Mongo sorgusu kapaliyi filtrelemez', async () => {
-    // Sorgu isOpen'a gore filtreleseydi sonuc OUT_OF_RANGE olurdu: "yaricap
-    // icinde ama kapali" ile "yaricap disi" ayirt edilemezdi.
-    await seed({
-      ...CATALOG_SNAPSHOT,
-      darkStores: CATALOG_SNAPSHOT.darkStores.map((store) =>
-        store.id === 'ds_kadikoy' ? { ...store, isOpen: false } : store,
-      ),
-    });
-
-    await expect(resolve()(demoLocation('Ev'))).rejects.toMatchObject({
-      code: ERROR_CODES.NO_STORE,
-      details: {
-        reason: 'STORE_CLOSED',
-        nearest_distance_meters: String(EXPECTED_NEAREST.Ev.meters),
-      },
-    });
+    expect(nearby.find((entry) => entry.market.id === 'mkt_a101-abbasaga')?.market.isOpen).toBe(
+      false,
+    );
   });
 });

@@ -1,150 +1,110 @@
 # @getir/catalog-service
 
-Katalog verisinin **tek sahibi** (ADR-05): kategoriler, ürünler ve dark store'lar. Başka
-hiçbir servis bu veriye doğrudan erişmez; yalnızca `getir.catalog.v1.CatalogService`
-RPC'leri üzerinden okur.
+Pazaryeri katalogunun **tek sahibi** (ADR-05, ADR-15): marketler, ortak ürünler, teklifler
+(market × ürün → fiyat) ve kategoriler. Başka hiçbir servis bu veriye doğrudan erişmez;
+yalnızca `getir.catalog.v1.CatalogService` RPC'leri üzerinden okur.
 
-Bu serviste **olmayanlar**, bilinçli: stok/müsaitlik `inventory-service`'in (B27), kampanyalı
-fiyat ve kupon `pricing`'in işidir. `Product` mesajında stok alanı yoktur.
+Bu serviste **olmayanlar**, bilinçli: stok/müsaitlik `inventory-service`'in (B27), sepet
+hesabı ve kupon `packages/pricing`'in işidir. Teklifte stok alanı yoktur.
 
-## Bugünkü durum (T4.2)
+## İş modeli: pazaryeri (ADR-15)
 
-| RPC                | Durum                                                 |
-| ------------------ | ----------------------------------------------------- |
-| `ListCategories`   | ✅ Mongo ya da `MOCK` (bellek)                        |
-| `ListProducts`     | ✅ Filtre (kategori, depo, arama) + imleçli sayfalama |
-| `GetProduct`       | ⏳ `UNIMPLEMENTED` — T4                               |
-| `BatchGetProducts` | ⏳ `UNIMPLEMENTED` — T4                               |
-| `ResolveDarkStore` | ✅ Konumdan depo; yarıçap dışı / kapalı → `NO_STORE`  |
+Kullanıcı konumuna hizmet veren marketleri görür ve **birini seçer**; sistem market atamaz.
+Ürün kataloğu ortaktır ve **fiyat taşımaz**; bir marketin o ürünü hangi fiyatla sattığı
+**tekliftir**. Aynı süt Migros Jet – Moda'da 34,90 TL, A101 – Caferağa'da 32,10 TL'dir. Her
+market kendi kurallarını taşır: minimum sepet, teslimat ücreti, ücretsiz teslimat eşiği,
+teslimat süresi ve puan. Market paneli kapsam dışıdır; değerler seed'dendir.
+
+## Bugünkü durum (T4.8)
+
+| RPC                                  | Durum                                                                            |
+| ------------------------------------ | -------------------------------------------------------------------------------- |
+| `ListCategories`                     | ✅ Platform kategorileri                                                         |
+| `ListNearbyMarkets`                  | ✅ Konumu kapsayan marketler, yakından uzağa; kapalılar dahil; boşsa boş         |
+| `GetMarket`                          | ✅ Puan, süre, fiyat kuralları; yoksa `NOT_FOUND`                                |
+| `ListMarketCategories`               | ✅ Marketin aktif teklifi olan kategoriler (manav yalnızca meyve-sebze)          |
+| `ListProducts`                       | ✅ `market_id` zorunlu; teklifler o marketin fiyatıyla, kategori + arama + imleç |
+| `ResolveDarkStore`                   | ⛔ Deprecated (ADR-15): `UNIMPLEMENTED`, mesaj `ListNearbyMarkets`'i gösterir    |
+| `GetProduct`                         | ⏳ `UNIMPLEMENTED` — T8.4                                                        |
+| `BatchGetProducts`, `BatchGetOffers` | ⏳ `UNIMPLEMENTED` — T9.3                                                        |
+
+T4.2'nin "yarıçap içinde ama kapalı → `STORE_CLOSED`, yarıçap dışı → `OUT_OF_RANGE`" kuralı
+kaybolmadı: tek market için `domain/market-coverage.ts` → `evaluateCoverage`'da duruyor ve
+rezervasyon (T11.4) seçilen marketin hâlâ hizmet verip vermediğini buna soracak.
 
 ## Veri kaynağı: Mongo ya da MOCK
 
-| `MOCK` | Kaynak                                                         | Mongo gerekir mi          |
-| ------ | -------------------------------------------------------------- | ------------------------- |
-| `true` | Bellek okuyucuları (`infrastructure/memory`)                   | Hayır                     |
-| değil  | Mongo repository'leri (`categories`, `products`, `darkstores`) | Evet, `MONGO_URI` zorunlu |
+| `MOCK` | Kaynak                                                                | Mongo gerekir mi          |
+| ------ | --------------------------------------------------------------------- | ------------------------- |
+| `true` | Bellek okuyucuları (`infrastructure/memory`)                          | Hayır                     |
+| değil  | Mongo repository'leri (`markets`, `offers`, `products`, `categories`) | Evet, `MONGO_URI` zorunlu |
 
-İki kaynak da **aynı demo verisinden** beslenir (`src/infrastructure/fixtures.ts`: 5 kategori,
-15 ürün, 2 dark store) ve **aynı sözleşme testlerinden** geçer
-(`test/support/{category,product,dark-store}-reader-contract.ts`): birim testinde bellek,
-entegrasyon testinde gerçek Mongo. MOCK modunda çalışan frontend gerçek modda da aynı cevabı görür.
-Veri kaynağını seçip açan tek yer `infrastructure/catalog-source.ts`'tir.
+İki kaynak da **aynı demo verisinden** beslenir (`src/infrastructure/fixtures/`: 5 kategori,
+15 ortak ürün, 6 market, 71 teklif) ve **aynı sözleşme testlerinden** geçer
+(`test/support/{category,market,offer}-reader-contract.ts`): birim testinde bellek, entegrasyon
+testinde gerçek Mongo. Veri kaynağını seçip açan tek yer `infrastructure/catalog-source.ts`'tir.
 
 ### Üç port, her use-case yalnızca ihtiyacını alır
 
-| Port              | Metotlar                                      | Kullanan use-case                           |
-| ----------------- | --------------------------------------------- | ------------------------------------------- |
-| `CategoryReader`  | `listCategories`                              | `ListCategories`                            |
-| `ProductReader`   | `listProducts`                                | `ListProducts`                              |
-| `DarkStoreReader` | `darkStoreExists`, `listDarkStoresByDistance` | `ListProducts` (varlık), `ResolveDarkStore` |
-
-İlk sürümde üçü tek bir `CatalogRepository` arayüzündeydi; her use-case üç konunun tamamına
-bağımlıydı ve arayüz her yeni RPC ile büyüyordu (SRP / Interface Segregation). Mongo tarafında
-her repository kendi portunu doğrudan uygular; seed yazımı ayrı bir sınıftadır
-(`mongo/mongo-catalog-seeder.ts`).
-
-Mongo'yu doldurmak: `pnpm seed` (kök). Üç koleksiyon **tek transaction**'da silinip yeniden
-yazılır; tekrar koşmak güvenlidir, yarıda kalan seed hiçbir koleksiyonu değiştirmez.
-`NODE_ENV=production` iken reddeder — Docker imajı production olduğu için konteynerde seed
-bilinçli olarak `NODE_ENV=development` verilmeden çalışmaz.
+| Port             | Metotlar                                             | Kullanan use-case                                    |
+| ---------------- | ---------------------------------------------------- | ---------------------------------------------------- |
+| `CategoryReader` | `listCategories`                                     | `ListCategories`, `ListMarketCategories`             |
+| `MarketReader`   | `getMarket`, `marketExists`, `listMarketsByDistance` | `ListNearbyMarkets`, `GetMarket`, varlık kontrolleri |
+| `OfferReader`    | `listOffers`, `listCategoryIdsWithOffers`            | `ListProducts`, `ListMarketCategories`               |
 
 ### Belge şekli ve indeksler
 
-| Koleksiyon   | Domain'de olmayan alan                    | İndeks                                                 |
-| ------------ | ----------------------------------------- | ------------------------------------------------------ |
-| `categories` | —                                         | `slug` unique                                          |
-| `products`   | `darkStoreIds[]` (çeşit), `searchTerms[]` | `sku` unique, `{categoryId,_id}`, `{darkStoreIds,_id}` |
-| `darkstores` | `location` GeoJSON `[boylam, enlem]`      | `location` 2dsphere (`ResolveDarkStore`, `$geoNear`)   |
+| Koleksiyon   | Domain'de olmayan alan                                   | İndeks                                                                       |
+| ------------ | -------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `categories` | —                                                        | `slug` unique                                                                |
+| `products`   | — (fiyat yok)                                            | `sku` unique                                                                 |
+| `markets`    | `location` GeoJSON `[boylam, enlem]`                     | `location` 2dsphere (`$geoNear`)                                             |
+| `offers`     | `product` kopyası, `categoryId` kopyası, `searchTerms[]` | `{marketId,productId}` unique, `{marketId,categoryId,_id}`, `{marketId,_id}` |
 
-- **`darkStoreIds`:** "bu depo bu ürünü satıyor mu" bilgisi (stok değil, B27). Depo filtresi
-  tek sorguda çözülür.
+- **Kopyalar:** teklif, listeleme alanlarını üründen kopyalar; market sayfası tek sorguda,
+  `$lookup` ve N+1 olmadan listelenir. Kopyaları yalnızca catalog'un seeder'ı yazar.
 - **`searchTerms`:** ad ve açıklamanın Türkçe küçük harfli hali. Mongo'nun regex `i` bayrağı
-  `İ → i` eşlemesini bilmez; normalizasyon yazım anında `domain/searchKey` ile yapılır, bellek
-  uygulamasıyla aynı fonksiyon.
-- İndeksler sorgulara göre seçildi: filtre + imleç sıralaması (`_id`) tek indeksten okunur.
-  Metin araması (başı açık regex) indeks kullanamaz; katalog küçük olduğu için kabul edildi.
-- **Görseller göreli yol** (`/img/cat/sut.png`): mutlak URL'yi gateway (BFF) `ASSET_BASE_URL`
-  ile kurar. Veriye alan adı yazılmaz.
+  `İ → i` eşlemesini bilmez; normalizasyon `domain/searchKey` ile, bellek uygulamasıyla aynı.
+- **Kimlikler** okunabilir ve önekli (`mkt_migros-jet-moda`, `prd_sut-1l`); teklif kimliği
+  market ve üründen **türetilir** (`ofr_migros-jet-moda-sut-1l`) — seed tekrarında değişmez.
+- **Görseller ve logolar göreli yol**; mutlak URL'yi gateway (BFF) `ASSET_BASE_URL` ile kurar.
 
-Yazılmamış RPC'ler boş bırakılmadı, açıkça `UNIMPLEMENTED` dönüyor. Sebep: grpc-js, tanımda
-olup uygulamada olmayan her metot için açılışta hata seviyesinde günlük yazar — her açılışta
-"bir şey bozuk" izlenimi verirdi. Bu bir `AppError` de değil: "bu uç henüz yok" iş hatası
-değil, protokol gerçeğidir.
+Mongo'yu doldurmak: `pnpm seed` (kök). Dört koleksiyon **tek transaction**'da silinip yeniden
+yazılır; tekrar koşmak güvenlidir, yarıda kalan seed hiçbir koleksiyonu değiştirmez.
+`NODE_ENV=production` iken reddeder.
 
-## `ResolveDarkStore`
-
-Konuma en yakın 5 depo (`DARK_STORE_CANDIDATE_LIMIT`) mesafeye göre getirilir, karar
-`domain/dark-store-resolution.ts`'teki saf kuralla verilir:
-
-| Durum                               | Cevap                                                             |
-| ----------------------------------- | ----------------------------------------------------------------- |
-| Yarıçap içinde **açık** depo var    | En yakın açık depo + `distance_meters` (tam sayı metre)           |
-| Kapsayan depoların **hepsi kapalı** | `NO_STORE` — `reason: STORE_CLOSED`, `nearest_distance_meters`    |
-| Hiçbir deponun yarıçapında değil    | `NO_STORE` — `reason: OUT_OF_RANGE`, `nearest_distance_meters`    |
-| Katalogda depo yok                  | `NO_STORE` — `reason: NO_STORES`                                  |
-| Konum yok / WGS84 dışı              | `VALIDATION_FAILED` (proto3'te eksik konum `(0,0)` gibi işlenmez) |
-
-`NO_STORE` gRPC'de `NOT_FOUND`'dur; ayrıntı `x-app-error` içinde metin → metin taşınır (proto
-`ErrorDetail.metadata` ile aynı anahtarlar). Kapalı depo ayrı bir hata kodu değildir: kullanıcı
-için sonuç aynıdır, fark yalnızca `reason`'dadır.
-
-**Mesafe iki modda aynı:** Mongo `$geoNear` kullanır; bellek (MOCK) haversine ile hesaplar ve
-MongoDB'nin kullandığı **ekvator yarıçapını (6378,1 km)** kullanır. Ortalama yarıçapla yazılan
-ilk sürüm 71 km'de 79 m sapıyordu; sözleşme testi iki modu ±1 m içinde tutar.
-
-```bash
-grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/catalog.proto \
-  -d '{"location":{"lat":40.9885,"lng":29.0262}}' \
-  localhost:50051 getir.catalog.v1.CatalogService/ResolveDarkStore     # Ev -> ds_kadikoy, 228 m
-```
+> **Eski yerel veri:** T4.1–T4.2'de seed edilmiş bir geliştirme veritabanında `darkstores`
+> koleksiyonu kalır; yeni seed onu silmez (şema değişikliği seed'in işi değil). Temizlemek için
+> `pnpm infra:reset && pnpm infra:up && pnpm seed`.
 
 ## Katmanlar
 
 ```text
 src/
-├── domain/            # saf iş kuralı — mongodb/grpc/proto importu YOK
-│   ├── catalog.ts            # Category, Product, DarkStore + sıralama/arama kuralları
-│   ├── pagination.ts         # sayfa boyutu sınırları + imleçle dilimleme
-│   ├── category-reader.ts    # okuma portları: kategori,
-│   ├── product-reader.ts     #   ürün (filtre, sayfa),
-│   ├── dark-store-reader.ts  #   depo (varlık, mesafe)
-│   ├── dark-store-resolution.ts  # hangi depo hizmet verir kuralı
-│   ├── geo.ts                # mesafe (haversine, MongoDB yarıçapı)
-│   └── catalog-snapshot.ts   # seed portu + katalogun tamamı
-├── application/       # bir dosya = bir use-case
-│   ├── list-categories.ts
-│   ├── list-products.ts
-│   ├── resolve-dark-store.ts
-│   └── seed-catalog.ts
-├── infrastructure/    # portların uygulaması
-│   ├── fixtures.ts        # demo verisi (MOCK + seed tek kaynak)
-│   ├── catalog-source.ts  # MOCK ya da Mongo: kaynağı açar, kapanışı verir
-│   ├── memory/            # MOCK: port başına bellek okuyucusu
-│   └── mongo/             # belgeler, çeviriciler, port başına repository, seed yazıcısı
-├── interfaces/grpc/   # ince handler'lar: doğrula → çağır → çevir
-│   ├── schemas.ts     # Zod istek şemaları
-│   ├── mappers.ts     # domain → proto
-│   └── catalog-handlers.ts
-├── config/            # env.ts (process.env yalnızca burada) + constants.ts
-├── bootstrap.ts       # elle bağımlılık kurulumu
-├── main.ts            # süreç yaşam döngüsü
-├── seed.ts            # pnpm seed giriş noktası
-└── healthcheck.ts     # Docker HEALTHCHECK: portu env.ts'ten alır, yoklama service-kit'te
+├── domain/                # saf iş kuralı — mongodb/grpc/proto importu YOK
+│   ├── catalog.ts             # Category, Product, Market, Offer + sıralama/arama/kimlik kuralları
+│   ├── market-coverage.ts     # hangi market hizmet verir (kapsama, kapalı/yarıçap dışı)
+│   ├── geo.ts                 # mesafe (haversine, MongoDB yarıçapı)
+│   ├── pagination.ts          # sayfa boyutu sınırları + imleçle dilimleme
+│   ├── category-reader.ts     # okuma portları: kategori,
+│   ├── market-reader.ts       #   market,
+│   ├── offer-reader.ts        #   teklif (filtre, sayfa)
+│   └── catalog-snapshot.ts    # seed portu + katalogun tamamı
+├── application/           # bir dosya = bir use-case
+│   ├── list-categories.ts, list-nearby-markets.ts, get-market.ts
+│   ├── list-market-categories.ts, list-products.ts, seed-catalog.ts
+├── infrastructure/
+│   ├── fixtures.ts + fixtures/   # demo verisi: katalog, marketler, teklifler (MOCK + seed tek kaynak)
+│   ├── catalog-source.ts         # MOCK ya da Mongo: kaynağı açar, kapanışı verir
+│   ├── memory/                   # MOCK: port başına bellek okuyucusu
+│   └── mongo/                    # belgeler, çeviriciler, koleksiyon başına repository, seed yazıcısı
+├── interfaces/grpc/       # ince handler'lar: doğrula → çağır → çevir
+├── config/                # env.ts (process.env yalnızca burada) + constants.ts
+├── bootstrap.ts           # elle bağımlılık kurulumu
+├── main.ts                # süreç yaşam döngüsü
+├── seed.ts                # pnpm seed giriş noktası
+└── healthcheck.ts         # Docker HEALTHCHECK: portu env.ts'ten alır, yoklama service-kit'te
 ```
-
-Ok hiçbir zaman yukarı gitmez: `infrastructure/`, `application/`'ı çağıramaz.
-
-## İki karar
-
-**Sayfalama imleci offset değil, "son görülen kimlik".** Katalog sıralaması stok, kampanya
-ve popülerlikle değişir; offset ile ikinci sayfa istendiğinde liste kaymış olabilir ve aynı
-ürün iki kez görünür ya da hiç görünmez. Kayıtlar kimliğe göre sıralı olduğu için sonraki
-sayfa "kimliği bundan büyük olanlar" ile deterministik bulunur — Mongo'da
-`{ _id: { $gt: token } }` sorgusuna birebir çevrilir.
-
-**Boş metin = filtre yok.** proto3'te set edilmemiş string alan çözüldüğünde `''` olur;
-"gönderilmedi" ile "boş gönderildi" ayırt edilemez. Şema bu boşlukları `undefined`'a çevirir,
-use-case yalnızca gerçek filtreleri görür.
 
 ## Çalıştırma ve doğrulama
 
@@ -157,23 +117,21 @@ MONGO_URI="mongodb://localhost:27017/getir?directConnection=true" \
   pnpm --filter @getir/catalog-service start
 ```
 
-`start`, `dev` ve `seed` kök `.env`'yi okur (`--env-file-if-exists`); dosya yoksa ortam
-değişkenleri geçerlidir.
-
 ```bash
-grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/catalog.proto \
-  localhost:50051 getir.catalog.v1.CatalogService/ListCategories
+G="grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/catalog.proto"
 
-grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/catalog.proto \
-  -d '{"category_id":"cat_2","page":{"page_size":2}}' \
-  localhost:50051 getir.catalog.v1.CatalogService/ListProducts
+$G -d '{"location":{"lat":40.9885,"lng":29.0262}}' \
+  localhost:50051 getir.catalog.v1.CatalogService/ListNearbyMarkets     # Ev -> 3 Kadikoy marketi
 
-grpcurl -plaintext -proto packages/service-kit/proto/health.proto \
-  -d '{"service":"getir.catalog.v1.CatalogService"}' localhost:50051 grpc.health.v1.Health/Check
+$G -d '{"market_id":"mkt_a101-caferaga","query":"süt"}' \
+  localhost:50051 getir.catalog.v1.CatalogService/ListProducts          # A101 fiyatlariyla
+
+$G -d '{"market_id":"mkt_kardesler-manavi"}' \
+  localhost:50051 getir.catalog.v1.CatalogService/ListMarketCategories  # yalnizca meyve-sebze
 ```
 
-Aynı akışın otomatik karşılığı `test/unit/catalog-grpc.spec.ts`: gerçek sunucu, gerçek
-istemci, dış bağımlılık yok.
+Aynı akışın otomatik karşılığı `test/unit/catalog-grpc.spec.ts`: gerçek sunucu, gerçek istemci,
+dış bağımlılık yok.
 
 ## Docker
 
@@ -182,11 +140,9 @@ docker build -f apps/catalog-service/Dockerfile -t getir/catalog-service .
 docker run --rm -p 50051:50051 -e MOCK=true getir/catalog-service
 ```
 
-Build bağlamı **depo köküdür**, app klasörü değil: servis `@getir/core`, `@getir/proto` ve
-`@getir/service-kit` paketlerine `workspace:*` ile bağlı. İmaj çok aşamalıdır (derleme
-araçları çalışma zamanına sızmaz), `node` kullanıcısıyla çalışır ve `HEALTHCHECK` servisin
-kendi `grpc.health.v1` ucunu sorar — konteynerde HTTP yok, `curl` ile kontrol edilemez.
+Build bağlamı **depo köküdür**. İmaj çok aşamalıdır, `node` kullanıcısıyla çalışır ve
+`HEALTHCHECK` servisin kendi `grpc.health.v1` ucunu sorar.
 
-Testler: `pnpm test:unit` (bellek, sözleşme, seed kapısı, çeviriciler) ve `pnpm test:int`
-(gerçek Mongo: sözleşme, seed sayıları ve tekrarı, indeksler, transaction geri alma, 3 demo
-adresinin 2dsphere'e karşı doğru depoya düşmesi).
+Testler: `pnpm test:unit` (bellek, sözleşmeler, use-case'ler, veri bütünlüğü, gRPC) ve
+`pnpm test:int` (gerçek Mongo: sözleşmeler, seed sayıları ve tekrarı, indeksler, transaction
+geri alma, 3 demo adresinin 2dsphere'e karşı doğru marketleri listelemesi).

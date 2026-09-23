@@ -29,9 +29,19 @@ const optionalText = z
 /** ListCategories parametresizdir; sema yine de calisir (ileride alan eklenirse kapi hazir). */
 export const listCategoriesRequestSchema = z.object({});
 
+/** Bos olamayan kimlik metni (proto3'te eksik alan "" gelir). */
+const requiredId = z
+  .string()
+  .transform((value) => value.trim())
+  .refine((value) => value !== '', { message: 'zorunlu' });
+
+/**
+ * ListProducts: market ZORUNLU (ADR-15). dark_store_id deprecated alan olarak
+ * telde gelebilir; sema onu okumaz, yok sayar.
+ */
 export const listProductsRequestSchema = z.object({
+  marketId: requiredId,
   categoryId: optionalText,
-  darkStoreId: optionalText,
   query: optionalText.refine(
     (value) => value === undefined || value.length >= MIN_SEARCH_QUERY_LENGTH,
     { message: `en az ${MIN_SEARCH_QUERY_LENGTH} karakter olmali` },
@@ -49,11 +59,11 @@ export const listProductsRequestSchema = z.object({
 export type ListProductsRequestInput = z.infer<typeof listProductsRequestSchema>;
 
 /**
- * ResolveDarkStore istegi. Konum ZORUNLUDUR: proto3'te mesaj alani set
- * edilmezse undefined gelir ve "konum yok" sessizce (0, 0) - Gine Korfezi -
- * gibi islenmemeli. Alt alanlardaki sinirlar WGS84 araligidir.
+ * ListNearbyMarkets. Konum ZORUNLUDUR: proto3'te mesaj alani set edilmezse
+ * undefined gelir ve "konum yok" sessizce (0, 0) - Gine Korfezi - gibi
+ * islenmemeli. Alt alanlardaki sinirlar WGS84 araligidir.
  */
-export const resolveDarkStoreRequestSchema = z.object({
+export const listNearbyMarketsRequestSchema = z.object({
   location: z.object(
     {
       lat: z.number().finite().min(-90).max(90),
@@ -62,3 +72,7 @@ export const resolveDarkStoreRequestSchema = z.object({
     { required_error: 'zorunlu' },
   ),
 });
+
+export const getMarketRequestSchema = z.object({ marketId: requiredId });
+
+export const listMarketCategoriesRequestSchema = z.object({ marketId: requiredId });

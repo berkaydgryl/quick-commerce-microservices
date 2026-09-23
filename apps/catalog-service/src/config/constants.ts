@@ -29,13 +29,13 @@ export const MIN_SEARCH_QUERY_LENGTH = 2;
 export const DEFAULT_CURRENCY = 'TRY';
 
 /**
- * ResolveDarkStore'da degerlendirilen en yakin depo sayisi.
+ * ListNearbyMarkets'te degerlendirilen en yakin market sayisi (ADR-15).
  *
- * NEDEN SINIR: her istekte tum depolari mesafeye gore siralamak depo sayisiyla
- * buyur. Teslimat yaricaplari birkac km oldugu icin bir konumu kapsayabilecek
- * depo en yakinlar arasindadir; 5, sehir ici yogun bir yerlesimde bile birbirine
- * yakin depolari kapsar. VARSAYIM: hicbir deponun yaricapi, kendisinden daha
- * yakin 5 depoyu atlayacak kadar buyuk degildir. Bu kosul bozulursa sinir
- * artirilir; sorgu degismez.
+ * NEDEN SINIR: her istekte tum marketleri mesafeye gore siralamak market
+ * sayisiyla buyur. Teslimat yaricaplari birkac km oldugu icin bir konumu
+ * kapsayan marketler en yakinlar arasindadir. Pazaryerinde ayni semtte bircok
+ * market olabildigi icin sinir, tek depo modelindeki 5'ten genistir.
+ * VARSAYIM: hicbir marketin yaricapi, kendisinden yakin 20 marketi atlayacak
+ * kadar buyuk degildir; bozulursa sinir artirilir, sorgu degismez.
  */
-export const DARK_STORE_CANDIDATE_LIMIT = 5;
+export const MARKET_CANDIDATE_LIMIT = 20;

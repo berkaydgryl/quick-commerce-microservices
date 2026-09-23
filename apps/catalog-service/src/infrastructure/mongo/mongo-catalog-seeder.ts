@@ -2,10 +2,18 @@
  * Seed portunun (CatalogSeedWriter) Mongo uygulamasi.
  */
 
+import { AppError } from '@getir/core';
 import type { MongoConnection } from '@getir/mongo-kit';
 
+import type { Product } from '../../domain/catalog.js';
 import type { CatalogSeedWriter, CatalogSnapshot } from '../../domain/catalog-snapshot.js';
-import { toCategoryDocument, toDarkStoreDocument, toProductDocument } from './mappers.js';
+import type { OfferDocument } from './documents.js';
+import {
+  toCategoryDocument,
+  toMarketDocument,
+  toOfferDocument,
+  toProductDocument,
+} from './mappers.js';
 import type { MongoCatalogRepositories } from './mongo-catalog.js';
 
 export class MongoCatalogSeeder implements CatalogSeedWriter {
@@ -18,42 +26,35 @@ export class MongoCatalogSeeder implements CatalogSeedWriter {
   }
 
   /**
-   * Uc koleksiyonu TEK transaction'da yeniden yazar: biri basarisiz olursa
-   * hicbiri degismez. Yarim katalog (urunu olan ama kategorisi olmayan)
+   * Dort koleksiyonu TEK transaction'da yeniden yazar: biri basarisiz olursa
+   * hicbiri degismez. Yarim katalog (teklifi olan ama urunu olmayan market)
    * istemcide bos ekran uretirdi.
    */
   async replaceAll(snapshot: CatalogSnapshot): Promise<void> {
-    const storesByProduct = invertAssortment(snapshot.assortment);
-    const { categories, products, darkStores } = this.repositories;
+    const offers = toOfferDocuments(snapshot);
+    const { categories, products, markets, offers: offerRepository } = this.repositories;
 
     await this.connection.withTransaction(async (session) => {
       await categories.replaceAll(snapshot.categories.map(toCategoryDocument), { session });
-      await products.replaceAll(
-        snapshot.products.map((product) =>
-          toProductDocument(product, storesByProduct.get(product.id) ?? []),
-        ),
-        { session },
-      );
-      await darkStores.replaceAll(snapshot.darkStores.map(toDarkStoreDocument), { session });
+      await products.replaceAll(snapshot.products.map(toProductDocument), { session });
+      await markets.replaceAll(snapshot.markets.map(toMarketDocument), { session });
+      await offerRepository.replaceAll(offers, { session });
     });
   }
 }
 
-/** depo -> urunler tablosunu urun -> depolar tablosuna cevirir. */
-function invertAssortment(
-  assortment: Readonly<Record<string, readonly string[]>>,
-): ReadonlyMap<string, readonly string[]> {
-  const storesByProduct = new Map<string, string[]>();
-  for (const [storeId, productIds] of Object.entries(assortment)) {
-    for (const productId of productIds) {
-      const stores = storesByProduct.get(productId) ?? [];
-      stores.push(storeId);
-      storesByProduct.set(productId, stores);
+/** Teklifleri urun kopyalariyla belgeye cevirir; olmayan urun veri hatasidir. */
+function toOfferDocuments(snapshot: CatalogSnapshot): OfferDocument[] {
+  const products = new Map<string, Product>(
+    snapshot.products.map((product) => [product.id, product]),
+  );
+  return snapshot.offers.map((seed) => {
+    const product = products.get(seed.productId);
+    if (product === undefined) {
+      throw AppError.internal(
+        `teklif olmayan urune isaret ediyor: ${seed.marketId} -> ${seed.productId}`,
+      );
     }
-  }
-  // Deterministik belge: ayni seed her kosuda ayni diziyi yazsin.
-  for (const stores of storesByProduct.values()) {
-    stores.sort();
-  }
-  return storesByProduct;
+    return toOfferDocument(seed, product);
+  });
 }

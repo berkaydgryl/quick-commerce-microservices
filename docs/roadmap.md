@@ -812,12 +812,12 @@ Minimum sepet tutarı ve kademeli teslimat ücreti, quick-commerce hissini veren
 total = subtotal - discount + deliveryFee
 ```
 
-| Kural                   | Kaynak                                           | Not                                     |
-| ----------------------- | ------------------------------------------------ | --------------------------------------- |
-| Minimum sepet tutarı    | `market.pricingRules.minBasketMinor`             | Markete özel (örnekler seed tablosunda) |
-| Teslimat ücreti         | `market.pricingRules.deliveryFeeMinor`           | Markete özel                            |
-| Ücretsiz teslimat eşiği | `market.pricingRules.freeDeliveryThresholdMinor` | Markete özel                            |
-| Maksimum sepet kalemi   | Platform sabiti MAX_ITEM_QTY = 30 / ürün         | Tüm marketlerde aynı                    |
+| Kural                   | Kaynak                                                                 | Not                                                                                                                                       |
+| ----------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Minimum sepet tutarı    | `market.pricingRules.minBasketMinor`                                   | Markete özel (örnekler seed tablosunda)                                                                                                   |
+| Teslimat ücreti         | `market.pricingRules.deliveryFeeMinor`                                 | Markete özel                                                                                                                              |
+| Ücretsiz teslimat eşiği | `market.pricingRules.freeDeliveryThresholdMinor`                       | Markete özel                                                                                                                              |
+| Maksimum sepet kalemi   | Platform sabiti: @getir/contracts `CART_ITEM_MAX_QUANTITY` = 99 / ürün | Tüm marketlerde aynı. Tek kaynak sözleşmedir; pricing ayrı bir sabit tanımlamaz (roadmap'in ilk sürümündeki MAX_ITEM_QTY = 30 kaldırıldı) |
 
 calculateCart(items, coupon, rules, context) — `rules` marketin kuralları, `context` kuponun ihtiyaç duyduğu bilgi (örn. `isFirstOrder`; pricing bunu sorgulamaz, çağıran verir) — döndürür: subtotalMinor, discountMinor, deliveryFeeMinor, totalMinor, canCheckout, amountToFreeDeliveryMinor, amountToMinBasketMinor. Son iki alan arayüze “şunu daha ekle” mesajını yazdırır; bu cümle Getir deneyiminin karakteridir.
 

@@ -1,29 +1,30 @@
 /**
- * Katalogun TAMAMI: seed'in yazdigi ve MOCK modunun okudugu veri.
+ * Katalogun TAMAMI: seed'in yazdigi ve MOCK modunun okudugu veri (ADR-15).
  *
  * Tek bir deger olarak tasinmasinin sebebi seed'in atomik olmasi: kategori,
- * urun ve depo birlikte yazilir ya da hic yazilmaz. Yarim bir katalog (urunleri
- * olan ama kategorisi olmayan) istemcide bos kategori ekrani uretirdi.
+ * urun, market ve teklif birlikte yazilir ya da hic yazilmaz.
  */
 
-import type { Category, DarkStore, Product } from './catalog.js';
+import type { Category, Market, Product } from './catalog.js';
+
+/** Teklifin seed bicimi: urun kimlikle baglanir, kimligi turetilir. */
+export interface OfferSeed {
+  readonly marketId: string;
+  readonly productId: string;
+  readonly priceMinor: number;
+  readonly isActive: boolean;
+}
 
 export interface CatalogSnapshot {
   readonly categories: readonly Category[];
   readonly products: readonly Product[];
-  readonly darkStores: readonly DarkStore[];
-  /**
-   * Depo -> o depoda SATILAN urun kimlikleri (cesit bilgisi).
-   * Stok DEGILDIR; adet inventory-svc'dedir (B27).
-   */
-  readonly assortment: Readonly<Record<string, readonly string[]>>;
+  readonly markets: readonly Market[];
+  readonly offers: readonly OfferSeed[];
 }
 
 /**
- * Katalogu bastan yazan depo (port). Uygulamasi infrastructure/mongo'dadir.
- *
- * "Ekle" degil "degistir": seed ikinci kez kosuldugunda ikinci bir kopya
- * olusmamali, katalog snapshot'taki hale gelmeli.
+ * Katalogu bastan yazan depo (port). "Ekle" degil "degistir": seed ikinci kez
+ * kosuldugunda ikinci bir kopya olusmamali.
  */
 export interface CatalogSeedWriter {
   replaceAll(snapshot: CatalogSnapshot): Promise<void>;
@@ -33,5 +34,6 @@ export interface CatalogSeedWriter {
 export interface SeedCounts {
   readonly categories: number;
   readonly products: number;
-  readonly darkStores: number;
+  readonly markets: number;
+  readonly offers: number;
 }

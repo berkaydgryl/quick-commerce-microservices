@@ -94,7 +94,7 @@ Ok yönü bağımlılık yönüdür: `order-svc` diğerlerini çağırır, kimse
 | `apps/web`               | TypeScript (React + Vite) | Mağaza arayüzü, sepet, geri sayım, canlı harita         | 5173  |
 | `apps/gateway`           | Go (Fiber)                | REST→gRPC çeviri, JWT, rate limit, idempotency key      | 8080  |
 | `apps/realtime-service`  | Node/TS                   | Socket.io odaları, event fan-out, yetki kontrolü        | 3001  |
-| `apps/catalog-service`   | Node/TS                   | Ürün, kategori ve dark store katalogları                | 50051 |
+| `apps/catalog-service`   | Node/TS                   | Market, ürün, teklif (fiyat) ve kategori katalogları    | 50051 |
 | `apps/inventory-service` | Node/TS                   | Stok gerçeği, atomik rezervasyon, TTL serbest bırakma   | 50052 |
 | `apps/order-service`     | Node/TS                   | Sipariş durum makinesi ve saga orkestrasyonu            | 50053 |
 | `apps/payment-service`   | Node/TS                   | Mock kart ödemesi + 3DS simülasyonu                     | 50054 |
@@ -119,7 +119,7 @@ ikisiyle birden yapmak yasaktır.
 ```mermaid
 flowchart TD
   A["Giriş / kayıt<br/>telefon + şifre, JWT"] --> B["Adres seçimi"]
-  B --> C["Depo çözümleme<br/>en yakın dark store"]
+  B --> C["Yakındaki marketler<br/>kullanıcı seçer (ADR-15)"]
   C --> D["Ürün listesi + arama<br/>stok rozetleri"]
   D --> E["Sepet<br/>min tutar, kurye ücreti, kupon"]
   E --> F["Rezervasyon + geri sayım<br/>stok atomik kilitlenir"]
@@ -277,7 +277,7 @@ itibarıyla geçmelidir; geçmiyorsa kurulum tamamlanmamıştır, devam etme.
 
 ```bash
 pnpm infra:up     # Mongo (replica set) + Redis
-pnpm seed         # catalog'u derler; 5 kategori, 15 urun, 2 dark store yazar (tekrar kosmak guvenli)
+pnpm seed         # catalog'u derler; 5 kategori, 15 urun, 6 market, 71 teklif yazar (tekrar kosmak guvenli)
 ```
 
 Seed kök `.env`'yi okur (yoksa ortam değişkenlerini). `NODE_ENV=production` iken reddeder.
@@ -332,11 +332,11 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/cat
   localhost:50051 getir.catalog.v1.CatalogService/ListCategories
 ```
 
-| Servis                                                     | Port  | Bugün ne yapıyor                                        |
-| ---------------------------------------------------------- | ----- | ------------------------------------------------------- |
-| [`catalog-service`](apps/catalog-service/README.md) (T4.1) | 50051 | `ListCategories`, `ListProducts` — Mongo ya da `MOCK`   |
-| [`order-service`](apps/order-service/README.md) (T3.2)     | 50053 | `CreateDraftOrder`, `CreateOrder` — bellekte, ödeme yok |
-| [`gateway`](apps/gateway/README.md) (T3.4, Go)             | 8080  | `GET /healthz`, `GET /v1/categories`                    |
+| Servis                                                     | Port  | Bugün ne yapıyor                                                               |
+| ---------------------------------------------------------- | ----- | ------------------------------------------------------------------------------ |
+| [`catalog-service`](apps/catalog-service/README.md) (T4.8) | 50051 | Pazaryeri: yakındaki marketler, market sayfası, teklifler — Mongo ya da `MOCK` |
+| [`order-service`](apps/order-service/README.md) (T3.2)     | 50053 | `CreateDraftOrder`, `CreateOrder` — bellekte, ödeme yok                        |
+| [`gateway`](apps/gateway/README.md) (T3.4, Go)             | 8080  | `GET /healthz`, `GET /v1/categories`                                           |
 
 Katalog T4.1'den beri Mongo'dan okur: `MOCK=true` ise aynı demo verisini bellekten döndürür
 ve Mongo istemez, değilse `MONGO_URI` zorunludur (yoksa açılışta ölür). Kök `.env` varsa okunur;
@@ -402,7 +402,7 @@ Tek repo, üç üst klasör: `apps/` çalışan process'ler, `packages/` paylaş
 quick-commerce-microservices/
 ├── apps/                      # Çalışan process'ler (Gün 3'ten itibaren doluyor)
 │   ├── gateway/               # Go - tek dış kapı  (T3.4 ilk proxy)
-│   ├── catalog-service/       # Node - ürün, kategori, dark store  (T3.1)
+│   ├── catalog-service/       # Node - market, ürün, teklif, kategori  (T4.8 pazaryeri)
 │   ├── inventory-service/     # Node - stok, rezervasyon, süpürücü
 │   ├── order-service/         # Node - durum makinesi, saga, outbox  (T3.2 iskelet)
 │   ├── payment-service/       # Node - mock kart + 3DS
@@ -543,7 +543,7 @@ geçersiz kaldığında mevcut dosyanın durumu güncellenir ve yerini alan yeni
 
 `pnpm demo` bu sırayı otomatik koşturacak şekilde yazılacaktır (Gün 7):
 
-1. **0:00 — Kayıt ve konum.** Kayıt olunur, konum seçilir; en yakın dark store belirlenir.
+1. **0:00 — Kayıt ve konum.** Kayıt olunur, adres seçilir; yakındaki marketler listelenir ve biri seçilir (ADR-15).
 2. **1:00 — Ürün listesi ve sepet.** Stok rozetleri görünür durumdayken sepete 3 ürün eklenir.
 3. **2:00 — Rezervasyon ve geri sayım.** Ödeme ekranı açılır, geri sayım başlar; ikinci tarayıcıda
    aynı ürünün stoğunun azaldığı gösterilir.

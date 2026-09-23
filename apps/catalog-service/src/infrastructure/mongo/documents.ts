@@ -1,9 +1,9 @@
 /**
- * Katalog koleksiyonlarinin Mongo'daki SEKLI.
+ * Katalog koleksiyonlarinin Mongo'daki SEKLI (ADR-15).
  *
  * Domain tipinden ayri tutulur: belge, sorguyu hizlandirmak icin domain'de
- * olmayan alanlar tasir (darkStoreIds, searchTerms) ve konumu GeoJSON olarak
- * saklar. Ceviri tek yerdedir: mappers.ts.
+ * olmayan alanlar tasir (offers'taki kopyalar, searchTerms) ve konumu GeoJSON
+ * olarak saklar. Ceviri tek yerdedir: mappers.ts.
  */
 
 import type { BaseDocument } from '@getir/mongo-kit';
@@ -14,7 +14,8 @@ import type { ProductUnit } from '../../domain/catalog.js';
 export const COLLECTIONS = {
   CATEGORIES: 'categories',
   PRODUCTS: 'products',
-  DARK_STORES: 'darkstores',
+  MARKETS: 'markets',
+  OFFERS: 'offers',
 } as const;
 
 export interface CategoryDocument extends BaseDocument {
@@ -25,28 +26,14 @@ export interface CategoryDocument extends BaseDocument {
   imageUrl: string;
 }
 
+/** Ortak urun. Fiyat YOK (ADR-15). */
 export interface ProductDocument extends BaseDocument {
   sku: string;
   name: string;
   description: string;
-  /** Kurus cinsinden tam sayi. */
-  priceMinor: number;
   categoryId: string;
   unit: ProductUnit;
   imageUrl: string;
-  isActive: boolean;
-  /**
-   * Bu urunu SATAN depolar (cesit bilgisi, stok degil - B27). Depo filtresi
-   * { darkStoreIds: id } ile tek sorguda cozulur; ayri bir "assortment"
-   * koleksiyonu ikinci bir okuma ve birlestirme demekti.
-   */
-  darkStoreIds: string[];
-  /**
-   * Arama icin normalize edilmis ad ve aciklama (domain/searchKey).
-   * Yazim aninda uretilir, cunku Mongo'nun regex "i" bayragi Turkce harf
-   * kurallarini bilmez ("İ" -> "i" eslesmez).
-   */
-  searchTerms: string[];
 }
 
 /** GeoJSON noktasi: koordinat sirasi [BOYLAM, ENLEM] - tersi degil. */
@@ -55,10 +42,42 @@ export interface GeoPoint {
   coordinates: [number, number];
 }
 
-export interface DarkStoreDocument extends BaseDocument {
+export interface MarketDocument extends BaseDocument {
   name: string;
-  /** 2dsphere indeksi bu alan uzerindedir (ResolveDarkStore, T4.2). */
+  brand: string;
+  logoUrl: string;
+  /** 2dsphere indeksi bu alan uzerindedir (ListNearbyMarkets, $geoNear). */
   location: GeoPoint;
   deliveryRadiusMeters: number;
   isOpen: boolean;
+  deliveryTime: { minMinutes: number; maxMinutes: number };
+  rating: { averageTenths: number; count: number };
+  pricingRules: {
+    minBasketMinor: number;
+    deliveryFeeMinor: number;
+    freeDeliveryThresholdMinor: number;
+  };
+}
+
+/**
+ * Teklif: fiyatin sahibi.
+ *
+ * Listeleme alanlari (productSnapshot) urunden KOPYALANIR: market sayfasi tek
+ * sorguda, $lookup ve N+1 olmadan listelenir. Kopyayi YALNIZCA catalog'un
+ * seeder'i yazar; urun degistiginde tekliflerle birlikte yeniden yazilir.
+ */
+export interface OfferDocument extends BaseDocument {
+  marketId: string;
+  productId: string;
+  priceMinor: number;
+  isActive: boolean;
+  /** Listeleme ve kategori filtresi icin kopya. */
+  product: ProductDocument;
+  /** Kategori filtresi + imlec indeksi icin ust seviyede tekrar edilir. */
+  categoryId: string;
+  /**
+   * Arama icin normalize edilmis ad ve aciklama (domain/searchKey). Mongo'nun
+   * regex "i" bayragi Turkce harf kurallarini bilmez ("İ" -> "i" eslesmez).
+   */
+  searchTerms: string[];
 }
