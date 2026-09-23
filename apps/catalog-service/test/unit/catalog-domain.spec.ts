@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   matchesQuery,
+  offerIdFor,
   PRODUCT_UNIT,
   sortCategories,
-  sortProducts,
+  sortOffers,
 } from '../../src/domain/catalog.js';
-import type { Category, Product } from '../../src/domain/catalog.js';
+import type { Category, Offer, Product } from '../../src/domain/catalog.js';
 
 function category(id: string, name: string, sortOrder: number): Category {
   return { id, name, slug: id, sortOrder, imageUrl: '' };
@@ -17,12 +18,14 @@ const product: Product = {
   sku: 'SUT-1L',
   name: 'Süt 1 L',
   description: 'Günlük pastörize tam yağlı süt',
-  priceMinor: 3490,
   categoryId: 'cat_1',
   unit: PRODUCT_UNIT.LITER,
   imageUrl: '',
-  isActive: true,
 };
+
+function offer(id: string): Offer {
+  return { id, marketId: 'mkt_a', product, priceMinor: 3490, isActive: true };
+}
 
 describe('sortCategories', () => {
   it('sort_order kucukten buyuge dizer', () => {
@@ -45,14 +48,24 @@ describe('sortCategories', () => {
   });
 });
 
-describe('sortProducts', () => {
+describe('sortOffers', () => {
   it('kimlige gore kararli sira uretir (sayfalama imleci buna dayanir)', () => {
-    const sorted = sortProducts([
-      { ...product, id: 'prd_10' },
-      { ...product, id: 'prd_02' },
-    ]);
+    const sorted = sortOffers([offer('ofr_b-10'), offer('ofr_b-02'), offer('ofr_a-99')]);
 
-    expect(sorted.map((item) => item.id)).toEqual(['prd_02', 'prd_10']);
+    expect(sorted.map((item) => item.id)).toEqual(['ofr_a-99', 'ofr_b-02', 'ofr_b-10']);
+  });
+
+  it('IKILI siralama: tire harften once gelir (Mongo ile ayni)', () => {
+    // localeCompare tireyi yok sayabilirdi; imlec "_id > token" ikili calisir.
+    const sorted = sortOffers([offer('ofr_ab'), offer('ofr_a-b')]);
+
+    expect(sorted.map((item) => item.id)).toEqual(['ofr_a-b', 'ofr_ab']);
+  });
+});
+
+describe('offerIdFor', () => {
+  it('market ve urunden turetilir, seed tekrarinda degismez', () => {
+    expect(offerIdFor('mkt_migros-jet-moda', 'prd_sut-1l')).toBe('ofr_migros-jet-moda-sut-1l');
   });
 });
 

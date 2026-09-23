@@ -12,16 +12,16 @@ import type { MongoEnv } from '@getir/mongo-kit';
 
 import { SERVICE_NAME } from '../config/constants.js';
 import type { CategoryReader } from '../domain/category-reader.js';
-import type { DarkStoreReader } from '../domain/dark-store-reader.js';
-import type { ProductReader } from '../domain/product-reader.js';
+import type { MarketReader } from '../domain/market-reader.js';
+import type { OfferReader } from '../domain/offer-reader.js';
 import { createInMemoryReaders } from './memory/in-memory-catalog.js';
 import { createMongoCatalogRepositories, ensureCatalogIndexes } from './mongo/mongo-catalog.js';
 
 /** Servisin okudugu uc port. Use-case'ler bunlardan YALNIZCA ihtiyacini alir. */
 export interface CatalogReaders {
   readonly categories: CategoryReader;
-  readonly products: ProductReader;
-  readonly darkStores: DarkStoreReader;
+  readonly markets: MarketReader;
+  readonly offers: OfferReader;
 }
 
 export interface CatalogSource {
@@ -65,5 +65,10 @@ export async function openCatalogSource(
     throw error;
   }
 
-  return { readers: repositories, name: 'mongo', close: () => connection.close() };
+  const readers: CatalogReaders = {
+    categories: repositories.categories,
+    markets: repositories.markets,
+    offers: repositories.offers,
+  };
+  return { readers, name: 'mongo', close: () => connection.close() };
 }

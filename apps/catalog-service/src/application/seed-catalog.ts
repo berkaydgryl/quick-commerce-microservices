@@ -28,7 +28,8 @@ export function createSeedCatalog(deps: SeedCatalogDeps): SeedCatalog {
     return {
       categories: deps.snapshot.categories.length,
       products: deps.snapshot.products.length,
-      darkStores: deps.snapshot.darkStores.length,
+      markets: deps.snapshot.markets.length,
+      offers: deps.snapshot.offers.length,
     };
   };
 }

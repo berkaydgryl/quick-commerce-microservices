@@ -35,12 +35,21 @@ export function demoLocation(title: DemoAddressTitle): GeoPoint {
 }
 
 /**
- * Adreslerin depolara beklenen mesafeleri (metre, yuvarlanmis). Haversine ile
- * MongoDB'nin ekvator yaricapiyla hesaplandi; Mongo $geoNear ile +-1 m icinde
- * esit oldugu sozlesme testinde olculur.
+ * Adrese hizmet veren marketler ve mesafeleri (metre, yuvarlanmis), YAKINDAN
+ * UZAGA. Haversine ile MongoDB'nin ekvator yaricapiyla olculdu; Mongo $geoNear
+ * ile +-1 m icinde esit oldugu sozlesme testinde olculur.
  */
-export const EXPECTED_NEAREST = {
-  Ev: { storeId: 'ds_kadikoy', meters: 228 },
-  İş: { storeId: 'ds_besiktas', meters: 210 },
-  Yazlık: { storeId: 'ds_kadikoy', meters: 71_240 },
-} as const satisfies Record<DemoAddressTitle, { storeId: string; meters: number }>;
+export const EXPECTED_NEARBY = {
+  Ev: [
+    { marketId: 'mkt_a101-caferaga', meters: 216 },
+    { marketId: 'mkt_kardesler-manavi', meters: 324 },
+    { marketId: 'mkt_migros-jet-moda', meters: 405 },
+  ],
+  İş: [
+    { marketId: 'mkt_migros-jet-besiktas', meters: 101 },
+    { marketId: 'mkt_carrefour-express-barbaros', meters: 323 },
+    // KAPALI: listede kalir ("Kapali" rozeti).
+    { marketId: 'mkt_a101-abbasaga', meters: 478 },
+  ],
+  Yazlık: [],
+} as const satisfies Record<DemoAddressTitle, readonly { marketId: string; meters: number }[]>;

@@ -1,5 +1,5 @@
 /**
- * CatalogService gRPC handler'lari.
+ * CatalogService gRPC handler'lari (ADR-15: pazaryeri).
  *
  * Handler'in isi UCTUR ve ucu de burada bitiyor: dogrula (sema), use-case'i
  * cagir, cevabi sozlesme bicimine cevir. Is kurali yok, sorgu yok, try/catch
@@ -12,83 +12,112 @@ import type { catalogV1 } from '@getir/proto';
 import { unaryHandler, unimplemented } from '@getir/service-kit';
 import type { UntypedServiceImplementation } from '@grpc/grpc-js';
 
+import type { GetMarket } from '../../application/get-market.js';
 import type { ListCategories } from '../../application/list-categories.js';
+import type { ListMarketCategories } from '../../application/list-market-categories.js';
+import type { ListNearbyMarkets } from '../../application/list-nearby-markets.js';
 import type { ListProducts } from '../../application/list-products.js';
-import type { ResolveDarkStore } from '../../application/resolve-dark-store.js';
-import { toProtoCategory, toProtoDarkStore, toProtoProduct } from './mappers.js';
+import { toProtoCategory, toProtoMarket, toProtoOffer } from './mappers.js';
 import {
+  getMarketRequestSchema,
   listCategoriesRequestSchema,
+  listMarketCategoriesRequestSchema,
+  listNearbyMarketsRequestSchema,
   listProductsRequestSchema,
-  resolveDarkStoreRequestSchema,
 } from './schemas.js';
 
 export interface CatalogHandlerDeps {
   readonly listCategories: ListCategories;
+  readonly listNearbyMarkets: ListNearbyMarkets;
+  readonly getMarket: GetMarket;
+  readonly listMarketCategories: ListMarketCategories;
   readonly listProducts: ListProducts;
-  readonly resolveDarkStore: ResolveDarkStore;
   readonly logger?: Logger;
 }
 
 export function createCatalogImplementation(
   deps: CatalogHandlerDeps,
 ): UntypedServiceImplementation {
-  const logger = deps.logger;
+  const logger = deps.logger === undefined ? {} : { logger: deps.logger };
 
   return {
     listCategories: unaryHandler({
       name: 'ListCategories',
       schema: listCategoriesRequestSchema,
-      ...(logger === undefined ? {} : { logger }),
+      ...logger,
       handle: async (): Promise<catalogV1.ListCategoriesResponse> => ({
         categories: (await deps.listCategories()).map(toProtoCategory),
+      }),
+    }),
+
+    listNearbyMarkets: unaryHandler({
+      name: 'ListNearbyMarkets',
+      schema: listNearbyMarketsRequestSchema,
+      ...logger,
+      handle: async (input): Promise<catalogV1.ListNearbyMarketsResponse> => ({
+        markets: (await deps.listNearbyMarkets(input.location)).map(
+          ({ market, distanceMeters }) => ({
+            market: toProtoMarket(market),
+            distanceMeters,
+          }),
+        ),
+      }),
+    }),
+
+    getMarket: unaryHandler({
+      name: 'GetMarket',
+      schema: getMarketRequestSchema,
+      ...logger,
+      handle: async (input): Promise<catalogV1.GetMarketResponse> => ({
+        market: toProtoMarket(await deps.getMarket(input.marketId)),
+      }),
+    }),
+
+    listMarketCategories: unaryHandler({
+      name: 'ListMarketCategories',
+      schema: listMarketCategoriesRequestSchema,
+      ...logger,
+      handle: async (input): Promise<catalogV1.ListMarketCategoriesResponse> => ({
+        categories: (await deps.listMarketCategories(input.marketId)).map(toProtoCategory),
       }),
     }),
 
     listProducts: unaryHandler({
       name: 'ListProducts',
       schema: listProductsRequestSchema,
-      ...(logger === undefined ? {} : { logger }),
-      handle: async (input): Promise<catalogV1.ListProductsResponse> => {
-        const page = await deps.listProducts({
+      ...logger,
+      handle: async ({
+        marketId,
+        categoryId,
+        query,
+        page,
+      }): Promise<catalogV1.ListProductsResponse> => {
+        const result = await deps.listProducts({
           filter: {
-            ...(input.categoryId === undefined ? {} : { categoryId: input.categoryId }),
-            ...(input.darkStoreId === undefined ? {} : { darkStoreId: input.darkStoreId }),
-            ...(input.query === undefined ? {} : { query: input.query }),
+            marketId,
+            ...(categoryId === undefined ? {} : { categoryId }),
+            ...(query === undefined ? {} : { query }),
           },
-          pageSize: input.page?.pageSize,
-          pageToken: input.page?.pageToken,
+          pageSize: page?.pageSize,
+          pageToken: page?.pageToken,
         });
-
         return {
-          products: page.items.map(toProtoProduct),
-          page: { nextPageToken: page.nextPageToken, totalSize: page.totalSize },
-          // T4.7 sozlesmesi (ADR-15): teklifler T4.8'de doldurulur.
-          offers: [],
+          // Deprecated alan (ADR-15): fiyatsiz urun listesi artik doldurulmaz.
+          products: [],
+          offers: result.items.map(toProtoOffer),
+          page: { nextPageToken: result.nextPageToken, totalSize: result.totalSize },
         };
       },
     }),
 
-    resolveDarkStore: unaryHandler({
-      name: 'ResolveDarkStore',
-      schema: resolveDarkStoreRequestSchema,
-      ...(logger === undefined ? {} : { logger }),
-      handle: async (input): Promise<catalogV1.ResolveDarkStoreResponse> => {
-        const resolved = await deps.resolveDarkStore(input.location);
-        return {
-          darkStore: toProtoDarkStore(resolved.store),
-          distanceMeters: resolved.distanceMeters,
-        };
-      },
-    }),
+    // DEPRECATED (ADR-15): sistem market atamaz, kullanici secer. Sozlesmede
+    // duruyor (buf breaking), uygulamasi bilerek yok; mesaj yerini soyler.
+    resolveDarkStore: unimplemented('ResolveDarkStore', 'deprecated - ListNearbyMarkets kullanin'),
 
     // Sozlesmede tanimli ama HENUZ UYGULANMAMIS RPC'ler; gerekce
     // @getir/service-kit grpc/unimplemented.ts'te.
-    getProduct: unimplemented('GetProduct', 'T4'),
-    batchGetProducts: unimplemented('BatchGetProducts', 'T4'),
-    // Pazaryeri RPC'leri (T4.7 sozlesmesi): uygulamasi T4.8.
-    listNearbyMarkets: unimplemented('ListNearbyMarkets', 'T4.8'),
-    getMarket: unimplemented('GetMarket', 'T4.8'),
-    listMarketCategories: unimplemented('ListMarketCategories', 'T4.8'),
+    getProduct: unimplemented('GetProduct', 'T8.4'),
+    batchGetProducts: unimplemented('BatchGetProducts', 'T9.3'),
     batchGetOffers: unimplemented('BatchGetOffers', 'T9.3'),
   };
 }

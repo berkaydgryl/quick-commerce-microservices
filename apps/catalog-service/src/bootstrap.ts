@@ -10,9 +10,11 @@ import type { Logger } from '@getir/core';
 import { catalogV1 } from '@getir/proto';
 import type { GrpcServiceRegistration } from '@getir/service-kit';
 
+import { createGetMarket } from './application/get-market.js';
 import { createListCategories } from './application/list-categories.js';
+import { createListMarketCategories } from './application/list-market-categories.js';
+import { createListNearbyMarkets } from './application/list-nearby-markets.js';
 import { createListProducts } from './application/list-products.js';
-import { createResolveDarkStore } from './application/resolve-dark-store.js';
 import { CATALOG_SERVICE_FULL_NAME } from './config/constants.js';
 import type { CatalogReaders } from './infrastructure/catalog-source.js';
 import { createInMemoryReaders } from './infrastructure/memory/in-memory-catalog.js';
@@ -26,13 +28,15 @@ export interface BootstrapOptions {
 
 /** Servisin gRPC'ye kayitli hali; startGrpcServer bunu oldugu gibi alir. */
 export function buildCatalogService(options: BootstrapOptions = {}): GrpcServiceRegistration {
-  const { categories, products, darkStores } = options.readers ?? createInMemoryReaders();
+  const { categories, markets, offers } = options.readers ?? createInMemoryReaders();
 
   // Her use-case YALNIZCA ihtiyac duydugu portu alir.
   const implementation = createCatalogImplementation({
     listCategories: createListCategories({ categories }),
-    listProducts: createListProducts({ products, darkStores }),
-    resolveDarkStore: createResolveDarkStore({ darkStores }),
+    listNearbyMarkets: createListNearbyMarkets({ markets }),
+    getMarket: createGetMarket({ markets }),
+    listMarketCategories: createListMarketCategories({ categories, markets, offers }),
+    listProducts: createListProducts({ offers, markets }),
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
 
