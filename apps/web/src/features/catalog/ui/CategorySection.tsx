@@ -1,3 +1,4 @@
+import { QueryEmpty, QueryError } from '../../../shared/ui/query-status/QueryStatus';
 import { CATEGORY_SKELETON_COUNT } from '../constants';
 import { useCategories } from '../hooks/useCategories';
 
@@ -20,21 +21,10 @@ export function CategorySection() {
 
       {isPending && <CategoryStripSkeleton count={CATEGORY_SKELETON_COUNT} />}
 
-      {error !== null && (
-        <div className={styles['c-category-section__status']} role="alert">
-          <p>{error.message}</p>
-          <button
-            type="button"
-            className={styles['c-category-section__retry']}
-            onClick={() => void refetch()}
-          >
-            Tekrar dene
-          </button>
-        </div>
-      )}
+      {error !== null && <QueryError error={error} onRetry={() => void refetch()} />}
 
       {categories !== undefined && categories.length === 0 && (
-        <p className={styles['c-category-section__status']}>Henüz kategori yok.</p>
+        <QueryEmpty>Henüz kategori yok.</QueryEmpty>
       )}
 
       {categories !== undefined && categories.length > 0 && (

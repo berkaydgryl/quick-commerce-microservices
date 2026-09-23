@@ -1,0 +1,26 @@
+.c-query-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.c-query-status--error {
+  color: var(--text-danger);
+}
+
+.c-query-status__retry {
+  padding: var(--space-2) var(--space-4);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-on-brand);
+  cursor: pointer;
+  background: var(--color-brand-primary);
+  border: none;
+  border-radius: var(--radius-pill);
+  transition: background var(--duration-fast) var(--easing-standard);
+}
+
+.c-query-status__retry:hover {
+  background: var(--color-brand-primary-strong);
+}

@@ -2,17 +2,32 @@
 
 Müşteri arayüzü: React 18 + Vite + TypeScript. Tarayıcı yalnızca gateway ile konuşur (`/v1/*`).
 
-## Bugünkü durum (T4.6 — iskelet)
+## Bugünkü durum (T5.4 — market ekranları, tasarımsız kabuk)
 
-| Parça                   | Durum                                                                              |
-| ----------------------- | ---------------------------------------------------------------------------------- |
-| Vite + React + router   | ✅ `/` → ilk ekran (logo + kategori şeridi)                                        |
-| TanStack Query          | ✅ Yalnızca geçici hata (`SERVICE_UNAVAILABLE`) yeniden denenir; mutasyon denenmez |
-| HTTP istemcisi          | ✅ Zarf açıcı → `AppError`; mutasyon `Idempotency-Key`'siz derlenmez (ADR-08)      |
-| Idempotency key         | ✅ `crypto.randomUUID()`, sözleşmedeki uzunluk sınırıyla                           |
-| Design token'lar        | ✅ `tokens.css`: marka paleti, Nunito, `clamp()` ölçeği, kapsayıcı genişlikleri    |
-| Kırılımlar              | ✅ `@custom-media` (48rem / 64rem), JS karşılığı `shared/config/breakpoints.ts`    |
-| Zustand (sepet, oturum) | ⏳ İlgili web görevlerinde                                                         |
+| Parça                   | Durum                                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------------------------ |
+| Vite + React + router   | ✅ `/` ilk ekran · `/markets` yakındaki marketler · `/markets/:id` market sayfası                |
+| TanStack Query          | ✅ Yalnızca geçici hata (`SERVICE_UNAVAILABLE`) yeniden denenir; mutasyon denenmez               |
+| HTTP istemcisi          | ✅ Zarf açıcı → `AppError`; mutasyon `Idempotency-Key`'siz derlenmez (ADR-08)                    |
+| Idempotency key         | ✅ `crypto.randomUUID()`, sözleşmedeki uzunluk sınırıyla                                         |
+| Design token'lar        | ✅ `tokens.css`: marka paleti, Nunito, `clamp()` ölçeği, kapsayıcı genişlikleri                  |
+| Kırılımlar              | ✅ `@custom-media` (48rem / 64rem), JS karşılığı `shared/config/breakpoints.ts`                  |
+| Market veri hook'ları   | ✅ `useNearbyMarkets`, `useMarket`, `useMarketCategories`, `useMarketProducts` (imleçle sayfalı) |
+| Ortak durumlar          | ✅ `QueryStatus`: yükleniyor / hata / boş; \"Tekrar dene\" yalnızca geçici hatada                |
+| Zustand (sepet, oturum) | ⏳ İlgili web görevlerinde                                                                       |
+
+## Market ekranları (T5.4) — tasarımsız kabuk
+
+Ekranların **görsel tasarımı kullanıcının kararıdır** ve zamanı gelince yapılacak (T16.2). Bu görev
+yalnızca veri katmanını ve okunur bir kabuğu kurar; yeni görsel karar yoktur, mevcut token'lar kullanılır.
+
+- **Konum:** adres seçimi (T9.5) gelene kadar sabit "Ev" adresi (`features/markets/constants.ts`).
+- **Ana sayfa değişmedi:** marketlere bağlantı bir tasarım kararı; şimdilik `/markets` adresiyle açılır.
+- **Seçili kategori adreste** (`?kategori=`): yenileme ve paylaşma seçimi korur.
+- **Stok gösterilmez:** `availableQuantity` bugün gelmiyor ("stok bilgisi yok"); sepet düğmeleri T6.4'te.
+- **Olmayan market:** hata yalnızca başlıkta görünür, katalog tekrar etmez; `NOT_FOUND`'da "Tekrar dene"
+  sunulmaz (aynı cevap döner).
+- **Biçim** `shared/services/format.ts`'te: `4599` → `45,99 TL`, `1250` → `1,3 km`, `{15,25}` → `15-25 dk`.
 
 ## Çalıştırma
 
