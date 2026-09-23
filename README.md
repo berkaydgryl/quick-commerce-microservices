@@ -414,7 +414,7 @@ quick-commerce-microservices/
 │   ├── core/                  # @getir/core - Result, AppError, ID üretimi, config loader
 │   ├── contracts/             # @getir/contracts - Zod şemaları, ApiResponse zarfı
 │   ├── proto/                 # @getir/proto - .proto + buf + üretilen TS/Go kodu
-│   ├── pricing/               # @getir/pricing - min sepet, kurye ücreti, kupon
+│   ├── pricing/               # @getir/pricing - sepet hesabı, market kuralları, kupon  (T4.3)
 │   ├── redis-kit/             # @getir/redis-kit - client, key builder, Lua yükleyici
 │   ├── mongo-kit/             # @getir/mongo-kit - client, repository tabanı, migration
 │   ├── event-bus/             # @getir/event-bus - EventBus arayüzü + Redis Streams

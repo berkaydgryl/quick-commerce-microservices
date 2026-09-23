@@ -1,0 +1,27 @@
+{
+  "name": "@getir/pricing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sepet hesabi: ara toplam, indirim, teslimat ucreti, minimum sepet, kupon - web ve order ayni fonksiyonu cagirir",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\""
+  },
+  "dependencies": {
+    "@getir/core": "workspace:*"
+  }
+}
