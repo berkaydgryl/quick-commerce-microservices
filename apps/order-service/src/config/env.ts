@@ -1,25 +1,35 @@
 /**
  * Siparis servisinin ortam degiskenleri.
  * `process.env` TUM serviste yalnizca bu dosyada okunur.
+ *
+ * MOCK=true ise siparisler BELLEKTE tutulur ve MONGO_URI istenmez: frontend
+ * veritabani kurmadan calisabilsin (ADR-09). MOCK kapaliyken Mongo zorunludur;
+ * eksik degiskende process acilista oler (loadEnvOrExit) - yarim
+ * yapilandirmayla ayaga kalkip ilk siparisde patlamaktan iyidir.
  */
 
 import { loadEnvOrExit } from '@getir/core';
+import type { MongoEnv } from '@getir/mongo-kit';
+import { mongoEnvSchema } from '@getir/mongo-kit';
 import { grpcPort, serviceEnvSchema } from '@getir/service-kit';
 import { z } from 'zod';
 
 import { DEFAULT_ORDER_GRPC_PORT } from './constants.js';
 
-const envSchema = serviceEnvSchema.extend({
+const serviceSchema = serviceEnvSchema.extend({
   ORDER_GRPC_PORT: grpcPort(DEFAULT_ORDER_GRPC_PORT),
 });
 
-/**
- * Dogrulanmis yapilandirma. Eksik/gecersiz degiskende process acilista oler.
- *
- * MONGO_URI burada YOK: T3.2 siparisi yalnizca BELLEKTE tutar. Kalicilik
- * (orders repository) T4.5'te, durum makinesi tablosu T4.4'te gelecek.
- */
-export const env = loadEnvOrExit(envSchema);
+export type OrderServiceEnv = z.infer<typeof serviceSchema> & {
+  /** MOCK=true ise tanimsiz: siparisler bellekte. */
+  readonly mongo: MongoEnv | undefined;
+};
+
+/** Servis ortami. Mongo parcasi yalnizca MOCK kapaliyken okunur ve zorunludur. */
+export function loadServiceEnv(): OrderServiceEnv {
+  const base = loadEnvOrExit(serviceSchema);
+  return { ...base, mongo: base.MOCK ? undefined : loadEnvOrExit(mongoEnvSchema) };
+}
 
 const healthcheckSchema = z.object({ ORDER_GRPC_PORT: grpcPort(DEFAULT_ORDER_GRPC_PORT) });
 

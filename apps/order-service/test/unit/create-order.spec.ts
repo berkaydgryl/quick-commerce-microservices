@@ -7,22 +7,22 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createCreateDraftOrder } from '../../src/application/create-draft-order.js';
 import { createCreateOrder } from '../../src/application/create-order.js';
-import { InMemoryOrderRepository } from '../../src/infrastructure/in-memory-order-repository.js';
+import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-order-store.js';
 
-let repository: InMemoryOrderRepository;
+let repository: InMemoryOrderStore;
 let draft: ReturnType<typeof createCreateDraftOrder>;
 let create: ReturnType<typeof createCreateOrder>;
 
 const input = {
   userId: 'usr_1',
-  darkStoreId: 'ds_kadikoy',
+  marketId: 'mkt_migros-jet-moda',
   lines: [{ productId: 'prd_01', sku: 'SUT-1L', quantity: 1 }],
   deliveryLocation: { lat: 40.99, lng: 29.02 },
   deliveryAddress: 'Kadıköy',
 };
 
 beforeEach(() => {
-  repository = new InMemoryOrderRepository();
+  repository = new InMemoryOrderStore();
   draft = createCreateDraftOrder({ repository, clock: systemClock });
   create = createCreateOrder({ repository, clock: systemClock });
 });
@@ -90,6 +90,26 @@ describe('createOrder use-case', () => {
     // Basarisiz ikinci deneme kayitli siparisi DEGISTIRMEZ.
     await expect(repository.findById(id)).resolves.toMatchObject({
       status: ORDER_STATUS.AWAITING_PAYMENT,
+    });
+  });
+
+  it('ayni taslaga ES ZAMANLI iki CreateOrder: biri gecer, digeri CONFLICT (surum kontrolu)', async () => {
+    const { id } = await draft(input);
+
+    // Ikisi de taslagi DRAFT olarak okur; surum kontrolu olmasa ikisi de yazardi.
+    const results = await Promise.allSettled([
+      create({ orderId: id, userId: 'usr_1' }),
+      create({ orderId: id, userId: 'usr_1' }),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.find((result) => result.status === 'rejected')).toMatchObject({
+      reason: { code: ERROR_CODES.CONFLICT },
+    });
+    await expect(repository.findById(id)).resolves.toMatchObject({
+      status: ORDER_STATUS.AWAITING_PAYMENT,
+      // DRAFT(1) -> RISK_CHECK -> RESERVED -> AWAITING_PAYMENT: tek yurume, uc gecis.
+      version: 4,
     });
   });
 });

@@ -7,22 +7,32 @@
 
 import type { Logger } from '@getir/core';
 import type { orderV1 } from '@getir/proto';
-import { unaryHandler, unimplemented } from '@getir/service-kit';
+import { unaryHandler } from '@getir/service-kit';
 import type { UntypedServiceImplementation } from '@grpc/grpc-js';
 
 import type { CancelOrder } from '../../application/cancel-order.js';
 import type { CreateDraftOrder } from '../../application/create-draft-order.js';
 import type { CreateOrder } from '../../application/create-order.js';
-import { toProtoOrderStatus } from './mappers.js';
+import type { GetOrder } from '../../application/get-order.js';
+import type { ListMyOrders } from '../../application/list-my-orders.js';
+import { toProtoOrder, toProtoOrderStatus } from './mappers.js';
+import { encodePageToken } from './page-token.js';
 import {
   cancelOrderRequestSchema,
   createDraftOrderRequestSchema,
   createOrderRequestSchema,
+  getOrderRequestSchema,
+  listMyOrdersRequestSchema,
 } from './schemas.js';
+
+/** Toplam sayim yapilmaz (pahali); sozlesme: 0 = "sayilmadi", "sonuc yok" degil. */
+const TOTAL_SIZE_NOT_COUNTED = 0;
 
 export interface OrderHandlerDeps {
   readonly createDraftOrder: CreateDraftOrder;
   readonly createOrder: CreateOrder;
+  readonly getOrder: GetOrder;
+  readonly listMyOrders: ListMyOrders;
   readonly cancelOrder: CancelOrder;
   readonly logger?: Logger;
 }
@@ -38,7 +48,7 @@ export function createOrderImplementation(deps: OrderHandlerDeps): UntypedServic
       handle: async (input): Promise<orderV1.CreateDraftOrderResponse> => {
         const order = await deps.createDraftOrder({
           userId: input.userId,
-          darkStoreId: input.darkStoreId,
+          marketId: input.marketId,
           lines: input.lines,
           deliveryLocation: input.deliveryLocation,
           deliveryAddress: input.deliveryAddress,
@@ -65,6 +75,33 @@ export function createOrderImplementation(deps: OrderHandlerDeps): UntypedServic
       },
     }),
 
+    getOrder: unaryHandler({
+      name: 'GetOrder',
+      schema: getOrderRequestSchema,
+      ...(logger === undefined ? {} : { logger }),
+      handle: async (input): Promise<orderV1.GetOrderResponse> => ({
+        order: toProtoOrder(await deps.getOrder(input)),
+      }),
+    }),
+
+    listMyOrders: unaryHandler({
+      name: 'ListMyOrders',
+      schema: listMyOrdersRequestSchema,
+      ...(logger === undefined ? {} : { logger }),
+      handle: async ({ userId, page }): Promise<orderV1.ListMyOrdersResponse> => {
+        const result = await deps.listMyOrders({
+          userId,
+          pageSize: page.pageSize,
+          after: page.pageToken,
+        });
+        const nextPageToken = result.next === undefined ? '' : encodePageToken(result.next);
+        return {
+          orders: result.orders.map(toProtoOrder),
+          page: { nextPageToken, totalSize: TOTAL_SIZE_NOT_COUNTED },
+        };
+      },
+    }),
+
     cancelOrder: unaryHandler({
       name: 'CancelOrder',
       schema: cancelOrderRequestSchema,
@@ -74,10 +111,5 @@ export function createOrderImplementation(deps: OrderHandlerDeps): UntypedServic
         return { status: toProtoOrderStatus(order.status) };
       },
     }),
-
-    // Sozlesmede tanimli ama HENUZ UYGULANMAMIS RPC'ler; gerekce
-    // @getir/service-kit grpc/unimplemented.ts'te.
-    getOrder: unimplemented('GetOrder', 'T4.5'),
-    listMyOrders: unimplemented('ListMyOrders', 'T4.5'),
   };
 }

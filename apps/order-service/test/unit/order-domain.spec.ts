@@ -9,7 +9,7 @@ const clock = fixedClock(CLOCK_EPOCH_MS);
 
 const input: DraftOrderInput = {
   userId: 'usr_1',
-  darkStoreId: 'ds_kadikoy',
+  marketId: 'mkt_migros-jet-moda',
   lines: [{ productId: 'prd_01', sku: 'SUT-1L', quantity: 2 }],
   deliveryLocation: { lat: 40.99, lng: 29.02 },
   deliveryAddress: 'Kadıköy, İstanbul',

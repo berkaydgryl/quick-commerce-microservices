@@ -7,7 +7,7 @@
  * servisler arasi ortak sozlukte tanimlidir.
  *
  * Durum gecisleri order-state-machine.ts'teki TABLODAN gecer (T4.4); her gecis
- * zaman cizelgesine (timeline) bir kayit ekler. Mongo kalicilik T4.5'tedir.
+ * zaman cizelgesine (timeline) bir kayit ekler ve surumu (version) bir artirir.
  */
 
 import { ID_PREFIX, newId, ORDER_STATUS } from '@getir/core';
@@ -63,7 +63,8 @@ export interface DeliveryLocation {
 export interface Order {
   readonly id: string;
   readonly userId: string;
-  readonly darkStoreId: string;
+  /** Siparisin verildigi market (ADR-15): kullanicinin SECTIGI satici, mkt_ onekli. */
+  readonly marketId: string;
   readonly lines: readonly CartLine[];
   readonly deliveryLocation: DeliveryLocation;
   readonly deliveryAddress: string;
@@ -72,11 +73,20 @@ export interface Order {
   readonly timeline: readonly TimelineEntry[];
   readonly createdAt: Date;
   readonly updatedAt: Date;
+  /**
+   * Iyimser kilit (optimistic concurrency) surumu: yeni taslak 1'dir, her gecis
+   * bir artirir. Depo, okundugu surumden farkli bir kaydin USTUNE yazmaz; ayni
+   * taslaga es zamanli iki CreateOrder/CancelOrder gelirse ikincisi CONFLICT alir.
+   */
+  readonly version: number;
 }
+
+/** Yeni taslagin surumu. */
+export const INITIAL_ORDER_VERSION = 1;
 
 export interface DraftOrderInput {
   readonly userId: string;
-  readonly darkStoreId: string;
+  readonly marketId: string;
   readonly lines: readonly CartLine[];
   readonly deliveryLocation: DeliveryLocation;
   readonly deliveryAddress: string;
@@ -96,7 +106,7 @@ export function createDraftOrder(input: DraftOrderInput, clock: Clock): Order {
   return {
     id: newId(ID_PREFIX.ORDER),
     userId: input.userId,
-    darkStoreId: input.darkStoreId,
+    marketId: input.marketId,
     lines: input.lines,
     deliveryLocation: input.deliveryLocation,
     deliveryAddress: input.deliveryAddress,
@@ -104,6 +114,7 @@ export function createDraftOrder(input: DraftOrderInput, clock: Clock): Order {
     timeline: [{ status: ORDER_STATUS.DRAFT, at: now }],
     createdAt: now,
     updatedAt: now,
+    version: INITIAL_ORDER_VERSION,
   };
 }
 
@@ -111,7 +122,7 @@ export function createDraftOrder(input: DraftOrderInput, clock: Clock): Order {
  * Siparisi yeni duruma GECIRIR: tablo kontrolu + zaman cizelgesi kaydi.
  *
  * Tek gecis yolu budur; durumu dogrudan degistiren baska bir fonksiyon yok.
- * Yeni nesne dondurur (mutasyon yok); timeline'a yalnizca EKLENIR.
+ * Yeni nesne dondurur (mutasyon yok); timeline'a yalnizca EKLENIR, surum bir artar.
  *
  * @throws AppError ORDER_STATE_INVALID - tabloda olmayan gecis.
  */
@@ -119,5 +130,11 @@ export function transitionOrder(order: Order, to: OrderStatus, clock: Clock, not
   assertTransition(order.id, order.status, to);
   const at = clock.date();
   const entry: TimelineEntry = note === undefined ? { status: to, at } : { status: to, at, note };
-  return { ...order, status: to, timeline: [...order.timeline, entry], updatedAt: at };
+  return {
+    ...order,
+    status: to,
+    timeline: [...order.timeline, entry],
+    updatedAt: at,
+    version: order.version + 1,
+  };
 }

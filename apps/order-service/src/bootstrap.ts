@@ -10,26 +10,42 @@ import type { GrpcServiceRegistration } from '@getir/service-kit';
 import { createCancelOrder } from './application/cancel-order.js';
 import { createCreateDraftOrder } from './application/create-draft-order.js';
 import { createCreateOrder } from './application/create-order.js';
+import { createGetOrder } from './application/get-order.js';
+import { createListMyOrders } from './application/list-my-orders.js';
 import { ORDER_SERVICE_FULL_NAME } from './config/constants.js';
+import type { OrderHistoryReader } from './domain/order-history-reader.js';
 import type { OrderRepository } from './domain/order-repository.js';
-import { InMemoryOrderRepository } from './infrastructure/in-memory-order-repository.js';
+import { InMemoryOrderStore } from './infrastructure/memory/in-memory-order-store.js';
 import { createOrderImplementation } from './interfaces/grpc/order-handlers.js';
+
+/** Servisin kullandigi iki port; main.ts bunlari openOrderStore'dan verir. */
+export interface OrderPorts {
+  readonly repository: OrderRepository;
+  readonly history: OrderHistoryReader;
+}
 
 export interface BootstrapOptions {
   readonly logger?: Logger;
-  /** Siparis deposu. Verilmezse bellek kullanilir; T4.5'te Mongo gelecek. */
-  readonly repository?: OrderRepository;
+  /** Siparis portlari. Verilmezse bellek kullanilir (testler). */
+  readonly store?: OrderPorts;
   /** Saat; testte sabitlenebilsin diye disaridan verilebilir. */
   readonly clock?: Clock;
 }
 
+function inMemoryPorts(): OrderPorts {
+  const memory = new InMemoryOrderStore();
+  return { repository: memory, history: memory };
+}
+
 export function buildOrderService(options: BootstrapOptions = {}): GrpcServiceRegistration {
-  const repository = options.repository ?? new InMemoryOrderRepository();
+  const { repository, history } = options.store ?? inMemoryPorts();
   const clock = options.clock ?? systemClock;
 
   const implementation = createOrderImplementation({
     createDraftOrder: createCreateDraftOrder({ repository, clock }),
     createOrder: createCreateOrder({ repository, clock }),
+    getOrder: createGetOrder({ repository }),
+    listMyOrders: createListMyOrders({ history }),
     cancelOrder: createCancelOrder({ repository, clock }),
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });

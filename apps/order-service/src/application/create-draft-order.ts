@@ -23,7 +23,7 @@ export type CreateDraftOrder = (input: DraftOrderInput) => Promise<Order>;
 export function createCreateDraftOrder(deps: CreateDraftOrderDeps): CreateDraftOrder {
   return async (input) => {
     const order = buildDraftOrder(input, deps.clock);
-    await deps.repository.save(order);
+    await deps.repository.insert(order);
     return order;
   };
 }

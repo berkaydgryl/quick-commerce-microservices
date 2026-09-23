@@ -58,7 +58,7 @@ export function createCancelOrder(deps: CancelOrderDeps): CancelOrder {
       deps.clock,
       reason ?? TIMELINE_NOTE.USER_CANCELLED,
     );
-    await deps.repository.save(cancelled);
+    await deps.repository.update(cancelled, order.version);
     return cancelled;
   };
 }
