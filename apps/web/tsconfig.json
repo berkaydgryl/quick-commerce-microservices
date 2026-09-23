@@ -1,0 +1,21 @@
+{
+  // Editor + ESLint + typecheck projesi: kaynak VE testleri kapsar.
+  // Derlemeyi Vite yapar (esbuild); tsc yalnizca tip kontrolu icindir.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // Uygulama paket degil: .d.ts uretilmez (router gibi cikarilan tipler tasinabilir olmak zorunda kalmaz).
+    "declaration": false,
+    "declarationMap": false,
+    // Tarayici kodu: Node'un NodeNext cozumu yerine paketleyici (bundler) cozumu.
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    // "node": @getir/core kaynagi (paths ile src'ye gidilir) node:crypto import
+    // ediyor; tip kontrolu icin gerekli. Tarayici kodunda Node API'si kullanilmaz,
+    // bunu ESLint'in tarayici globals'i ve Vite derlemesi yakalar.
+    "types": ["vite/client", "node"]
+  },
+  "include": ["src", "test", "vite.config.ts"]
+}

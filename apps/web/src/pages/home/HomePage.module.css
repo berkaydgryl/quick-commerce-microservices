@@ -1,0 +1,28 @@
+.c-home__header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-header);
+  padding-block: var(--space-3);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-home__brand {
+  display: flex;
+  justify-content: center;
+  font-size: var(--font-size-xl);
+}
+
+.c-home__main {
+  padding-block: var(--space-4);
+}
+
+@media (--bp-md) {
+  .c-home__brand {
+    justify-content: flex-start;
+  }
+
+  .c-home__main {
+    padding-block: var(--space-6);
+  }
+}

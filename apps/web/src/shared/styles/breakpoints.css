@@ -1,0 +1,14 @@
+/*
+ * Kirilim noktalari - CSS tarafinin TEK kaynagi (roadmap P6).
+ *
+ * Duzen MOBIL ONCELIKLIDIR: taban stil telefon icindir, kirilimlar yalnizca
+ * min-width ile yukari dogru genisletir. Degerler rem'dir (1rem = 16px iken
+ * 48rem = 768px, 64rem = 1024px); kullanici tarayicinin yazi boyutunu buyuttugunde
+ * kirilim da onunla birlikte kayar.
+ *
+ * JS karsiligi: src/shared/config/breakpoints.ts. Iki dosyanin ayni degeri
+ * tasidigi test/unit/breakpoints.spec.ts ile dogrulanir.
+ */
+
+@custom-media --bp-md (min-width: 48rem);
+@custom-media --bp-lg (min-width: 64rem);
