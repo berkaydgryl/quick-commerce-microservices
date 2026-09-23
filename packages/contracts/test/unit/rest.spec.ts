@@ -58,10 +58,16 @@ describe('productSchema', () => {
     expect(productSchema.parse(base).availableQuantity).toBe(12);
   });
 
-  it('availableQuantity zorunludur', () => {
+  it('availableQuantity yoksa "stok bilgisi yok" demektir, gecerlidir', () => {
     const { availableQuantity: _omitted, ...withoutStock } = base;
 
-    expect(productSchema.safeParse(withoutStock).success).toBe(false);
+    const parsed = productSchema.parse(withoutStock);
+    expect(parsed.availableQuantity).toBeUndefined();
+  });
+
+  it('availableQuantity varsa negatif ya da kesirli olamaz', () => {
+    expect(productSchema.safeParse({ ...base, availableQuantity: -1 }).success).toBe(false);
+    expect(productSchema.safeParse({ ...base, availableQuantity: 1.5 }).success).toBe(false);
   });
 
   it('bicimsiz sku reddedilir', () => {

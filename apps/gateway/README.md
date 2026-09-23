@@ -7,7 +7,7 @@ Pnpm workspace'inin parçası değildir: kendi Go modülüdür (`go.mod`). `pnpm
 kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, `go mod tidy -diff`, `-race`
 testleri, statik derleme).
 
-## Bugünkü durum (T3.4 — ilk proxy)
+## Bugünkü durum (pazaryeri uçları — T8.4'ün market kısmı öne alındı)
 
 | Parça                | Durum                                                           |
 | -------------------- | --------------------------------------------------------------- |
@@ -17,9 +17,13 @@ testleri, statik derleme).
 | Cevap zarfı          | ✅ `packages/contracts` ile aynı biçim, her cevapta `requestId` |
 | Zarif kapanış        | ✅ SIGINT/SIGTERM → devam eden istekler beklenir                |
 | `GET /v1/categories` | ✅ catalog `ListCategories`; bilinmeyen sorgu parametresi 400   |
+| `GET /v1/markets?lat&lng` | ✅ Yakındaki marketler; boş bölge = boş liste, hata değil |
+| `GET /v1/markets/{id}` | ✅ Market sayfası başlığı; puan onda birden ondalığa (`47` → `4.7`) |
+| `GET /v1/markets/{id}/categories` | ✅ Marketin teklifi olan kategoriler |
+| `GET /v1/markets/{id}/products` | ✅ `categoryId`, `q`, `pageToken`, `pageSize`; **stok yok** (aşağıda) |
 | gRPC hata çevirisi   | ✅ `x-app-error` trailer'ı, yoksa durum kodu (`apperror`)       |
 | Görsel adresleri     | ✅ Göreli yol → mutlak URL (`ASSET_BASE_URL`, `internal/assets`) |
-| `GET /v1/products`   | ⏳ T8.4 (stok birleştirmesiyle)                                 |
+| Stok birleştirmesi (B27) | ⏳ inventory-svc ile (T8.4 / T9.x) |
 | JWT, rate limit      | ⏳ T8.1, T8.2                                                   |
 
 ## Çalıştırma
@@ -49,6 +53,23 @@ docker run --rm -p 8080:8080 \
 
 İmaj `distroless/static:nonroot` üzerindedir (~28 MB). İçinde kabuk olmadığı için Docker
 `HEALTHCHECK`'i ikilinin kendi alt komutunu çağırır: `/gateway healthcheck`.
+
+## Pazaryeri uçları: gateway ne yapar, ne yapmaz
+
+- **Yapar:** bilinmeyen sorgu parametresini reddeder; parametrenin **biçimini** doğrular (`lat` sayı mı,
+  `pageSize` tam sayı mı; NaN/sonsuz reddedilir); proto → REST çevirisi (puan ondalık, boş para birimi
+  `TRY`, göreli görsel → mutlak URL); servisin doğrulama hatasındaki **proto alan adını istemcinin
+  gönderdiği adla** değiştirir (`query` → `q`, `location.lat` → `lat`).
+- **Yapmaz:** aralık kuralları (enlem −90..90, arama en az 2 karakter, sayfa boyu kırpma) catalog-service'te
+  durur; gateway'de tekrar yazılmaz, iki yerde duran kural bir gün ayrışır.
+- **Stok:** ürünlerde `availableQuantity` bugün **yazılmaz**. Sözleşmede alan isteğe bağlıdır ve yokluğu
+  "stok bilgisi yok" demektir, "0" değil. inventory-svc bağlanınca gateway iki cevabı birleştirir (B27).
+
+```bash
+curl -s "localhost:8080/v1/markets?lat=40.9885&lng=29.0262" | jq '.data.items[].market.name'   # Ev: 3 market
+curl -s "localhost:8080/v1/markets?lat=41.1363&lng=29.8539" | jq '.data.items'                 # Yazlik: []
+curl -s "localhost:8080/v1/markets/mkt_migros-jet-moda/products?q=s%C3%BCt" | jq '.data.items[].name'
+```
 
 ## Ortam değişkenleri
 

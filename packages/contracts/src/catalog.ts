@@ -8,7 +8,7 @@
  * DIKKAT - BURADAKI Product PROTO'DAKI Product DEGILDIR. Ikisi bilerek
  * farklidir:
  *   - getir.catalog.v1.Offer   -> urun + o marketteki fiyat, stok YOK (B27)
- *   - buradaki productSchema   -> teklif + availableQuantity ZORUNLU
+ *   - buradaki productSchema   -> teklif + availableQuantity (stok bilgisi varsa)
  * Sebep: fiyat catalog-svc'den (Offer), adet inventory-svc'den gelir ve gateway
  * ikisini BIRLESTIREREK istemciye tek gorunum sunar.
  */
@@ -154,8 +154,13 @@ export const productSchema = z.object({
   /**
    * marketId kapsaminda satilabilir adet. Kaynagi inventory-svc'dir ve
    * TOPLU sorgulanir (CheckAvailability(marketId, sku[]), B27).
+   *
+   * ISTEGE BAGLIDIR: alan YOKSA "stok bilgisi yok" demektir, "stok 0" DEGIL.
+   * Iki durumda yoktur: inventory-svc henuz baglanmadi (T9.x oncesi) ya da
+   * cevap vermedi (katalog stoksuz gorunumle ayakta kalir). Istemci bu durumda
+   * stok rozeti gostermez; baglayici kontrol rezervasyonda yapilir (ADR-13).
    */
-  availableQuantity: z.number().int().min(0),
+  availableQuantity: z.number().int().min(0).optional(),
 });
 
 /**

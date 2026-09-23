@@ -56,7 +56,8 @@ const (
 )
 
 // startStub, bellek ici baglantida sunucuyu kurar ve adaptoru dondurur.
-func startStub(t *testing.T, stub *stubServer) *Service {
+// Her sahte katalog sunucusunu kabul eder (kategori ve pazaryeri testleri).
+func startStub(t *testing.T, stub catalogv1.CatalogServiceServer) *Service {
 	t.Helper()
 
 	listener := bufconn.Listen(1 << 20)

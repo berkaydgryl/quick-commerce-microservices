@@ -1414,7 +1414,7 @@ components:
         Bir marketin TEKLİFİ olarak ürün (ADR-15): fiyat o markete özeldir.
         Fiyat catalog-svc'den (Offer), `availableQuantity` inventory-svc'den
         gelir; gateway iki cevabı BİRLEŞTİRİR (B27).
-      required: [id, offerId, marketId, sku, name, categoryId, price, availableQuantity]
+      required: [id, offerId, marketId, sku, name, categoryId, price]
       properties:
         id:
           $ref: "#/components/schemas/ProductId"
@@ -1458,6 +1458,11 @@ components:
           description: |
             `marketId` kapsamında satılabilir adet. Kaynağı inventory-svc'dir
             ve TOPLU sorgulanır (`CheckAvailability(marketId, sku[])`, B27).
+
+            **İsteğe bağlıdır:** alan YOKSA "stok bilgisi yok" demektir, "stok 0"
+            değil. inventory-svc henüz bağlanmadıysa (T9.x öncesi) ya da cevap
+            vermediyse gateway alanı yazmaz; istemci stok rozeti göstermez,
+            bağlayıcı kontrol rezervasyondadır (ADR-13).
 
     # --- Pazaryeri (ADR-15) -------------------------------------------------
     PricingRules:
