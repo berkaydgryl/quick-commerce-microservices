@@ -91,14 +91,22 @@ func run(cfg config.Config, logger *slog.Logger) error {
 		return fmt.Errorf("%s baglantisi havuzda yok", config.CatalogService)
 	}
 
+	// Tek katalog adaptoru butun katalog uclarini karsilar; yonlendirici her
+	// ucu ayri, dar bir arayuzle gorur (bkz. httpapi.Deps).
+	catalogService := catalog.New(
+		catalogv1.NewCatalogServiceClient(catalogConn),
+		cfg.RequestTimeout,
+		assets.NewResolver(cfg.AssetBaseURL),
+	)
+
 	app := httpapi.New(httpapi.Deps{
-		Health: health.New(healthClients, cfg.RequestTimeout, cfg.Mock),
-		Categories: catalog.New(
-			catalogv1.NewCatalogServiceClient(catalogConn),
-			cfg.RequestTimeout,
-			assets.NewResolver(cfg.AssetBaseURL),
-		),
-		Logger: logger,
+		Health:           health.New(healthClients, cfg.RequestTimeout, cfg.Mock),
+		Categories:       catalogService,
+		NearbyMarkets:    catalogService,
+		Market:           catalogService,
+		MarketCategories: catalogService,
+		MarketProducts:   catalogService,
+		Logger:           logger,
 	})
 
 	// SIGINT/SIGTERM: orkestrator once nazikce ister, sonra oldurur. O pencereyi

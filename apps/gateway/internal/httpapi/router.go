@@ -4,6 +4,8 @@ package httpapi
 // kendi dosyasi var; bir sebeple degisen kod tek dosyada kalsin diye bolundu:
 //   health.go     - /healthz
 //   categories.go - /v1/categories
+//   markets.go    - /v1/markets ve alt uclari (pazaryeri)
+//   params.go     - sorgu parametresinin tipine cevrilmesi
 //   middleware.go - istek gunlugu
 //   errors.go     - hata -> zarf cevirisi
 //   requestid.go  - korelasyon kimligi (baslik, gRPC metadata'si)
@@ -35,11 +37,39 @@ type CategoryLister interface {
 	ListCategories(ctx context.Context) (catalog.CategoryList, error)
 }
 
+// NearbyMarketLister, GET /v1/markets ucunun ihtiyaci olan tek davranis.
+type NearbyMarketLister interface {
+	NearbyMarkets(ctx context.Context, lat, lng float64) (catalog.NearbyMarketList, error)
+}
+
+// MarketGetter, GET /v1/markets/{marketId}.
+type MarketGetter interface {
+	Market(ctx context.Context, marketID string) (catalog.Market, error)
+}
+
+// MarketCategoryLister, GET /v1/markets/{marketId}/categories.
+type MarketCategoryLister interface {
+	MarketCategories(ctx context.Context, marketID string) (catalog.CategoryList, error)
+}
+
+// MarketProductLister, GET /v1/markets/{marketId}/products.
+type MarketProductLister interface {
+	MarketProducts(ctx context.Context, query catalog.ProductQuery) (catalog.ProductPage, error)
+}
+
 // Deps, yonlendiricinin disaridan aldigi her sey.
+//
+// Katalog uclari ayri alanlardir, tek buyuk arayuz degil: bugun hepsini ayni
+// adaptor karsilasa da her handler yalnizca kendi ihtiyacini gorur ve testte
+// yalnizca o davranis taklit edilir.
 type Deps struct {
-	Health     HealthReporter
-	Categories CategoryLister
-	Logger     *slog.Logger
+	Health           HealthReporter
+	Categories       CategoryLister
+	NearbyMarkets    NearbyMarketLister
+	Market           MarketGetter
+	MarketCategories MarketCategoryLister
+	MarketProducts   MarketProductLister
+	Logger           *slog.Logger
 }
 
 // New, Fiber uygulamasini kurar.
@@ -60,6 +90,10 @@ func New(deps Deps) *fiber.App {
 
 	v1 := app.Group("/v1")
 	v1.Get("/categories", listCategoriesHandler(deps.Categories))
+	v1.Get("/markets", listNearbyMarketsHandler(deps.NearbyMarkets))
+	v1.Get("/markets/:marketId", getMarketHandler(deps.Market))
+	v1.Get("/markets/:marketId/categories", listMarketCategoriesHandler(deps.MarketCategories))
+	v1.Get("/markets/:marketId/products", listMarketProductsHandler(deps.MarketProducts))
 
 	return app
 }

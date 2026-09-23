@@ -7,6 +7,7 @@ package catalog
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -22,6 +23,10 @@ import (
 // tarafta ve kucuk: testte sahte istemci vermek icin sunucu kurmak gerekmez.
 type RPC interface {
 	ListCategories(ctx context.Context, in *catalogv1.ListCategoriesRequest, opts ...grpc.CallOption) (*catalogv1.ListCategoriesResponse, error)
+	ListNearbyMarkets(ctx context.Context, in *catalogv1.ListNearbyMarketsRequest, opts ...grpc.CallOption) (*catalogv1.ListNearbyMarketsResponse, error)
+	GetMarket(ctx context.Context, in *catalogv1.GetMarketRequest, opts ...grpc.CallOption) (*catalogv1.GetMarketResponse, error)
+	ListMarketCategories(ctx context.Context, in *catalogv1.ListMarketCategoriesRequest, opts ...grpc.CallOption) (*catalogv1.ListMarketCategoriesResponse, error)
+	ListProducts(ctx context.Context, in *catalogv1.ListProductsRequest, opts ...grpc.CallOption) (*catalogv1.ListProductsResponse, error)
 }
 
 // ImageResolver, verideki goreli gorsel yolunu mutlak URL'ye cevirir
@@ -47,18 +52,50 @@ func New(rpc RPC, timeout time.Duration, images ImageResolver) *Service {
 // Hata her zaman *apperror.Error'dur: servis hatasi (x-app-error) varsa onun
 // kodu, yoksa gRPC durum kodundan turetilen kod.
 func (s *Service) ListCategories(ctx context.Context) (CategoryList, error) {
+	response, err := invoke(ctx, s.timeout, "ListCategories", s.rpc.ListCategories, &catalogv1.ListCategoriesRequest{})
+	if err != nil {
+		return CategoryList{}, err
+	}
+	return toCategoryList(response.GetCategories(), s.images), nil
+}
+
+// unaryCall, uretilen istemcideki tek bir unary metodun imzasi.
+type unaryCall[Req, Resp any] func(ctx context.Context, in *Req, opts ...grpc.CallOption) (*Resp, error)
+
+// invoke, her katalog cagrisinin ortak adimlarini TEK yerde yapar: cagri
+// basina son tarih, trailer toplama ve hatayi apperror'a indirme. Uc eklemek
+// bu adimlari kopyalamayi gerektirmesin diye jeneriktir.
+func invoke[Req, Resp any](ctx context.Context, timeout time.Duration, name string, call unaryCall[Req, Resp], request *Req) (*Resp, error) {
 	// Son tarih cagri basinadir: istemci baglantiyi acik tutsa bile takilan bir
 	// servis gateway'in goroutine'ini sonsuza kadar bekletmesin.
-	callCtx, cancel := context.WithTimeout(ctx, s.timeout)
+	callCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	// Servis hatasinin is anlami trailer'daki x-app-error'dadir; toplamazsak
 	// her hata yalnizca durum kodundan tahmin edilir.
 	var trailer metadata.MD
-	response, err := s.rpc.ListCategories(callCtx, &catalogv1.ListCategoriesRequest{}, grpc.Trailer(&trailer))
+	response, err := call(callCtx, request, grpc.Trailer(&trailer))
 	if err != nil {
-		return CategoryList{}, apperror.FromGRPC(fmt.Errorf("catalog ListCategories: %w", err), trailer)
+		return nil, apperror.FromGRPC(fmt.Errorf("catalog %s: %w", name, err), trailer)
 	}
+	return response, nil
+}
 
-	return toCategoryList(response.GetCategories(), s.images), nil
+// restFieldNames, servisin dogrulama hatasindaki PROTO alan adlarini istemcinin
+// gonderdigi REST parametre adlarina cevirir ("query" -> "q"). Istemci hatayi
+// kendi gonderdigi adla gormeli; "query" diye bir parametre gondermedi.
+// Eslemesi olmayan alan oldugu gibi kalir. Hata apperror degilse dokunulmaz.
+func restFieldNames(err error, names map[string]string) error {
+	var appErr *apperror.Error
+	if !errors.As(err, &appErr) || len(appErr.Details) == 0 {
+		return err
+	}
+	renamed := make(map[string]string, len(appErr.Details))
+	for field, reason := range appErr.Details {
+		if restName, ok := names[field]; ok {
+			field = restName
+		}
+		renamed[field] = reason
+	}
+	return &apperror.Error{Code: appErr.Code, Details: renamed, Cause: appErr.Cause}
 }
