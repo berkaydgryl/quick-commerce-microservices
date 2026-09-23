@@ -4,7 +4,7 @@
 gerçek bir sağlayıcı takılabilecek biçimde kuruldu: sağlayıcı bir port (`PaymentProvider`),
 idempotency ve durum makinesi baştan yerinde.
 
-## Bugünkü durum (T5.1 — Charge mock)
+## Bugünkü durum (T5.2 — 3DS doğrulaması)
 
 | Uç                     | Durum                                                         |
 | ---------------------- | ------------------------------------------------------------- |
@@ -42,15 +42,36 @@ yapabilirdi. Şimdi ikincisi 3. adımda çakışır, tekrar-istek yoluna düşer
 (test: `charge.spec.ts` → "es zamanli ayni anahtar"). Sağlayıcıya ulaşılamazsa tutar çekilmemiştir;
 kayıt `FAILED` + `SERVICE_UNAVAILABLE` olur, `PENDING`'de takılı kalmaz.
 
+## 3DS doğrulaması (Confirm3Ds)
+
+Mock bankanın kabul ettiği kod `@getir/core` → `MOCK_THREEDS_CODE` (`123456`). Kodu domain değil
+sağlayıcı doğrular (`PaymentProvider.verifyChallenge`).
+
+| Girdi                               | Ödeme                      | Cevap                                                                 |
+| ----------------------------------- | -------------------------- | --------------------------------------------------------------------- |
+| Doğru kod                           | `REQUIRES_3DS → SUCCEEDED` | ödeme kaydı                                                           |
+| 1. / 2. yanlış kod                  | `REQUIRES_3DS` kalır       | `THREEDS_FAILED`, `{ attemptsLeft: 2/1, reason: "wrong_code" }`       |
+| 3. yanlış kod                       | `→ FAILED`, jeton kilitli  | `THREEDS_FAILED`, `{ attemptsLeft: 0, reason: "attempts_exhausted" }` |
+| 60 sn doldu (kod bakılmaz)          | `→ FAILED`                 | `THREEDS_FAILED`, `{ attemptsLeft: 0, reason: "expired" }`            |
+| Bilinmeyen / başka siparişin jetonu | değişmez                   | `NOT_FOUND`                                                           |
+| Sonuçlanmış ödemeye tekrar          | değişmez                   | önceki sonuç (başarı ya da aynı sebeple ret)                          |
+| Biçimi bozuk kod (`12ab`)           | değişmez, **hak düşmez**   | `VALIDATION_FAILED`                                                   |
+| Bankaya ulaşılamadı                 | değişmez, **hak düşmez**   | `SERVICE_UNAVAILABLE`                                                 |
+
+**Eşzamanlı denemeler:** ödeme kaydında `version` (iyimser kilit) var. Aynı jetona aynı anda iki yanlış
+kod gelirse ikinci yazma çakışır, kayıt yeniden okunur ve kural güncel sayaçla uygulanır: iki deneme
+iki hak yakar, tek değil. Bankaya istek başına bir kez gidilir; kodun doğruluğu kaydın durumuna bağlı
+değildir.
+
 ## Katmanlar
 
 ```text
 src/
-  domain/          payment.ts (durumlar, startPayment/settlePayment/failPayment), portlar
-  application/     charge.ts (tek use-case)
+  domain/          payment.ts (durumlar, geçişler), three-ds.ts (3DS kuralları), portlar
+  application/     charge.ts, confirm-3ds.ts
   infrastructure/  memory/ (depo), mock-provider/ (test kartları)
   interfaces/grpc/ şema (Zod), eşleme (Record), handler
-  config/          env.ts, constants.ts (THREEDS_CHALLENGE_TTL_MS = 60 000)
+  config/          env.ts, constants.ts (THREEDS_CHALLENGE_TTL_MS = 60 000, THREEDS_MAX_ATTEMPTS = 3)
 ```
 
 ## Çalıştırma ve doğrulama

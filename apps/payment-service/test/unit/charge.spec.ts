@@ -28,7 +28,7 @@ const cardCharge = (overrides: Partial<ChargeInput> = {}): ChargeInput => ({
 let repository: InMemoryPaymentStore;
 let charge: Charge;
 
-function build(provider: PaymentProvider = new MockPaymentProvider()): Charge {
+function build(provider: Pick<PaymentProvider, 'authorize'> = new MockPaymentProvider()): Charge {
   return createCharge({
     repository,
     provider,

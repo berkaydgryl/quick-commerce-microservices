@@ -36,10 +36,28 @@ export interface Money {
   readonly currency: string;
 }
 
-/** Bekleyen 3DS dogrulamasi. Jeton Confirm3Ds cagrisina oldugu gibi geri verilir. */
+/**
+ * 3DS dogrulamasinin neden kapandigi (yalnizca FAILED odemede dolu).
+ * Kapanan dogrulamaya gelen tekrar istek ayni sebebi yeniden gorur.
+ */
+export const THREEDS_CLOSE_REASON = {
+  EXPIRED: 'expired',
+  ATTEMPTS_EXHAUSTED: 'attempts_exhausted',
+} as const;
+
+export type ThreeDsCloseReason = (typeof THREEDS_CLOSE_REASON)[keyof typeof THREEDS_CLOSE_REASON];
+
+/**
+ * 3DS dogrulamasi. Jeton Confirm3Ds cagrisina oldugu gibi geri verilir.
+ * Odeme sonuclandiktan sonra da kayitta KALIR: ayni jetonla gelen tekrar
+ * istek (ag kaybi) sonucu yeniden gorebilsin (T5.2).
+ */
 export interface ThreeDsChallenge {
   readonly id: string;
   readonly expiresAt: Date;
+  /** Yanlis kod sayisi; sinira ulasinca dogrulama kilitlenir. */
+  readonly failedAttempts: number;
+  readonly closedReason?: ThreeDsCloseReason;
 }
 
 export interface Payment {
@@ -56,6 +74,11 @@ export interface Payment {
   readonly challenge?: ThreeDsChallenge;
   /** Cekimi baslatan niyetin anahtari (ADR-08); ayni anahtar ayni kaydi doner. */
   readonly idempotencyKey: string;
+  /**
+   * Iyimser kilit: her durum gecisi bir artirir, depo yazarken beklenen surumu
+   * karsilastirir. Ayni dogrulamaya es zamanli iki deneme tek hak yakamaz.
+   */
+  readonly version: number;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -80,6 +103,7 @@ export function startPayment(command: ChargeCommand, clock: Clock): Payment {
     id: newId(ID_PREFIX.PAYMENT),
     ...command,
     status: PAYMENT_STATUS.PENDING,
+    version: 0,
     createdAt: now,
     updatedAt: now,
   };
@@ -96,7 +120,7 @@ export function settlePayment(
   challengeTtlMs: number,
 ): Payment {
   const now = clock.date();
-  const base = { ...payment, updatedAt: now };
+  const base = { ...payment, version: payment.version + 1, updatedAt: now };
 
   switch (decision) {
     case 'APPROVED':
@@ -110,6 +134,7 @@ export function settlePayment(
         challenge: {
           id: newId(ID_PREFIX.THREEDS_CHALLENGE),
           expiresAt: new Date(now.getTime() + challengeTtlMs),
+          failedAttempts: 0,
         },
       };
   }
@@ -121,7 +146,13 @@ export function settlePayment(
  * gorur ve siparis sonsuza kadar beklerdi.
  */
 export function failPayment(payment: Payment, failureCode: ErrorCode, clock: Clock): Payment {
-  return { ...payment, status: PAYMENT_STATUS.FAILED, failureCode, updatedAt: clock.date() };
+  return {
+    ...payment,
+    status: PAYMENT_STATUS.FAILED,
+    failureCode,
+    version: payment.version + 1,
+    updatedAt: clock.date(),
+  };
 }
 
 /**

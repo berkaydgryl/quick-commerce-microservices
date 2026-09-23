@@ -119,3 +119,11 @@ export function redisHashTag(key: string): string | undefined {
   }
   return key.slice(start + 1, end);
 }
+
+/**
+ * Mock odeme saglayicisinin kabul ettigi 3DS kodu (payment.proto: "mock
+ * saglayicida sabit bir kod beklenir; deger packages/core icindeki
+ * sabitlerden gelir"). Bicim sozlesmedeki OTP kuraliyla ayni: 6 hane.
+ * Yalnizca demo ve testler icindir; gercek saglayicida kodu banka uretir.
+ */
+export const MOCK_THREEDS_CODE = '123456';

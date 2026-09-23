@@ -27,7 +27,8 @@ import { paymentAlreadyExists } from '../domain/payment-repository.js';
 
 export interface ChargeDeps {
   readonly repository: PaymentRepository;
-  readonly provider: PaymentProvider;
+  /** Yalnizca cekim karari; 3DS dogrulamasi bu use-case'in isi degil. */
+  readonly provider: Pick<PaymentProvider, 'authorize'>;
   readonly clock: Clock;
   readonly challengeTtlMs: number;
   readonly logger?: Logger;
@@ -68,7 +69,7 @@ export function createCharge(deps: ChargeDeps): Charge {
       return pending;
     }
     const settled = await authorizeAndSettle(deps, pending, cardToken);
-    await deps.repository.update(settled);
+    await deps.repository.update(settled, pending.version);
     return settled;
   };
 }

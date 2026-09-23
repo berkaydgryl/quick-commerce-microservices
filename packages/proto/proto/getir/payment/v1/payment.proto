@@ -131,15 +131,29 @@ message Confirm3DsRequest {
   // Charge cevabindan gelen jeton.
   string challenge_id = 2;
 
-  // Kullanicinin girdigi dogrulama kodu. Mock saglayicida sabit bir kod
-  // beklenir; deger packages/core icindeki sabitlerden gelir.
+  // Kullanicinin girdigi dogrulama kodu: 6 hane (contracts OTP_PATTERN).
+  // Mock saglayicida sabit bir kod beklenir: packages/core MOCK_THREEDS_CODE.
+  // Bicimi bozuk kod DENEME SAYILMAZ, INVALID_ARGUMENT (VALIDATION_FAILED) doner.
   string code = 3;
 }
 
-// 3DS dogrulama cevabi.
+// 3DS dogrulama cevabi (T5.2).
 //
-// Kod yanlissa payment.status = FAILED ve failure_code = "PAYMENT_DECLINED"
-// doner. Jeton bulunamaz ya da suresi dolmussa NOT_FOUND hatasi doner.
+// Dogru kod: payment.status = SUCCEEDED doner.
+//
+// Ret HATA olarak doner: FAILED_PRECONDITION + x-app-error kodu THREEDS_FAILED.
+// Ayrinti (details) kalan hakki ve sebebi tasir: { attemptsLeft, reason }.
+//   - Yanlis kod, hak kaldi: reason "wrong_code", attemptsLeft 2 ya da 1; odeme
+//     REQUIRES_3DS kalir, ayni jetonla yeniden denenir.
+//   - Son hak da yanlis: reason "attempts_exhausted", attemptsLeft 0; odeme
+//     FAILED ve failure_code = "THREEDS_FAILED", jeton kilitlenir.
+//   - Jetonun 60 sn omru doldu: reason "expired", attemptsLeft 0; odeme FAILED.
+// Kart reddi (PAYMENT_DECLINED) ile karismasin diye 3DS hatasi ayri koddadir.
+//
+// Tekrar istek (ag kaybi): sonuclanmis odemeye ayni jetonla gelen istek durumu
+// DEGISTIRMEZ, onceki sonucu yeniden alir (basari ya da ayni sebeple ret).
+//
+// Jeton bu siparise ait degilse ya da hic yoksa NOT_FOUND doner.
 message Confirm3DsResponse {
   Payment payment = 1;
 }

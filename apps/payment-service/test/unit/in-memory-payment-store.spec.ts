@@ -53,8 +53,18 @@ describe('InMemoryPaymentStore', () => {
     });
   });
 
+  it('beklenen surum tutmazsa CONFLICT (iyimser kilit)', async () => {
+    const payment = startPayment(command(), clock);
+    await store.insert(payment);
+    await store.update({ ...payment, version: 1 }, 0);
+
+    await expect(store.update({ ...payment, version: 1 }, 0)).rejects.toMatchObject({
+      code: ERROR_CODES.CONFLICT,
+    });
+  });
+
   it('olmayan kaydi guncellemek NOT_FOUND', async () => {
-    await expect(store.update(startPayment(command(), clock))).rejects.toMatchObject({
+    await expect(store.update(startPayment(command(), clock), 0)).rejects.toMatchObject({
       code: ERROR_CODES.NOT_FOUND,
     });
   });
