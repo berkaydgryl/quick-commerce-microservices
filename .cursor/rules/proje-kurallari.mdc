@@ -146,6 +146,11 @@ Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicid
 - Dogru veri yapisi secilir: sayac icin string/hash, sirali kayit icin sorted set, olay akisi
   icin stream.
 - `KEYS *` YASAK; tarama gerekiyorsa `SCAN`.
+- Redis `maxmemory-policy noeviction` zorunludur (`infra/docker/redis.conf`): tahliye edilen stok
+  sayaci onbellek kacirmasi degil fazla satistir. Stok sayacina yazan servis acilista politikayi
+  dogrular, `noeviction` degilse acilmaz (roadmap P1).
+- Hiz siniri ve paylasilan sayaclar Redis'te tutulur, bellek ici DEGIL: coklu gateway orneginde
+  bellek ici sayac siniri ornek sayisi kadar gevsetir (roadmap P2).
 
 ## Docker
 
