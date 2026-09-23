@@ -2,7 +2,7 @@
  * Katalog demo verisi - TEK KAYNAK (T4.1).
  *
  * Iki moda birden hizmet eder:
- *   - MOCK=true : InMemoryCatalogRepository bu veriyi dogrudan dondurur,
+ *   - MOCK=true : bellek okuyuculari (infrastructure/memory) bu veriyi dondurur,
  *   - seed      : `pnpm seed` ayni veriyi Mongo'ya yazar (src/seed.ts).
  * Iki ayri kopya olsaydi MOCK modu ile gercek mod zamanla farkli katalog
  * gosterirdi ve frontend "mock'ta calisiyordu" hatasiyla karsilasirdi.

@@ -7,7 +7,7 @@ RPC'leri üzerinden okur.
 Bu serviste **olmayanlar**, bilinçli: stok/müsaitlik `inventory-service`'in (B27), kampanyalı
 fiyat ve kupon `pricing`'in işidir. `Product` mesajında stok alanı yoktur.
 
-## Bugünkü durum (T4.1)
+## Bugünkü durum (T4.2)
 
 | RPC                | Durum                                                 |
 | ------------------ | ----------------------------------------------------- |
@@ -15,19 +15,33 @@ fiyat ve kupon `pricing`'in işidir. `Product` mesajında stok alanı yoktur.
 | `ListProducts`     | ✅ Filtre (kategori, depo, arama) + imleçli sayfalama |
 | `GetProduct`       | ⏳ `UNIMPLEMENTED` — T4                               |
 | `BatchGetProducts` | ⏳ `UNIMPLEMENTED` — T4                               |
-| `ResolveDarkStore` | ⏳ `UNIMPLEMENTED` — T4.2                             |
+| `ResolveDarkStore` | ✅ Konumdan depo; yarıçap dışı / kapalı → `NO_STORE`  |
 
 ## Veri kaynağı: Mongo ya da MOCK
 
-| `MOCK` | Kaynak                                                  | Mongo gerekir mi          |
-| ------ | ------------------------------------------------------- | ------------------------- |
-| `true` | `InMemoryCatalogRepository` (bellek)                    | Hayır                     |
-| değil  | `MongoCatalog` (`categories`, `products`, `darkstores`) | Evet, `MONGO_URI` zorunlu |
+| `MOCK` | Kaynak                                                         | Mongo gerekir mi          |
+| ------ | -------------------------------------------------------------- | ------------------------- |
+| `true` | Bellek okuyucuları (`infrastructure/memory`)                   | Hayır                     |
+| değil  | Mongo repository'leri (`categories`, `products`, `darkstores`) | Evet, `MONGO_URI` zorunlu |
 
 İki kaynak da **aynı demo verisinden** beslenir (`src/infrastructure/fixtures.ts`: 5 kategori,
-15 ürün, 2 dark store) ve **aynı sözleşme testinden** geçer
-(`test/support/catalog-repository-contract.ts`): birim testinde bellek, entegrasyon testinde
-gerçek Mongo. MOCK modunda çalışan frontend gerçek modda da aynı cevabı görür.
+15 ürün, 2 dark store) ve **aynı sözleşme testlerinden** geçer
+(`test/support/{category,product,dark-store}-reader-contract.ts`): birim testinde bellek,
+entegrasyon testinde gerçek Mongo. MOCK modunda çalışan frontend gerçek modda da aynı cevabı görür.
+Veri kaynağını seçip açan tek yer `infrastructure/catalog-source.ts`'tir.
+
+### Üç port, her use-case yalnızca ihtiyacını alır
+
+| Port              | Metotlar                                      | Kullanan use-case                           |
+| ----------------- | --------------------------------------------- | ------------------------------------------- |
+| `CategoryReader`  | `listCategories`                              | `ListCategories`                            |
+| `ProductReader`   | `listProducts`                                | `ListProducts`                              |
+| `DarkStoreReader` | `darkStoreExists`, `listDarkStoresByDistance` | `ListProducts` (varlık), `ResolveDarkStore` |
+
+İlk sürümde üçü tek bir `CatalogRepository` arayüzündeydi; her use-case üç konunun tamamına
+bağımlıydı ve arayüz her yeni RPC ile büyüyordu (SRP / Interface Segregation). Mongo tarafında
+her repository kendi portunu doğrudan uygular; seed yazımı ayrı bir sınıftadır
+(`mongo/mongo-catalog-seeder.ts`).
 
 Mongo'yu doldurmak: `pnpm seed` (kök). Üç koleksiyon **tek transaction**'da silinip yeniden
 yazılır; tekrar koşmak güvenlidir, yarıda kalan seed hiçbir koleksiyonu değiştirmez.
@@ -40,7 +54,7 @@ bilinçli olarak `NODE_ENV=development` verilmeden çalışmaz.
 | ------------ | ----------------------------------------- | ------------------------------------------------------ |
 | `categories` | —                                         | `slug` unique                                          |
 | `products`   | `darkStoreIds[]` (çeşit), `searchTerms[]` | `sku` unique, `{categoryId,_id}`, `{darkStoreIds,_id}` |
-| `darkstores` | `location` GeoJSON `[boylam, enlem]`      | `location` 2dsphere (T4.2 `ResolveDarkStore`)          |
+| `darkstores` | `location` GeoJSON `[boylam, enlem]`      | `location` 2dsphere (`ResolveDarkStore`, `$geoNear`)   |
 
 - **`darkStoreIds`:** "bu depo bu ürünü satıyor mu" bilgisi (stok değil, B27). Depo filtresi
   tek sorguda çözülür.
@@ -57,6 +71,33 @@ olup uygulamada olmayan her metot için açılışta hata seviyesinde günlük y
 "bir şey bozuk" izlenimi verirdi. Bu bir `AppError` de değil: "bu uç henüz yok" iş hatası
 değil, protokol gerçeğidir.
 
+## `ResolveDarkStore`
+
+Konuma en yakın 5 depo (`DARK_STORE_CANDIDATE_LIMIT`) mesafeye göre getirilir, karar
+`domain/dark-store-resolution.ts`'teki saf kuralla verilir:
+
+| Durum                               | Cevap                                                             |
+| ----------------------------------- | ----------------------------------------------------------------- |
+| Yarıçap içinde **açık** depo var    | En yakın açık depo + `distance_meters` (tam sayı metre)           |
+| Kapsayan depoların **hepsi kapalı** | `NO_STORE` — `reason: STORE_CLOSED`, `nearest_distance_meters`    |
+| Hiçbir deponun yarıçapında değil    | `NO_STORE` — `reason: OUT_OF_RANGE`, `nearest_distance_meters`    |
+| Katalogda depo yok                  | `NO_STORE` — `reason: NO_STORES`                                  |
+| Konum yok / WGS84 dışı              | `VALIDATION_FAILED` (proto3'te eksik konum `(0,0)` gibi işlenmez) |
+
+`NO_STORE` gRPC'de `NOT_FOUND`'dur; ayrıntı `x-app-error` içinde metin → metin taşınır (proto
+`ErrorDetail.metadata` ile aynı anahtarlar). Kapalı depo ayrı bir hata kodu değildir: kullanıcı
+için sonuç aynıdır, fark yalnızca `reason`'dadır.
+
+**Mesafe iki modda aynı:** Mongo `$geoNear` kullanır; bellek (MOCK) haversine ile hesaplar ve
+MongoDB'nin kullandığı **ekvator yarıçapını (6378,1 km)** kullanır. Ortalama yarıçapla yazılan
+ilk sürüm 71 km'de 79 m sapıyordu; sözleşme testi iki modu ±1 m içinde tutar.
+
+```bash
+grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/catalog.proto \
+  -d '{"location":{"lat":40.9885,"lng":29.0262}}' \
+  localhost:50051 getir.catalog.v1.CatalogService/ResolveDarkStore     # Ev -> ds_kadikoy, 228 m
+```
+
 ## Katmanlar
 
 ```text
@@ -64,16 +105,22 @@ src/
 ├── domain/            # saf iş kuralı — mongodb/grpc/proto importu YOK
 │   ├── catalog.ts            # Category, Product, DarkStore + sıralama/arama kuralları
 │   ├── pagination.ts         # sayfa boyutu sınırları + imleçle dilimleme
-│   ├── catalog-repository.ts # okuma portu
+│   ├── category-reader.ts    # okuma portları: kategori,
+│   ├── product-reader.ts     #   ürün (filtre, sayfa),
+│   ├── dark-store-reader.ts  #   depo (varlık, mesafe)
+│   ├── dark-store-resolution.ts  # hangi depo hizmet verir kuralı
+│   ├── geo.ts                # mesafe (haversine, MongoDB yarıçapı)
 │   └── catalog-snapshot.ts   # seed portu + katalogun tamamı
 ├── application/       # bir dosya = bir use-case
 │   ├── list-categories.ts
 │   ├── list-products.ts
+│   ├── resolve-dark-store.ts
 │   └── seed-catalog.ts
 ├── infrastructure/    # portların uygulaması
-│   ├── fixtures.ts                      # demo verisi (MOCK + seed tek kaynak)
-│   ├── in-memory-catalog-repository.ts  # MOCK
-│   └── mongo/                           # belgeler, çeviriciler, koleksiyon başına repository
+│   ├── fixtures.ts        # demo verisi (MOCK + seed tek kaynak)
+│   ├── catalog-source.ts  # MOCK ya da Mongo: kaynağı açar, kapanışı verir
+│   ├── memory/            # MOCK: port başına bellek okuyucusu
+│   └── mongo/             # belgeler, çeviriciler, port başına repository, seed yazıcısı
 ├── interfaces/grpc/   # ince handler'lar: doğrula → çağır → çevir
 │   ├── schemas.ts     # Zod istek şemaları
 │   ├── mappers.ts     # domain → proto
@@ -82,7 +129,7 @@ src/
 ├── bootstrap.ts       # elle bağımlılık kurulumu
 ├── main.ts            # süreç yaşam döngüsü
 ├── seed.ts            # pnpm seed giriş noktası
-└── healthcheck.ts     # Docker HEALTHCHECK için grpc.health.v1 sorgusu
+└── healthcheck.ts     # Docker HEALTHCHECK: portu env.ts'ten alır, yoklama service-kit'te
 ```
 
 Ok hiçbir zaman yukarı gitmez: `infrastructure/`, `application/`'ı çağıramaz.

@@ -8,10 +8,10 @@ import { describe, expect, it } from 'vitest';
 
 import { createListProducts } from '../../src/application/list-products.js';
 import { DEFAULT_PAGE_SIZE } from '../../src/domain/pagination.js';
-import { InMemoryCatalogRepository } from '../../src/infrastructure/in-memory-catalog-repository.js';
+import { createInMemoryReaders } from '../../src/infrastructure/memory/in-memory-catalog.js';
 
-const repository = new InMemoryCatalogRepository();
-const listProducts = createListProducts({ repository });
+const { products, darkStores } = createInMemoryReaders();
+const listProducts = createListProducts({ products, darkStores });
 
 describe('listProducts', () => {
   it('filtresiz cagride tum urunleri sayfalar', async () => {

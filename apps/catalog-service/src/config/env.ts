@@ -18,7 +18,7 @@ import { loadEnvOrExit } from '@getir/core';
 import type { MongoEnv } from '@getir/mongo-kit';
 import { mongoEnvSchema } from '@getir/mongo-kit';
 import { grpcPort, serviceEnvSchema } from '@getir/service-kit';
-import type { z } from 'zod';
+import { z } from 'zod';
 
 import { DEFAULT_CATALOG_GRPC_PORT } from './constants.js';
 
@@ -47,4 +47,15 @@ export type SeedEnv = z.infer<typeof seedSchema>;
 /** Seed ortami: Mongo her zaman zorunlu. */
 export function loadSeedEnv(): SeedEnv {
   return loadEnvOrExit(seedSchema);
+}
+
+const healthcheckSchema = z.object({ CATALOG_GRPC_PORT: grpcPort(DEFAULT_CATALOG_GRPC_PORT) });
+
+/**
+ * Yalnizca saglik yoklamasinin ihtiyaci: port. Servisin TAM ortami
+ * yuklenmez - yoklama Mongo adresi gibi degiskenlere bagli olmamali; bir
+ * degisken eksikse servisin kendisi zaten acilista olmustur.
+ */
+export function loadHealthcheckEnv(): { readonly port: number } {
+  return { port: loadEnvOrExit(healthcheckSchema).CATALOG_GRPC_PORT };
 }

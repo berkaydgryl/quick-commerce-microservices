@@ -10,7 +10,7 @@
  * yapilandirilabilir.
  */
 
-import { AppError, ERROR_CODES, silentLogger } from '@getir/core';
+import { AppError, ERROR_CODES, redactConnectionString, silentLogger } from '@getir/core';
 import type { Logger } from '@getir/core';
 import { Redis } from 'ioredis';
 
@@ -90,12 +90,12 @@ export async function connectRedis(options: RedisConnectionOptions): Promise<Red
     redis.disconnect();
     throw new AppError(
       ERROR_CODES.SERVICE_UNAVAILABLE,
-      `Redis baglantisi kurulamadi: ${redactUrl(options.url)}`,
+      `Redis baglantisi kurulamadi: ${redactConnectionString(options.url)}`,
       { cause: error },
     );
   }
 
-  logger.info({ url: redactUrl(options.url) }, 'redis baglantisi hazir');
+  logger.info({ url: redactConnectionString(options.url) }, 'redis baglantisi hazir');
 
   return {
     redis,
@@ -155,9 +155,4 @@ function waitUntilReady(redis: Redis, budgetMs: number, logger: Logger): Promise
       logger.warn({}, 'redis ilk baglanti denemesi basarisiz, yeniden deneniyor');
     });
   });
-}
-
-/** Gunluge yazarken URL icindeki parolayi gizler. */
-function redactUrl(url: string): string {
-  return url.replace(/\/\/([^@/]*)@/, '//***@');
 }

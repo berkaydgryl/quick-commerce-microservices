@@ -7,9 +7,8 @@
 
 import type { Logger } from '@getir/core';
 import type { orderV1 } from '@getir/proto';
-import { unaryHandler } from '@getir/service-kit';
-import { Metadata, status as GrpcStatus } from '@grpc/grpc-js';
-import type { handleUnaryCall, UntypedServiceImplementation } from '@grpc/grpc-js';
+import { unaryHandler, unimplemented } from '@getir/service-kit';
+import type { UntypedServiceImplementation } from '@grpc/grpc-js';
 
 import type { CreateDraftOrder } from '../../application/create-draft-order.js';
 import type { CreateOrder } from '../../application/create-order.js';
@@ -60,25 +59,10 @@ export function createOrderImplementation(deps: OrderHandlerDeps): UntypedServic
       },
     }),
 
-    // Sozlesmede tanimli ama HENUZ UYGULANMAMIS RPC'ler (bkz. catalog-service:
-    // ayni gerekce - grpc-js eksik handler icin her acilista hata gunlugu yazar,
-    // ve "bu uc henuz yok" bir is hatasi degil protokol gercegidir).
+    // Sozlesmede tanimli ama HENUZ UYGULANMAMIS RPC'ler; gerekce
+    // @getir/service-kit grpc/unimplemented.ts'te.
     getOrder: unimplemented('GetOrder', 'T4.5'),
     listMyOrders: unimplemented('ListMyOrders', 'T4.5'),
     cancelOrder: unimplemented('CancelOrder', 'T4.4'),
-  };
-}
-
-/** Henuz yazilmamis RPC'nin durus noktasi; hangi gorevde gelecegini soyler. */
-function unimplemented(rpc: string, task: string): handleUnaryCall<unknown, never> {
-  return (_call, callback) => {
-    const message = `${rpc} henuz uygulanmadi (${task})`;
-    callback({
-      name: 'ServiceError',
-      message,
-      code: GrpcStatus.UNIMPLEMENTED,
-      details: message,
-      metadata: new Metadata(),
-    });
   };
 }

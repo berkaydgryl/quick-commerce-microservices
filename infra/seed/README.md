@@ -32,8 +32,8 @@ roadmap'in adres tablosunu izler:
 | Yazlık | Şile           | Hiçbir deponun yarıçapında değil → `NO_STORE` |
 
 `users` koleksiyonu gateway'e aittir ve T8.1'de açılır; adresler o gün oraya yüklenecek. O güne
-kadar bu dosya, seed edilen depoların 2dsphere indeksine karşı test edilir
-(`apps/catalog-service/test/integration/mongo-catalog.spec.ts`): konum verisinde bir kayma
+kadar bu dosya, gerçek `ResolveDarkStore` use-case'ine seed edilmiş Mongo üzerinden verilir
+(`apps/catalog-service/test/integration/mongo-catalog.spec.ts`, T4.2): konum verisinde bir kayma
 olursa demo senaryosu bozulmadan önce test kırmızı olur.
 
 ## Komutlar

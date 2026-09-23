@@ -27,3 +27,15 @@ export const MIN_SEARCH_QUERY_LENGTH = 2;
  * istemcinin varsayim yapmasi gerekmesin.
  */
 export const DEFAULT_CURRENCY = 'TRY';
+
+/**
+ * ResolveDarkStore'da degerlendirilen en yakin depo sayisi.
+ *
+ * NEDEN SINIR: her istekte tum depolari mesafeye gore siralamak depo sayisiyla
+ * buyur. Teslimat yaricaplari birkac km oldugu icin bir konumu kapsayabilecek
+ * depo en yakinlar arasindadir; 5, sehir ici yogun bir yerlesimde bile birbirine
+ * yakin depolari kapsar. VARSAYIM: hicbir deponun yaricapi, kendisinden daha
+ * yakin 5 depoyu atlayacak kadar buyuk degildir. Bu kosul bozulursa sinir
+ * artirilir; sorgu degismez.
+ */
+export const DARK_STORE_CANDIDATE_LIMIT = 5;

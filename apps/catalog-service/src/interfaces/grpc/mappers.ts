@@ -10,7 +10,7 @@ import { commonV1 } from '@getir/proto';
 import type { catalogV1 } from '@getir/proto';
 
 import { DEFAULT_CURRENCY } from '../../config/constants.js';
-import type { Category, Product, ProductUnit } from '../../domain/catalog.js';
+import type { Category, DarkStore, Product, ProductUnit } from '../../domain/catalog.js';
 import { PRODUCT_UNIT } from '../../domain/catalog.js';
 
 /** Domain birimi -> proto enum. Eksik esleme derlemede yakalanir (Record). */
@@ -43,5 +43,15 @@ export function toProtoProduct(product: Product): catalogV1.Product {
     unit: UNIT_TO_PROTO[product.unit],
     imageUrl: product.imageUrl,
     isActive: product.isActive,
+  };
+}
+
+export function toProtoDarkStore(store: DarkStore): catalogV1.DarkStore {
+  return {
+    id: store.id,
+    name: store.name,
+    location: { lat: store.lat, lng: store.lng },
+    deliveryRadiusMeters: store.deliveryRadiusMeters,
+    isOpen: store.isOpen,
   };
 }

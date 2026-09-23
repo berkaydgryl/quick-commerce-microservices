@@ -1,12 +1,16 @@
 import type { Db, IndexDescription } from 'mongodb';
 
 import type { Category } from '../../domain/catalog.js';
+import type { CategoryReader } from '../../domain/category-reader.js';
 import type { CategoryDocument } from './documents.js';
 import { COLLECTIONS } from './documents.js';
 import { fromCategoryDocument } from './mappers.js';
 import { ReplaceableRepository } from './replaceable-repository.js';
 
-export class CategoryRepository extends ReplaceableRepository<CategoryDocument> {
+export class CategoryRepository
+  extends ReplaceableRepository<CategoryDocument>
+  implements CategoryReader
+{
   constructor(db: Db) {
     super(db, COLLECTIONS.CATEGORIES);
   }
@@ -22,8 +26,8 @@ export class CategoryRepository extends ReplaceableRepository<CategoryDocument> 
    * sortOrder'da ada gore Turkce siralama Mongo'nun varsayilan karsilastirmasiyla
    * yapilamaz. Liste kucuk (vitrin kategorileri), bellekte siralamak ucuzdur.
    */
-  async listAll(): Promise<readonly Category[]> {
-    const documents = await this.run('listAll', () => this.collection.find({}).toArray());
+  async listCategories(): Promise<readonly Category[]> {
+    const documents = await this.run('listCategories', () => this.collection.find({}).toArray());
     return documents.map(fromCategoryDocument);
   }
 }

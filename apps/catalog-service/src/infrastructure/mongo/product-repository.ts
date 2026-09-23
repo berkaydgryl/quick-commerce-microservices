@@ -1,7 +1,12 @@
 import type { Db, Filter, IndexDescription } from 'mongodb';
 
-import type { PageQuery, ProductFilter, ProductPage } from '../../domain/catalog-repository.js';
 import { searchKey } from '../../domain/catalog.js';
+import type {
+  PageQuery,
+  ProductFilter,
+  ProductPage,
+  ProductReader,
+} from '../../domain/product-reader.js';
 import type { ProductDocument } from './documents.js';
 import { COLLECTIONS } from './documents.js';
 import { fromProductDocument } from './mappers.js';
@@ -12,13 +17,16 @@ function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export class ProductRepository extends ReplaceableRepository<ProductDocument> {
+export class ProductRepository
+  extends ReplaceableRepository<ProductDocument>
+  implements ProductReader
+{
   constructor(db: Db) {
     super(db, COLLECTIONS.PRODUCTS);
   }
 
   /**
-   * Indeksler SORGULARA gore secildi (list asagida):
+   * Indeksler SORGULARA gore secildi (listProducts asagida):
    *   - sku unique        : servisler arasi birlestirme anahtari; cift sku stok
    *                         sayacini iki urune bolerdi.
    *   - categoryId + _id  : kategori filtresi + imlec siralamasi tek indeksten.
@@ -42,13 +50,13 @@ export class ProductRepository extends ReplaceableRepository<ProductDocument> {
    * gore sirali, sonraki sayfa "_id > son gorulen". Bir fazla kayit istenir;
    * gelirse devam var demektir - ikinci bir sayim sorgusu gerekmeden.
    */
-  async list(filter: ProductFilter, page: PageQuery): Promise<ProductPage> {
+  async listProducts(filter: ProductFilter, page: PageQuery): Promise<ProductPage> {
     const base = toMongoFilter(filter);
     const paged: Filter<ProductDocument> =
       page.token === '' ? base : { ...base, _id: { $gt: page.token } };
 
     const [documents, totalSize] = await Promise.all([
-      this.run('list', () =>
+      this.run('listProducts', () =>
         this.collection
           .find(paged)
           .sort({ _id: 1 })

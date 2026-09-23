@@ -175,7 +175,7 @@ Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicid
   (ornek: `.github/workflows/ci.yml` icinde `permissions: contents: read`).
 - Gunluk ve hata cevabi KISISEL VERI TASIMAZ. Ornekler: Mongo benzersiz indeks ihlalinde
   yalnizca alan ADI disari verilir, deger verilmez (`mongo-kit/src/errors.ts`); baglanti
-  dizesindeki parola gunluge maskelenerek yazilir (`redactUri` / `redactUrl`).
+  dizesindeki parola gunluge maskelenerek yazilir (`@getir/core` `redactConnectionString`).
 - Beklenmeyen hatanin ic mesaji istemciye gitmez; yalnizca gunluge yazilir.
 
 ## Gozlemlenebilirlik

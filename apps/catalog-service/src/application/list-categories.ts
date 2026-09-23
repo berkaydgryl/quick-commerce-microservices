@@ -3,12 +3,12 @@
  * Bir dosya = bir use-case = bir public fonksiyon.
  */
 
-import type { CatalogRepository } from '../domain/catalog-repository.js';
 import type { Category } from '../domain/catalog.js';
 import { sortCategories } from '../domain/catalog.js';
+import type { CategoryReader } from '../domain/category-reader.js';
 
 export interface ListCategoriesDeps {
-  readonly repository: CatalogRepository;
+  readonly categories: CategoryReader;
 }
 
 export type ListCategories = () => Promise<readonly Category[]>;
@@ -18,5 +18,5 @@ export type ListCategories = () => Promise<readonly Category[]>;
  * gecerli olacak ve use-case kopyalanmadan yeniden kullanilabilsin.
  */
 export function createListCategories(deps: ListCategoriesDeps): ListCategories {
-  return async () => sortCategories(await deps.repository.listCategories());
+  return async () => sortCategories(await deps.categories.listCategories());
 }
