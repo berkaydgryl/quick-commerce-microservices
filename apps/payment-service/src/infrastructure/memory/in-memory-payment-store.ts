@@ -6,7 +6,11 @@
 
 import type { Payment } from '../../domain/payment.js';
 import type { PaymentRepository } from '../../domain/payment-repository.js';
-import { paymentAlreadyExists, paymentNotFound } from '../../domain/payment-repository.js';
+import {
+  paymentAlreadyExists,
+  paymentNotFound,
+  paymentVersionConflict,
+} from '../../domain/payment-repository.js';
 
 export class InMemoryPaymentStore implements PaymentRepository {
   /** orderId -> odeme. */
@@ -20,9 +24,13 @@ export class InMemoryPaymentStore implements PaymentRepository {
     return Promise.resolve();
   }
 
-  update(payment: Payment): Promise<void> {
-    if (!this.payments.has(payment.orderId)) {
+  update(payment: Payment, expectedVersion: number): Promise<void> {
+    const current = this.payments.get(payment.orderId);
+    if (current === undefined) {
       return Promise.reject(paymentNotFound(payment.orderId));
+    }
+    if (current.version !== expectedVersion) {
+      return Promise.reject(paymentVersionConflict(payment.orderId, expectedVersion));
     }
     this.payments.set(payment.orderId, payment);
     return Promise.resolve();

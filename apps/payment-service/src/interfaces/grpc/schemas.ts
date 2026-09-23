@@ -3,7 +3,11 @@
  * (tutar pozitif, kartta jeton zorunlu, anahtar zorunlu) burada calisir (ADR-10).
  */
 
-import { IDEMPOTENCY_KEY_MAX_LENGTH, IDEMPOTENCY_KEY_MIN_LENGTH } from '@getir/contracts';
+import {
+  IDEMPOTENCY_KEY_MAX_LENGTH,
+  IDEMPOTENCY_KEY_MIN_LENGTH,
+  OTP_PATTERN,
+} from '@getir/contracts';
 import { paymentV1 } from '@getir/proto';
 import { z } from 'zod';
 
@@ -85,3 +89,16 @@ export const chargeRequestSchema = z
   }));
 
 export type ChargeRequestInput = z.infer<typeof chargeRequestSchema>;
+
+/**
+ * Confirm3Ds. Kod bicimi (6 hane) sozlesmedeki OTP kuraliyla ayni. Bicimi
+ * bozuk kod DENEME SAYILMAZ: VALIDATION_FAILED doner, hak dusmez - yazim hatasi
+ * yuzunden kullanicinin hakki yanmasin.
+ */
+export const confirm3DsRequestSchema = z.object({
+  orderId: requiredText('orderId'),
+  challengeId: requiredText('challengeId'),
+  code: z.string().trim().regex(OTP_PATTERN, '6 haneli kod olmali'),
+});
+
+export type Confirm3DsRequestInput = z.infer<typeof confirm3DsRequestSchema>;

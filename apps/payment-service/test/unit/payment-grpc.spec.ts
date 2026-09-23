@@ -3,7 +3,7 @@
  * T5.1'in "bitti sayilir" olcutunun (4242... onay, 4000... ret) otomatik karsiligi.
  */
 
-import { ERROR_CODES, GRPC_STATUS } from '@getir/core';
+import { ERROR_CODES, GRPC_STATUS, MOCK_THREEDS_CODE } from '@getir/core';
 import { paymentV1 } from '@getir/proto';
 import { ERROR_METADATA_KEY, startGrpcServer } from '@getir/service-kit';
 import type { GrpcServerHandle } from '@getir/service-kit';
@@ -44,6 +44,11 @@ function call<TRequest, TResponse>(
 function errorCodeOf(error: ServiceError | undefined): string | undefined {
   const raw = error?.metadata.get(ERROR_METADATA_KEY)[0];
   return typeof raw === 'string' ? (JSON.parse(raw) as { code: string }).code : undefined;
+}
+
+function errorDetailsOf(error: ServiceError | undefined): unknown {
+  const raw = error?.metadata.get(ERROR_METADATA_KEY)[0];
+  return typeof raw === 'string' ? (JSON.parse(raw) as { details?: unknown }).details : undefined;
 }
 
 let sequence = 0;
@@ -117,14 +122,66 @@ describe('PaymentService/Charge', () => {
     expect(error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
     expect(errorCodeOf(error)).toBe(ERROR_CODES.VALIDATION_FAILED);
   });
+});
 
-  it('henuz yazilmayan Confirm3Ds UNIMPLEMENTED doner (T5.2)', async () => {
-    const { error } = await call(paymentV1.PaymentServiceService.confirm3Ds, {
-      orderId: 'ord_1',
-      challengeId: 'tds_x',
-      code: '123456',
+async function chargeWith3Ds(): Promise<{ orderId: string; challengeId: string }> {
+  const request = chargeRequest('tok_test_3184');
+  const { response } = await call(paymentV1.PaymentServiceService.charge, request);
+  return { orderId: request.orderId, challengeId: response?.challengeId ?? '' };
+}
+
+describe('PaymentService/Confirm3Ds', () => {
+  it('dogru kod SUCCEEDED doner', async () => {
+    const { orderId, challengeId } = await chargeWith3Ds();
+
+    const { error, response } = await call(paymentV1.PaymentServiceService.confirm3Ds, {
+      orderId,
+      challengeId,
+      code: MOCK_THREEDS_CODE,
     });
 
+    expect(error).toBeUndefined();
+    expect(response?.payment?.status).toBe(paymentV1.PaymentStatus.PAYMENT_STATUS_SUCCEEDED);
+  });
+
+  it('yanlis kod FAILED_PRECONDITION + THREEDS_FAILED, kalan hak ayrintida', async () => {
+    const { orderId, challengeId } = await chargeWith3Ds();
+
+    const { error } = await call(paymentV1.PaymentServiceService.confirm3Ds, {
+      orderId,
+      challengeId,
+      code: '000000',
+    });
+
+    expect(error?.code).toBe(GRPC_STATUS.FAILED_PRECONDITION);
+    expect(errorCodeOf(error)).toBe(ERROR_CODES.THREEDS_FAILED);
+    expect(errorDetailsOf(error)).toEqual({ attemptsLeft: 2, reason: 'wrong_code' });
+  });
+
+  it('bicimi bozuk kod deneme sayilmaz: VALIDATION_FAILED', async () => {
+    const { orderId, challengeId } = await chargeWith3Ds();
+
+    const { error } = await call(paymentV1.PaymentServiceService.confirm3Ds, {
+      orderId,
+      challengeId,
+      code: '12ab',
+    });
+
+    expect(errorCodeOf(error)).toBe(ERROR_CODES.VALIDATION_FAILED);
+  });
+
+  it('bilinmeyen jeton NOT_FOUND', async () => {
+    const { error } = await call(paymentV1.PaymentServiceService.confirm3Ds, {
+      orderId: 'ord_yok',
+      challengeId: 'tds_yok',
+      code: MOCK_THREEDS_CODE,
+    });
+
+    expect(error?.code).toBe(GRPC_STATUS.NOT_FOUND);
+  });
+
+  it('henuz yazilmayan GetPayment UNIMPLEMENTED doner', async () => {
+    const { error } = await call(paymentV1.PaymentServiceService.getPayment, { orderId: 'ord_1' });
     expect(error?.code).toBe(GRPC_STATUS.UNIMPLEMENTED);
   });
 });

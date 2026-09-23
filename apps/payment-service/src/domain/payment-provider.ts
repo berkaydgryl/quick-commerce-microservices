@@ -20,6 +20,17 @@ export interface AuthorizeInput {
   readonly amount: Money;
 }
 
+export interface VerifyChallengeInput {
+  readonly challengeId: string;
+  /** Kullanicinin girdigi kod. Gunluge ve hata ayrintisina YAZILMAZ. */
+  readonly code: string;
+}
+
 export interface PaymentProvider {
   authorize(input: AuthorizeInput): Promise<ProviderDecision>;
+  /**
+   * 3DS kodunu dogrular: true ise banka cekimi onayladi. Kodu domain degil
+   * saglayici (banka) bilir; gercek bir PSP takildiginda da boyle olur.
+   */
+  verifyChallenge(input: VerifyChallengeInput): Promise<boolean>;
 }

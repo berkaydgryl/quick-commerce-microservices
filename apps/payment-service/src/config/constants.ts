@@ -14,5 +14,15 @@ export const DEFAULT_PAYMENT_GRPC_PORT = 50_054;
  */
 export const THREEDS_CHALLENGE_TTL_MS = 60_000;
 
+/** 3DS yanlis kod hakki: bu sayiya ulasinca dogrulama kilitlenir, odeme FAILED (B5). */
+export const THREEDS_MAX_ATTEMPTS = 3;
+
+/**
+ * Confirm3Ds surum cakismasinda en fazla kac kez yeniden okunup yazilir.
+ * Cakisma ancak ayni dogrulamaya es zamanli deneme gelince olur; her turda bir
+ * deneme kesinlesir, hak sayisi kadar tur yeter.
+ */
+export const CONFIRM_3DS_MAX_WRITE_RETRIES = THREEDS_MAX_ATTEMPTS;
+
 /** Tek desteklenen para birimi. Proto'da bos para birimi TRY demektir. */
 export const SUPPORTED_CURRENCY = 'TRY';

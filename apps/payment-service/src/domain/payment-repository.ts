@@ -10,8 +10,11 @@ import type { Payment } from './payment.js';
 export interface PaymentRepository {
   /** Siparisin odemesi ya da ayni anahtar zaten varsa CONFLICT firlatir. */
   insert(payment: Payment): Promise<void>;
-  /** Var olan kaydi degistirir (durum gecisi). Kayit yoksa NOT_FOUND. */
-  update(payment: Payment): Promise<void>;
+  /**
+   * Var olan kaydi degistirir (durum gecisi). Kayit yoksa NOT_FOUND; kayittaki
+   * surum expectedVersion degilse (araya baska yazma girdi) CONFLICT.
+   */
+  update(payment: Payment, expectedVersion: number): Promise<void>;
   findByOrderId(orderId: string): Promise<Payment | null>;
   findByIdempotencyKey(idempotencyKey: string): Promise<Payment | null>;
 }
@@ -22,4 +25,10 @@ export function paymentAlreadyExists(orderId: string): AppError {
 
 export function paymentNotFound(orderId: string): AppError {
   return AppError.notFound('Odeme bulunamadi', { details: { orderId } });
+}
+
+export function paymentVersionConflict(orderId: string, expectedVersion: number): AppError {
+  return AppError.conflict('Odeme baska bir istekle degisti', {
+    details: { orderId, expectedVersion },
+  });
 }
