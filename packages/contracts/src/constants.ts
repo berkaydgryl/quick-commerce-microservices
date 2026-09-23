@@ -64,3 +64,28 @@ export const ROOM_PREFIX = {
   /** Herkese acik; yalnizca stock.changed tasir. */
   store: 'store:',
 } as const;
+
+/**
+ * Katalog kimliklerinin onekleri (ADR-15).
+ *
+ * Katalog kimlikleri seed ile gelir ve OKUNABILIRDIR: "mkt_migros-jet-moda",
+ * "prd_sut-1l". Calisma aninda uretilen kimlikler (siparis, kullanici) ise
+ * @getir/core ID_PREFIX + 32 onaltilik karakterdir; ikisi farkli kaynaktir ve
+ * farkli dogrulanir.
+ */
+export const CATALOG_ID_PREFIX = {
+  MARKET: 'mkt',
+  PRODUCT: 'prd',
+  CATEGORY: 'cat',
+  OFFER: 'ofr',
+} as const;
+
+/** Onekten sonraki govde: kucuk harf, rakam ve tekli tire ("migros-jet-moda"). */
+export const CATALOG_ID_BODY_PATTERN = '[a-z0-9]+(?:-[a-z0-9]+)*';
+
+/** Katalog kimliginin en uzun hali; yol parametresi olarak URL'de tasinir. */
+export const CATALOG_ID_MAX_LENGTH = 64;
+
+/** Market puani araligi (sabit seed verisi; yorum sistemi kapsam disi). */
+export const RATING_MIN = 0;
+export const RATING_MAX = 5;

@@ -60,15 +60,15 @@ Ek adlandırma kuralları:
 
 ## Kapsam: neyin hangi dosyada olduğu
 
-| Dosya                          | Taşıdığı                                        | Görev |
-| ------------------------------ | ----------------------------------------------- | ----- |
-| `common/v1/common.proto`       | `Money`, sayfalama, ortak hata ve zaman tipleri | T1.6  |
-| `catalog/v1/catalog.proto`     | Ürün, kategori, dark store                      | T1.6  |
-| `inventory/v1/inventory.proto` | Stok ve rezervasyon RPC'leri                    | T2.1  |
-| `order/v1/order.proto`         | Sipariş yaşam döngüsü                           | T2.1  |
-| `payment/v1/payment.proto`     | Ödeme yetkilendirme ve iade                     | T2.1  |
-| `risk/v1/risk.proto`           | Risk/fraud değerlendirmesi                      | T2.1  |
-| `courier/v1/courier.proto`     | Kurye atama ve rota                             | T2.1  |
+| Dosya                          | Taşıdığı                                        | Görev      |
+| ------------------------------ | ----------------------------------------------- | ---------- |
+| `common/v1/common.proto`       | `Money`, sayfalama, ortak hata ve zaman tipleri | T1.6       |
+| `catalog/v1/catalog.proto`     | Market, ürün, teklif, kategori (ADR-15)         | T1.6, T4.7 |
+| `inventory/v1/inventory.proto` | Stok ve rezervasyon RPC'leri                    | T2.1       |
+| `order/v1/order.proto`         | Sipariş yaşam döngüsü                           | T2.1       |
+| `payment/v1/payment.proto`     | Ödeme yetkilendirme ve iade                     | T2.1       |
+| `risk/v1/risk.proto`           | Risk/fraud değerlendirmesi                      | T2.1       |
+| `courier/v1/courier.proto`     | Kurye atama ve rota                             | T2.1       |
 
 **B27 kararı — `catalog.proto` stok döndürmez.** Stok sorgusu **toplu** yapılır ve stok
 RPC'leri `inventory.proto` dosyasına aittir. Katalog yalnızca ürün, kategori ve depo

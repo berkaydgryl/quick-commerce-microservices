@@ -62,6 +62,8 @@ export function createCatalogImplementation(
         return {
           products: page.items.map(toProtoProduct),
           page: { nextPageToken: page.nextPageToken, totalSize: page.totalSize },
+          // T4.7 sozlesmesi (ADR-15): teklifler T4.8'de doldurulur.
+          offers: [],
         };
       },
     }),
@@ -83,5 +85,10 @@ export function createCatalogImplementation(
     // @getir/service-kit grpc/unimplemented.ts'te.
     getProduct: unimplemented('GetProduct', 'T4'),
     batchGetProducts: unimplemented('BatchGetProducts', 'T4'),
+    // Pazaryeri RPC'leri (T4.7 sozlesmesi): uygulamasi T4.8.
+    listNearbyMarkets: unimplemented('ListNearbyMarkets', 'T4.8'),
+    getMarket: unimplemented('GetMarket', 'T4.8'),
+    listMarketCategories: unimplemented('ListMarketCategories', 'T4.8'),
+    batchGetOffers: unimplemented('BatchGetOffers', 'T9.3'),
   };
 }

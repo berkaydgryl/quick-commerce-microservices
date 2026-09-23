@@ -133,7 +133,12 @@ message Reservation {
   // uretmek yalnizca eslesme hatasi kaynagi olurdu.
   string order_id = 1;
 
-  string dark_store_id = 2;
+  // DEPRECATED (ADR-15): market_id kullanin. Alan silinmez; numara ve JSON adi
+  // korunur (buf breaking WIRE_JSON). Yeni istemci doldurmaz, sunucu once market_id'ye bakar.
+  string dark_store_id = 2 [deprecated = true];
+
+  // Pazaryerinde siparisin/stogun ait oldugu market (ADR-15): mkt_ onekli kimlik.
+  string market_id = 8;
   string user_id = 3;
   repeated ReservationItem items = 4;
 
@@ -149,7 +154,12 @@ message Reservation {
 }
 
 message CheckAvailabilityRequest {
-  string dark_store_id = 1;
+  // DEPRECATED (ADR-15): market_id kullanin. Alan silinmez; numara ve JSON adi
+  // korunur (buf breaking WIRE_JSON). Yeni istemci doldurmaz, sunucu once market_id'ye bakar.
+  string dark_store_id = 1 [deprecated = true];
+
+  // Pazaryerinde siparisin/stogun ait oldugu market (ADR-15): mkt_ onekli kimlik.
+  string market_id = 3;
 
   // En fazla 100 SKU; fazlasi VALIDATION_FAILED ile reddedilir.
   repeated string skus = 2;
@@ -174,7 +184,12 @@ message ReserveRequest {
   // ADR-08'deki idempotency kuralinin stok tarafindaki karsiligidir.
   string order_id = 1;
 
-  string dark_store_id = 2;
+  // DEPRECATED (ADR-15): market_id kullanin. Alan silinmez; numara ve JSON adi
+  // korunur (buf breaking WIRE_JSON). Yeni istemci doldurmaz, sunucu once market_id'ye bakar.
+  string dark_store_id = 2 [deprecated = true];
+
+  // Pazaryerinde siparisin/stogun ait oldugu market (ADR-15): mkt_ onekli kimlik.
+  string market_id = 6;
   string user_id = 3;
   repeated ReservationItem items = 4;
 
@@ -198,7 +213,12 @@ message ReserveResponse {
 
 message CommitRequest {
   string order_id = 1;
-  string dark_store_id = 2;
+  // DEPRECATED (ADR-15): market_id kullanin. Alan silinmez; numara ve JSON adi
+  // korunur (buf breaking WIRE_JSON). Yeni istemci doldurmaz, sunucu once market_id'ye bakar.
+  string dark_store_id = 2 [deprecated = true];
+
+  // Pazaryerinde siparisin/stogun ait oldugu market (ADR-15): mkt_ onekli kimlik.
+  string market_id = 3;
 }
 
 message CommitResponse {
@@ -207,7 +227,12 @@ message CommitResponse {
 
 message ReleaseRequest {
   string order_id = 1;
-  string dark_store_id = 2;
+  // DEPRECATED (ADR-15): market_id kullanin. Alan silinmez; numara ve JSON adi
+  // korunur (buf breaking WIRE_JSON). Yeni istemci doldurmaz, sunucu once market_id'ye bakar.
+  string dark_store_id = 2 [deprecated = true];
+
+  // Pazaryerinde siparisin/stogun ait oldugu market (ADR-15): mkt_ onekli kimlik.
+  string market_id = 4;
 
   // Serbest birakma gerekcesi; stock.released olayina ve ledger kaydina
   // oldugu gibi yazilir (ornegin "user_cancelled", "risk_rejected",
@@ -222,7 +247,12 @@ message ReleaseResponse {
 
 message ExtendReservationRequest {
   string order_id = 1;
-  string dark_store_id = 2;
+  // DEPRECATED (ADR-15): market_id kullanin. Alan silinmez; numara ve JSON adi
+  // korunur (buf breaking WIRE_JSON). Yeni istemci doldurmaz, sunucu once market_id'ye bakar.
+  string dark_store_id = 2 [deprecated = true];
+
+  // Pazaryerinde siparisin/stogun ait oldugu market (ADR-15): mkt_ onekli kimlik.
+  string market_id = 4;
 
   // Mevcut bitis anina EKLENECEK saniye. Mutlak bir zaman alinmaz; istemci
   // saatine guvenmek, saat kaymasi olan bir cihazin sureyi istedigi kadar
@@ -241,7 +271,12 @@ message ExtendReservationResponse {
 
 message GetReservationRequest {
   string order_id = 1;
-  string dark_store_id = 2;
+  // DEPRECATED (ADR-15): market_id kullanin. Alan silinmez; numara ve JSON adi
+  // korunur (buf breaking WIRE_JSON). Yeni istemci doldurmaz, sunucu once market_id'ye bakar.
+  string dark_store_id = 2 [deprecated = true];
+
+  // Pazaryerinde siparisin/stogun ait oldugu market (ADR-15): mkt_ onekli kimlik.
+  string market_id = 3;
 }
 
 // Rezervasyon okuma cevabi.

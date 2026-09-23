@@ -10,7 +10,13 @@
 
 import { z } from 'zod';
 
-import { idSchema, isoDateTimeSchema, moneySchema } from './common.js';
+import {
+  idSchema,
+  isoDateTimeSchema,
+  marketIdSchema,
+  moneySchema,
+  productIdSchema,
+} from './common.js';
 import {
   CART_ITEM_MAX_QUANTITY,
   CART_ITEM_MIN_QUANTITY,
@@ -26,18 +32,22 @@ import {
  * hesaplanir.
  */
 export const cartItemInputSchema = z.object({
-  productId: idSchema,
+  productId: productIdSchema,
   quantity: z.number().int().min(CART_ITEM_MIN_QUANTITY).max(CART_ITEM_MAX_QUANTITY),
 });
 
+/**
+ * Rezervasyon istegi. Sepet TEK MARKETTIR (ADR-15): tum kalemler marketId'nin
+ * teklifleri olmalidir; aksi halde sunucu VALIDATION_FAILED doner (T11.4).
+ */
 export const reserveCartRequestSchema = z.object({
-  darkStoreId: idSchema,
+  marketId: marketIdSchema,
   items: z.array(cartItemInputSchema).min(CART_MIN_ITEMS).max(CART_MAX_ITEMS),
 });
 
 /** Rezerve edilmis, fiyati DONDURULMUS satir. */
 export const reservationLineSchema = z.object({
-  productId: idSchema,
+  productId: productIdSchema,
   name: z.string(),
   quantity: z.number().int().min(CART_ITEM_MIN_QUANTITY),
   unitPrice: moneySchema,
@@ -48,7 +58,7 @@ export const reservationLineSchema = z.object({
 export const reservationSchema = z.object({
   /** Rezervasyonun ve ondan dogacak siparisin ORTAK kimligi. */
   orderId: idSchema,
-  darkStoreId: idSchema,
+  marketId: marketIdSchema,
   lines: z.array(reservationLineSchema),
   subtotal: moneySchema,
   deliveryFee: moneySchema.optional(),

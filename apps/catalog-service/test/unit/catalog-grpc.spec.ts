@@ -84,6 +84,8 @@ describe('ListProducts', () => {
     const { response } = await call(catalogV1.CatalogServiceService.listProducts, {
       categoryId: '',
       darkStoreId: '',
+      // T4.7: yeni zorunlu alan; catalog T4.8'e kadar dark store modeliyle calisir.
+      marketId: '',
       query: '',
       page: undefined,
     });
@@ -97,6 +99,8 @@ describe('ListProducts', () => {
     const { response } = await call(catalogV1.CatalogServiceService.listProducts, {
       categoryId: '',
       darkStoreId: '',
+      // T4.7: yeni zorunlu alan; catalog T4.8'e kadar dark store modeliyle calisir.
+      marketId: '',
       query: 'Süt 1 L',
       page: undefined,
     });
@@ -110,6 +114,8 @@ describe('ListProducts', () => {
     const first = await call(catalogV1.CatalogServiceService.listProducts, {
       categoryId: '',
       darkStoreId: '',
+      // T4.7: yeni zorunlu alan; catalog T4.8'e kadar dark store modeliyle calisir.
+      marketId: '',
       query: '',
       page: { pageSize: 10, pageToken: '' },
     });
@@ -118,6 +124,8 @@ describe('ListProducts', () => {
     const second = await call(catalogV1.CatalogServiceService.listProducts, {
       categoryId: '',
       darkStoreId: '',
+      // T4.7: yeni zorunlu alan; catalog T4.8'e kadar dark store modeliyle calisir.
+      marketId: '',
       query: '',
       page: { pageSize: 10, pageToken: token },
     });
@@ -132,6 +140,8 @@ describe('ListProducts', () => {
     const { error } = await call(catalogV1.CatalogServiceService.listProducts, {
       categoryId: '',
       darkStoreId: 'ds_yok',
+      // T4.7: yeni zorunlu alan; catalog T4.8'e kadar dark store modeliyle calisir.
+      marketId: '',
       query: '',
       page: undefined,
     });
@@ -144,6 +154,8 @@ describe('ListProducts', () => {
     const { error } = await call(catalogV1.CatalogServiceService.listProducts, {
       categoryId: '',
       darkStoreId: '',
+      // T4.7: yeni zorunlu alan; catalog T4.8'e kadar dark store modeliyle calisir.
+      marketId: '',
       query: 'a',
       page: undefined,
     });

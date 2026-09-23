@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CART_MAX_ITEMS,
   createOrderRequestSchema,
-  listProductsQuerySchema,
+  marketProductsQuerySchema,
   loginRequestSchema,
   orderStatusSchema,
   productSchema,
@@ -12,9 +12,9 @@ import {
   threeDsRequestSchema,
 } from '../../src/index.js';
 
-const STORE_ID = '9f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f';
-const PRODUCT_ID = '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d';
-const ORDER_ID = '2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e';
+const MARKET_ID = 'mkt_migros-jet-moda';
+const PRODUCT_ID = 'prd_sut-1l';
+const ORDER_ID = 'ord_db77f4c0e24f49919cc1d78a649c9c94';
 
 const VALID_ADDRESS = {
   title: 'Ev',
@@ -45,9 +45,11 @@ describe('loginRequestSchema', () => {
 describe('productSchema', () => {
   const base = {
     id: PRODUCT_ID,
+    offerId: 'ofr_migros-jet-moda-sut-1l',
+    marketId: MARKET_ID,
     sku: 'SUT-1L',
     name: 'Sut 1 L',
-    categoryId: 'cat-1',
+    categoryId: 'cat_sut-kahvaltilik',
     price: { amountMinor: 4599, currency: 'TRY' },
     availableQuantity: 12,
   };
@@ -65,35 +67,47 @@ describe('productSchema', () => {
   it('bicimsiz sku reddedilir', () => {
     expect(productSchema.safeParse({ ...base, sku: 'sut 1l' }).success).toBe(false);
   });
+
+  it('urun bir market BAGLAMINDA doner: marketId ve offerId zorunlu (ADR-15)', () => {
+    const { marketId: _market, ...withoutMarket } = base;
+    const { offerId: _offer, ...withoutOffer } = base;
+
+    expect(productSchema.safeParse(withoutMarket).success).toBe(false);
+    expect(productSchema.safeParse(withoutOffer).success).toBe(false);
+  });
 });
 
-describe('listProductsQuerySchema', () => {
-  it('darkStoreId zorunludur, cunku stok magaza kapsamlidir', () => {
-    expect(listProductsQuerySchema.safeParse({}).success).toBe(false);
-    expect(listProductsQuerySchema.safeParse({ darkStoreId: STORE_ID }).success).toBe(true);
+describe('marketProductsQuerySchema', () => {
+  it('marketId sorguda DEGIL yolda: bos sorgu gecerlidir', () => {
+    expect(marketProductsQuerySchema.safeParse({}).success).toBe(true);
+  });
+
+  it('kategori onekli katalog kimligi olmali', () => {
+    expect(marketProductsQuerySchema.safeParse({ categoryId: 'cat_icecek' }).success).toBe(true);
+    expect(marketProductsQuerySchema.safeParse({ categoryId: 'icecek' }).success).toBe(false);
   });
 
   it('tek karakterlik aramayi reddeder', () => {
-    expect(listProductsQuerySchema.safeParse({ darkStoreId: STORE_ID, q: 'a' }).success).toBe(
-      false,
-    );
-    expect(listProductsQuerySchema.safeParse({ darkStoreId: STORE_ID, q: 'su' }).success).toBe(
-      true,
-    );
+    expect(marketProductsQuerySchema.safeParse({ q: 'a' }).success).toBe(false);
+    expect(marketProductsQuerySchema.safeParse({ q: 'su' }).success).toBe(true);
   });
 });
 
 describe('reserveCartRequestSchema', () => {
   const item = { productId: PRODUCT_ID, quantity: 2 };
 
+  it('sepet TEK MARKETTIR: marketId zorunlu (ADR-15)', () => {
+    expect(reserveCartRequestSchema.safeParse({ items: [item] }).success).toBe(false);
+  });
+
   it('gecerli sepeti kabul eder', () => {
-    expect(
-      reserveCartRequestSchema.safeParse({ darkStoreId: STORE_ID, items: [item] }).success,
-    ).toBe(true);
+    expect(reserveCartRequestSchema.safeParse({ marketId: MARKET_ID, items: [item] }).success).toBe(
+      true,
+    );
   });
 
   it('bos sepeti reddeder', () => {
-    expect(reserveCartRequestSchema.safeParse({ darkStoreId: STORE_ID, items: [] }).success).toBe(
+    expect(reserveCartRequestSchema.safeParse({ marketId: MARKET_ID, items: [] }).success).toBe(
       false,
     );
   });
@@ -101,15 +115,13 @@ describe('reserveCartRequestSchema', () => {
   it('ust sinirdan fazla kalemi reddeder', () => {
     const items = Array.from({ length: CART_MAX_ITEMS + 1 }, () => item);
 
-    expect(reserveCartRequestSchema.safeParse({ darkStoreId: STORE_ID, items }).success).toBe(
-      false,
-    );
+    expect(reserveCartRequestSchema.safeParse({ marketId: MARKET_ID, items }).success).toBe(false);
   });
 
   it('sifir adedi reddeder', () => {
     expect(
       reserveCartRequestSchema.safeParse({
-        darkStoreId: STORE_ID,
+        marketId: MARKET_ID,
         items: [{ productId: PRODUCT_ID, quantity: 0 }],
       }).success,
     ).toBe(false);
@@ -117,7 +129,7 @@ describe('reserveCartRequestSchema', () => {
 
   it('istemciden gelen fiyati sessizce yok sayar', () => {
     const parsed = reserveCartRequestSchema.parse({
-      darkStoreId: STORE_ID,
+      marketId: MARKET_ID,
       items: [{ ...item, unitPrice: { amountMinor: 1, currency: 'TRY' } }],
     });
 

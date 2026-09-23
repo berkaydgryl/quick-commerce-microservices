@@ -58,7 +58,12 @@ message Courier {
   string name = 2;
 
   // Kuryenin bagli oldugu depo. Atama yalnizca ayni depo icinde yapilir.
-  string dark_store_id = 3;
+  // DEPRECATED (ADR-15): market_id kullanin. Alan silinmez; numara ve JSON adi
+  // korunur (buf breaking WIRE_JSON). Yeni istemci doldurmaz, sunucu once market_id'ye bakar.
+  string dark_store_id = 3 [deprecated = true];
+
+  // Pazaryerinde siparisin/stogun ait oldugu market (ADR-15): mkt_ onekli kimlik.
+  string market_id = 8;
 
   CourierStatus status = 4;
 
@@ -87,7 +92,12 @@ message Route {
 
 message AssignCourierRequest {
   string order_id = 1;
-  string dark_store_id = 2;
+  // DEPRECATED (ADR-15): market_id kullanin. Alan silinmez; numara ve JSON adi
+  // korunur (buf breaking WIRE_JSON). Yeni istemci doldurmaz, sunucu once market_id'ye bakar.
+  string dark_store_id = 2 [deprecated = true];
+
+  // Pazaryerinde siparisin/stogun ait oldugu market (ADR-15): mkt_ onekli kimlik.
+  string market_id = 4;
   getir.common.v1.GeoPoint delivery_location = 3;
 }
 

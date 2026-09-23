@@ -17,7 +17,13 @@
 
 import { z } from 'zod';
 
-import { geoPointSchema, idSchema, isoDateTimeSchema } from './common.js';
+import {
+  geoPointSchema,
+  idSchema,
+  isoDateTimeSchema,
+  marketIdSchema,
+  productIdSchema,
+} from './common.js';
 import { ROOM_PREFIX } from './constants.js';
 import { orderStatusSchema } from './order.js';
 
@@ -40,9 +46,9 @@ export function orderRoom(orderId: string): string {
   return `${ROOM_PREFIX.order}${orderId}`;
 }
 
-/** Depo odasi: herkese acik, yalnizca stok degisimi tasir. */
-export function storeRoom(darkStoreId: string): string {
-  return `${ROOM_PREFIX.store}${darkStoreId}`;
+/** Market odasi: herkese acik, yalnizca stok degisimi tasir. */
+export function storeRoom(marketId: string): string {
+  return `${ROOM_PREFIX.store}${marketId}`;
 }
 
 /**
@@ -148,15 +154,15 @@ export const orderDeliveredEventSchema = z.object({
 });
 
 /**
- * Depo odasina yayin.
+ * Market odasina yayin.
  *
  * DISARIYA sku CIKMAZ: bu olay productId tasir. sku ic birlestirme anahtaridir
  * ve anonim baglanabilen bir odada paylasilmaz (B11). seq alani da yoktur;
  * sira garantisi yalnizca siparis odasinda anlamlidir.
  */
 export const stockChangedEventSchema = z.object({
-  darkStoreId: idSchema,
-  productId: idSchema,
+  marketId: marketIdSchema,
+  productId: productIdSchema,
   availableQuantity: z.number().int().min(0),
   at: isoDateTimeSchema,
 });

@@ -137,7 +137,12 @@ message OrderTimelineEntry {
 message Order {
   string id = 1;
   string user_id = 2;
-  string dark_store_id = 3;
+  // DEPRECATED (ADR-15): market_id kullanin. Alan silinmez; numara ve JSON adi
+  // korunur (buf breaking WIRE_JSON). Yeni istemci doldurmaz, sunucu once market_id'ye bakar.
+  string dark_store_id = 3 [deprecated = true];
+
+  // Pazaryerinde siparisin/stogun ait oldugu market (ADR-15): mkt_ onekli kimlik.
+  string market_id = 16;
   OrderStatus status = 4;
   repeated OrderItem items = 5;
 
@@ -171,7 +176,12 @@ message Order {
 
 message CreateDraftOrderRequest {
   string user_id = 1;
-  string dark_store_id = 2;
+  // DEPRECATED (ADR-15): market_id kullanin. Alan silinmez; numara ve JSON adi
+  // korunur (buf breaking WIRE_JSON). Yeni istemci doldurmaz, sunucu once market_id'ye bakar.
+  string dark_store_id = 2 [deprecated = true];
+
+  // Pazaryerinde siparisin/stogun ait oldugu market (ADR-15): mkt_ onekli kimlik.
+  string market_id = 7;
   repeated CartLine lines = 3;
   getir.common.v1.GeoPoint delivery_location = 4;
   string delivery_address = 5;

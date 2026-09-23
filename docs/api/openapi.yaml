@@ -134,7 +134,7 @@ paths:
                       code: REQUEST_IN_PROGRESS
                       message: "Aynı Idempotency-Key farklı bir gövde ile kullanıldı."
                       details:
-                        idempotencyKey: "0f5d0b2a-1c2d-4e3f-9a8b-7c6d5e4f3a2b"
+                        idempotencyKey: "4f1c3a2b-9d8e-4b7a-8c6d-5e4f3a2b1c0d"
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -259,46 +259,144 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
-  /v1/products:
+  /v1/markets:
     get:
       tags: [catalog]
-      operationId: listProducts
-      summary: Ürünleri listele veya ara
+      operationId: listNearbyMarkets
+      summary: Konuma hizmet veren marketler (ADR-15)
       description: |
-        Stok mağaza kapsamlı olduğu için `darkStoreId` zorunludur; FİYAT
-        mağazadan bağımsızdır (tek liste fiyatı, bkz. `Product.price`).
-        `q` verilirse arama yapılır; `categoryId` ile birlikte kullanılabilir.
+        Pazaryeri: kullanıcı marketi KENDİSİ seçer. Teslimat yarıçapı konumu
+        kapsayan marketler yakından uzağa döner; kapalı marketler de listede
+        vardır (`isOpen: false` → "Kapalı" rozeti). Hiçbiri yoksa BOŞ liste
+        döner — hata değil ("bölgende market yok").
       security: []
       parameters:
-        - name: darkStoreId
+        - name: lat
           in: query
           required: true
-          description: Fiyat ve stok bu karanlık mağazaya göre döner.
-          schema:
-            type: string
-            format: uuid
+          schema: { type: number, minimum: -90, maximum: 90 }
+        - name: lng
+          in: query
+          required: true
+          schema: { type: number, minimum: -180, maximum: 180 }
+      responses:
+        "200":
+          description: Yakındaki marketler
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/NearbyMarket"
+        "400":
+          description: Konum eksik ya da WGS84 aralığı dışında
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /v1/markets/{marketId}:
+    get:
+      tags: [catalog]
+      operationId: getMarket
+      summary: Market sayfası başlığı (puan, süre, fiyat kuralları)
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/MarketIdPath"
+      responses:
+        "200":
+          description: Market
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Market"
+        "404":
+          description: Market yok (NOT_FOUND)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /v1/markets/{marketId}/categories:
+    get:
+      tags: [catalog]
+      operationId: listMarketCategories
+      summary: Marketin teklifi olan kategoriler
+      description: Manav yalnızca meyve-sebze kategorisini döndürür.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/MarketIdPath"
+      responses:
+        "200":
+          description: Kategoriler, sortOrder ile
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/Category"
+        "404":
+          description: Market yok (NOT_FOUND)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+
+  /v1/markets/{marketId}/products:
+    get:
+      tags: [catalog]
+      operationId: listMarketProducts
+      summary: Marketin ürünleri, o marketin fiyatı ve stoğuyla
+      description: |
+        FİYAT markete özeldir (ADR-15): aynı ürün başka markette farklı fiyattadır.
+        `q` verilirse arama yapılır; `categoryId` ile birlikte kullanılabilir.
+        Market var ama eşleşme yoksa BOŞ liste döner; market yoksa NOT_FOUND.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/MarketIdPath"
         - name: categoryId
           in: query
           required: false
           schema:
-            type: string
-            format: uuid
+            $ref: "#/components/schemas/CategoryId"
         - name: q
           in: query
           required: false
-          description: Serbest metin araması. En az 2 karakter olmalıdır.
-          schema:
-            type: string
-            minLength: 2
-            maxLength: 64
+          schema: { type: string, minLength: 2, maxLength: 64 }
         - $ref: "#/components/parameters/PageTokenParam"
         - $ref: "#/components/parameters/PageSizeParam"
       responses:
         "200":
           description: Ürün sayfası
-          headers:
-            X-Request-Id:
-              $ref: "#/components/headers/XRequestId"
           content:
             application/json:
               schema:
@@ -317,108 +415,17 @@ paths:
                           page:
                             $ref: "#/components/schemas/Page"
         "400":
-          description: Sorgu parametresi geçersiz
+          description: Geçersiz filtre (örn. tek karakterlik arama)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
-              examples:
-                queryTooShort:
-                  summary: VALIDATION_FAILED (q en az 2 karakter)
-                  value:
-                    success: false
-                    error:
-                      code: VALIDATION_FAILED
-                      message: "Arama terimi en az 2 karakter olmalı."
-                      details:
-                        fieldErrors:
-                          q: "minLength: 2"
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "404":
-          description: Karanlık mağaza bulunamadı
+          description: Market yok (NOT_FOUND)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
-              examples:
-                darkStoreNotFound:
-                  summary: NOT_FOUND
-                  value:
-                    success: false
-                    error:
-                      code: NOT_FOUND
-                      message: "Karanlık mağaza bulunamadı."
-                      details:
-                        darkStoreId: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
-        "429":
-          $ref: "#/components/responses/RateLimited"
-
-  /v1/darkstores/resolve:
-    post:
-      tags: [darkstore]
-      operationId: resolveDarkStore
-      summary: Konuma göre teslimat yapacak mağazayı bul
-      description: |
-        Gövdede konum taşıdığı için POST'tur; kalıcı durum değiştirmez,
-        bu yüzden `Idempotency-Key` istemez.
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ResolveDarkStoreRequest"
-      responses:
-        "200":
-          description: Hizmet veren mağaza
-          headers:
-            X-Request-Id:
-              $ref: "#/components/headers/XRequestId"
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: "#/components/schemas/ApiSuccessResponse"
-                  - type: object
-                    properties:
-                      data:
-                        $ref: "#/components/schemas/DarkStoreMatch"
-        "400":
-          description: Konum doğrulaması başarısız
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorResponse"
-              examples:
-                validationError:
-                  summary: VALIDATION_FAILED
-                  value:
-                    success: false
-                    error:
-                      code: VALIDATION_FAILED
-                      message: "Enlem -90 ile 90 arasında olmalı."
-                      details:
-                        fieldErrors:
-                          "location.lat": "range"
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
-        "404":
-          description: Bu konuma hizmet veren mağaza yok
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorResponse"
-              examples:
-                outOfServiceArea:
-                  summary: NO_STORE
-                  value:
-                    success: false
-                    error:
-                      code: NO_STORE
-                      message: "Bu konum teslimat bölgesi dışında."
-                      details:
-                        nearestDistanceMeters: 8400
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "429":
           $ref: "#/components/responses/RateLimited"
 
@@ -497,7 +504,7 @@ paths:
                       code: NOT_FOUND
                       message: "Ürün bulunamadı."
                       details:
-                        productId: "2b1f7a54-6a8f-4f2e-8f0a-1d3c5b7a9e11"
+                        productId: "prd_sut-1l"
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "409":
           description: Stok yetmiyor ya da anahtar farklı gövdeyle kullanıldı
@@ -514,7 +521,7 @@ paths:
                       code: STOCK_INSUFFICIENT
                       message: "Yeterli stok yok."
                       details:
-                        productId: "2b1f7a54-6a8f-4f2e-8f0a-1d3c5b7a9e11"
+                        productId: "prd_sut-1l"
                         requested: 5
                         available: 2
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
@@ -526,7 +533,7 @@ paths:
                       code: REQUEST_IN_PROGRESS
                       message: "Aynı Idempotency-Key farklı bir gövde ile kullanıldı."
                       details:
-                        idempotencyKey: "0f5d0b2a-1c2d-4e3f-9a8b-7c6d5e4f3a2b"
+                        idempotencyKey: "4f1c3a2b-9d8e-4b7a-8c6d-5e4f3a2b1c0d"
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -603,7 +610,7 @@ paths:
                       code: NOT_FOUND
                       message: "Rezervasyon bulunamadı."
                       details:
-                        orderId: "9f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f"
+                        orderId: "ord_db77f4c0e24f49919cc1d78a649c9c94"
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "409":
           description: Rezervasyon zaten kapanmış
@@ -736,7 +743,7 @@ paths:
                       code: NOT_FOUND
                       message: "Rezervasyon bulunamadı."
                       details:
-                        orderId: "9f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f"
+                        orderId: "ord_db77f4c0e24f49919cc1d78a649c9c94"
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "409":
           description: Rezervasyon süresi dolmuş veya durum uygun değil
@@ -991,7 +998,7 @@ paths:
                       code: FORBIDDEN
                       message: "Bu sipariş odası için jeton alamazsınız."
                       details:
-                        room: "order:9f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f"
+                        room: "order:ord_db77f4c0e24f49919cc1d78a649c9c94"
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "404":
           $ref: "#/components/responses/OrderNotFound"
@@ -1023,15 +1030,20 @@ components:
         type: string
         minLength: 8
         maxLength: 128
-      example: "0f5d0b2a-1c2d-4e3f-9a8b-7c6d5e4f3a2b"
+      example: "ord_db77f4c0e24f49919cc1d78a649c9c94"
 
+    MarketIdPath:
+      name: marketId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/MarketId"
     OrderIdPath:
       name: orderId
       in: path
       required: true
       schema:
-        type: string
-        format: uuid
+        $ref: "#/components/schemas/RuntimeId"
 
     OrderIdPathId:
       name: id
@@ -1039,8 +1051,7 @@ components:
       required: true
       description: Sipariş kimliği (rezervasyon anında üretilen `orderId`).
       schema:
-        type: string
-        format: uuid
+        $ref: "#/components/schemas/RuntimeId"
 
     PageTokenParam:
       name: pageToken
@@ -1111,7 +1122,7 @@ components:
                   code: NOT_FOUND
                   message: "Sipariş bulunamadı."
                   details:
-                    orderId: "9f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f"
+                    orderId: "ord_db77f4c0e24f49919cc1d78a649c9c94"
                   requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
 
     RateLimited:
@@ -1367,8 +1378,7 @@ components:
       required: [id, phone, fullName]
       properties:
         id:
-          type: string
-          format: uuid
+          $ref: "#/components/schemas/RuntimeId"
         phone:
           type: string
           pattern: "^\\+90[0-9]{10}$"
@@ -1384,7 +1394,7 @@ components:
       required: [id, name, slug]
       properties:
         id:
-          type: string
+          $ref: "#/components/schemas/CategoryId"
         name:
           type: string
         slug:
@@ -1401,13 +1411,17 @@ components:
     Product:
       type: object
       description: |
-        Katalog verisi catalog-svc'den, `availableQuantity` ise inventory-svc'den
-        gelir; gateway iki cevabı BİRLEŞTİRİR. Bu yüzden proto tarafındaki
-        `getir.catalog.v1.Product` mesajında stok alanı YOKTUR (B27).
-      required: [id, sku, name, categoryId, price, availableQuantity]
+        Bir marketin TEKLİFİ olarak ürün (ADR-15): fiyat o markete özeldir.
+        Fiyat catalog-svc'den (Offer), `availableQuantity` inventory-svc'den
+        gelir; gateway iki cevabı BİRLEŞTİRİR (B27).
+      required: [id, offerId, marketId, sku, name, categoryId, price, availableQuantity]
       properties:
         id:
-          type: string
+          $ref: "#/components/schemas/ProductId"
+        offerId:
+          $ref: "#/components/schemas/OfferId"
+        marketId:
+          $ref: "#/components/schemas/MarketId"
         sku:
           type: string
           description: |
@@ -1419,7 +1433,7 @@ components:
         description:
           type: string
         categoryId:
-          type: string
+          $ref: "#/components/schemas/CategoryId"
         imageUrl:
           type: string
           format: uri
@@ -1430,69 +1444,126 @@ components:
           allOf:
             - $ref: "#/components/schemas/Money"
           description: |
-            Liste fiyatı; kampanya/indirim UYGULANMAMIŞ hâlidir ve mağazadan
-            BAĞIMSIZDIR. İndirim hesabı `packages/pricing` içinde sepet
-            düzeyinde yapılır, ürün düzeyinde değil.
+            BU MARKETTEKİ liste fiyatı; kampanya/indirim UYGULANMAMIŞ hâlidir.
+            İndirim `packages/pricing` içinde sepet düzeyinde hesaplanır.
         unit:
           type: string
           enum: [PIECE, KILOGRAM, LITER, PACK]
           description: |
             `getir.common.v1.Unit` ile birebir aynı sözlük. Türkçe etiket
-            (adet / kg / lt / paket) istemcide üretilir; sunucu çevrilmiş metin
-            göndermez.
+            istemcide üretilir.
         availableQuantity:
           type: integer
           minimum: 0
           description: |
-            `darkStoreId` kapsamında satılabilir adet. Kaynağı inventory-svc'dir
-            ve TOPLU sorgulanır (`CheckAvailability(darkStoreId, sku[])`, B27);
-            gateway ürün listesi için tek çağrı yapar.
+            `marketId` kapsamında satılabilir adet. Kaynağı inventory-svc'dir
+            ve TOPLU sorgulanır (`CheckAvailability(marketId, sku[])`, B27).
 
-    # --- Karanlık mağaza ----------------------------------------------------
-    ResolveDarkStoreRequest:
-      type: object
-      required: [location]
-      properties:
-        location:
-          $ref: "#/components/schemas/GeoPoint"
-
-    DarkStore:
+    # --- Pazaryeri (ADR-15) -------------------------------------------------
+    PricingRules:
       type: object
       description: |
-        Minimum sepet ve teslimat ücreti BU ŞEMADA TUTULMAZ: değerler
-        `packages/pricing` içindeki sabitlerden (MIN_BASKET_MINOR,
-        DELIVERY_FEE_MINOR, FREE_DELIVERY_THRESHOLD_MINOR) gelir ve tek kaynak
-        orasıdır. Mağaza başına farklılaştırma bu fazda kapsam dışıdır.
-      required: [id, name, location]
+        Marketin sepet kuralları. Market paneli olmadığı için bugün seed'den
+        gelir; `packages/pricing` bu değerleri PARAMETRE olarak alır.
+      required: [minBasket, deliveryFee, freeDeliveryThreshold]
+      properties:
+        minBasket:
+          $ref: "#/components/schemas/Money"
+        deliveryFee:
+          $ref: "#/components/schemas/Money"
+        freeDeliveryThreshold:
+          allOf:
+            - $ref: "#/components/schemas/Money"
+          description: Ara toplam (indirim ÖNCESİ, B12) buna ulaşırsa teslimat ücretsiz.
+
+    Market:
+      type: object
+      required:
+        [
+          id,
+          name,
+          brand,
+          location,
+          deliveryRadiusMeters,
+          isOpen,
+          deliveryTime,
+          rating,
+          pricingRules,
+        ]
       properties:
         id:
-          type: string
+          $ref: "#/components/schemas/MarketId"
         name:
           type: string
+          example: "Migros Jet - Moda"
+        brand:
+          type: string
+          example: "Migros Jet"
+        logoUrl:
+          type: string
+          format: uri
+          description: MUTLAK URL (gateway kurar); logosu olmayan markette alan yok.
         location:
           $ref: "#/components/schemas/GeoPoint"
         deliveryRadiusMeters:
           type: integer
-          description: Yarıçap dışındaki konum NO_STORE alır.
+          minimum: 1
         isOpen:
           type: boolean
-          description: |
-            Kapalı mağaza da NO_STORE ile sonuçlanır; sebep hata
-            `details.reason = "STORE_CLOSED"` alanında taşınır.
+          description: Kapalı market listede görünür ama sipariş almaz (rezervasyon NO_STORE / STORE_CLOSED).
+        deliveryTime:
+          type: object
+          required: [minMinutes, maxMinutes]
+          properties:
+            minMinutes: { type: integer, minimum: 0 }
+            maxMinutes: { type: integer, minimum: 0 }
+        rating:
+          type: object
+          description: Seed'de sabit; yorum sistemi kapsam dışı. Proto onda bir hassasiyetle tam sayı taşır (47 → 4.7).
+          required: [average, count]
+          properties:
+            average: { type: number, minimum: 0, maximum: 5, example: 4.7 }
+            count: { type: integer, minimum: 0 }
+        pricingRules:
+          $ref: "#/components/schemas/PricingRules"
 
-    DarkStoreMatch:
+    NearbyMarket:
       type: object
-      required: [darkStore, distanceMeters, etaMinutes]
+      required: [market, distanceMeters]
       properties:
-        darkStore:
-          $ref: "#/components/schemas/DarkStore"
+        market:
+          $ref: "#/components/schemas/Market"
         distanceMeters:
           type: integer
           minimum: 0
-        etaMinutes:
-          type: integer
-          minimum: 0
-          description: COURIER_SPEED_KMH (20 km/sa) üzerinden hesaplanan tahmin.
+          description: Her zaman `market.deliveryRadiusMeters`'tan küçük veya eşittir.
+
+    # --- Kimlikler (ADR-15) -------------------------------------------------
+    RuntimeId:
+      type: string
+      description: Çalışma anında üretilen kimlik (@getir/core ID_PREFIX + 32 hex). UUID DEĞİLDİR.
+      pattern: "^(ord|usr|pay|crr|rsv|req)_[0-9a-f]{32}$"
+      example: "ord_db77f4c0e24f49919cc1d78a649c9c94"
+    MarketId:
+      type: string
+      pattern: "^mkt_[a-z0-9]+(?:-[a-z0-9]+)*$"
+      maxLength: 64
+      example: "mkt_migros-jet-moda"
+    ProductId:
+      type: string
+      pattern: "^prd_[a-z0-9]+(?:-[a-z0-9]+)*$"
+      maxLength: 64
+      example: "prd_sut-1l"
+    CategoryId:
+      type: string
+      pattern: "^cat_[a-z0-9]+(?:-[a-z0-9]+)*$"
+      maxLength: 64
+      example: "cat_sut-kahvaltilik"
+    OfferId:
+      type: string
+      pattern: "^ofr_[a-z0-9]+(?:-[a-z0-9]+)*$"
+      maxLength: 64
+      example: "ofr_migros-jet-moda-sut-1l"
 
     # --- Sepet ve rezervasyon ----------------------------------------------
     CartItemInput:
@@ -1500,8 +1571,7 @@ components:
       required: [productId, quantity]
       properties:
         productId:
-          type: string
-          format: uuid
+          $ref: "#/components/schemas/ProductId"
         quantity:
           type: integer
           minimum: 1
@@ -1509,11 +1579,10 @@ components:
 
     ReserveCartRequest:
       type: object
-      required: [darkStoreId, items]
+      required: [marketId, items]
       properties:
-        darkStoreId:
-          type: string
-          format: uuid
+        marketId:
+          $ref: "#/components/schemas/MarketId"
         items:
           type: array
           minItems: 1
@@ -1526,8 +1595,7 @@ components:
       required: [productId, name, quantity, unitPrice, lineTotal]
       properties:
         productId:
-          type: string
-          format: uuid
+          $ref: "#/components/schemas/ProductId"
         name:
           type: string
         quantity:
@@ -1540,15 +1608,14 @@ components:
 
     Reservation:
       type: object
-      required: [orderId, darkStoreId, lines, subtotal, expiresAt, ttlSeconds]
+      required: [orderId, marketId, lines, subtotal, expiresAt, ttlSeconds]
       properties:
         orderId:
-          type: string
-          format: uuid
+          allOf:
+            - $ref: "#/components/schemas/RuntimeId"
           description: Rezervasyonun ve ondan doğacak siparişin ortak kimliği.
-        darkStoreId:
-          type: string
-          format: uuid
+        marketId:
+          $ref: "#/components/schemas/MarketId"
         lines:
           type: array
           items:
@@ -1574,8 +1641,7 @@ components:
       required: [orderId, released, releasedAt]
       properties:
         orderId:
-          type: string
-          format: uuid
+          $ref: "#/components/schemas/RuntimeId"
         released:
           type: boolean
         releasedAt:
@@ -1622,8 +1688,8 @@ components:
       required: [orderId, address, payment]
       properties:
         orderId:
-          type: string
-          format: uuid
+          allOf:
+            - $ref: "#/components/schemas/RuntimeId"
           description: Rezervasyondan dönen kimlik.
         address:
           $ref: "#/components/schemas/DeliveryAddress"
@@ -1666,8 +1732,7 @@ components:
       required: [id, name]
       properties:
         id:
-          type: string
-          format: uuid
+          $ref: "#/components/schemas/RuntimeId"
         name:
           type: string
         location:
@@ -1678,16 +1743,14 @@ components:
 
     Order:
       type: object
-      required: [id, status, darkStoreId, lines, total, createdAt]
+      required: [id, status, marketId, lines, total, createdAt]
       properties:
         id:
-          type: string
-          format: uuid
+          $ref: "#/components/schemas/RuntimeId"
         status:
           $ref: "#/components/schemas/OrderStatus"
-        darkStoreId:
-          type: string
-          format: uuid
+        marketId:
+          $ref: "#/components/schemas/MarketId"
         lines:
           type: array
           items:
@@ -1721,7 +1784,7 @@ components:
         room:
           type: string
           description: Jetonun yetkili olduğu tek oda.
-          examples: ["order:9f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f"]
+          examples: ["order:ord_db77f4c0e24f49919cc1d78a649c9c94"]
         expiresAt:
           type: string
           format: date-time
