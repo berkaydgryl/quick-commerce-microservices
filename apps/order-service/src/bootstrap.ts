@@ -7,6 +7,7 @@ import type { Clock, Logger } from '@getir/core';
 import { orderV1 } from '@getir/proto';
 import type { GrpcServiceRegistration } from '@getir/service-kit';
 
+import { createCancelOrder } from './application/cancel-order.js';
 import { createCreateDraftOrder } from './application/create-draft-order.js';
 import { createCreateOrder } from './application/create-order.js';
 import { ORDER_SERVICE_FULL_NAME } from './config/constants.js';
@@ -29,6 +30,7 @@ export function buildOrderService(options: BootstrapOptions = {}): GrpcServiceRe
   const implementation = createOrderImplementation({
     createDraftOrder: createCreateDraftOrder({ repository, clock }),
     createOrder: createCreateOrder({ repository, clock }),
+    cancelOrder: createCancelOrder({ repository, clock }),
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
 

@@ -466,12 +466,13 @@ seq alanı istemcinin geç gelen paketi atmasını sağlar. Tüm payload tipleri
 
 ## Sipariş Durum Makinesi ve Saga
 
-Sipariş durumunu yazabilen tek yer order-service'tir. Geçişler bir tabloda tanımlıdır; tabloda olmayan geçiş denemesi hata fırlatır, sessizce geçilmez.
+Sipariş durumunu yazabilen tek yer order-service'tir. Geçişler bir tabloda tanımlıdır (`apps/order-service/src/domain/order-state-machine.ts`, T4.4); tabloda olmayan geçiş denemesi hata fırlatır, sessizce geçilmez. Her geçiş `timeline[]`'a bir kayıt ekler (durum, zaman, isteğe bağlı not anahtarı). Kullanıcı yalnızca DRAFT, RESERVED ve AWAITING_PAYMENT durumundaki kendi siparişini iptal edebilir; diğer CANCELLED kenarlarını sistem yürütür (B20, B29).
 
 ```mermaid
 stateDiagram-v2
   [*] --> DRAFT: sepet rezerve edilecek
   DRAFT --> RISK_CHECK
+  DRAFT --> CANCELLED: kullanici vazgecti (B29)
   RISK_CHECK --> REJECTED: skor 86+
   RISK_CHECK --> REVIEW: skor 66-85 (B20)
   RISK_CHECK --> RESERVED: stok kilitlendi
@@ -480,6 +481,8 @@ stateDiagram-v2
   REVIEW --> REJECTED: inceleme reddetti (B20)
   RESERVED --> EXPIRED: sure doldu
   RESERVED --> AWAITING_PAYMENT
+  RESERVED --> CANCELLED: rezervasyon serbest birakildi (B29)
+  AWAITING_PAYMENT --> CANCELLED: kullanici odemeden vazgecti (B29)
   AWAITING_PAYMENT --> PAYMENT_FAILED
   AWAITING_PAYMENT --> PAID
   PAYMENT_FAILED --> CANCELLED
@@ -1172,7 +1175,7 @@ Roadmap'in akışlarını satır satır denetledim. Birinci turda 18 nokta buldu
 | B17 | Konum buffer'ı 30 nokta × 2 sn = 60 sn; 5 dakikalık teslimatta yenileme sonrası rota eksik kalır                      | GET /v1/orders/{id} cevabına courier.route ve lastPosition eklenir; buffer yalnızca anlık boşluk içindir                                                               |
 | B18 | Her demo hesabı yeni olduğu için account-age puanı alır; düşük risk bandı hiç görülmez                                | Seed'e 30 gün önce oluşturulmuş, 5 teslimatlı bir demo kullanıcısı eklenir                                                                                             |
 
-### İkinci tur denetim — kalan boşluklar (B19-B28)
+### İkinci tur denetim — kalan boşluklar (B19-B29)
 
 Birinci turun düzeltmeleri uygulandıktan sonra akışlar bir kez daha okundu ve on nokta daha çıktı. İkisi, birinci turun kendi düzeltmelerinin bıraktığı boşluklardır: B21 (B5'in süre aritmetiği tutmuyor) ve B22 (B8'in çözümü Lua script'ine hiç girmemiş). Aşağıdaki düzeltmeler de bağlayıcıdır ve ilgili görevlerin bitti tanımına dahildir.
 
@@ -1188,6 +1191,7 @@ Birinci turun düzeltmeleri uygulandıktan sonra akışlar bir kez daha okundu v
 | B26 | CI kapısı, entegrasyon testleri için replica set kurmayı varsayıyor | Outbox transaction'ı replica set ister; GitHub Actions services bloğunda servis konteynerine özel komut ve healthcheck verilemediği için rs.initiate ve PRIMARY bekleme adımları elle yazılmak zorunda kalır.                                                                                                                                                    | Entegrasyon testleri CI'da services yerine Testcontainers ile kendi konteynerini kaldırır (ubuntu runner'ında Docker hazırdır). Repo herkese açık olduğu için Actions dakikaları ücretsizdir; aynı kapılar ayrıca yerelde tek komutla koşar.              |
 | B27 | Ürün listesi için stok sorgusu N+1 üretiyor                         | Ürünler catalog-svc'den, availableQty ise inventory-svc'den gelir. CheckAvailability tekil tasarlanırsa 15 ürünlük bir liste 15 ayrı gRPC çağrısı demektir; ürün listesi projenin en sık açılan ekranıdır.                                                                                                                                                       | CheckAvailability toplu imza alır: CheckAvailability(marketId, sku[]) → map<sku, availableQty>. Gateway ürün listesini tek çağrıyla zenginleştirir.                                                                                                       |
 | B28 | Market odası "herkese açık" ama handshake token doğruluyor          | store:{marketId} odası anonim kullanıcıya açık olmalı; oysa realtime-svc tüm bağlantılarda kısa ömürlü sipariş token'ı bekliyor. Kuralın iki modlu olduğu hiçbir yerde yazılı değil.                                                                                                                                                                             | Realtime iki yetki modu tanımlar: anonim bağlantı yalnızca store:* odasına katılabilir ve yalnızca stock.changed alır; order:* odası için handshake'te geçerli token zorunludur. Yetkisiz katılım denemesi FORBIDDEN ile reddedilir ve loglanır.          |
+| B29 | Kullanıcı iptali için durum makinesinde geçiş yok (T4.4'te bulundu) | Sözleşmede `CancelOrder` RPC'si ve `DELETE /v1/cart/reserve/{orderId}` var; ama diyagramda DRAFT, RESERVED ve AWAITING_PAYMENT'tan CANCELLED'a ok yoktu. "Tabloda olmayan geçiş hata fırlatır" kuralı gereği kullanıcı ödemeden vazgeçemez, rezervasyonunu bırakamazdı.                                                                                          | Üç kenar eklendi (DRAFT/RESERVED/AWAITING_PAYMENT → CANCELLED). Kullanıcının tetikleyebildiği küme ayrı tutulur (`USER_CANCELLABLE`): PAID → CANCELLED (B20c) sistemin telafi adımıdır, kullanıcı iptal edemez.                                           |
 
 ### Üçüncü tur — prodüksiyon kör noktaları (P1-P6)
 
@@ -1206,32 +1210,33 @@ Yüksek yük, kesinti ve çoklu örnek (multi-instance) altında veri kaybı, ki
 
 Her kritik bulgunun bir testi vardır; testi olmayan düzeltme yapılmamış sayılır.
 
-| Bulgu  | Test                                                                                                                                            |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| B1     | Reseed sonrası avail değeri Mongo ve aktif rezervasyonlarla birebir tutar                                                                       |
-| B2     | Orta riskli kullanıcının rezervasyonu 120 sn TTL ile açılır                                                                                     |
-| B3, B4 | Süre dolarken gelen commit: ya sipariş açılır ya RESERVATION_EXPIRED; stok toplamı değişmez                                                     |
-| B5     | 3DS ikinci denemede başarılı olur, rezervasyon hayatta kalır                                                                                    |
-| B6     | Aynı anda iki POST /v1/orders: biri sipariş, diğeri 409                                                                                         |
-| B7     | İki sipariş eşzamanlı, tek IDLE kurye: biri atanır, diğeri bekler                                                                               |
-| B8     | Aynı kullanıcının ikinci rezervasyonu ilkini serbest bırakır                                                                                    |
-| B9     | İstemci sahte dwell süresi gönderir, skor değişmez                                                                                              |
-| B12    | 260 TL sepet + kargo kuponu: teslimat ücreti tek kez sıfırlanır                                                                                 |
-| B14    | Aynı olay iki kez tüketilir, ledger'da tek kayıt kalır                                                                                          |
-| B20    | REVIEW bandındaki sipariş kuyruğa düşer; stok yetersizken taslak CANCELLED olur; commit ZREM 0 dönünce ödeme iade edilip sipariş CANCELLED olur |
-| B21    | Üçüncü 3DS denemesi 150. saniyede başarılı olur ve rezervasyon hâlâ yaşıyordur                                                                  |
-| B22    | Aynı kullanıcının iki eşzamanlı isteği: biri rezerve eder, diğeri RESERVATION_ACTIVE alır; stok tek kez düşer                                   |
-| B24    | PAID ama commit kaydı olmayan sipariş varken reseed koşulur: avail o adetleri geri vermez                                                       |
-| B25    | Süpürücü lideri öldürülür; 3 sn içinde ikinci instance devralır ve süresi dolan rezervasyon serbest kalır                                       |
-| B27    | 15 ürünlük liste tek CheckAvailability çağrısıyla döner                                                                                         |
-| P1     | Redis `maxmemory-policy` `allkeys-lru` iken inventory-service açılmaz; `noeviction` iken açılır                                                 |
-| P2     | İki gateway örneği aynı Redis'e bağlıyken toplam istek sınırı örnek sayısından bağımsız tutar; pencere sınırında sayım kaymaz                   |
-| P3     | Aynı `version` ile iki eşzamanlı yazımda biri yeniden dener ve başarır; 3 denemeyi aşan çakışma `CONFLICT` olur ve saga telafiye geçer          |
-| P4     | Bağlantı `seq` 7'de kesilip 12'de dönen istemci 8-11'i toplu alır; tampon dışı kalan eski `seq` "tam yenile" sinyali üretir                     |
-| P5     | Aynı anahtarla tekrar: aynı `orderId` döner; aynı anahtarla farklı gövde: `CONFLICT`; başarılı checkout kaydının TTL'i 2 saattir                |
-| P6     | `stylelint` token dışı kırılım ve `px` kırılımı yakalar; kırılımlar tek `@custom-media` kaynağından derlenir                                    |
+| Bulgu  | Test                                                                                                                                                         |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| B1     | Reseed sonrası avail değeri Mongo ve aktif rezervasyonlarla birebir tutar                                                                                    |
+| B2     | Orta riskli kullanıcının rezervasyonu 120 sn TTL ile açılır                                                                                                  |
+| B3, B4 | Süre dolarken gelen commit: ya sipariş açılır ya RESERVATION_EXPIRED; stok toplamı değişmez                                                                  |
+| B5     | 3DS ikinci denemede başarılı olur, rezervasyon hayatta kalır                                                                                                 |
+| B6     | Aynı anda iki POST /v1/orders: biri sipariş, diğeri 409                                                                                                      |
+| B7     | İki sipariş eşzamanlı, tek IDLE kurye: biri atanır, diğeri bekler                                                                                            |
+| B8     | Aynı kullanıcının ikinci rezervasyonu ilkini serbest bırakır                                                                                                 |
+| B9     | İstemci sahte dwell süresi gönderir, skor değişmez                                                                                                           |
+| B12    | 260 TL sepet + kargo kuponu: teslimat ücreti tek kez sıfırlanır                                                                                              |
+| B14    | Aynı olay iki kez tüketilir, ledger'da tek kayıt kalır                                                                                                       |
+| B20    | REVIEW bandındaki sipariş kuyruğa düşer; stok yetersizken taslak CANCELLED olur; commit ZREM 0 dönünce ödeme iade edilip sipariş CANCELLED olur              |
+| B21    | Üçüncü 3DS denemesi 150. saniyede başarılı olur ve rezervasyon hâlâ yaşıyordur                                                                               |
+| B22    | Aynı kullanıcının iki eşzamanlı isteği: biri rezerve eder, diğeri RESERVATION_ACTIVE alır; stok tek kez düşer                                                |
+| B24    | PAID ama commit kaydı olmayan sipariş varken reseed koşulur: avail o adetleri geri vermez                                                                    |
+| B25    | Süpürücü lideri öldürülür; 3 sn içinde ikinci instance devralır ve süresi dolan rezervasyon serbest kalır                                                    |
+| B27    | 15 ürünlük liste tek CheckAvailability çağrısıyla döner                                                                                                      |
+| P1     | Redis `maxmemory-policy` `allkeys-lru` iken inventory-service açılmaz; `noeviction` iken açılır                                                              |
+| P2     | İki gateway örneği aynı Redis'e bağlıyken toplam istek sınırı örnek sayısından bağımsız tutar; pencere sınırında sayım kaymaz                                |
+| P3     | Aynı `version` ile iki eşzamanlı yazımda biri yeniden dener ve başarır; 3 denemeyi aşan çakışma `CONFLICT` olur ve saga telafiye geçer                       |
+| P4     | Bağlantı `seq` 7'de kesilip 12'de dönen istemci 8-11'i toplu alır; tampon dışı kalan eski `seq` "tam yenile" sinyali üretir                                  |
+| P5     | Aynı anahtarla tekrar: aynı `orderId` döner; aynı anahtarla farklı gövde: `CONFLICT`; başarılı checkout kaydının TTL'i 2 saattir                             |
+| P6     | `stylelint` token dışı kırılım ve `px` kırılımı yakalar; kırılımlar tek `@custom-media` kaynağından derlenir                                                 |
+| B29    | Kullanıcı DRAFT / RESERVED / AWAITING_PAYMENT siparişini iptal eder; PAID siparişi iptal edemez (ORDER_STATE_INVALID); geçiş tablosu diyagramla birebir aynı |
 
-Bu testlerin hepsi mevcut görevlerin içinde kalır: B1-B5 ve B14 → T10-T11, B6 → T8.2, B7 → T13.1, B8-B9 → T7.1-T7.2, B12 → T4.3. İkinci tur bulguların karşılığı da aynı şekilde dağılır: B19 → T8.4 ve T11.4, B20 → T4.4 ve T11.2, B21 → T5.2 ve T11.3, B22-B23 → T10.1, B24 → T9.2, B25 → T10.3, B26 → T15.2, B27 → T9.1, B28 → T12.2. Ek gün gerekmez. Üçüncü tur: P1 → T9.2, P2 ve P5 → T8.2, P3 → T10.2 ve T7.1, P4 → T14.1-T14.2 ve T13.4, P6 → T4.6 ve T16.1.
+Bu testlerin hepsi mevcut görevlerin içinde kalır: B1-B5 ve B14 → T10-T11, B6 → T8.2, B7 → T13.1, B8-B9 → T7.1-T7.2, B12 → T4.3. İkinci tur bulguların karşılığı da aynı şekilde dağılır: B19 → T8.4 ve T11.4, B20 → T4.4 ve T11.2, B21 → T5.2 ve T11.3, B22-B23 → T10.1, B24 → T9.2, B25 → T10.3, B26 → T15.2, B27 → T9.1, B28 → T12.2, B29 → T4.4. Ek gün gerekmez. Üçüncü tur: P1 → T9.2, P2 ve P5 → T8.2, P3 → T10.2 ve T7.1, P4 → T14.1-T14.2 ve T13.4, P6 → T4.6 ve T16.1.
 
 ## Test Stratejisi ve Kalite Kapıları
 

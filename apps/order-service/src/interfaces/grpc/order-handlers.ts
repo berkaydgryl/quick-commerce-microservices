@@ -10,14 +10,20 @@ import type { orderV1 } from '@getir/proto';
 import { unaryHandler, unimplemented } from '@getir/service-kit';
 import type { UntypedServiceImplementation } from '@grpc/grpc-js';
 
+import type { CancelOrder } from '../../application/cancel-order.js';
 import type { CreateDraftOrder } from '../../application/create-draft-order.js';
 import type { CreateOrder } from '../../application/create-order.js';
 import { toProtoOrderStatus } from './mappers.js';
-import { createDraftOrderRequestSchema, createOrderRequestSchema } from './schemas.js';
+import {
+  cancelOrderRequestSchema,
+  createDraftOrderRequestSchema,
+  createOrderRequestSchema,
+} from './schemas.js';
 
 export interface OrderHandlerDeps {
   readonly createDraftOrder: CreateDraftOrder;
   readonly createOrder: CreateOrder;
+  readonly cancelOrder: CancelOrder;
   readonly logger?: Logger;
 }
 
@@ -59,10 +65,19 @@ export function createOrderImplementation(deps: OrderHandlerDeps): UntypedServic
       },
     }),
 
+    cancelOrder: unaryHandler({
+      name: 'CancelOrder',
+      schema: cancelOrderRequestSchema,
+      ...(logger === undefined ? {} : { logger }),
+      handle: async (input): Promise<orderV1.CancelOrderResponse> => {
+        const order = await deps.cancelOrder(input);
+        return { status: toProtoOrderStatus(order.status) };
+      },
+    }),
+
     // Sozlesmede tanimli ama HENUZ UYGULANMAMIS RPC'ler; gerekce
     // @getir/service-kit grpc/unimplemented.ts'te.
     getOrder: unimplemented('GetOrder', 'T4.5'),
     listMyOrders: unimplemented('ListMyOrders', 'T4.5'),
-    cancelOrder: unimplemented('CancelOrder', 'T4.4'),
   };
 }

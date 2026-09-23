@@ -1,9 +1,17 @@
 /**
- * Use-case: taslak siparisi gercek siparise cevirir.
+ * Use-case: taslak siparisi odeme adimina getirir.
  *
- * KAPSAM (T3.2): taslak bulunur, sahiplik ve durum dogrulanir, siparis
- * AWAITING_PAYMENT'a gecer. Ikinci risk gecisi, odeme cekimi ve stok dusumu
- * (saga) T7.1'de; kalicilik T4.5'te gelecek.
+ * DURUM MAKINESI (T4.4): siparis tablodaki yolu ADIM ADIM yurur:
+ *   DRAFT -> RISK_CHECK -> RESERVED -> AWAITING_PAYMENT
+ * T3.2 iskeleti DRAFT'tan dogrudan AWAITING_PAYMENT'a atliyordu; tablo zorunlu
+ * olunca o kisayol ORDER_STATE_INVALID olur.
+ *
+ * GECICI ADIMLAR (bilerek ve gorunur): risk-svc (T6.3) ve stok rezervasyonu
+ * (T11.2) henuz bagli degil. Bu iki adim bugun degerlendirmesiz/kilitsiz
+ * gecer ve zaman cizelgesine NEDENIYLE yazilir (PENDING_RISK_SERVICE,
+ * PENDING_RESERVATION) - sessizce atlanmaz. Saga geldiginde (T7.1, T11.2) bu
+ * adimlarin yerini gercek cagrilar alir; tablo ve timeline degismez.
+ * Odeme cekimi T7.1'dedir.
  */
 
 import { AppError, ORDER_STATUS } from '@getir/core';
@@ -11,7 +19,7 @@ import type { Clock } from '@getir/core';
 
 import type { OrderRepository } from '../domain/order-repository.js';
 import type { Order } from '../domain/order.js';
-import { assertCanStartPayment, withStatus } from '../domain/order.js';
+import { TIMELINE_NOTE, transitionOrder } from '../domain/order.js';
 
 export interface CreateOrderDeps {
   readonly repository: OrderRepository;
@@ -36,10 +44,23 @@ export function createCreateOrder(deps: CreateOrderDeps): CreateOrder {
       throw AppError.notFound('Siparis bulunamadi', { details: { orderId } });
     }
 
-    assertCanStartPayment(order);
+    // Ilk gecis tablodan kontrol edilir: DRAFT disindaki bir siparis (ornegin
+    // ikinci CreateOrder) burada ORDER_STATE_INVALID alir, hicbir sey yazilmaz.
+    const riskChecked = transitionOrder(
+      order,
+      ORDER_STATUS.RISK_CHECK,
+      deps.clock,
+      TIMELINE_NOTE.PENDING_RISK_SERVICE,
+    );
+    const reserved = transitionOrder(
+      riskChecked,
+      ORDER_STATUS.RESERVED,
+      deps.clock,
+      TIMELINE_NOTE.PENDING_RESERVATION,
+    );
+    const awaitingPayment = transitionOrder(reserved, ORDER_STATUS.AWAITING_PAYMENT, deps.clock);
 
-    const updated = withStatus(order, ORDER_STATUS.AWAITING_PAYMENT, deps.clock);
-    await deps.repository.save(updated);
-    return updated;
+    await deps.repository.save(awaitingPayment);
+    return awaitingPayment;
   };
 }
