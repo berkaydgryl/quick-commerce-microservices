@@ -16,9 +16,14 @@
   "dependencies": {
     "@getir/contracts": "workspace:*",
     "@getir/core": "workspace:*",
+    "@getir/mongo-kit": "workspace:*",
     "@getir/proto": "workspace:*",
     "@getir/service-kit": "workspace:*",
     "@grpc/grpc-js": "^1.14.5",
+    "mongodb": "^7.6.0",
     "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@testcontainers/mongodb": "^12.1.0"
   }
 }

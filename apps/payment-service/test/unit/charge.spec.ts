@@ -68,6 +68,22 @@ describe('Charge - test kartlari', () => {
     expect(payment.challenge?.expiresAt.getTime()).toBe(NOW + THREEDS_CHALLENGE_TTL_MS);
   });
 
+  it('cekim karari attempts[] gecmisine yazilir; kapida odemede gecmis bos', async () => {
+    const card = await charge(cardCharge({ cardToken: 'tok_test_0002' }));
+    expect(card.attempts.map((a) => a.outcome)).toEqual(['DECLINED']);
+    expect(card.attempts[0]?.at).toEqual(new Date(NOW));
+
+    const cash = await charge(
+      cardCharge({
+        orderId: 'ord_2',
+        idempotencyKey: 'anahtar-0002',
+        method: PAYMENT_METHOD.CASH_ON_DELIVERY,
+        cardToken: undefined,
+      }),
+    );
+    expect(cash.attempts).toEqual([]);
+  });
+
   it('taninmayan jeton reddedilir', async () => {
     const payment = await charge(cardCharge({ cardToken: 'tok_bilinmeyen' }));
     expect(payment.failureCode).toBe(ERROR_CODES.PAYMENT_DECLINED);
@@ -145,6 +161,7 @@ describe('Charge - saglayici hatasi', () => {
 
     expect(payment.status).toBe(PAYMENT_STATUS.FAILED);
     expect(payment.failureCode).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+    expect(payment.attempts.map((a) => a.outcome)).toEqual(['PROVIDER_ERROR']);
     expect((await repository.findByOrderId('ord_1'))?.status).toBe(PAYMENT_STATUS.FAILED);
   });
 });

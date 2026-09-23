@@ -30,6 +30,33 @@ export const PAYMENT_METHOD = {
 
 export type PaymentMethod = (typeof PAYMENT_METHOD)[keyof typeof PAYMENT_METHOD];
 
+/** Denemenin hangi adimda yapildigi. */
+export const ATTEMPT_KIND = {
+  CHARGE: 'CHARGE',
+  THREEDS: 'THREEDS',
+} as const;
+
+export type AttemptKind = (typeof ATTEMPT_KIND)[keyof typeof ATTEMPT_KIND];
+
+/** Denemenin sonucu. CHARGE icin ilk dordu, THREEDS icin son ucu kullanilir. */
+export const ATTEMPT_OUTCOME = {
+  APPROVED: 'APPROVED',
+  DECLINED: 'DECLINED',
+  CHALLENGE_REQUIRED: 'CHALLENGE_REQUIRED',
+  PROVIDER_ERROR: 'PROVIDER_ERROR',
+  CODE_ACCEPTED: 'CODE_ACCEPTED',
+  CODE_REJECTED: 'CODE_REJECTED',
+  EXPIRED: 'EXPIRED',
+} as const;
+
+export type AttemptOutcome = (typeof ATTEMPT_OUTCOME)[keyof typeof ATTEMPT_OUTCOME];
+
+export interface PaymentAttempt {
+  readonly kind: AttemptKind;
+  readonly outcome: AttemptOutcome;
+  readonly at: Date;
+}
+
 /** Tutar kurus cinsinden tam sayidir; float yoktur. */
 export interface Money {
   readonly amountMinor: number;
@@ -70,8 +97,14 @@ export interface Payment {
   readonly status: PaymentStatus;
   /** Yalnizca FAILED durumunda dolu; ERROR_CODES sozlugunden bir anahtar. */
   readonly failureCode?: ErrorCode;
-  /** Yalnizca REQUIRES_3DS durumunda dolu. */
+  /** 3DS istenen odemede dolu; sonuclandiktan sonra da kalir (tekrar istek icin). */
   readonly challenge?: ThreeDsChallenge;
+  /**
+   * Denetim gecmisi (T5.3): odemede olan her karar, eskiden yeniye. Durumu
+   * degistirmeyen istekler (tekrar istek, bicimi bozuk kod, ulasilamayan
+   * banka) kayit EKLEMEZ. Girilen 3DS kodu hicbir kayitta tutulmaz.
+   */
+  readonly attempts: readonly PaymentAttempt[];
   /** Cekimi baslatan niyetin anahtari (ADR-08); ayni anahtar ayni kaydi doner. */
   readonly idempotencyKey: string;
   /**
@@ -103,6 +136,7 @@ export function startPayment(command: ChargeCommand, clock: Clock): Payment {
     id: newId(ID_PREFIX.PAYMENT),
     ...command,
     status: PAYMENT_STATUS.PENDING,
+    attempts: [],
     version: 0,
     createdAt: now,
     updatedAt: now,
@@ -120,7 +154,11 @@ export function settlePayment(
   challengeTtlMs: number,
 ): Payment {
   const now = clock.date();
-  const base = { ...payment, version: payment.version + 1, updatedAt: now };
+  const base = {
+    ...withAttempt(payment, ATTEMPT_KIND.CHARGE, decision, now),
+    version: payment.version + 1,
+    updatedAt: now,
+  };
 
   switch (decision) {
     case 'APPROVED':
@@ -141,18 +179,29 @@ export function settlePayment(
 }
 
 /**
- * Saglayiciya ulasilamadi: tutar CEKILMEDI, kayit FAILED olur. PENDING'de
- * birakilsaydi ayni anahtarla gelen tekrar istek hep "sonuc belli degil"
- * gorur ve siparis sonsuza kadar beklerdi.
+ * Cekimde saglayiciya ulasilamadi: tutar CEKILMEDI, kayit FAILED olur.
+ * PENDING'de birakilsaydi ayni anahtarla gelen tekrar istek hep "sonuc belli
+ * degil" gorur ve siparis sonsuza kadar beklerdi.
  */
-export function failPayment(payment: Payment, failureCode: ErrorCode, clock: Clock): Payment {
+export function failUnreachableProvider(payment: Payment, clock: Clock): Payment {
+  const now = clock.date();
   return {
-    ...payment,
+    ...withAttempt(payment, ATTEMPT_KIND.CHARGE, ATTEMPT_OUTCOME.PROVIDER_ERROR, now),
     status: PAYMENT_STATUS.FAILED,
-    failureCode,
+    failureCode: ERROR_CODES.SERVICE_UNAVAILABLE,
     version: payment.version + 1,
-    updatedAt: clock.date(),
+    updatedAt: now,
   };
+}
+
+/** Gecmise bir deneme ekler; kayit degismez (yeni nesne doner). */
+export function withAttempt(
+  payment: Payment,
+  kind: AttemptKind,
+  outcome: AttemptOutcome,
+  at: Date,
+): Payment {
+  return { ...payment, attempts: [...payment.attempts, { kind, outcome, at }] };
 }
 
 /**

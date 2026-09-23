@@ -4,14 +4,14 @@
 gerçek bir sağlayıcı takılabilecek biçimde kuruldu: sağlayıcı bir port (`PaymentProvider`),
 idempotency ve durum makinesi baştan yerinde.
 
-## Bugünkü durum (T5.2 — 3DS doğrulaması)
+## Bugünkü durum (T5.3 — kalıcılık ve deneme geçmişi)
 
-| Uç                     | Durum                                                         |
-| ---------------------- | ------------------------------------------------------------- |
-| `Charge`               | ✅ Test kartına göre onay / ret / 3DS; kapıda ödeme `PENDING` |
-| `Confirm3Ds`           | ⏳ T5.2 (bugün `UNIMPLEMENTED`)                               |
-| `payments`             | ⏳ T5.3 Mongo + `attempts[]`; bugün bellekte                  |
-| `GetPayment`, `Refund` | ⏳ Sipariş zinciri görevlerinde                               |
+| Uç                     | Durum                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------- |
+| `Charge`               | ✅ Test kartına göre onay / ret / 3DS; kapıda ödeme `PENDING`                   |
+| `Confirm3Ds`           | ✅ Sabit kod, 60 sn ömür, 3 yanlışta kilit, tekrar istek güvenli (T5.2)         |
+| `payments`             | ✅ Mongo (`MOCK=false`) ya da bellek (`MOCK=true`); `attempts[]` geçmişi (T5.3) |
+| `GetPayment`, `Refund` | ⏳ Sipariş zinciri görevlerinde                                                 |
 
 ## Test kartları
 
@@ -42,6 +42,32 @@ yapabilirdi. Şimdi ikincisi 3. adımda çakışır, tekrar-istek yoluna düşer
 (test: `charge.spec.ts` → "es zamanli ayni anahtar"). Sağlayıcıya ulaşılamazsa tutar çekilmemiştir;
 kayıt `FAILED` + `SERVICE_UNAVAILABLE` olur, `PENDING`'de takılı kalmaz.
 
+## Veri kaynağı: Mongo ya da MOCK
+
+| `MOCK` | Depo                                            | Mongo gerekir mi                 |
+| ------ | ----------------------------------------------- | -------------------------------- |
+| `true` | Bellek (`infrastructure/memory`)                | Hayır; yeniden başlayınca unutur |
+| değil  | `payments` koleksiyonu (`infrastructure/mongo`) | Evet, `MONGO_URI` zorunlu        |
+
+İki depo **aynı sözleşme testinden** geçer (`test/support/payment-store-contract.ts`): birim testinde
+bellek, entegrasyon testinde gerçek Mongo. Depoyu seçip açan tek yer `infrastructure/payment-store.ts`.
+
+**İndeksler (koda bildirilir, açılışta kurulur):** `orderId` unique (sipariş başına tek ödeme) ve
+`idempotencyKey` unique (aynı niyet iki kayıt açamaz). İkisi de hız için değil, **iş kuralı** için.
+
+**İyimser kilit:** güncelleme `replaceOne({ _id, version: beklenen })`; eşleşme yoksa kayıt yok mu
+(NOT_FOUND) sürüm mü değişmiş (CONFLICT) ayrılır.
+
+**`attempts[]` denetim geçmişi:** ödemedeki her karar, eskiden yeniye:
+
+| Adım      | Sonuçlar                                                       |
+| --------- | -------------------------------------------------------------- |
+| `CHARGE`  | `APPROVED`, `DECLINED`, `CHALLENGE_REQUIRED`, `PROVIDER_ERROR` |
+| `THREEDS` | `CODE_ACCEPTED`, `CODE_REJECTED`, `EXPIRED`                    |
+
+Durumu değiştirmeyen istekler (tekrar istek, biçimi bozuk kod, ulaşılamayan banka) kayıt eklemez.
+Belgede kart jetonu ve girilen 3DS kodu **yoktur**. Kapıda ödemede geçmiş boştur (sağlayıcı yok).
+
 ## 3DS doğrulaması (Confirm3Ds)
 
 Mock bankanın kabul ettiği kod `@getir/core` → `MOCK_THREEDS_CODE` (`123456`). Kodu domain değil
@@ -69,7 +95,7 @@ değildir.
 src/
   domain/          payment.ts (durumlar, geçişler), three-ds.ts (3DS kuralları), portlar
   application/     charge.ts, confirm-3ds.ts
-  infrastructure/  memory/ (depo), mock-provider/ (test kartları)
+  infrastructure/  memory/ ve mongo/ (depo), payment-store.ts (mod seçimi), mock-provider/
   interfaces/grpc/ şema (Zod), eşleme (Record), handler
   config/          env.ts, constants.ts (THREEDS_CHALLENGE_TTL_MS = 60 000, THREEDS_MAX_ATTEMPTS = 3)
 ```
@@ -77,7 +103,8 @@ src/
 ## Çalıştırma ve doğrulama
 
 ```bash
-pnpm --filter @getir/payment-service build && pnpm --filter @getir/payment-service start   # :50054
+pnpm --filter @getir/payment-service build && pnpm --filter @getir/payment-service start   # :50054 (kok .env: MOCK, MONGO_URI)
+pnpm test:int   # gercek Mongo (Testcontainers): sozlesme, indeksler, yeniden baslatma
 
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/payment/v1/payment.proto \
   -d '{"orderId":"ord_a","userId":"usr_1","amount":{"amountMinor":12990,"currency":"TRY"},
