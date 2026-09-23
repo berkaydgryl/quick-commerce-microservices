@@ -9,19 +9,38 @@ Bu serviste **olmayanlar**, bilinçli: stok sayacı `inventory-service`'in, kart
 (kapıda ödeme kapalı, rezervasyon süresi, reddet) burada verilir — risk servisi yalnızca
 skor önerir.
 
-## Bugünkü durum (T3.2 — iskelet)
+## Bugünkü durum (T4.4 — durum makinesi)
 
-| RPC                | Durum                                                    |
-| ------------------ | -------------------------------------------------------- |
-| `CreateDraftOrder` | ✅ Kimlik üretir, `DRAFT` açar (risk ve rezervasyon yok) |
-| `CreateOrder`      | ✅ `DRAFT → AWAITING_PAYMENT` (ödeme ve saga yok)        |
-| `GetOrder`         | ⏳ `UNIMPLEMENTED` — T4.5                                |
-| `ListMyOrders`     | ⏳ `UNIMPLEMENTED` — T4.5                                |
-| `CancelOrder`      | ⏳ `UNIMPLEMENTED` — T4.4                                |
+| RPC                | Durum                                                                       |
+| ------------------ | --------------------------------------------------------------------------- |
+| `CreateDraftOrder` | ✅ Kimlik üretir, `DRAFT` açar; zaman çizelgesi `DRAFT` ile başlar          |
+| `CreateOrder`      | ✅ Tablodan adım adım: `DRAFT → RISK_CHECK → RESERVED → AWAITING_PAYMENT`   |
+| `CancelOrder`      | ✅ Kullanıcı iptali: yalnızca `DRAFT`, `RESERVED`, `AWAITING_PAYMENT` (B29) |
+| `GetOrder`         | ⏳ `UNIMPLEMENTED` — T4.5                                                   |
+| `ListMyOrders`     | ⏳ `UNIMPLEMENTED` — T4.5                                                   |
 
-Siparişler **bellekte** tutulur; süreç yeniden başlayınca kaybolur. Kalıcılık T4.5
-(`orders` repository), tam geçiş tablosu ve `timeline[]` T4.4, saga (risk → ödeme → stok)
-T7.1 ve T11.2 ile gelecek. Bugün tutar da hesaplanmıyor: fiyatlandırma T4.3'te.
+### Durum makinesi (`src/domain/order-state-machine.ts`)
+
+Her geçiş tek bir tablodan geçer (`ORDER_TRANSITIONS`, roadmap diyagramı + B20 + B29); tabloda
+olmayan geçiş `ORDER_STATE_INVALID` fırlatır (gRPC `FAILED_PRECONDITION`) ve ayrıntıda
+`{ orderId, from, to }` taşır. Durumu değiştirmenin tek yolu `transitionOrder`'dır: tabloyu
+kontrol eder ve `timeline[]`'a bir kayıt **ekler** (durum, zaman, isteğe bağlı not anahtarı).
+Tablo `Record<OrderStatus, …>`: `@getir/core`'a yeni durum eklenip tabloya eklenmezse derleme
+kırılır. Testi tabloyu diyagramdaki kenar listesiyle **birebir** karşılaştırır; ayrıca her durum
+`DRAFT`'tan erişilebilir ve her ara durumdan bir son duruma varılabilir.
+
+**Geçici adımlar, görünür:** risk servisi (T6.3) ve stok rezervasyonu (T11.2) henüz bağlı değil.
+`CreateOrder` bu iki adımı yine tablodan geçer ama zaman çizelgesine nedeniyle yazar
+(`PENDING_RISK_SERVICE`, `PENDING_RESERVATION`) — sessizce atlanmaz. Saga gelince (T7.1, T11.2)
+yerlerini gerçek çağrılar alır; tablo ve zaman çizelgesi değişmez.
+
+**Kullanıcı iptali (B29):** kullanıcı yalnızca `DRAFT`, `RESERVED` ve `AWAITING_PAYMENT`
+durumundaki **kendi** siparişini iptal edebilir (`USER_CANCELLABLE`). `PAID → CANCELLED` tabloda
+var ama sistemin telafi adımıdır (iade, B20c). Gerekçe bir anahtardır (`CHANGED_MIND`); yoksa
+`USER_CANCELLED` yazılır. Rezervasyonun serbest bırakılması T11.2'de saga'ya eklenir.
+
+Siparişler hâlâ **bellekte** tutulur; kalıcılık T4.5 (`orders` repository). Tutar hesabı
+`@getir/pricing` ile T7.2'de bağlanır.
 
 Yazılmamış RPC'ler boş bırakılmadı, açıkça `UNIMPLEMENTED` dönüyor — gerekçesi
 [catalog-service README'sinde](../catalog-service/README.md) anlatılan ile aynı.

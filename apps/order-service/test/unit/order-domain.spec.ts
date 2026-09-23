@@ -1,7 +1,7 @@
 import { AppError, ERROR_CODES, fixedClock, ORDER_STATUS } from '@getir/core';
 import { describe, expect, it } from 'vitest';
 
-import { assertCanStartPayment, createDraftOrder, withStatus } from '../../src/domain/order.js';
+import { createDraftOrder, TIMELINE_NOTE, transitionOrder } from '../../src/domain/order.js';
 import type { DraftOrderInput } from '../../src/domain/order.js';
 
 const CLOCK_EPOCH_MS = 1_760_000_000_000;
@@ -23,11 +23,11 @@ describe('createDraftOrder', () => {
     expect(order.status).toBe(ORDER_STATUS.DRAFT);
   });
 
-  it('zamani Clock uzerinden okur (Date.now cagrilmaz)', () => {
+  it('zaman cizelgesi DRAFT kaydiyla baslar; zaman Clock tan', () => {
     const order = createDraftOrder(input, clock);
 
+    expect(order.timeline).toEqual([{ status: ORDER_STATUS.DRAFT, at: new Date(CLOCK_EPOCH_MS) }]);
     expect(order.createdAt.getTime()).toBe(CLOCK_EPOCH_MS);
-    expect(order.updatedAt.getTime()).toBe(CLOCK_EPOCH_MS);
   });
 
   it('her cagride farkli kimlik uretir', () => {
@@ -37,35 +37,46 @@ describe('createDraftOrder', () => {
   });
 });
 
-describe('assertCanStartPayment', () => {
-  it('DRAFT siparise izin verir', () => {
-    expect(() => assertCanStartPayment(createDraftOrder(input, clock))).not.toThrow();
-  });
-
-  it('baska durumda ORDER_STATE_INVALID firlatir', () => {
-    // "Tabloda olmayan gecis hata firlatir" kurali (sozlesme yorumu).
-    const paid = withStatus(createDraftOrder(input, clock), ORDER_STATUS.PAID, clock);
-
-    try {
-      assertCanStartPayment(paid);
-      expect.unreachable('PAID siparis odemeye gecememeliydi');
-    } catch (error: unknown) {
-      expect(error).toBeInstanceOf(AppError);
-      expect((error as AppError).code).toBe(ERROR_CODES.ORDER_STATE_INVALID);
-    }
-  });
-});
-
-describe('withStatus', () => {
-  it('yeni nesne dondurur, girdiyi degistirmez', () => {
+describe('transitionOrder', () => {
+  it('durumu degistirir, timeline a EKLER, girdiyi degistirmez', () => {
     const draft = createDraftOrder(input, clock);
     const later = fixedClock(CLOCK_EPOCH_MS + 5_000);
 
-    const updated = withStatus(draft, ORDER_STATUS.AWAITING_PAYMENT, later);
+    const next = transitionOrder(
+      draft,
+      ORDER_STATUS.RISK_CHECK,
+      later,
+      TIMELINE_NOTE.PENDING_RISK_SERVICE,
+    );
 
     expect(draft.status).toBe(ORDER_STATUS.DRAFT);
-    expect(updated.status).toBe(ORDER_STATUS.AWAITING_PAYMENT);
-    expect(updated.updatedAt.getTime()).toBe(CLOCK_EPOCH_MS + 5_000);
-    expect(updated.createdAt.getTime()).toBe(CLOCK_EPOCH_MS);
+    expect(draft.timeline).toHaveLength(1);
+    expect(next.status).toBe(ORDER_STATUS.RISK_CHECK);
+    expect(next.timeline).toEqual([
+      { status: ORDER_STATUS.DRAFT, at: new Date(CLOCK_EPOCH_MS) },
+      {
+        status: ORDER_STATUS.RISK_CHECK,
+        at: new Date(CLOCK_EPOCH_MS + 5_000),
+        note: 'PENDING_RISK_SERVICE',
+      },
+    ]);
+    expect(next.updatedAt.getTime()).toBe(CLOCK_EPOCH_MS + 5_000);
+    expect(next.createdAt.getTime()).toBe(CLOCK_EPOCH_MS);
+  });
+
+  it('not verilmezse kayitta note alani HIC olmaz', () => {
+    const next = transitionOrder(createDraftOrder(input, clock), ORDER_STATUS.RISK_CHECK, clock);
+
+    expect(Object.hasOwn(next.timeline[1] ?? {}, 'note')).toBe(false);
+  });
+
+  it('tablo disi gecis ORDER_STATE_INVALID; siparis degismez', () => {
+    const draft = createDraftOrder(input, clock);
+
+    expect(() => transitionOrder(draft, ORDER_STATUS.PAID, clock)).toThrow(AppError);
+    expect(() => transitionOrder(draft, ORDER_STATUS.PAID, clock)).toThrow(
+      expect.objectContaining({ code: ERROR_CODES.ORDER_STATE_INVALID }) as Error,
+    );
+    expect(draft.status).toBe(ORDER_STATUS.DRAFT);
   });
 });

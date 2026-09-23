@@ -22,3 +22,6 @@ export const MAX_CART_LINES = 50;
 
 /** Bir kalemde izin verilen en fazla adet. */
 export const MAX_LINE_QUANTITY = 99;
+
+/** Iptal gerekcesi anahtarinin en uzun hali (ornek: "CHANGED_MIND"). */
+export const MAX_CANCEL_REASON_LENGTH = 64;

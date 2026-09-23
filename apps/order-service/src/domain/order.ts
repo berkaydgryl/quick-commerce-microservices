@@ -6,13 +6,14 @@
  * saf TypeScript, I/O icermez ve siparis durumlari (ORDER_STATUS) zaten
  * servisler arasi ortak sozlukte tanimlidir.
  *
- * KAPSAM (T3.2): burasi iskelet. Tam gecis tablosu ve timeline yazimi T4.4'un,
- * Mongo kalicilik T4.5'in isidir. Bugun yalnizca taslak siparisin dogusu ve
- * odemeye gecis adimi var.
+ * Durum gecisleri order-state-machine.ts'teki TABLODAN gecer (T4.4); her gecis
+ * zaman cizelgesine (timeline) bir kayit ekler. Mongo kalicilik T4.5'tedir.
  */
 
-import { AppError, ERROR_CODES, ID_PREFIX, newId, ORDER_STATUS } from '@getir/core';
+import { ID_PREFIX, newId, ORDER_STATUS } from '@getir/core';
 import type { Clock, OrderStatus } from '@getir/core';
+
+import { assertTransition } from './order-state-machine.js';
 
 /** Sepetten gelen ham satir. FIYAT TASIMAZ (istemciden gelen fiyata guvenilmez). */
 export interface CartLine {
@@ -20,6 +21,31 @@ export interface CartLine {
   readonly sku: string;
   readonly quantity: number;
 }
+
+/**
+ * Zaman cizelgesi kaydi: siparisin gectigi her durum, ne zaman ve (varsa)
+ * neden. UI "Siparisin alindi 14:02, hazirlaniyor 14:05" seridini bundan
+ * cizer (proto OrderTimelineEntry).
+ */
+export interface TimelineEntry {
+  readonly status: OrderStatus;
+  readonly at: Date;
+  /** Istege bagli kisa aciklama ANAHTARI (TIMELINE_NOTE ya da iptal gerekcesi). */
+  readonly note?: string;
+}
+
+/**
+ * Sistemin yazdigi not anahtarlari. Metin degil ANAHTAR: istemci kullanici
+ * diline kendisi cevirir, sunucu cevrilmis metin gondermez.
+ */
+export const TIMELINE_NOTE = {
+  /** Risk servisi henuz bagli degil (T6.3): adim degerlendirmesiz gecti. */
+  PENDING_RISK_SERVICE: 'PENDING_RISK_SERVICE',
+  /** Stok rezervasyonu henuz yok (T11.2): adim kilitsiz gecti. */
+  PENDING_RESERVATION: 'PENDING_RESERVATION',
+  /** Kullanici gerekce vermeden iptal etti. */
+  USER_CANCELLED: 'USER_CANCELLED',
+} as const;
 
 export interface DeliveryLocation {
   readonly lat: number;
@@ -42,6 +68,8 @@ export interface Order {
   readonly deliveryLocation: DeliveryLocation;
   readonly deliveryAddress: string;
   readonly status: OrderStatus;
+  /** Eskiden yeniye; ilk kayit her zaman DRAFT. Yalnizca EKLENIR, degistirilmez. */
+  readonly timeline: readonly TimelineEntry[];
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -73,32 +101,23 @@ export function createDraftOrder(input: DraftOrderInput, clock: Clock): Order {
     deliveryLocation: input.deliveryLocation,
     deliveryAddress: input.deliveryAddress,
     status: ORDER_STATUS.DRAFT,
+    timeline: [{ status: ORDER_STATUS.DRAFT, at: now }],
     createdAt: now,
     updatedAt: now,
   };
 }
 
 /**
- * Odeme adimina gecmeye uygun mu?
+ * Siparisi yeni duruma GECIRIR: tablo kontrolu + zaman cizelgesi kaydi.
  *
- * T3.2 ISKELETI: yalnizca DRAFT kabul edilir. Gercek gecis tablosu (RISK_CHECK,
- * REVIEW, RESERVED, telafi yollari) T4.4'te gelecek; o gun bu fonksiyon
- * tablodan okuyan genel bir "gecis uygulayicisi" ile degistirilecek.
+ * Tek gecis yolu budur; durumu dogrudan degistiren baska bir fonksiyon yok.
+ * Yeni nesne dondurur (mutasyon yok); timeline'a yalnizca EKLENIR.
  *
- * Tablo disi gecis SESSIZCE GECILMEZ: ORDER_STATE_INVALID firlatir ve bu kod
- * gRPC tarafinda FAILED_PRECONDITION'a cevrilir.
+ * @throws AppError ORDER_STATE_INVALID - tabloda olmayan gecis.
  */
-export function assertCanStartPayment(order: Order): void {
-  if (order.status !== ORDER_STATUS.DRAFT) {
-    throw new AppError(
-      ERROR_CODES.ORDER_STATE_INVALID,
-      `Bu durumdaki siparis odemeye gecemez: ${order.status}`,
-      { details: { orderId: order.id, status: order.status } },
-    );
-  }
-}
-
-/** Durumu degistirilmis YENI siparis nesnesi dondurur (mutasyon yok). */
-export function withStatus(order: Order, status: OrderStatus, clock: Clock): Order {
-  return { ...order, status, updatedAt: clock.date() };
+export function transitionOrder(order: Order, to: OrderStatus, clock: Clock, note?: string): Order {
+  assertTransition(order.id, order.status, to);
+  const at = clock.date();
+  const entry: TimelineEntry = note === undefined ? { status: to, at } : { status: to, at, note };
+  return { ...order, status: to, timeline: [...order.timeline, entry], updatedAt: at };
 }

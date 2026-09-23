@@ -10,6 +10,7 @@ import { isSku } from '@getir/core';
 import { z } from 'zod';
 
 import {
+  MAX_CANCEL_REASON_LENGTH,
   MAX_CART_LINES,
   MAX_LINE_QUANTITY,
   MIN_IDEMPOTENCY_KEY_LENGTH,
@@ -60,6 +61,23 @@ export const createOrderRequestSchema = z.object({
   // paymentMethod ve cardToken BUGUN OKUNMUYOR: odeme cekimi T7.1'de gelecek.
   // Semaya simdiden koymak, dogrulanip hicbir yerde kullanilmayan bir alan
   // uretirdi; sozlesmede duruyor olmasi yeterli.
+});
+
+/**
+ * Iptal gerekcesi ANAHTARI (metin degil): zaman cizelgesine ve outbox
+ * olayina yazilir, istemci kullanici diline cevirir. Bos = gerekce yok.
+ */
+const cancelReason = z
+  .string()
+  .trim()
+  .max(MAX_CANCEL_REASON_LENGTH)
+  .regex(/^[A-Z0-9_]*$/, 'gerekce buyuk harf, rakam ve alt cizgiden olusan bir anahtar olmali')
+  .transform((value) => (value === '' ? undefined : value));
+
+export const cancelOrderRequestSchema = z.object({
+  orderId: requiredText('orderId'),
+  userId: requiredText('userId'),
+  reason: cancelReason,
 });
 
 export type CreateDraftOrderInput = z.infer<typeof createDraftOrderRequestSchema>;

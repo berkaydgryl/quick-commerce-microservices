@@ -49,6 +49,21 @@ describe('createOrder use-case', () => {
     expect(repository.size).toBe(1);
   });
 
+  it('tablodaki yolu ADIM ADIM yurur; gecici adimlar nedeniyle zaman cizelgesinde (T4.4)', async () => {
+    const { id } = await draft(input);
+
+    const order = await create({ orderId: id, userId: 'usr_1' });
+
+    expect(order.timeline.map((entry) => [entry.status, entry.note])).toEqual([
+      [ORDER_STATUS.DRAFT, undefined],
+      // risk-svc (T6.3) ve rezervasyon (T11.2) henuz yok: sessizce atlanmaz.
+      [ORDER_STATUS.RISK_CHECK, 'PENDING_RISK_SERVICE'],
+      [ORDER_STATUS.RESERVED, 'PENDING_RESERVATION'],
+      [ORDER_STATUS.AWAITING_PAYMENT, undefined],
+    ]);
+    await expect(repository.findById(id)).resolves.toMatchObject({ timeline: order.timeline });
+  });
+
   it('olmayan sipariste NOT_FOUND verir', async () => {
     const failing = create({ orderId: 'ord_yok', userId: 'usr_1' });
 
@@ -71,6 +86,10 @@ describe('createOrder use-case', () => {
 
     await expect(create({ orderId: id, userId: 'usr_1' })).rejects.toMatchObject({
       code: ERROR_CODES.ORDER_STATE_INVALID,
+    });
+    // Basarisiz ikinci deneme kayitli siparisi DEGISTIRMEZ.
+    await expect(repository.findById(id)).resolves.toMatchObject({
+      status: ORDER_STATUS.AWAITING_PAYMENT,
     });
   });
 });
