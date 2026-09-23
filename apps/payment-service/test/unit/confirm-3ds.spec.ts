@@ -235,3 +235,45 @@ describe('Confirm3Ds - tekrar istek ve es zamanlilik', () => {
     expect((await stored())?.challenge?.failedAttempts).toBe(0);
   });
 });
+
+describe('attempts[] denetim gecmisi (T5.3)', () => {
+  const outcomes = async (): Promise<string[]> =>
+    ((await stored())?.attempts ?? []).map((a) => `${a.kind}:${a.outcome}`);
+
+  it('cekim karari ve her 3DS denemesi sirayla kaydedilir', async () => {
+    await rejection(confirm({ orderId: 'ord_1', challengeId, code: WRONG_CODE }));
+    await confirm({ orderId: 'ord_1', challengeId, code: MOCK_THREEDS_CODE });
+
+    expect(await outcomes()).toEqual([
+      'CHARGE:CHALLENGE_REQUIRED',
+      'THREEDS:CODE_REJECTED',
+      'THREEDS:CODE_ACCEPTED',
+    ]);
+  });
+
+  it('suresi dolan dogrulama EXPIRED olarak kaydedilir', async () => {
+    clock.advance(THREEDS_CHALLENGE_TTL_MS);
+    await rejection(confirm({ orderId: 'ord_1', challengeId, code: MOCK_THREEDS_CODE }));
+
+    expect(await outcomes()).toEqual(['CHARGE:CHALLENGE_REQUIRED', 'THREEDS:EXPIRED']);
+  });
+
+  it('durumu degistirmeyen istekler kayit EKLEMEZ: tekrar istek ve ulasilamayan banka', async () => {
+    await confirm({ orderId: 'ord_1', challengeId, code: MOCK_THREEDS_CODE });
+    await confirm({ orderId: 'ord_1', challengeId, code: MOCK_THREEDS_CODE });
+
+    expect(await outcomes()).toEqual(['CHARGE:CHALLENGE_REQUIRED', 'THREEDS:CODE_ACCEPTED']);
+
+    const other = await chargeWith3Ds('ord_2');
+    confirm = build({ verifyChallenge: () => Promise.reject(new Error('banka yok')) });
+    await rejection(
+      confirm({ orderId: 'ord_2', challengeId: other.challenge?.id ?? '', code: WRONG_CODE }),
+    );
+    expect((await repository.findByOrderId('ord_2'))?.attempts).toHaveLength(1);
+  });
+
+  it('girilen kod gecmiste hicbir yerde tutulmaz', async () => {
+    await rejection(confirm({ orderId: 'ord_1', challengeId, code: WRONG_CODE }));
+    expect(JSON.stringify(await stored())).not.toContain(WRONG_CODE);
+  });
+});

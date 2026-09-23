@@ -10,11 +10,11 @@
  * HIC gitmez: cift cekim olmaz.
  */
 
-import { AppError, ERROR_CODES } from '@getir/core';
+import { AppError } from '@getir/core';
 import type { Clock, Logger } from '@getir/core';
 
 import {
-  failPayment,
+  failUnreachableProvider,
   isSameCharge,
   PAYMENT_METHOD,
   settlePayment,
@@ -102,6 +102,6 @@ async function authorizeAndSettle(
   } catch (error) {
     // Hata istemciye degil gunluge: tutar cekilmedi, kayit FAILED olur.
     deps.logger?.error({ err: error, orderId: pending.orderId }, 'odeme saglayicisina ulasilamadi');
-    return failPayment(pending, ERROR_CODES.SERVICE_UNAVAILABLE, deps.clock);
+    return failUnreachableProvider(pending, deps.clock);
   }
 }

@@ -333,12 +333,12 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/cat
   localhost:50051 getir.catalog.v1.CatalogService/ListCategories
 ```
 
-| Servis                                                     | Port  | Bugün ne yapıyor                                                               |
-| ---------------------------------------------------------- | ----- | ------------------------------------------------------------------------------ |
-| [`catalog-service`](apps/catalog-service/README.md) (T4.8) | 50051 | Pazaryeri: yakındaki marketler, market sayfası, teklifler — Mongo ya da `MOCK` |
-| [`order-service`](apps/order-service/README.md) (T3.2)     | 50053 | `CreateDraftOrder`, `CreateOrder` — bellekte, ödeme yok                        |
-| [`payment-service`](apps/payment-service/README.md) (T5.1) | 50054 | `Charge` — test kartına göre onay / ret / 3DS, idempotent; bellekte            |
-| [`gateway`](apps/gateway/README.md) (T3.4, Go)             | 8080  | `GET /healthz`, `GET /v1/categories`                                           |
+| Servis                                                     | Port  | Bugün ne yapıyor                                                                    |
+| ---------------------------------------------------------- | ----- | ----------------------------------------------------------------------------------- |
+| [`catalog-service`](apps/catalog-service/README.md) (T4.8) | 50051 | Pazaryeri: yakındaki marketler, market sayfası, teklifler — Mongo ya da `MOCK`      |
+| [`order-service`](apps/order-service/README.md) (T3.2)     | 50053 | `CreateDraftOrder`, `CreateOrder` — bellekte, ödeme yok                             |
+| [`payment-service`](apps/payment-service/README.md) (T5.3) | 50054 | `Charge`, `Confirm3Ds` — mock kart + 3DS, idempotent; Mongo `payments` ya da `MOCK` |
+| [`gateway`](apps/gateway/README.md) (T3.4, Go)             | 8080  | `GET /healthz`, `GET /v1/categories`                                                |
 
 Katalog T4.1'den beri Mongo'dan okur: `MOCK=true` ise aynı demo verisini bellekten döndürür
 ve Mongo istemez, değilse `MONGO_URI` zorunludur (yoksa açılışta ölür). Kök `.env` varsa okunur;

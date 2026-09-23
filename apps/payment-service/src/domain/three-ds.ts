@@ -12,7 +12,14 @@
 import { ERROR_CODES } from '@getir/core';
 import type { Clock } from '@getir/core';
 
-import { PAYMENT_STATUS, THREEDS_CLOSE_REASON } from './payment.js';
+import {
+  ATTEMPT_KIND,
+  ATTEMPT_OUTCOME,
+  PAYMENT_STATUS,
+  THREEDS_CLOSE_REASON,
+  withAttempt,
+} from './payment.js';
+import type { AttemptOutcome } from './payment.js';
 import type { Payment, ThreeDsChallenge, ThreeDsCloseReason } from './payment.js';
 
 /** Dogrulamanin sonucu: ya tamamlandi ya da reddedildi (kalan hakla). */
@@ -47,6 +54,7 @@ export function expireChallenge(
     challenge,
     challenge.failedAttempts,
     THREEDS_CLOSE_REASON.EXPIRED,
+    ATTEMPT_OUTCOME.EXPIRED,
     clock,
   );
   return {
@@ -71,7 +79,10 @@ export function applyVerification(
   if (codeAccepted) {
     return {
       kind: 'succeeded',
-      payment: { ...next(payment, clock), status: PAYMENT_STATUS.SUCCEEDED },
+      payment: {
+        ...next(payment, ATTEMPT_OUTCOME.CODE_ACCEPTED, clock),
+        status: PAYMENT_STATUS.SUCCEEDED,
+      },
     };
   }
 
@@ -83,6 +94,7 @@ export function applyVerification(
       challenge,
       failedAttempts,
       THREEDS_CLOSE_REASON.ATTEMPTS_EXHAUSTED,
+      ATTEMPT_OUTCOME.CODE_REJECTED,
       clock,
     );
     return {
@@ -95,7 +107,10 @@ export function applyVerification(
 
   return {
     kind: 'rejected',
-    payment: { ...next(payment, clock), challenge: { ...challenge, failedAttempts } },
+    payment: {
+      ...next(payment, ATTEMPT_OUTCOME.CODE_REJECTED, clock),
+      challenge: { ...challenge, failedAttempts },
+    },
     attemptsLeft,
   };
 }
@@ -116,8 +131,14 @@ export function replayOutcome(payment: Payment): ThreeDsOutcome | undefined {
   return undefined;
 }
 
-function next(payment: Payment, clock: Clock): Payment {
-  return { ...payment, version: payment.version + 1, updatedAt: clock.date() };
+/** Her 3DS gecisi: surum +1, zaman, ve gecmise bir THREEDS denemesi. */
+function next(payment: Payment, outcome: AttemptOutcome, clock: Clock): Payment {
+  const now = clock.date();
+  return {
+    ...withAttempt(payment, ATTEMPT_KIND.THREEDS, outcome, now),
+    version: payment.version + 1,
+    updatedAt: now,
+  };
 }
 
 function close(
@@ -125,10 +146,11 @@ function close(
   challenge: ThreeDsChallenge,
   failedAttempts: number,
   closedReason: ThreeDsCloseReason,
+  outcome: AttemptOutcome,
   clock: Clock,
 ): Payment {
   return {
-    ...next(payment, clock),
+    ...next(payment, outcome, clock),
     status: PAYMENT_STATUS.FAILED,
     failureCode: ERROR_CODES.THREEDS_FAILED,
     challenge: { ...challenge, failedAttempts, closedReason },

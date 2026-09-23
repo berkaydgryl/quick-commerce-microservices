@@ -17,14 +17,20 @@ import type { PaymentMethod } from '../../domain/payment.js';
 
 const requiredText = (field: string) => z.string().trim().min(1, `${field} zorunlu`);
 
-/** Proto yontemi -> domain. UNSPECIFIED bilerek yok: gecersiz istek sayilir. */
-const METHOD_FROM_PROTO: ReadonlyMap<paymentV1.PaymentMethod, PaymentMethod> = new Map([
-  [paymentV1.PaymentMethod.PAYMENT_METHOD_CARD, PAYMENT_METHOD.CARD],
-  [paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY, PAYMENT_METHOD.CASH_ON_DELIVERY],
-]);
+/**
+ * Proto yontemi -> domain. Record TUM enum degerlerini ister: proto'ya yeni bir
+ * yontem eklendiginde burasi DERLEMEDE kirilir (proje kurali). UNSPECIFIED ve
+ * UNRECOGNIZED bilerek undefined: gecersiz istek sayilir.
+ */
+const METHOD_FROM_PROTO: Readonly<Record<paymentV1.PaymentMethod, PaymentMethod | undefined>> = {
+  [paymentV1.PaymentMethod.PAYMENT_METHOD_UNSPECIFIED]: undefined,
+  [paymentV1.PaymentMethod.PAYMENT_METHOD_CARD]: PAYMENT_METHOD.CARD,
+  [paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY]: PAYMENT_METHOD.CASH_ON_DELIVERY,
+  [paymentV1.PaymentMethod.UNRECOGNIZED]: undefined,
+};
 
 const method = z.nativeEnum(paymentV1.PaymentMethod).transform((value, ctx) => {
-  const mapped = METHOD_FROM_PROTO.get(value);
+  const mapped = METHOD_FROM_PROTO[value];
   if (mapped === undefined) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'odeme yontemi zorunlu' });
     return z.NEVER;

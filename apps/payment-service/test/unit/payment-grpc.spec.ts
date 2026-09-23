@@ -5,13 +5,14 @@
 
 import { ERROR_CODES, GRPC_STATUS, MOCK_THREEDS_CODE } from '@getir/core';
 import { paymentV1 } from '@getir/proto';
-import { ERROR_METADATA_KEY, startGrpcServer } from '@getir/service-kit';
+import { startGrpcServer } from '@getir/service-kit';
 import type { GrpcServerHandle } from '@getir/service-kit';
 import { Client, credentials, Metadata } from '@grpc/grpc-js';
 import type { MethodDefinition, ServiceError } from '@grpc/grpc-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { buildPaymentService } from '../../src/bootstrap.js';
+import { appErrorOf } from '../support/grpc-error.js';
 
 const EPHEMERAL_PORT = 0;
 
@@ -41,15 +42,9 @@ function call<TRequest, TResponse>(
   });
 }
 
-function errorCodeOf(error: ServiceError | undefined): string | undefined {
-  const raw = error?.metadata.get(ERROR_METADATA_KEY)[0];
-  return typeof raw === 'string' ? (JSON.parse(raw) as { code: string }).code : undefined;
-}
-
-function errorDetailsOf(error: ServiceError | undefined): unknown {
-  const raw = error?.metadata.get(ERROR_METADATA_KEY)[0];
-  return typeof raw === 'string' ? (JSON.parse(raw) as { details?: unknown }).details : undefined;
-}
+const errorCodeOf = (error: ServiceError | undefined): string | undefined =>
+  appErrorOf(error)?.code;
+const errorDetailsOf = (error: ServiceError | undefined): unknown => appErrorOf(error)?.details;
 
 let sequence = 0;
 function chargeRequest(cardToken: string): paymentV1.ChargeRequest {

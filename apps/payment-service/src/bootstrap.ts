@@ -23,7 +23,7 @@ import { createPaymentImplementation } from './interfaces/grpc/payment-handlers.
 
 export interface BootstrapOptions {
   readonly logger?: Logger;
-  /** Verilmezse bellek (T5.3'e kadar tek depo). */
+  /** Odeme deposu; main.ts openPaymentStore'dan verir. Verilmezse bellek (testler). */
   readonly repository?: PaymentRepository;
   /** Verilmezse mock saglayici (test kartlari). */
   readonly provider?: PaymentProvider;
