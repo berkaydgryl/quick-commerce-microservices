@@ -3,11 +3,12 @@ import { describe, expect, it } from 'vitest';
 import {
   createDraftOrderRequestSchema,
   createOrderRequestSchema,
+  listMyOrdersRequestSchema,
 } from '../../src/interfaces/grpc/schemas.js';
 
 const valid = {
   userId: 'usr_1',
-  darkStoreId: 'ds_kadikoy',
+  marketId: 'mkt_migros-jet-moda',
   lines: [{ productId: 'prd_01', sku: 'SUT-1L', quantity: 2 }],
   deliveryLocation: { lat: 40.99, lng: 29.02 },
   deliveryAddress: 'Kadıköy, İstanbul',
@@ -66,5 +67,31 @@ describe('createOrderRequestSchema', () => {
     expect(() => createOrderRequestSchema.parse(request)).not.toThrow();
     expect(() => createOrderRequestSchema.parse({ ...request, orderId: '' })).toThrow();
     expect(() => createOrderRequestSchema.parse({ ...request, userId: '  ' })).toThrow();
+  });
+});
+
+describe('listMyOrdersRequestSchema', () => {
+  const pageSizeOf = (pageSize: number): number =>
+    listMyOrdersRequestSchema.parse({ userId: 'usr_1', page: { pageSize, pageToken: '' } }).page
+      .pageSize;
+
+  it('sayfa boyutu reddedilmez, sozlesme sinirlarina oturtulur', () => {
+    expect(pageSizeOf(0)).toBe(20);
+    expect(pageSizeOf(-5)).toBe(20);
+    expect(pageSizeOf(7)).toBe(7);
+    expect(pageSizeOf(500)).toBe(100);
+  });
+
+  it('page yoksa ilk sayfa, varsayilan boyut', () => {
+    expect(listMyOrdersRequestSchema.parse({ userId: 'usr_1' }).page).toEqual({
+      pageSize: 20,
+      pageToken: undefined,
+    });
+  });
+
+  it('cozulemeyen jetonu reddeder', () => {
+    expect(() =>
+      listMyOrdersRequestSchema.parse({ userId: 'usr_1', page: { pageSize: 5, pageToken: 'x' } }),
+    ).toThrow();
   });
 });

@@ -9,15 +9,56 @@ Bu serviste **olmayanlar**, bilinçli: stok sayacı `inventory-service`'in, kart
 (kapıda ödeme kapalı, rezervasyon süresi, reddet) burada verilir — risk servisi yalnızca
 skor önerir.
 
-## Bugünkü durum (T4.4 — durum makinesi)
+## Bugünkü durum (T4.5 — kalıcılık)
 
 | RPC                | Durum                                                                       |
 | ------------------ | --------------------------------------------------------------------------- |
-| `CreateDraftOrder` | ✅ Kimlik üretir, `DRAFT` açar; zaman çizelgesi `DRAFT` ile başlar          |
+| `CreateDraftOrder` | ✅ Kimlik üretir, seçilen markete (`market_id`) `DRAFT` açar ve kaydeder    |
 | `CreateOrder`      | ✅ Tablodan adım adım: `DRAFT → RISK_CHECK → RESERVED → AWAITING_PAYMENT`   |
+| `GetOrder`         | ✅ Tek sipariş, zaman çizelgesi dahil; başkasının siparişi `NOT_FOUND`      |
+| `ListMyOrders`     | ✅ Yeniden eskiye, imleçle sayfalı; sipariş yoksa boş liste                 |
 | `CancelOrder`      | ✅ Kullanıcı iptali: yalnızca `DRAFT`, `RESERVED`, `AWAITING_PAYMENT` (B29) |
-| `GetOrder`         | ⏳ `UNIMPLEMENTED` — T4.5                                                   |
-| `ListMyOrders`     | ⏳ `UNIMPLEMENTED` — T4.5                                                   |
+
+## Veri kaynağı: Mongo ya da MOCK
+
+| `MOCK` | Kaynak                                        | Mongo gerekir mi                 |
+| ------ | --------------------------------------------- | -------------------------------- |
+| `true` | Bellek (`infrastructure/memory`)              | Hayır; yeniden başlayınca unutur |
+| değil  | `orders` koleksiyonu (`infrastructure/mongo`) | Evet, `MONGO_URI` zorunlu        |
+
+İki uygulama **aynı sözleşme testinden** geçer (`test/support/order-store-contract.ts`): birim
+testinde bellek, entegrasyon testinde gerçek Mongo. Depoyu seçip açan tek yer
+`infrastructure/order-store.ts`'tir; indeksler açılışta kurulur.
+
+**İki port, her use-case yalnızca ihtiyacını alır:** `OrderRepository` (`insert`, `update`,
+`findById`) taslak açan, ilerleten ve iptal eden use-case'lerin; `OrderHistoryReader`
+(`listByUser`) yalnızca `ListMyOrders`'ın.
+
+**İyimser kilit (`version`).** Yeni taslak 1'dir, her geçiş bir artırır. `update(order,
+expectedVersion)` yalnızca kayıttaki sürüm okunanla aynıysa yazar (Mongo'da
+`replaceOne({ _id, version })`). Aynı taslağa eş zamanlı iki `CreateOrder` ya da
+`CreateOrder` + `CancelOrder` gelirse ikincisi `CONFLICT` alır; "son yazan kazanır" yoktur.
+
+**Geçmiş sırası ve imleç.** Liste `createdAt` azalan, eşitlikte kimlik azalan sıralıdır;
+kimlik rastgele olduğu için tek başına zaman sırası vermez. Sayfa jetonu `(createdAt, id)`
+taşır ve istemci için opaktır (`interfaces/grpc/page-token.ts`). Offset yerine imleç: kullanıcı
+listeyi gezerken yeni sipariş verirse offset kayar. Sayfa boyutu sözleşme sınırlarına
+oturtulur (0 → 20, 100 üstü → 100); bu sınırlar REST ile aynı yerden, `@getir/contracts`'tan
+gelir.
+
+| Koleksiyon | İndeks                                                          | Sorgu          |
+| ---------- | --------------------------------------------------------------- | -------------- |
+| `orders`   | `{ userId: 1, createdAt: -1, _id: -1 }` (`userId_createdAt_id`) | `ListMyOrders` |
+
+Roadmap veri modelindeki `status` indeksi, durumu sorgulayan ilk iş (rezervasyon süpürücüsü,
+T11.x) geldiğinde eklenir: bugün onu kullanan sorgu yok, gereksiz indeks her yazımı
+pahalılaştırır.
+
+**Bilerek boş bırakılanlar:** proto `Order`'daki fiyatlı kalemler (`items`) ve tutarlar
+(`subtotal`, `total`…) boş döner. Sipariş bugün ham sepet satırı taşır; fiyatın dondurulması
+katalog teklifleri toplu okununca (T9.3) ve pricing bağlanınca gelir. "0 TL" yazmak
+istemciye yanlış tutar gösterirdi. `dark_store_id` okunmaz (ADR-15); `market_id` zorunlu
+ve `mkt_` biçimlidir.
 
 ### Durum makinesi (`src/domain/order-state-machine.ts`)
 
@@ -39,11 +80,7 @@ durumundaki **kendi** siparişini iptal edebilir (`USER_CANCELLABLE`). `PAID →
 var ama sistemin telafi adımıdır (iade, B20c). Gerekçe bir anahtardır (`CHANGED_MIND`); yoksa
 `USER_CANCELLED` yazılır. Rezervasyonun serbest bırakılması T11.2'de saga'ya eklenir.
 
-Siparişler hâlâ **bellekte** tutulur; kalıcılık T4.5 (`orders` repository). Tutar hesabı
-`@getir/pricing` ile T7.2'de bağlanır.
-
-Yazılmamış RPC'ler boş bırakılmadı, açıkça `UNIMPLEMENTED` dönüyor — gerekçesi
-[catalog-service README'sinde](../catalog-service/README.md) anlatılan ile aynı.
+Tutar hesabı `@getir/pricing` ile T7.2'de bağlanır.
 
 ## Neden `CreateDraftOrder` de bu görevde
 
@@ -67,16 +104,22 @@ göndermeye bugün alışsın, koruma açıldığında sözleşme değişmesin.
 ```text
 src/
 ├── domain/            # saf iş kuralı — mongodb/grpc/proto importu YOK
-│   ├── order.ts             # Order, createDraftOrder, geçiş koruması, withStatus
-│   └── order-repository.ts  # port (arayüz)
+│   ├── order.ts                 # Order, createDraftOrder, transitionOrder (timeline + version)
+│   ├── order-state-machine.ts   # geçiş tablosu, USER_CANCELLABLE
+│   ├── order-repository.ts      # port: insert / update(sürümlü) / findById + hataları
+│   ├── order-history-reader.ts  # port: listByUser (sayfalı geçmiş)
+│   └── order-history-cursor.ts  # geçmiş sırası ve imleç
 ├── application/       # bir dosya = bir use-case
-│   ├── create-draft-order.ts
-│   └── create-order.ts
+│   ├── create-draft-order.ts, create-order.ts, cancel-order.ts
+│   └── get-order.ts, list-my-orders.ts
 ├── infrastructure/
-│   └── in-memory-order-repository.ts
+│   ├── order-store.ts           # MOCK ya da Mongo: depoyu açar, kapanışı verir
+│   ├── memory/                  # MOCK: bellek deposu
+│   └── mongo/                   # belge şekli, çeviriciler, sorgular (orders-collection), portlar
 ├── interfaces/grpc/   # ince handler'lar: doğrula → çağır → çevir
-│   ├── schemas.ts     # Zod istek şemaları
-│   ├── mappers.ts     # domain durumu → proto enum
+│   ├── schemas.ts     # Zod istek şemaları (sayfa boyutu kırpma, jeton çözme)
+│   ├── page-token.ts  # imleç ↔ opak sayfa jetonu
+│   ├── mappers.ts     # domain → proto (durum, Order)
 │   └── order-handlers.ts
 ├── config/            # env.ts (process.env yalnızca burada) + constants.ts
 ├── bootstrap.ts
@@ -91,14 +134,18 @@ testte saat sabitlenebilir.
 
 ```bash
 pnpm --filter @getir/order-service build
-pnpm --filter @getir/order-service start      # 50053 portunda dinler
+MOCK=true pnpm --filter @getir/order-service start    # 50053, Mongo'suz (bellek)
+
+pnpm infra:up                                         # ya da Mongo ile:
+MONGO_URI="mongodb://localhost:27017/getir?directConnection=true" \
+  pnpm --filter @getir/order-service start
 ```
 
 ```bash
 # 1) Taslak aç → orderId
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/order/v1/order.proto \
-  -d '{"user_id":"usr_1","dark_store_id":"ds_kadikoy",
-       "lines":[{"product_id":"prd_01","sku":"SUT-1L","quantity":2}],
+  -d '{"user_id":"usr_1","market_id":"mkt_migros-jet-moda",
+       "lines":[{"product_id":"prd_sut-1l","sku":"SUT-1L","quantity":2}],
        "delivery_location":{"lat":40.99,"lng":29.02},
        "delivery_address":"Kadıköy","idempotency_key":"4f1c3a2b-9d8e"}' \
   localhost:50053 getir.order.v1.OrderService/CreateDraftOrder
@@ -107,15 +154,22 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/order/v1/order
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/order/v1/order.proto \
   -d '{"order_id":"<1. adımdan>","user_id":"usr_1","idempotency_key":"4f1c3a2b-9d8e"}' \
   localhost:50053 getir.order.v1.OrderService/CreateOrder
+
+# 3) Geçmiş → en yeni sipariş başta; Mongo modunda Compass'ta getir.orders altında da görünür
+grpcurl -plaintext -import-path packages/proto/proto -proto getir/order/v1/order.proto \
+  -d '{"user_id":"usr_1","page":{"page_size":10}}' \
+  localhost:50053 getir.order.v1.OrderService/ListMyOrders
 ```
 
-Aynı akışın otomatik karşılığı `test/unit/order-grpc.spec.ts`.
+Aynı akışın otomatik karşılığı `test/unit/order-grpc.spec.ts` (bellek) ve
+`test/integration/mongo-order-store.spec.ts` (gerçek Mongo: sözleşme, indeks planı, gRPC →
+`orders` belgesi).
 
 ## Docker
 
 ```bash
 docker build -f apps/order-service/Dockerfile -t getir/order-service .
-docker run --rm -p 50053:50053 getir/order-service
+docker run --rm -p 50053:50053 -e MOCK=true getir/order-service
 ```
 
 Çok aşamalı imaj, `node` kullanıcısı, `grpc.health.v1` ile `HEALTHCHECK`. Ayrıntılı gerekçe

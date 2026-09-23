@@ -60,7 +60,9 @@ export function createCreateOrder(deps: CreateOrderDeps): CreateOrder {
     );
     const awaitingPayment = transitionOrder(reserved, ORDER_STATUS.AWAITING_PAYMENT, deps.clock);
 
-    await deps.repository.save(awaitingPayment);
+    // Okundugu surumun USTUNE yazilir: arada ayni taslaga ikinci bir
+    // CreateOrder/CancelOrder yazdiysa bu cagri CONFLICT alir.
+    await deps.repository.update(awaitingPayment, order.version);
     return awaitingPayment;
   };
 }

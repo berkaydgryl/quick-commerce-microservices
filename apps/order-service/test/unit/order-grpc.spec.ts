@@ -49,9 +49,9 @@ function errorCodeOf(error: ServiceError | undefined): string | undefined {
 
 const draftRequest: orderV1.CreateDraftOrderRequest = {
   userId: 'usr_1',
-  darkStoreId: 'ds_kadikoy',
-  // T4.7: yeni alan (ADR-15); order-service market_id'ye gecisi kendi gorevinde.
-  marketId: '',
+  // Kullanimdan kalkan alan (ADR-15): sunucu okumaz, yeni istemci doldurmaz.
+  darkStoreId: '',
+  marketId: 'mkt_migros-jet-moda',
   lines: [{ productId: 'prd_01', sku: 'SUT-1L', quantity: 2 }],
   deliveryLocation: { lat: 40.99, lng: 29.02 },
   deliveryAddress: 'Kadıköy, İstanbul',
@@ -91,6 +91,17 @@ describe('CreateDraftOrder', () => {
     const { error } = await call(orderV1.OrderServiceService.createDraftOrder, {
       ...draftRequest,
       lines: [],
+    });
+
+    expect(error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
+    expect(errorCodeOf(error)).toBe(ERROR_CODES.VALIDATION_FAILED);
+  });
+
+  it('market_id zorunlu ve mkt_ bicimli: eski ds_ kimligi reddedilir (ADR-15)', async () => {
+    const { error } = await call(orderV1.OrderServiceService.createDraftOrder, {
+      ...draftRequest,
+      darkStoreId: 'ds_kadikoy',
+      marketId: '',
     });
 
     expect(error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
@@ -219,14 +230,107 @@ describe('CancelOrder', () => {
   });
 });
 
-describe('henuz yazilmamis RPC ler', () => {
-  it('GetOrder UNIMPLEMENTED doner ve hangi gorevde gelecegini soyler', async () => {
-    const { error } = await call(orderV1.OrderServiceService.getOrder, {
-      orderId: 'ord_1',
+describe('GetOrder', () => {
+  it('siparisi market, durum ve zaman cizelgesiyle doner', async () => {
+    const orderId =
+      (await call(orderV1.OrderServiceService.createDraftOrder, draftRequest)).response?.orderId ??
+      '';
+
+    const { error, response } = await call(orderV1.OrderServiceService.getOrder, {
+      orderId,
       userId: 'usr_1',
     });
 
-    expect(error?.code).toBe(GRPC_STATUS.UNIMPLEMENTED);
-    expect(error?.details).toContain('T4.5');
+    expect(error).toBeUndefined();
+    expect(response?.order).toMatchObject({
+      id: orderId,
+      userId: 'usr_1',
+      marketId: 'mkt_migros-jet-moda',
+      status: orderV1.OrderStatus.ORDER_STATUS_DRAFT,
+      deliveryAddress: 'Kadıköy, İstanbul',
+    });
+    expect(response?.order?.timeline.map((entry) => entry.status)).toEqual([
+      orderV1.OrderStatus.ORDER_STATUS_DRAFT,
+    ]);
+    expect(response?.order?.createdAt).toBeInstanceOf(Date);
+    // Fiyatlar henuz hesaplanmiyor (T9.3): uydurma "0 TL" yerine alan yok.
+    expect(response?.order?.total).toBeUndefined();
+  });
+
+  it('baskasinin siparisi NOT_FOUND (PERMISSION_DENIED degil)', async () => {
+    const orderId =
+      (await call(orderV1.OrderServiceService.createDraftOrder, draftRequest)).response?.orderId ??
+      '';
+
+    const { error } = await call(orderV1.OrderServiceService.getOrder, {
+      orderId,
+      userId: 'usr_2',
+    });
+
+    expect(error?.code).toBe(GRPC_STATUS.NOT_FOUND);
+  });
+});
+
+describe('ListMyOrders', () => {
+  // Sunucu testler boyunca ayni bellek deposunu kullanir: bu blok kendi kullanicisini acar.
+  const userId = 'usr_history';
+
+  beforeAll(async () => {
+    for (let index = 0; index < 3; index += 1) {
+      await call(orderV1.OrderServiceService.createDraftOrder, { ...draftRequest, userId });
+    }
+  });
+
+  it('jetonla sayfalar: kayit kaybolmaz, tekrar etmez, son sayfada jeton bos', async () => {
+    const first = await call(orderV1.OrderServiceService.listMyOrders, {
+      userId,
+      page: { pageSize: 2, pageToken: '' },
+    });
+    const second = await call(orderV1.OrderServiceService.listMyOrders, {
+      userId,
+      page: { pageSize: 2, pageToken: first.response?.page?.nextPageToken ?? '' },
+    });
+
+    expect(first.response?.orders).toHaveLength(2);
+    expect(first.response?.page?.nextPageToken).not.toBe('');
+    expect(second.response?.orders).toHaveLength(1);
+    expect(second.response?.page?.nextPageToken).toBe('');
+
+    const ids = [...(first.response?.orders ?? []), ...(second.response?.orders ?? [])].map(
+      (order) => order.id,
+    );
+    expect(new Set(ids).size).toBe(3);
+    expect(
+      [...(first.response?.orders ?? []), ...(second.response?.orders ?? [])].every(
+        (order) => order.userId === userId,
+      ),
+    ).toBe(true);
+  });
+
+  it('page gonderilmezse varsayilan boyutla ilk sayfa', async () => {
+    const { error, response } = await call(orderV1.OrderServiceService.listMyOrders, { userId });
+
+    expect(error).toBeUndefined();
+    expect(response?.orders).toHaveLength(3);
+  });
+
+  it('siparisi olmayan kullanici: bos liste, hata degil', async () => {
+    const { error, response } = await call(orderV1.OrderServiceService.listMyOrders, {
+      userId: 'usr_yeni',
+    });
+
+    expect(error).toBeUndefined();
+    expect(response?.orders).toEqual([]);
+    expect(response?.page?.nextPageToken).toBe('');
+  });
+
+  it('bu sunucunun uretmedigi jeton INVALID_ARGUMENT', async () => {
+    const { error } = await call(orderV1.OrderServiceService.listMyOrders, {
+      userId,
+      page: { pageSize: 2, pageToken: 'uydurma-jeton' },
+    });
+
+    expect(error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
+    expect(errorCodeOf(error)).toBe(ERROR_CODES.VALIDATION_FAILED);
   });
 });

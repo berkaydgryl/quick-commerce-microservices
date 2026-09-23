@@ -3,21 +3,27 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Siparis servisi: taslak siparis ve siparis olusturma uclari (gRPC)",
+  "description": "Siparis servisi: taslak, siparis, gecmis ve iptal uclari (gRPC), orders koleksiyonu",
   "main": "./dist/main.js",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",
-    "dev": "node --watch dist/main.js",
-    "start": "node dist/main.js",
+    "dev": "node --env-file-if-exists=../../.env --watch dist/main.js",
+    "start": "node --env-file-if-exists=../../.env dist/main.js",
     "healthcheck": "node dist/healthcheck.js",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\""
   },
   "dependencies": {
+    "@getir/contracts": "workspace:*",
     "@getir/core": "workspace:*",
+    "@getir/mongo-kit": "workspace:*",
     "@getir/proto": "workspace:*",
     "@getir/service-kit": "workspace:*",
     "@grpc/grpc-js": "^1.14.5",
+    "mongodb": "^7.6.0",
     "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@testcontainers/mongodb": "^12.1.0"
   }
 }

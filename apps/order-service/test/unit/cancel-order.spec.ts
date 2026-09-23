@@ -9,24 +9,24 @@ import { createCancelOrder } from '../../src/application/cancel-order.js';
 import { createCreateDraftOrder } from '../../src/application/create-draft-order.js';
 import { createCreateOrder } from '../../src/application/create-order.js';
 import { transitionOrder } from '../../src/domain/order.js';
-import { InMemoryOrderRepository } from '../../src/infrastructure/in-memory-order-repository.js';
+import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-order-store.js';
 
 const clock = fixedClock(1_760_000_000_000);
 const input = {
   userId: 'usr_1',
-  darkStoreId: 'ds_kadikoy',
+  marketId: 'mkt_migros-jet-moda',
   lines: [{ productId: 'prd_01', sku: 'SUT-1L', quantity: 1 }],
   deliveryLocation: { lat: 40.99, lng: 29.02 },
   deliveryAddress: 'Kadıköy',
 };
 
-let repository: InMemoryOrderRepository;
+let repository: InMemoryOrderStore;
 let draft: ReturnType<typeof createCreateDraftOrder>;
 let create: ReturnType<typeof createCreateOrder>;
 let cancel: ReturnType<typeof createCancelOrder>;
 
 beforeEach(() => {
-  repository = new InMemoryOrderRepository();
+  repository = new InMemoryOrderStore();
   draft = createCreateDraftOrder({ repository, clock });
   create = createCreateOrder({ repository, clock });
   cancel = createCancelOrder({ repository, clock });
@@ -61,7 +61,7 @@ describe('cancelOrder use-case', () => {
   it('odenmis siparisi kullanici iptal EDEMEZ (iade sistemin telafi adimi, B20c)', async () => {
     const { id } = await draft(input);
     const awaiting = await create({ orderId: id, userId: 'usr_1' });
-    await repository.save(transitionOrder(awaiting, ORDER_STATUS.PAID, clock));
+    await repository.update(transitionOrder(awaiting, ORDER_STATUS.PAID, clock), awaiting.version);
 
     const failing = cancel({ orderId: id, userId: 'usr_1' });
 
