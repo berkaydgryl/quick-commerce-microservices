@@ -8,3 +8,30 @@ export const SERVICE_NAME = 'risk';
  * hata gibi islenir: 0 puan + uyari, degerlendirme devam eder.
  */
 export const RULE_TIMEOUT_MS = 200;
+
+// ---------------------------------------------------------------------------
+// Cekirdek kural esikleri (T6.2). Agirliklar config/risk.rules.json'da;
+// burada yalnizca "ne zaman tetiklenir" sinirlari durur.
+// ---------------------------------------------------------------------------
+
+/** account-age: bundan GENC hesap tetikler (tam 24 saat tetiklemez). */
+export const NEW_ACCOUNT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/** order-history: iptal orani bunun USTUNDEYSE tetikler (tam %50 tetiklemez). */
+export const MAX_CANCEL_RATIO = 0.5;
+
+/** basket-anomaly: sepet, ortalamanin bu katinin USTUNDEYSE tetikler. */
+export const BASKET_ANOMALY_MULTIPLIER = 3;
+
+/** checkout-dwell: rezervasyondan siparise bundan KISA sure tetikler (bot hizi). */
+export const MIN_CHECKOUT_DWELL_MS = 3000;
+
+/**
+ * geofence: teslimat konumu ile oturum konumu arasi bundan FAZLAYSA tetikler.
+ * 50 km: Istanbul icinde ilceler arasini "ayni sehir" sayar, baska bir sehri
+ * yakalar (T6.2 karari; baglamda sehir adi yok, yalnizca koordinat var).
+ */
+export const GEOFENCE_MAX_DISTANCE_KM = 50;
+
+/** ip-device: ayni cihazda bu kadar ve USTU hesap KESIN KURALDIR (veto). */
+export const MAX_ACCOUNTS_PER_DEVICE = 3;

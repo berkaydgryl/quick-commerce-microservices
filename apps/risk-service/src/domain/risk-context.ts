@@ -35,4 +35,6 @@ export interface RiskContext {
   readonly ipCity?: string;
   readonly deviceId?: string;
   readonly accountsOnDevice?: number;
+  /** Bir onceki oturumun IP'si; yoksa ilk oturum ya da bilinmiyor. */
+  readonly previousIpAddress?: string;
 }
