@@ -123,8 +123,14 @@ message RiskContext {
   string ip_city = 13;
   string device_id = 14;
 
-  // Ayni cihazda gorulmus hesap sayisi.
+  // Ayni cihazda gorulmus hesap sayisi. 3 ve ustu KESIN KURALDIR (veto).
   int32 accounts_on_device = 15;
+
+  // ip-device kuralinin "IP degisimi" sinyali icin kullanicinin bir onceki
+  // oturumundaki IP (T6.2). Bos ise ilk oturumdur ya da bilinmiyordur; sinyal
+  // tetiklenmez. Cagiran taraf (gateway) son giris IP'sini bilir; istemciden
+  // ALINMAZ.
+  string previous_ip_address = 17;
 }
 
 // Degerlendirme sonucu.

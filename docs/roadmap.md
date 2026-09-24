@@ -554,14 +554,14 @@ Her kural aynı imzayı uygular: evaluate(ctx): Promise<{ hit: boolean, score: n
 
 ### Taahhüde dahil çekirdek kurallar
 
-| Kural          | Sinyal                                                         | Ağırlık |
-| -------------- | -------------------------------------------------------------- | ------- |
-| account-age    | Hesap 24 saatten yeni                                          | 20      |
-| order-history  | İptal oranı %50 üzeri veya hiç teslimat yok                    | 15      |
-| basket-anomaly | Sepet, kullanıcı ortalamasının 3 katı üstü                     | 20      |
-| checkout-dwell | Rezervasyon ile sipariş arası 3 sn'den kısa (sunucuda ölçülür) | 15      |
-| geofence       | Teslimat adresi ile oturum konumu/IP şehri uyuşmuyor           | 15      |
-| ip-device      | Aynı cihazda 3+ hesap veya IP değişimi                         | 15      |
+| Kural          | Sinyal                                                                                                       | Ağırlık |
+| -------------- | ------------------------------------------------------------------------------------------------------------ | ------- |
+| account-age    | Hesap 24 saatten yeni                                                                                        | 20      |
+| order-history  | İptal oranı %50 üzeri veya hiç teslimat yok                                                                  | 15      |
+| basket-anomaly | Sepet, kullanıcı ortalamasının 3 katı üstü                                                                   | 20      |
+| checkout-dwell | Rezervasyon ile sipariş arası 3 sn'den kısa (sunucuda ölçülür)                                               | 15      |
+| geofence       | Teslimat konumu ile oturum konumu arası 50 km'den fazla (T6.2; bağlamda şehir adı yok, koordinat var)        | 15      |
+| ip-device      | Aynı cihazda 3+ hesap (**veto**) veya IP önceki oturumdan farklı (`previous_ip_address`, T6.2); puan bir kez | 15      |
 
 ### Bantlar ve aksiyonlar
 
@@ -1069,7 +1069,7 @@ Her görev tek alana dokunur, tek çıktısı ve tek bitti tanımı vardır. Gü
 | T5.3 | 5   | payment  | payments koleksiyonu (Mongo) + attempts[] deneme geçmişi; kilit kuralı T5.2'de, burada yalnızca kalıcılık                                                                                                                                                                                               | Denemeler attempts[] olarak görülür; servis yeniden başlayınca 3DS sayacı ve kilit korunur                                    |
 | T5.4 | 5   | web      | useNearbyMarkets, useMarket, useMarketCategories, useMarketProducts + isLoading/isFetching iskelet sinyalleri; market listesi ve market sayfası kabuğu (tasarımsız kabuk; görsel tasarım T16.2, konum T9.5'e kadar sabit Ev adresi)                                                                     | Market listesi ve seçilen marketin ürünleri mock veriyle render olur, yüklenirken iskelet kutucuk çıkar                       |
 | T6.1 | 6   | risk     | Rule arayüzü, registry, skor ve band hesabı + kesin kural (veto, `severity: 'block'`) + yeni eşikler 0-29/30-54/55-79/80+ + sözleşme: `RuleHit.veto`, `RiskEvaluation.vetoed_by_rule_id`, risk.proto eşik yorumu                                                                                        | Sahte kurallarla birim test geçer                                                                                             |
-| T6.2 | 6   | risk     | Altı çekirdek kuralın uygulanması ; persona tablosu (Ayşe/Zeynep/Can/Ali/Komşu) sahte bağlamla tablo güdümlü testte                                                                                                                                                                                     | Her kuralın ayrı testi var                                                                                                    |
+| T6.2 | 6   | risk     | Altı çekirdek kuralın uygulanması ; persona tablosu (Ayşe/Zeynep/Can/Ali/Komşu) sahte bağlamla tablo güdümlü testte; eşikler `config/constants.ts`te, gerekçelerde kişisel veri yok; sözleşme: `RiskContext.previous_ip_address`                                                                        | Her kuralın ayrı testi var                                                                                                    |
 | T6.3 | 6   | risk     | risk_events yazımı + Evaluate RPC                                                                                                                                                                                                                                                                       | Değerlendirme kaydı sorgulanabilir                                                                                            |
 | T6.4 | 6   | web      | useCartStore (tek market; başka marketten ekleme onay ister) + packages/pricing ile toplam, minimum sepet, teslimat ücreti — kurallar seçili marketten                                                                                                                                                  | “X TL daha ekle” mesajı doğru hesaplanır; hesap bileşende değil serviste durur                                                |
 | T7.1 | 7   | order    | Saga: Risk → Payment zinciri + telafi adımları                                                                                                                                                                                                                                                          | Kart reddinde sipariş PAYMENT_FAILED                                                                                          |

@@ -3,7 +3,7 @@
 Risk servisi: sipariş bağlamını puanlar ve bir **bant önerir**. Kararı uygulamaz; aksiyonlar
 (kapıda ödeme, rezervasyon süresi, 403) `order-service/application/apply-risk-decision.ts`'te tek yerde.
 
-## Bugünkü durum (T6.1 — kural motoru)
+## Bugünkü durum (T6.2 — çekirdek kurallar)
 
 | Parça                          | Durum                                                                   |
 | ------------------------------ | ----------------------------------------------------------------------- |
@@ -11,7 +11,7 @@ Risk servisi: sipariş bağlamını puanlar ve bir **bant önerir**. Kararı uyg
 | Skor, bant, veto               | ✅ `domain/score.ts`, `domain/bands.ts`                                 |
 | Paralel koşu + hata izolasyonu | ✅ `application/evaluate-risk.ts` (kural başına 200 ms sınır)           |
 | Config                         | ✅ `config/risk.rules.json` (Zod ile doğrulanır)                        |
-| Altı çekirdek kural            | ⏳ T6.2                                                                 |
+| Altı çekirdek kural            | ✅ `rules/*.rule.ts`, eşikler `config/constants.ts`                     |
 | `Evaluate` RPC, `risk_events`  | ⏳ T6.3 (gRPC sunucusu da o görevde açılır)                             |
 
 ## Bantlar (T6.1 kararı)
@@ -33,6 +33,22 @@ dikkate alınır; diğerlerininki yok sayılır ve uyarı yazılır. Kural kendi
 Bugün yalnızca `ip-device` ("aynı cihazda 3+ hesap"). Veto skor ne olursa olsun `CRITICAL` verir ve
 sonuçta `vetoedByRuleId` durur: "skor 45, ama cihazda 3+ hesap".
 
+## Çekirdek kurallar (T6.2)
+
+| Kural            | Tetiklenir (eşik dahil değil)                                   | Ağırlık |
+| ---------------- | --------------------------------------------------------------- | ------- |
+| `account-age`    | Hesap 24 saatten genç                                           | 20      |
+| `order-history`  | Hiç teslimat yok **ya da** iptal oranı %50'nin üstünde          | 15      |
+| `basket-anomaly` | Sepet ortalamanın 3 katından büyük (ortalama yoksa tetiklenmez) | 20      |
+| `checkout-dwell` | Rezervasyondan siparişe 3 sn'den kısa (sunucuda ölçülür)        | 15      |
+| `geofence`       | Teslimat ile oturum konumu arası 50 km'den fazla                | 15      |
+| `ip-device`      | Cihazda 3+ hesap (**veto**) ya da IP önceki oturumdan farklı    | 15      |
+
+- Bağlamda alan yoksa kural **tetiklenmez** (sözleşme: eksik sinyal 0 puan).
+- **Gerekçelerde kişisel veri yok:** IP, cihaz kimliği ve koordinat `risk_events`'e yazılmaz; "cihazda 4 hesap",
+  "oturum teslimat adresinden 351 km uzakta", "IP önceki oturumdan farklı" gibi.
+- Eşikler ham değerle karşılaştırılır; yuvarlama yalnızca gerekçe metnindedir.
+
 ## Kural = dosya
 
 Yeni kural: `rules/<id>.rule.ts` + `config/risk.rules.json`'a bir satır + `rules/index.ts`'e kayıt.
@@ -51,5 +67,14 @@ Kural yalnızca `{ hit, reason, veto? }` döner; **ağırlık ve veto yetkisi co
 
 ## Test personaları
 
-Roadmap "Test personaları" tablosu (Ayşe, Zeynep, Can, Ali, Komşu). Personaların kurallarla tablo
-güdümlü testi T6.2'de, gerçek hesaplar T8.1 seed'inde.
+`test/support/personas.ts` + `test/unit/personas.spec.ts`: beş persona **gerçek** altı kural, gerçek config
+ve gerçek eşiklerle değerlendirilir. Bir ağırlık, eşik ya da kural değişip bir persona bandından kayarsa test
+kırmızı olur. Gerçek hesaplar T8.1 seed'inde, demo T15.1'de.
+
+| Persona | Tetiklenen kurallar                                  | Skor      | Bant       |
+| ------- | ---------------------------------------------------- | --------- | ---------- |
+| Ayşe    | —                                                    | 0         | `LOW`      |
+| Zeynep  | account-age, order-history                           | 35        | `MEDIUM`   |
+| Can     | account-age, order-history, basket-anomaly, geofence | 70        | `HIGH`     |
+| Ali     | checkout-dwell, geofence, ip-device (**veto**)       | 45 + veto | `CRITICAL` |
+| Komşu   | —                                                    | 0         | `LOW`      |
