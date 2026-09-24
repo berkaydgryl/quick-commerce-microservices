@@ -1,0 +1,8 @@
+{
+  "account-age": { "weight": 20, "enabled": true, "severity": "score" },
+  "order-history": { "weight": 15, "enabled": true, "severity": "score" },
+  "basket-anomaly": { "weight": 20, "enabled": true, "severity": "score" },
+  "checkout-dwell": { "weight": 15, "enabled": true, "severity": "score" },
+  "geofence": { "weight": 15, "enabled": true, "severity": "score" },
+  "ip-device": { "weight": 15, "enabled": true, "severity": "block" }
+}

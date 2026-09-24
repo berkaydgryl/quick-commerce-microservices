@@ -141,6 +141,15 @@ importers:
         specifier: ^12.1.0
         version: 12.1.0
 
+  apps/risk-service:
+    dependencies:
+      '@getir/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
+
   apps/web:
     dependencies:
       '@getir/contracts':

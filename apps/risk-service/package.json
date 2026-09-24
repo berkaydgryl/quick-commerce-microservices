@@ -1,0 +1,16 @@
+{
+  "name": "@getir/risk-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Risk servisi: kural motoru, agirlikli skor, bant ve kesin kural (veto); risk_events koleksiyonu",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\""
+  },
+  "dependencies": {
+    "@getir/core": "workspace:*",
+    "zod": "^3.23.8"
+  }
+}
