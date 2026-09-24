@@ -338,6 +338,7 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/cat
 | [`catalog-service`](apps/catalog-service/README.md) (T4.8) | 50051 | Pazaryeri: yakındaki marketler, market sayfası, teklifler — Mongo ya da `MOCK`      |
 | [`order-service`](apps/order-service/README.md) (T3.2)     | 50053 | `CreateDraftOrder`, `CreateOrder` — bellekte, ödeme yok                             |
 | [`payment-service`](apps/payment-service/README.md) (T5.3) | 50054 | `Charge`, `Confirm3Ds` — mock kart + 3DS, idempotent; Mongo `payments` ya da `MOCK` |
+| [`risk-service`](apps/risk-service/README.md) (T6.1)       | —     | Kural motoru: skor, bant (0-29/30-54/55-79/80+), veto; sunucu T6.3                  |
 | [`gateway`](apps/gateway/README.md) (Go)                   | 8080  | `GET /healthz`, `/v1/categories`, `/v1/markets` ve alt uçları (stoksuz)             |
 
 Katalog T4.1'den beri Mongo'dan okur: `MOCK=true` ise aynı demo verisini bellekten döndürür

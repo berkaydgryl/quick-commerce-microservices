@@ -536,9 +536,9 @@ Risk motoru kural = dosya ilkesiyle kurulur. Yeni kural eklemek bir dosya yazmak
 ```text
 apps/risk-service/src/
   domain/
-    rule.ts              # Rule arayuzu: id, weight, evaluate(ctx)
+    rule.ts              # Rule arayuzu: id, evaluate(ctx) -> { hit, reason, veto? }; agirlik ve severity config'ten
     score.ts             # agirlikli skor + band hesabi
-    bands.ts             # 0-30 / 31-65 / 66-85 / 86-100 esikleri
+    bands.ts             # 0-29 / 30-54 / 55-79 / 80-100 esikleri (T6.1 karari)
   rules/
     account-age.rule.ts
     order-history.rule.ts
@@ -565,12 +565,37 @@ Her kural aynı imzayı uygular: evaluate(ctx): Promise<{ hit: boolean, score: n
 
 ### Bantlar ve aksiyonlar
 
-| Skor   | Band   | Gateway/Order aksiyonu                                     |
-| ------ | ------ | ---------------------------------------------------------- |
-| 0-30   | Düşük  | Kapıda ödeme açık, rezervasyon 10 dk                       |
-| 31-65  | Orta   | Kapıda ödeme kapalı, kart + 3DS zorunlu, rezervasyon 2 dk  |
-| 66-85  | Yüksek | Sipariş REVIEW kuyruğuna düşer (Opsiyon C: Shadow Capture) |
-| 86-100 | Kritik | Gateway 403, IP/cihaz geçici kara liste                    |
+Eşikler T6.1 öncesinde yeniden belirlendi. Eski eşiklerle (86+ kritik) ağırlıkların toplamı tam 100 olduğu için kritik banda **altı kuralın hepsi** tetiklenmeden ulaşılamıyordu; tek bir 15 puanlık kural eksik kalınca skor 85'te "yüksek" kalıyordu.
+
+| Skor   | Band (sözleşme adı) | Gateway/Order aksiyonu                                     |
+| ------ | ------------------- | ---------------------------------------------------------- |
+| 0-29   | Düşük (`LOW`)       | Kapıda ödeme açık, rezervasyon 10 dk                       |
+| 30-54  | Orta (`MEDIUM`)     | Kapıda ödeme kapalı, kart + 3DS zorunlu, rezervasyon 2 dk  |
+| 55-79  | Yüksek (`HIGH`)     | Sipariş REVIEW kuyruğuna düşer (Opsiyon C: Shadow Capture) |
+| 80-100 | Kritik (`CRITICAL`) | Gateway 403, IP/cihaz geçici kara liste                    |
+
+Bandın adı her yerde sözleşmedekidir (proto `RiskBand`, `@getir/core` `RISK_BANDS`); ikinci bir sözlük (ALLOWED/DENIED gibi) kullanılmaz. Eşik değerleri yalnızca `domain/bands.ts`'te durur.
+
+**Kesin kural (veto):** skor tek başına yetmez; gerçek risk motorları skorla birlikte kesin kurallar kullanır. Bir kural `severity: 'block'` taşıyabilir ve tetiklendiğinde skor ne olursa olsun band doğrudan `CRITICAL` olur. Bugün yalnızca **ip-device kuralının "aynı cihazda 3+ hesap" sinyali** vetodur; aynı kuralın "IP değişimi" sinyali yalnızca puan verir. Bir kural iki sinyalinden biri ya da ikisi tetiklense de puanını **bir kez** verir. Kayıtta hem skor hem vetoyu veren kural görünür ("skor 45, cihazda 3+ hesap nedeniyle kritik"). Sözleşme etkisi (T6.1, yalnızca ekleme; `buf breaking` temiz): `RuleHit.veto`, `RiskEvaluation.vetoed_by_rule_id` ve `risk.proto`'daki eşik yorumunun güncellenmesi.
+
+### Test personaları
+
+Tek kullanıcıyla bütün bantlar elle test edilemez. Her band için hazır bir hesap vardır; aynı tablo birim testinde sahte bağlamla (T6.2), gerçek hesaplarla seed'de (T8.1) ve demo betiğinde (T15.1) kullanılır. Bir ağırlık ya da eşik değişip bir persona bandından kayarsa test kırmızı olur.
+| Persona | Senaryo                       | Tetiklenen sinyaller                                                               | Skor      | Band → aksiyon                                 |
+| ------- | ----------------------------- | ---------------------------------------------------------------------------------- | --------- | ---------------------------------------------- |
+| Ayşe    | Temiz, sadık müşteri          | yok (30 günlük hesap, 5 teslimat)                                                  | 0         | LOW → kapıda ödeme açık, 10 dk                 |
+| Zeynep  | Yeni üye                      | hesap yaşı (20) + teslimat yok (15)                                                | 35        | MEDIUM → kart + 3DS, kapıda ödeme kapalı, 2 dk |
+| Can     | Şüpheli gezgin                | yeni (20) + iptal geçmişi (15) + şehir farkı (15) + sepet anomalisi (20)           | 70        | HIGH → REVIEW kuyruğu                          |
+| Ali     | Çoklu hesap                   | ip-device: **cihazda 3+ hesap (15, veto)** + hızlı sipariş (15) + şehir farkı (15) | 45 + veto | CRITICAL → 403 + geçici kara liste             |
+| Komşu   | Stok yarışı (ikinci tarayıcı) | yok                                                                                | 0         | LOW → normal akış                              |
+
+Kurallar:
+
+- **Risk sinyalleri istemciden alınmaz** (B9). Cihaz geçmişi, IP/şehir, oturum konumu, sipariş ve iptal sayıları sunucudaki seed verisinde durur; `RiskContext`'i çağıran taraf (order/gateway) doldurur.
+- **Persona seçici yalnızca geliştirmede:** giriş ekranında telefon + şifreyi dolduran "Demo hesabı seç" listesi derleme zamanı bayrağına (`VITE_DEMO_PERSONAS`) bağlıdır ve production paketine girmez; CI, production paketinde persona adı ya da demo telefonu geçerse kırılır (T8.5).
+- **Persona hesapları yalnızca yerel/MOCK seed'inde:** bilinen şifreli hesaplar production veritabanına yazılmaz; seed betiği production ortamında persona yüklemeyi reddeder (T8.1).
+- Hesap gerektirmeyen senaryolar başka yoldan test edilir: kart reddi ve 3DS test kartlarıyla (`4242` / `…0002` / `…3184`), bölge dışı ve kapalı market hazır adreslerle (Ev / İş / Yazlık).
+- "Kart avcısı" personası (art arda reddedilen kartlar) bu kural setinde yakalanmadığı için yoktur; ilgili kural Opsiyon C ile gelince eklenir.
 
 Bandların aksiyonu tek yerde uygulanır: order-service/application/apply-risk-decision.ts. Risk servisi kararı önerir, uygulamaz — bu ayrım yetki karışıklığını önler.
 
@@ -1042,8 +1067,8 @@ Her görev tek alana dokunur, tek çıktısı ve tek bitti tanımı vardır. Gü
 | T5.2 | 5   | payment  | 3DS simülasyonu: Confirm3Ds(code), 60 sn geçerlilik, 3 yanlış kodda kilit (sayaç + iyimser kilit); başarı sonrası tekrar istek aynı sonucu alır                                                                                                                                                         | Yanlış kod THREEDS_FAILED + kalan hak döner; 3. yanlışta ve 60 sn sonunda ödeme FAILED                                        |
 | T5.3 | 5   | payment  | payments koleksiyonu (Mongo) + attempts[] deneme geçmişi; kilit kuralı T5.2'de, burada yalnızca kalıcılık                                                                                                                                                                                               | Denemeler attempts[] olarak görülür; servis yeniden başlayınca 3DS sayacı ve kilit korunur                                    |
 | T5.4 | 5   | web      | useNearbyMarkets, useMarket, useMarketCategories, useMarketProducts + isLoading/isFetching iskelet sinyalleri; market listesi ve market sayfası kabuğu (tasarımsız kabuk; görsel tasarım T16.2, konum T9.5'e kadar sabit Ev adresi)                                                                     | Market listesi ve seçilen marketin ürünleri mock veriyle render olur, yüklenirken iskelet kutucuk çıkar                       |
-| T6.1 | 6   | risk     | Rule arayüzü, registry, skor ve band hesabı                                                                                                                                                                                                                                                             | Sahte kurallarla birim test geçer                                                                                             |
-| T6.2 | 6   | risk     | Altı çekirdek kuralın uygulanması                                                                                                                                                                                                                                                                       | Her kuralın ayrı testi var                                                                                                    |
+| T6.1 | 6   | risk     | Rule arayüzü, registry, skor ve band hesabı + kesin kural (veto, `severity: 'block'`) + yeni eşikler 0-29/30-54/55-79/80+ + sözleşme: `RuleHit.veto`, `RiskEvaluation.vetoed_by_rule_id`, risk.proto eşik yorumu                                                                                        | Sahte kurallarla birim test geçer                                                                                             |
+| T6.2 | 6   | risk     | Altı çekirdek kuralın uygulanması ; persona tablosu (Ayşe/Zeynep/Can/Ali/Komşu) sahte bağlamla tablo güdümlü testte                                                                                                                                                                                     | Her kuralın ayrı testi var                                                                                                    |
 | T6.3 | 6   | risk     | risk_events yazımı + Evaluate RPC                                                                                                                                                                                                                                                                       | Değerlendirme kaydı sorgulanabilir                                                                                            |
 | T6.4 | 6   | web      | useCartStore (tek market; başka marketten ekleme onay ister) + packages/pricing ile toplam, minimum sepet, teslimat ücreti — kurallar seçili marketten                                                                                                                                                  | “X TL daha ekle” mesajı doğru hesaplanır; hesap bileşende değil serviste durur                                                |
 | T7.1 | 7   | order    | Saga: Risk → Payment zinciri + telafi adımları                                                                                                                                                                                                                                                          | Kart reddinde sipariş PAYMENT_FAILED                                                                                          |
@@ -1063,11 +1088,11 @@ Gün 7 kontrol noktası: Stok olmadan sipariş→risk→ödeme zinciri çalış�
 
 | ID    | Gün | Alan       | Görev                                                                                                                                                                                                                                      | Bitti sayılır                                                              |
 | ----- | --- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| T8.1  | 8   | gateway    | Auth: kayıt, giriş, JWT middleware, refresh                                                                                                                                                                                                | Korumalı uç token'sız 401 döner                                            |
+| T8.1  | 8   | gateway    | Auth: kayıt, giriş, JWT middleware, refresh + 5 persona hesabı ve sinyal verisi (yalnızca yerel/MOCK seed'i; production'da reddedilir)                                                                                                     | Korumalı uç token'sız 401 döner                                            |
 | T8.2  | 8   | gateway    | Rate limit + Idempotency-Key middleware'i. **Ek (P2):** Redis kayan pencere (ZSET + Lua). **Ek (P5):** kompakt idem kaydı + istek parmak izi, checkout TTL 2 sa; ADR-08 eki                                                                | Aynı key ile iki istek tek sipariş yaratır                                 |
 | T8.3  | 8   | gateway    | ApiResponse zarf middleware'i + global hata middleware'i                                                                                                                                                                                   | Her cevap aynı zarfta, requestId logla eşleşir                             |
 | T8.4  | 8   | gateway    | Stok birleştirmesi (B27: ürün uçlarına availableQuantity, inventory CheckAvailability ile) + hata sözlüğü. Market, kategori ve ürün uçları T5.4 öncesi `feat/gateway-market-uclari` ile öne alındı (stoksuz; alan sözleşmede isteğe bağlı) | Katalog ve kimlik uçları tamam; Opsiyon A'nın gateway ayağı kapanır (B19)  |
-| T8.5  | 8   | web        | Auth akışı (kayıt/giriş formu, zodResolver), token saklama, korumalı rota                                                                                                                                                                  | 401 alınan istekte kullanıcı girişe yönlenir, token yenilenir              |
+| T8.5  | 8   | web        | Auth akışı (kayıt/giriş formu, zodResolver), token saklama, korumalı rota + geliştirmeye özel persona seçici (`VITE_DEMO_PERSONAS`, derleme zamanı) + CI'da production paketi taraması                                                     | 401 alınan istekte kullanıcı girişe yönlenir, token yenilenir              |
 | T9.1  | 9   | inventory  | stock şeması (marketId + sku), seed, CheckAvailability(marketId, sku[]) RPC                                                                                                                                                                | Ürün listesi gerçek stokla döner                                           |
 | T9.2  | 9   | inventory  | Açılışta Mongo'dan Redis sayaç seed'i + reseed komutu. **Ek (P1):** `noeviction` değilse servis açılmaz                                                                                                                                    | Redis silinip yeniden kurulur                                              |
 | T9.3  | 9   | catalog    | BatchGetOffers: sepet doğrulaması için market + ürün fiyatlarını toplu okuma (N+1 yok)                                                                                                                                                     | 50 kalemlik sepet tek çağrıyla fiyatlanır; başka marketin ürünü reddedilir |
@@ -1098,7 +1123,7 @@ Gün 7 kontrol noktası: Stok olmadan sipariş→risk→ödeme zinciri çalış�
 | T14.2 | 14  | realtime | Konum fan-out + seq sıra numarası. **Ek (P4):** `sync` ile kaçırılan `seq` aralığını toplu gönderme | Sırasız paket istemcide atılır                                        |
 | T14.3 | 14  | order    | Teslimat tamamlanma akışı: ON_THE_WAY → DELIVERED                                                   | Rota bitince sipariş kapanır                                          |
 | T14.4 | 14  | web      | Leaflet harita + marker rotasyonu + useSmoothPosition interpolasyonu                                | Hareket takılmadan akar, geç gelen paket seq ile atılır               |
-| T15.1 | 15  | platform | Uçtan uca demo script'i (make demo)                                                                 | Tek komutla tüm akış koşar                                            |
+| T15.1 | 15  | platform | Uçtan uca demo script'i (make demo) — personalarla dört bandın her birini koşar                     | Tek komutla tüm akış koşar                                            |
 | T15.2 | 15  | platform | Entegrasyon testleri + CI pipeline                                                                  | CI yeşil                                                              |
 | T15.3 | 15  | —        | Bugfix ve tampon                                                                                    | Açık kritik hata kalmaz                                               |
 | T15.4 | 15  | web      | ErrorBoundary + global query onError + toast kuyruğu (useUiStore)                                   | Sunucu kapalıyken sayfa çökmez, hata kodu kullanıcı mesajına çevrilir |
@@ -1330,6 +1355,7 @@ packages/event-bus içine KafkaEventBus yaz, bootstrap.ts içinde uygulamayı de
 - Ödeme ekranı açılır, geri sayım başlar; ikinci tarayıcıda aynı ürünün stokta azaldığı gösterilir.
 - Bekleyip sürenin dolması izlenir; stok geri gelir (bu sahne projenin vitrinidir).
 - Yeni hesapla aynı sipariş denenir → orta risk bandı, kapıda ödeme kapalı, süre 2 dk.
+- Persona seçiciden Can ile sipariş → yüksek band, REVIEW kuyruğu; Ali ile → veto, 403 ("skor 45, cihazda 3+ hesap" kaydı gösterilir).
 - Kart ile ödenir, 3DS kodu girilir, sipariş oluşur.
 - Kurye atanır, harita üzerinde pürüzsüz hareket izlenir, teslimat kapanır.
 - make race koşturulur: 100 istek, 1 başarılı sipariş.
