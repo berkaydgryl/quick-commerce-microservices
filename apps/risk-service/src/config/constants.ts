@@ -2,6 +2,12 @@
 
 export const SERVICE_NAME = 'risk';
 
+/** Proto'daki tam servis adi; saglik kaydi ve gunluk bunu kullanir. */
+export const RISK_SERVICE_FULL_NAME = 'getir.risk.v1.RiskService';
+
+/** Roadmap'teki port haritasindan: risk 50055. */
+export const DEFAULT_RISK_GRPC_PORT = 50_055;
+
 /**
  * Tek bir kuralin en fazla bekleyebilecegi sure. Evaluate checkout'un kritik
  * yolundadir; takilan bir kural siparisi bekletmemeli. Suresi dolan kural

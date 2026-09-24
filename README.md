@@ -324,6 +324,7 @@ Hepsi depo kökünden `pnpm <komut>` ile çalışır. `make` bu projede zorunlu 
 pnpm --filter @getir/catalog-service build && MOCK=true pnpm --filter @getir/catalog-service start  # :50051, Mongo'suz
 pnpm --filter @getir/order-service   build && pnpm --filter @getir/order-service   start  # :50053
 pnpm --filter @getir/payment-service build && pnpm --filter @getir/payment-service start  # :50054, mock kart
+pnpm --filter @getir/risk-service    build && pnpm --filter @getir/risk-service    start  # :50055, risk motoru
 pnpm proto:gen && (cd apps/gateway && ASSET_BASE_URL=http://localhost:5173 go run ./cmd/gateway)  # :8080
 
 curl -s localhost:8080/healthz          # iki servisin durumu; biri dusukse 503
@@ -338,7 +339,7 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/cat
 | [`catalog-service`](apps/catalog-service/README.md) (T4.8) | 50051 | Pazaryeri: yakındaki marketler, market sayfası, teklifler — Mongo ya da `MOCK`      |
 | [`order-service`](apps/order-service/README.md) (T3.2)     | 50053 | `CreateDraftOrder`, `CreateOrder` — bellekte, ödeme yok                             |
 | [`payment-service`](apps/payment-service/README.md) (T5.3) | 50054 | `Charge`, `Confirm3Ds` — mock kart + 3DS, idempotent; Mongo `payments` ya da `MOCK` |
-| [`risk-service`](apps/risk-service/README.md) (T6.2)       | —     | Kural motoru + 6 çekirdek kural, veto; 5 persona testi; sunucu T6.3                 |
+| [`risk-service`](apps/risk-service/README.md) (T6.3)       | 50055 | `Evaluate`, `GetLastEvaluation` — 6 kural, veto, `risk_events` (Mongo ya da `MOCK`) |
 | [`gateway`](apps/gateway/README.md) (Go)                   | 8080  | `GET /healthz`, `/v1/categories`, `/v1/markets` ve alt uçları (stoksuz)             |
 
 Katalog T4.1'den beri Mongo'dan okur: `MOCK=true` ise aynı demo verisini bellekten döndürür
