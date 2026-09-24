@@ -581,6 +581,7 @@ Bandın adı her yerde sözleşmedekidir (proto `RiskBand`, `@getir/core` `RISK_
 ### Test personaları
 
 Tek kullanıcıyla bütün bantlar elle test edilemez. Her band için hazır bir hesap vardır; aynı tablo birim testinde sahte bağlamla (T6.2), gerçek hesaplarla seed'de (T8.1) ve demo betiğinde (T15.1) kullanılır. Bir ağırlık ya da eşik değişip bir persona bandından kayarsa test kırmızı olur.
+
 | Persona | Senaryo                       | Tetiklenen sinyaller                                                               | Skor      | Band → aksiyon                                 |
 | ------- | ----------------------------- | ---------------------------------------------------------------------------------- | --------- | ---------------------------------------------- |
 | Ayşe    | Temiz, sadık müşteri          | yok (30 günlük hesap, 5 teslimat)                                                  | 0         | LOW → kapıda ödeme açık, 10 dk                 |
