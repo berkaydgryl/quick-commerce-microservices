@@ -88,6 +88,18 @@ message RuleHit {
 //
 // Eksik birakilan alanlar ilgili kurali TETIKLEMEZ (hata degildir); kural
 // motoru eksik sinyali 0 puan olarak isler.
+//
+// "0 MI, YOK MU?" (T6.3): proto3'te gonderilmeyen sayi 0, metin "" gelir.
+// Sunucu bunlari su sozlesmeyle okur:
+//   - checkout_dwell_ms = 0 ve accounts_on_device = 0 -> OLCULMEDI (yok).
+//     Gercekte 0 ms'lik siparis ya da 0 hesapli cihaz olmaz; 0'i "bot hizi"
+//     saymak ilk degerlendirmede (rezervasyon oncesi) herkese puan eklerdi.
+//   - delivered_order_count / cancelled_order_count = 0 -> GERCEKTEN 0.
+//     Cagiran taraf bu sayilari her zaman bilir; yeni uyenin 0 teslimati
+//     gercek bir sinyaldir.
+//   - bos metin (ip_address, ip_city, device_id, previous_ip_address,
+//     order_id, market_id) -> yok.
+//   - mesaj alanlari (zaman, konum, tutar) gonderilmezse yok.
 message RiskContext {
   string user_id = 1;
   string order_id = 2;

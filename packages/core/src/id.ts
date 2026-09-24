@@ -17,6 +17,8 @@ export const ID_PREFIX = {
   RESERVATION: 'rsv',
   /** 3DS dogrulama jetonu: Charge uretir, Confirm3Ds geri alir (payment-svc). */
   THREEDS_CHALLENGE: 'tds',
+  /** Risk degerlendirme kaydi (risk_events, risk-svc). */
+  RISK_EVENT: 'rev',
   /** Istek korelasyon kimligi: gunluk kaydi, gRPC metadata'si ve REST hata
    *  zarfindaki `error.requestId` ayni degeri tasir. */
   REQUEST: 'req',

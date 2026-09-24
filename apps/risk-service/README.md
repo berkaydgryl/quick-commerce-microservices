@@ -3,16 +3,38 @@
 Risk servisi: sipariş bağlamını puanlar ve bir **bant önerir**. Kararı uygulamaz; aksiyonlar
 (kapıda ödeme, rezervasyon süresi, 403) `order-service/application/apply-risk-decision.ts`'te tek yerde.
 
-## Bugünkü durum (T6.2 — çekirdek kurallar)
+## Bugünkü durum (T6.3 — Evaluate RPC ve risk_events)
 
-| Parça                          | Durum                                                                   |
-| ------------------------------ | ----------------------------------------------------------------------- |
-| Kural arayüzü + kayıt          | ✅ `domain/rule.ts`, `rules/registry.ts` (config ile iki yönlü eşleşme) |
-| Skor, bant, veto               | ✅ `domain/score.ts`, `domain/bands.ts`                                 |
-| Paralel koşu + hata izolasyonu | ✅ `application/evaluate-risk.ts` (kural başına 200 ms sınır)           |
-| Config                         | ✅ `config/risk.rules.json` (Zod ile doğrulanır)                        |
-| Altı çekirdek kural            | ✅ `rules/*.rule.ts`, eşikler `config/constants.ts`                     |
-| `Evaluate` RPC, `risk_events`  | ⏳ T6.3 (gRPC sunucusu da o görevde açılır)                             |
+| Parça                           | Durum                                                                   |
+| ------------------------------- | ----------------------------------------------------------------------- |
+| Kural arayüzü + kayıt           | ✅ `domain/rule.ts`, `rules/registry.ts` (config ile iki yönlü eşleşme) |
+| Skor, bant, veto                | ✅ `domain/score.ts`, `domain/bands.ts`                                 |
+| Paralel koşu + hata izolasyonu  | ✅ `application/evaluate-risk.ts` (kural başına 200 ms sınır)           |
+| Config                          | ✅ `config/risk.rules.json` (Zod ile doğrulanır)                        |
+| Altı çekirdek kural             | ✅ `rules/*.rule.ts`, eşikler `config/constants.ts`                     |
+| `Evaluate`, `GetLastEvaluation` | ✅ gRPC :50055; kayıt `risk_events` (Mongo) ya da bellek (`MOCK`)       |
+
+## RPC'ler (T6.3)
+
+| RPC                 | Ne yapar                                                                            |
+| ------------------- | ----------------------------------------------------------------------------------- |
+| `Evaluate`          | Altı kuralı koşar, skor + bant + veto hesaplar, `risk_events`'e yazar, kararı döner |
+| `GetLastEvaluation` | Kullanıcının (ya da `orderId` verilirse o siparişin) son kararı; yoksa `NOT_FOUND`  |
+
+**"0 mı, yok mu?"** proto3'te gönderilmeyen sayı 0, metin `""` gelir. Sözleşme (`risk.proto` yorumu):
+
+- `checkoutDwellMs = 0` ve `accountsOnDevice = 0` → **ölçülmedi**. Aksi hâlde rezervasyon öncesi ilk
+  değerlendirmede herkes "0 ms, bot" sayılırdı (test: yalnızca kullanıcı kimliği gönderilince skor 0).
+- Sipariş sayıları 0 → **gerçekten 0** (çağıran hep bilir; yeni üyenin 0 teslimatı gerçek sinyal).
+- Boş metin ve gönderilmeyen mesaj (zaman, konum, tutar) → yok.
+
+**Kayıt yazılamazsa karar yine döner** ve `error` günlüğü yazılır: risk siparişin kritik yolunda; kayıp,
+o tek değerlendirmenin "neden" kaydıdır.
+
+**`risk_events` belgesi:** `_id (rev_…)`, `userId`, `orderId?`, `marketId?`, `score`, `band`,
+`vetoedByRuleId?`, `rules[]` (altı kuralın sonucu), `createdAt`. **Ham bağlam yok:** IP, konum, cihaz
+kimliği yazılmaz; gerekçeler kişisel veri içermez. İndeksler: `userId+createdAt`, kısmi
+`orderId+createdAt`.
 
 ## Bantlar (T6.1 kararı)
 
@@ -78,3 +100,15 @@ kırmızı olur. Gerçek hesaplar T8.1 seed'inde, demo T15.1'de.
 | Can     | account-age, order-history, basket-anomaly, geofence | 70        | `HIGH`     |
 | Ali     | checkout-dwell, geofence, ip-device (**veto**)       | 45 + veto | `CRITICAL` |
 | Komşu   | —                                                    | 0         | `LOW`      |
+
+## Çalıştırma
+
+```bash
+pnpm --filter @getir/risk-service build && pnpm --filter @getir/risk-service start   # :50055 (kok .env: MOCK, MONGO_URI)
+pnpm test:int   # gercek Mongo: sozlesme, indeksler, Evaluate -> risk_events -> GetLastEvaluation
+
+grpcurl -plaintext -import-path packages/proto/proto -proto getir/risk/v1/risk.proto \
+  -d '{"userId":"usr_ali","orderId":"ord_ali-1"}' localhost:50055 getir.risk.v1.RiskService/GetLastEvaluation
+```
+
+Docker (bağlam depo kökü): `docker build -f apps/risk-service/Dockerfile -t getir/risk-service .`
