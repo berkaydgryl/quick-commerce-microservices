@@ -15,6 +15,7 @@
 
 import { z } from 'zod';
 
+import type { ListProductsInput } from '../../application/list-products.js';
 import { MAX_BATCH_OFFER_IDS, MIN_SEARCH_QUERY_LENGTH } from '../../config/constants.js';
 
 /** Bos metni "yok" sayan istege bagli alan. */
@@ -38,25 +39,39 @@ const requiredId = z
 /**
  * ListProducts: market ZORUNLU (ADR-15). dark_store_id deprecated alan olarak
  * telde gelebilir; sema onu okumaz, yok sayar.
+ *
+ * Cikti dogrudan use-case girdisidir (ListProductsInput): telin duz bicimini
+ * use-case'in `filter` + sayfa bicimine cevirmek de "istegi dogrula" isinin
+ * parcasi. Handler boylece yalnizca cagirir ve cevirir (~15 satir kurali).
+ * Bos filtreler anahtar olarak HIC yazilmaz (exactOptionalPropertyTypes:
+ * `categoryId: undefined` ile "anahtar yok" ayri tiplerdir).
  */
-export const listProductsRequestSchema = z.object({
-  marketId: requiredId,
-  categoryId: optionalText,
-  query: optionalText.refine(
-    (value) => value === undefined || value.length >= MIN_SEARCH_QUERY_LENGTH,
-    { message: `en az ${MIN_SEARCH_QUERY_LENGTH} karakter olmali` },
-  ),
-  page: z
-    .object({
-      // Sinirlari BURADA degil domain'de uyguluyoruz: sozlesme "reddetme,
-      // kirp" diyor; sema reddederse o kural cignenir.
-      pageSize: z.number().int().optional(),
-      pageToken: z.string().optional(),
-    })
-    .optional(),
-});
-
-export type ListProductsRequestInput = z.infer<typeof listProductsRequestSchema>;
+export const listProductsRequestSchema = z
+  .object({
+    marketId: requiredId,
+    categoryId: optionalText,
+    query: optionalText.refine(
+      (value) => value === undefined || value.length >= MIN_SEARCH_QUERY_LENGTH,
+      { message: `en az ${MIN_SEARCH_QUERY_LENGTH} karakter olmali` },
+    ),
+    page: z
+      .object({
+        // Sinirlari BURADA degil domain'de uyguluyoruz: sozlesme "reddetme,
+        // kirp" diyor; sema reddederse o kural cignenir.
+        pageSize: z.number().int().optional(),
+        pageToken: z.string().optional(),
+      })
+      .optional(),
+  })
+  .transform(({ marketId, categoryId, query, page }): ListProductsInput => ({
+    filter: {
+      marketId,
+      ...(categoryId === undefined ? {} : { categoryId }),
+      ...(query === undefined ? {} : { query }),
+    },
+    pageSize: page?.pageSize,
+    pageToken: page?.pageToken,
+  }));
 
 /**
  * ListNearbyMarkets. Konum ZORUNLUDUR: proto3'te mesaj alani set edilmezse

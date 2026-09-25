@@ -18,7 +18,7 @@ import type { ListCategories } from '../../application/list-categories.js';
 import type { ListMarketCategories } from '../../application/list-market-categories.js';
 import type { ListNearbyMarkets } from '../../application/list-nearby-markets.js';
 import type { ListProducts } from '../../application/list-products.js';
-import { toProtoCategory, toProtoMarket, toProtoOffer } from './mappers.js';
+import { toListProductsResponse, toProtoCategory, toProtoMarket, toProtoOffer } from './mappers.js';
 import {
   batchGetOffersRequestSchema,
   getMarketRequestSchema,
@@ -89,28 +89,8 @@ export function createCatalogImplementation(
       name: 'ListProducts',
       schema: listProductsRequestSchema,
       ...logger,
-      handle: async ({
-        marketId,
-        categoryId,
-        query,
-        page,
-      }): Promise<catalogV1.ListProductsResponse> => {
-        const result = await deps.listProducts({
-          filter: {
-            marketId,
-            ...(categoryId === undefined ? {} : { categoryId }),
-            ...(query === undefined ? {} : { query }),
-          },
-          pageSize: page?.pageSize,
-          pageToken: page?.pageToken,
-        });
-        return {
-          // Deprecated alan (ADR-15): fiyatsiz urun listesi artik doldurulmaz.
-          products: [],
-          offers: result.items.map(toProtoOffer),
-          page: { nextPageToken: result.nextPageToken, totalSize: result.totalSize },
-        };
-      },
+      handle: async (input): Promise<catalogV1.ListProductsResponse> =>
+        toListProductsResponse(await deps.listProducts(input)),
     }),
 
     // DEPRECATED (ADR-15): sistem market atamaz, kullanici secer. Sozlesmede

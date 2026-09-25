@@ -12,6 +12,7 @@ import type { catalogV1 } from '@getir/proto';
 import { DEFAULT_CURRENCY } from '../../config/constants.js';
 import type { Category, Market, Offer, ProductUnit } from '../../domain/catalog.js';
 import { PRODUCT_UNIT } from '../../domain/catalog.js';
+import type { OfferPage } from '../../domain/offer-reader.js';
 
 /** Domain birimi -> proto enum. Eksik esleme derlemede yakalanir (Record). */
 const UNIT_TO_PROTO: Readonly<Record<ProductUnit, commonV1.Unit>> = {
@@ -70,5 +71,14 @@ export function toProtoOffer(offer: Offer): catalogV1.Offer {
     imageUrl: product.imageUrl,
     price: money(offer.priceMinor),
     isActive: offer.isActive,
+  };
+}
+
+export function toListProductsResponse(page: OfferPage): catalogV1.ListProductsResponse {
+  return {
+    // Deprecated alan (ADR-15): fiyatsiz urun listesi artik doldurulmaz.
+    products: [],
+    offers: page.items.map(toProtoOffer),
+    page: { nextPageToken: page.nextPageToken, totalSize: page.totalSize },
   };
 }
