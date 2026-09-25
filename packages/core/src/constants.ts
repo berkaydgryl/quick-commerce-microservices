@@ -73,52 +73,19 @@ export const RISK_BANDS = {
 export type RiskBand = (typeof RISK_BANDS)[keyof typeof RISK_BANDS];
 
 /**
- * Redis anahtar ureticileri.
+ * Idempotency-Key uzunluk sinirlari (ADR-08).
  *
- * HASH-TAG: Redis Cluster slot hesabi ilk `{...}` blogunu kullanir. Bir siparisin
- * rezervasyonu ile o magazanin stok anahtarlari TEK Lua script'inde birlikte
- * degistirildigi icin hepsinin AYNI slotta olmasi gerekir -> hash-tag her zaman
- * magaza kimligidir (stock / resv anahtarlarinda). Kullanici, kurye, idempotency
- * ve rate-limit anahtarlari ise kendi kimlikleriyle etiketlenir.
+ * Anahtari istemci uretir (UUID v4 onerilir) ve ayni sinir uc yerde
+ * uygulanir: REST basligi (@getir/contracts bunlari yeniden disa verir),
+ * servislerin gRPC semalari ve Redis'teki idem:{key} anahtari
+ * (@getir/redis-kit deseni bunlardan kurar). Sinir tek yerde durur; biri
+ * degisirse ucu birlikte degisir.
+ *
+ * Redis anahtar ureticileri burada DEGIL, @getir/redis-kit/keys.ts'tedir:
+ * anahtar bicimi tek kaynaktan gelir (ikinci bir uretici farkli anahtar yazar).
  */
-export const REDIS_KEY = {
-  /** Magazanin bir SKU'su icin satilabilir stok sayaci. */
-  stockAvail: (storeId: string, sku: string): string => `stock:{${storeId}}:avail:{${sku}}`,
-  /** Siparise ait rezervasyon kaydi (hash). */
-  reservation: (storeId: string, orderId: string): string => `resv:{${storeId}}:{${orderId}}`,
-  /** Magazanin acik rezervasyonlarinin son kullanma indeksi (sorted set). */
-  reservationIndex: (storeId: string): string => `resv:index:{${storeId}}`,
-  /** Kullanicinin acik rezervasyonlari (ayni anda tek rezervasyon kurali). */
-  reservationsByUser: (userId: string): string => `resv:user:{${userId}}`,
-  /** Kuryenin rota gecmisi (stream/list). */
-  courierTrack: (courierId: string): string => `courier:{${courierId}}:track`,
-  /** Kuryenin son bilinen konumu. */
-  courierLast: (courierId: string): string => `courier:{${courierId}}:last`,
-  /** Idempotency kaydi. */
-  idempotency: (key: string): string => `idem:{${key}}`,
-  /** IP + rota bazli hiz siniri sayaci. */
-  rateLimit: (ip: string, route: string): string => `rate:{${ip}}:{${route}}`,
-  /** Tum olaylarin yazildigi tek stream. */
-  eventStream: 'stream:events',
-  /** Mutabakat (reconcile) isinin dagitik kilidi. */
-  reconcileLock: 'lock:reconcile',
-} as const;
-
-/**
- * Anahtarin slot hesabinda kullanilacak hash-tag'ini dondurur.
- * Tag yoksa (veya bos ise) undefined doner - o anahtar kendi adina gore dagitilir.
- */
-export function redisHashTag(key: string): string | undefined {
-  const start = key.indexOf('{');
-  if (start < 0) {
-    return undefined;
-  }
-  const end = key.indexOf('}', start + 1);
-  if (end < 0 || end === start + 1) {
-    return undefined;
-  }
-  return key.slice(start + 1, end);
-}
+export const IDEMPOTENCY_KEY_MIN_LENGTH = 8;
+export const IDEMPOTENCY_KEY_MAX_LENGTH = 128;
 
 /**
  * Mock odeme saglayicisinin kabul ettigi 3DS kodu (payment.proto: "mock

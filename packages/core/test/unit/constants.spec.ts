@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { EVENTS, ORDER_STATUS, REDIS_KEY, RISK_BANDS, redisHashTag } from '../../src/index.js';
-
-const STORE_ID = 'store-1';
-const OTHER_STORE_ID = 'store-2';
-const SKU = 'SKU-42';
-const ORDER_ID = 'ord_0123456789abcdef0123456789abcdef';
-const USER_ID = 'usr_0123456789abcdef0123456789abcdef';
-const COURIER_ID = 'crr_0123456789abcdef0123456789abcdef';
+import { EVENTS, ORDER_STATUS, RISK_BANDS } from '../../src/index.js';
 
 describe('ORDER_STATUS', () => {
   it('anahtar ve deger ayni yazilir', () => {
@@ -60,53 +53,5 @@ describe('EVENTS', () => {
 describe('RISK_BANDS', () => {
   it('dort bant tanimlidir', () => {
     expect(Object.values(RISK_BANDS)).toEqual(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']);
-  });
-});
-
-describe('REDIS_KEY', () => {
-  it('anahtarlari sozlesmedeki bicimde uretir', () => {
-    expect(REDIS_KEY.stockAvail(STORE_ID, SKU)).toBe('stock:{store-1}:avail:{SKU-42}');
-    expect(REDIS_KEY.reservation(STORE_ID, ORDER_ID)).toBe(`resv:{store-1}:{${ORDER_ID}}`);
-    expect(REDIS_KEY.reservationIndex(STORE_ID)).toBe('resv:index:{store-1}');
-    expect(REDIS_KEY.reservationsByUser(USER_ID)).toBe(`resv:user:{${USER_ID}}`);
-    expect(REDIS_KEY.courierTrack(COURIER_ID)).toBe(`courier:{${COURIER_ID}}:track`);
-    expect(REDIS_KEY.courierLast(COURIER_ID)).toBe(`courier:{${COURIER_ID}}:last`);
-    expect(REDIS_KEY.idempotency('abc')).toBe('idem:{abc}');
-    expect(REDIS_KEY.rateLimit('10.0.0.1', '/orders')).toBe('rate:{10.0.0.1}:{/orders}');
-    expect(REDIS_KEY.eventStream).toBe('stream:events');
-    expect(REDIS_KEY.reconcileLock).toBe('lock:reconcile');
-  });
-
-  it("stok ve rezervasyon anahtarlari ayni hash-tag'i (magaza) tasir", () => {
-    const keys = [
-      REDIS_KEY.stockAvail(STORE_ID, SKU),
-      REDIS_KEY.stockAvail(STORE_ID, 'SKU-7'),
-      REDIS_KEY.reservation(STORE_ID, ORDER_ID),
-      REDIS_KEY.reservationIndex(STORE_ID),
-    ];
-
-    for (const key of keys) {
-      expect(redisHashTag(key)).toBe(STORE_ID);
-    }
-  });
-
-  it('farkli magazalar farkli hash-tag alir', () => {
-    expect(redisHashTag(REDIS_KEY.stockAvail(OTHER_STORE_ID, SKU))).toBe(OTHER_STORE_ID);
-    expect(redisHashTag(REDIS_KEY.stockAvail(STORE_ID, SKU))).not.toBe(
-      redisHashTag(REDIS_KEY.stockAvail(OTHER_STORE_ID, SKU)),
-    );
-  });
-
-  it('kullanici, kurye, idempotency ve rate-limit anahtarlari kendi kimligiyle etiketlenir', () => {
-    expect(redisHashTag(REDIS_KEY.reservationsByUser(USER_ID))).toBe(USER_ID);
-    expect(redisHashTag(REDIS_KEY.courierTrack(COURIER_ID))).toBe(COURIER_ID);
-    expect(redisHashTag(REDIS_KEY.courierLast(COURIER_ID))).toBe(COURIER_ID);
-    expect(redisHashTag(REDIS_KEY.idempotency('abc'))).toBe('abc');
-    expect(redisHashTag(REDIS_KEY.rateLimit('10.0.0.1', '/orders'))).toBe('10.0.0.1');
-  });
-
-  it('tekil anahtarlarda hash-tag yoktur', () => {
-    expect(redisHashTag(REDIS_KEY.eventStream)).toBeUndefined();
-    expect(redisHashTag(REDIS_KEY.reconcileLock)).toBeUndefined();
   });
 });

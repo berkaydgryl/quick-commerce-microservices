@@ -1,4 +1,9 @@
-import { AppError, ERROR_CODES } from '@getir/core';
+import {
+  AppError,
+  ERROR_CODES,
+  IDEMPOTENCY_KEY_MAX_LENGTH,
+  IDEMPOTENCY_KEY_MIN_LENGTH,
+} from '@getir/core';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -108,5 +113,24 @@ describe('dogrulama', () => {
 
   it('cok kisa idempotency anahtari reddedilir', () => {
     expect(() => idempotencyKey('kisa')).toThrow(AppError);
+  });
+
+  it('idempotency anahtari sozlesmedeki uzunluk sinirlarini birebir uygular', () => {
+    // Sinirlar @getir/core'dan gelir; REST basligi ayni degerleri kullanir. Sinirin
+    // iki yani da denenir: sozlesmenin kabul ettigi anahtar Redis'te reddedilmemeli.
+    const ofLength = (length: number): string => 'a'.repeat(length);
+
+    expect(() => idempotencyKey(ofLength(IDEMPOTENCY_KEY_MIN_LENGTH - 1))).toThrow(AppError);
+    expect(idempotencyKey(ofLength(IDEMPOTENCY_KEY_MIN_LENGTH))).toBe(
+      `idem:{${ofLength(IDEMPOTENCY_KEY_MIN_LENGTH)}}`,
+    );
+    expect(idempotencyKey(ofLength(IDEMPOTENCY_KEY_MAX_LENGTH))).toBe(
+      `idem:{${ofLength(IDEMPOTENCY_KEY_MAX_LENGTH)}}`,
+    );
+    expect(() => idempotencyKey(ofLength(IDEMPOTENCY_KEY_MAX_LENGTH + 1))).toThrow(AppError);
+  });
+
+  it('idempotency anahtarinda ayirici karakter reddedilir', () => {
+    expect(() => idempotencyKey('anahtar:{ds_1}')).toThrow(AppError);
   });
 });

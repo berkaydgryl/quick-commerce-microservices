@@ -4,7 +4,7 @@
 
 # Getir Market Klonu — Mimari & 20 Günlük Roadmap (Opsiyon A + B)
 
-Kaynak: mimari & 20 günlük yol haritası belgesi · Son güncelleme: 2026-09-25 (kurallar denetimi: T10.4 migration, T10.5 metrik)
+Kaynak: mimari & 20 günlük yol haritası belgesi · Son güncelleme: 2026-09-25 (kurallar denetimi: T10.4 migration, T10.5 metrik, D1-D13 düzeltmeleri)
 
 ## Yönetici Özeti
 
@@ -1084,6 +1084,26 @@ Her görev tek alana dokunur, tek çıktısı ve tek bitti tanımı vardır. Gü
 Gün 7 kontrol noktası: Stok olmadan sipariş→risk→ödeme zinciri çalışıyor olmalı. Çalışmıyorsa Gün 8'e geçilmez; Faz 3 bu zincirin üzerine kurulur.
 
 **Gün 7 uygulama sırası:** T9.3 → T7.2 → T7.1 → T7.3 → T7.4 → T7.5 → T7.6. Saga'nın ödeme adımı (T7.1) ödenecek tutarı bilmek zorunda; tutarı T7.2 hesaplar ve T7.2 fiyatları T9.3'ün `BatchGetOffers` ucundan okur. Numaralar tabloda sabit kalır.
+
+### Denetim düzeltmeleri (D1-D13)
+
+25 Eylül'deki kurallar denetiminde (her bulgu üç bağımsız doğrulayıcıdan geçti) ve SRP denetiminde doğrulanan ihlallerin düzeltmeleri. Roadmap dışı iş oldukları için kimlikleri `D<no>`'dur; commit'ler `(D1)` gibi biter. Sıra D1 → D13; D1-D4 T7.2'den önce biter, çünkü T7.2 order-service'e ve ilk servisler arası çağrıya dokunur. Geçmişe dönük ihlaller (kurala uymayan commit başlıkları, görev dışı değişiklik taşıyan PR'lar) `main` geçmişi yeniden yazılmadan bırakılır; tekrarını D13 önler.
+
+| ID  | Gün | Alan     | Görev                                                                                                                                                                                                                                                                      | Bitti sayılır                                                                       |
+| --- | --- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| D1  | 7   | platform | Redis anahtarları tek kaynakta: core'daki ikinci üretici (`REDIS_KEY`, farklı anahtar üretiyordu) silinir, `redis-kit/keys.ts` tek üreticidir; Idempotency-Key uzunluk sınırları `@getir/core`'da, contracts yeniden dışa verir, `keys.ts` deseni onlardan kurar           | core'da anahtar üreten kod yok; sınır sayıları tek dosyada; sınırın iki yanı testli |
+| D2  | 7   | platform | Log bağlamı: payment ve risk use-case'leri çağrının requestId'li logger'ını kullanır; env ve açılış hataları JSON log olur; redis-kit ilk bağlantı denemeleri warn; bağlantı dizesi maskesi parolada `@` taşır                                                             | Use-case hata ve uyarı satırlarında requestId var; stderr'e düz metin yazılmıyor    |
+| D3  | 7   | order    | `order-grpc.spec.ts` ve `order-store-contract.ts` bölünür; kopya sabitler (idempotency sınırı dahil) ve `geoPoint` şeması contracts'tan alınır                                                                                                                             | 200 satırı aşan order dosyası yok; order'da contracts'ı tekrar eden sabit yok       |
+| D4  | 7   | order    | CancelOrder'a Idempotency-Key: proto alanı (eklemeli) ve doğrulama                                                                                                                                                                                                         | Anahtarsız iptal reddedilir; aynı anahtarla tekrar aynı sonucu döner                |
+| D5  | 7   | platform | service-kit ve contracts: Health Watch Zod'dan geçer; `unimplemented()` `x-app-error` taşır; graceful-shutdown zaman aşımı ve hata yolları testli; `ERROR_MESSAGES` Readonly; socket eşlemesi olay adlarıyla eksiksiz tipli; contracts betiği `apps/gateway` yolunu bilmez | İlgili yollar testli; `packages/*` içinde `apps/*` yolu yok                         |
+| D6  | 7   | catalog  | İstek doğrulaması REST sözleşmesiyle aynı (marketId ve categoryId biçimi, arama en fazla 64 karakter); kategori listelerine üst sınır; konum hatası Türkçe; `BatchGetProducts` proto yorumu güncel                                                                         | Hatalı istek 200 ya da 404 yerine 400 döner                                         |
+| D7  | 7   | catalog  | Kopya sabitler contracts'tan; mesafe yuvarlama mapper'da; seed bütünlük kuralı domain'de; `catalog-grpc.spec.ts` bölünür ve hata metadata'sı Zod ile okunur                                                                                                                | Davranış değişmez; testler yeşil                                                    |
+| D8  | 7   | gateway  | Go hata kuralları: healthcheck `context` ve `Body.Close`, testlerde yok sayılan hatalar; `/healthz` `x-request-id` iletir; `config.go` ve `markets_test.go` bölünür                                                                                                        | Gerekçesiz `_ =` yok; `go test -race` yeşil                                         |
+| D9  | 7   | payment  | `domain/payment.ts`'teki charge adımları `domain/charge.ts`'e; `mongo-payment-store.spec.ts` bölünür                                                                                                                                                                       | Davranış değişmez; testler yeşil                                                    |
+| D10 | 7   | risk     | `runRule` içindeki puan ve sonuç kuralları saf fonksiyonlara (domain)                                                                                                                                                                                                      | Kural sonucu I/O'suz birim testli                                                   |
+| D11 | 7   | web      | Sepet adet sınırı servisten sorulur; `MarketProductsQuery` `z.infer`'den; `MarketSummary` kendi BEM bloğu; çıplak rem/em değerleri token'a (değer değişmez)                                                                                                                | Görünüm aynı; stylelint ve testler yeşil                                            |
+| D12 | 7   | platform | Node çalışma imajlarında yalnızca `dist` ve üretim bağımlılıkları (`src`, `tsconfig`, `.turbo` yok)                                                                                                                                                                        | İmaj içeriği listelenerek doğrulanır                                                |
+| D13 | 7   | platform | CI'da commit başlığı kontrolü (conventional commit, izinli alan, görev kimliği); roadmap'teki var olmayan dal adı düzeltilir                                                                                                                                               | Kurala uymayan başlık CI'da kırmızı                                                 |
 
 ## Görev Panosu — Gün 8-20
 
