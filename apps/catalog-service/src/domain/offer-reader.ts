@@ -28,4 +28,14 @@ export interface OfferReader {
   listOffers(filter: OfferFilter, page: PageQuery): Promise<OfferPage>;
   /** Marketin en az bir AKTIF teklifi olan kategori kimlikleri. */
   listCategoryIdsWithOffers(marketId: string): Promise<readonly string[]>;
+  /**
+   * Marketin verilen urunlere ait teklifleri, TEK sorguda (N+1 yok, T9.3).
+   * Pasif teklifler DAHILDIR ve sira garantisi yoktur: "satilir mi" karari
+   * depo degil use-case isidir (batch-get-offers.ts). Bilinmeyen kimlik
+   * sessizce yoktur; eksikleri cagiran hesaplar.
+   */
+  findOffersByProductIds(
+    marketId: string,
+    productIds: readonly string[],
+  ): Promise<readonly Offer[]>;
 }

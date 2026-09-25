@@ -244,6 +244,74 @@ describe('ListProducts (teklifler)', () => {
   });
 });
 
+describe('BatchGetOffers (T9.3)', () => {
+  it('satilabilir teklifler ve missing tek cevapta; fiyat kurus', async () => {
+    const { error, response } = await call(catalogV1.CatalogServiceService.batchGetOffers, {
+      marketId: 'mkt_migros-jet-moda',
+      productIds: ['prd_sut-1l', 'prd_camasir-suyu', 'prd_yok'],
+    });
+
+    expect(error).toBeUndefined();
+    expect(
+      response?.offers.map((offer) => [offer.productId, offer.price?.amountMinor, offer.isActive]),
+    ).toEqual([['prd_sut-1l', 3490, true]]);
+    expect(response?.missing).toEqual(['prd_camasir-suyu', 'prd_yok']);
+  });
+
+  it('T9.3 olcutu uctan uca: 50 kalemlik sepet TEK cagrida, semadan gecerek', async () => {
+    const migros = await call(catalogV1.CatalogServiceService.listProducts, {
+      ...catalogV1.ListProductsRequest.fromPartial({}),
+      marketId: 'mkt_migros-jet-moda',
+      page: { pageSize: 50, pageToken: '' },
+    });
+    const known = (migros.response?.offers ?? []).map((offer) => offer.productId);
+    const unknown = Array.from({ length: 50 - known.length }, (_, index) => `prd_yok-${index}`);
+
+    const { error, response } = await call(catalogV1.CatalogServiceService.batchGetOffers, {
+      marketId: 'mkt_migros-jet-moda',
+      productIds: [...known, ...unknown],
+    });
+
+    expect(known).toHaveLength(15);
+    expect(error).toBeUndefined();
+    expect(response?.offers).toHaveLength(14);
+    expect(response?.missing).toEqual(['prd_camasir-suyu', ...unknown]);
+  });
+
+  it('100 den fazla kimlik INVALID_ARGUMENT', async () => {
+    const { error } = await call(catalogV1.CatalogServiceService.batchGetOffers, {
+      marketId: 'mkt_migros-jet-moda',
+      productIds: Array.from({ length: 101 }, (_, index) => `prd_${index}`),
+    });
+
+    expect(error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
+    expect(errorCodeOf(error)).toBe(ERROR_CODES.VALIDATION_FAILED);
+  });
+
+  it('bos kimlik ve eksik market INVALID_ARGUMENT', async () => {
+    const blankId = await call(catalogV1.CatalogServiceService.batchGetOffers, {
+      marketId: 'mkt_migros-jet-moda',
+      productIds: ['prd_sut-1l', ' '],
+    });
+    const noMarket = await call(catalogV1.CatalogServiceService.batchGetOffers, {
+      marketId: '',
+      productIds: ['prd_sut-1l'],
+    });
+
+    expect(blankId.error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
+    expect(noMarket.error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
+  });
+
+  it('bilinmeyen market NOT_FOUND', async () => {
+    const { error } = await call(catalogV1.CatalogServiceService.batchGetOffers, {
+      marketId: 'mkt_yok',
+      productIds: ['prd_sut-1l'],
+    });
+
+    expect(error?.code).toBe(GRPC_STATUS.NOT_FOUND);
+  });
+});
+
 describe('deprecated ve henuz yazilmamis RPC ler', () => {
   it('ResolveDarkStore UNIMPLEMENTED doner ve yerini soyler (ADR-15)', async () => {
     const { error } = await call(catalogV1.CatalogServiceService.resolveDarkStore, {

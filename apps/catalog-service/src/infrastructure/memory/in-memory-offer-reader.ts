@@ -32,6 +32,16 @@ export class InMemoryOfferReader implements OfferReader {
     );
     return Promise.resolve([...ids]);
   }
+
+  findOffersByProductIds(
+    marketId: string,
+    productIds: readonly string[],
+  ): Promise<readonly Offer[]> {
+    const wanted = new Set(productIds);
+    return Promise.resolve(
+      this.sorted.filter((offer) => offer.marketId === marketId && wanted.has(offer.product.id)),
+    );
+  }
 }
 
 function matches(offer: Offer, filter: OfferFilter): boolean {

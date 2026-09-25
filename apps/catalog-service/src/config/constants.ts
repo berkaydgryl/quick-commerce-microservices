@@ -29,6 +29,13 @@ export const MIN_SEARCH_QUERY_LENGTH = 2;
 export const DEFAULT_CURRENCY = 'TRY';
 
 /**
+ * BatchGetOffers tek cagrida en fazla bu kadar urun kimligi kabul eder
+ * (catalog.proto sozlesmesi). Sepet en fazla 50 kalemdir; 100 genis bir tavandir,
+ * daha fazlasi VALIDATION_FAILED.
+ */
+export const MAX_BATCH_OFFER_IDS = 100;
+
+/**
  * ListNearbyMarkets'te degerlendirilen en yakin market sayisi (ADR-15).
  *
  * NEDEN SINIR: her istekte tum marketleri mesafeye gore siralamak market

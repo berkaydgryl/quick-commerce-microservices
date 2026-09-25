@@ -15,18 +15,22 @@ import type { MongoConnection } from '@getir/mongo-kit';
 import { MongoDBContainer } from '@testcontainers/mongodb';
 import type { StartedMongoDBContainer } from '@testcontainers/mongodb';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
+import { createBatchGetOffers } from '../../src/application/batch-get-offers.js';
 import { createListNearbyMarkets } from '../../src/application/list-nearby-markets.js';
 import { createSeedCatalog } from '../../src/application/seed-catalog.js';
 import type { CatalogSnapshot } from '../../src/domain/catalog-snapshot.js';
 import { CATALOG_SNAPSHOT } from '../../src/infrastructure/fixtures.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
+import type { OfferDocument } from '../../src/infrastructure/mongo/documents.js';
 import type { MongoCatalogRepositories } from '../../src/infrastructure/mongo/mongo-catalog.js';
 import {
   createMongoCatalogRepositories,
   ensureCatalogIndexes,
 } from '../../src/infrastructure/mongo/mongo-catalog.js';
 import { MongoCatalogSeeder } from '../../src/infrastructure/mongo/mongo-catalog-seeder.js';
+import { offersByProductIdsFilter } from '../../src/infrastructure/mongo/offer-repository.js';
 import { describeCategoryReaderContract } from '../support/category-reader-contract.js';
 import { DEMO_ADDRESSES, demoLocation, EXPECTED_NEARBY } from '../support/demo-addresses.js';
 import { describeMarketReaderContract } from '../support/market-reader-contract.js';
@@ -181,5 +185,69 @@ describe('ListNearbyMarkets - gercek Mongo', () => {
     expect(nearby.find((entry) => entry.market.id === 'mkt_a101-abbasaga')?.market.isOpen).toBe(
       false,
     );
+  });
+});
+
+/** explain() ciktisi dis veridir: zorlanmaz, semadan gecer; yalnizca KAZANAN plan okunur. */
+const explainSchema = z.object({ queryPlanner: z.object({ winningPlan: z.unknown() }) });
+
+/**
+ * Kazanan plan agacindaki asamalar ve indeksler. Plan bicimi surumden surume
+ * degisir (ic ice inputStage / inputStages); agac guvenli bicimde gezilir.
+ * Reddedilen planlar (rejectedPlans) BILEREK okunmaz: indeksin orada gorunmesi
+ * kullanildigi anlamina gelmez.
+ */
+function planStages(
+  node: unknown,
+  found: { stages: string[]; indexes: string[] } = { stages: [], indexes: [] },
+) {
+  if (Array.isArray(node)) {
+    node.forEach((child) => planStages(child, found));
+  } else if (typeof node === 'object' && node !== null) {
+    for (const [key, value] of Object.entries(node)) {
+      if (key === 'stage' && typeof value === 'string') found.stages.push(value);
+      else if (key === 'indexName' && typeof value === 'string') found.indexes.push(value);
+      else planStages(value, found);
+    }
+  }
+  return found;
+}
+
+describe('BatchGetOffers - gercek Mongo (T9.3)', () => {
+  it('deponun GERCEK filtresi market_product_unique ile okunur; kazanan planda koleksiyon taramasi yok', async () => {
+    const plan: unknown = await connection.db
+      .collection<OfferDocument>(COLLECTIONS.OFFERS)
+      .find(
+        offersByProductIdsFilter('mkt_migros-jet-moda', [
+          'prd_sut-1l',
+          'prd_kola-1l',
+          'prd_elma-1k',
+        ]),
+      )
+      .explain('queryPlanner');
+
+    const { stages, indexes } = planStages(explainSchema.parse(plan).queryPlanner.winningPlan);
+    expect(stages).toContain('IXSCAN');
+    expect(stages).not.toContain('COLLSCAN');
+    expect(indexes).toEqual(['market_product_unique']);
+  });
+
+  it('15 urunluk Migros sepeti tek cagrida: 14 satilabilir, pasif camasir suyu missing', async () => {
+    const productIds = (
+      await repositories.offers.listOffers(
+        { marketId: 'mkt_migros-jet-moda' },
+        { size: 50, token: '' },
+      )
+    ).items.map((offer) => offer.product.id);
+    const batch = createBatchGetOffers({
+      offers: repositories.offers,
+      markets: repositories.markets,
+    });
+
+    const result = await batch({ marketId: 'mkt_migros-jet-moda', productIds });
+
+    expect(productIds).toHaveLength(15);
+    expect(result.offers).toHaveLength(14);
+    expect(result.missing).toEqual(['prd_camasir-suyu']);
   });
 });

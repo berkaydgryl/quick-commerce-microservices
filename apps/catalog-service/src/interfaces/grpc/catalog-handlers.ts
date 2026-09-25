@@ -12,6 +12,7 @@ import type { catalogV1 } from '@getir/proto';
 import { unaryHandler, unimplemented } from '@getir/service-kit';
 import type { UntypedServiceImplementation } from '@grpc/grpc-js';
 
+import type { BatchGetOffers } from '../../application/batch-get-offers.js';
 import type { GetMarket } from '../../application/get-market.js';
 import type { ListCategories } from '../../application/list-categories.js';
 import type { ListMarketCategories } from '../../application/list-market-categories.js';
@@ -19,6 +20,7 @@ import type { ListNearbyMarkets } from '../../application/list-nearby-markets.js
 import type { ListProducts } from '../../application/list-products.js';
 import { toProtoCategory, toProtoMarket, toProtoOffer } from './mappers.js';
 import {
+  batchGetOffersRequestSchema,
   getMarketRequestSchema,
   listCategoriesRequestSchema,
   listMarketCategoriesRequestSchema,
@@ -32,6 +34,7 @@ export interface CatalogHandlerDeps {
   readonly getMarket: GetMarket;
   readonly listMarketCategories: ListMarketCategories;
   readonly listProducts: ListProducts;
+  readonly batchGetOffers: BatchGetOffers;
   readonly logger?: Logger;
 }
 
@@ -117,7 +120,18 @@ export function createCatalogImplementation(
     // Sozlesmede tanimli ama HENUZ UYGULANMAMIS RPC'ler; gerekce
     // @getir/service-kit grpc/unimplemented.ts'te.
     getProduct: unimplemented('GetProduct', 'T8.4'),
-    batchGetProducts: unimplemented('BatchGetProducts', 'T9.3'),
-    batchGetOffers: unimplemented('BatchGetOffers', 'T9.3'),
+    // Fiyatsiz urun okumasi: pazaryerinde (ADR-15) fiyat teklife ait oldugu icin
+    // sepet dogrulamasi BatchGetOffers ile yapilir; bu RPC'yi kullanan yok.
+    batchGetProducts: unimplemented('BatchGetProducts', 'kullanan yok - BatchGetOffers kullanin'),
+
+    batchGetOffers: unaryHandler({
+      name: 'BatchGetOffers',
+      schema: batchGetOffersRequestSchema,
+      ...logger,
+      handle: async (input): Promise<catalogV1.BatchGetOffersResponse> => {
+        const result = await deps.batchGetOffers(input);
+        return { offers: result.offers.map(toProtoOffer), missing: [...result.missing] };
+      },
+    }),
   };
 }
