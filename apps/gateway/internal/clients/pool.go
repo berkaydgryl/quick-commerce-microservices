@@ -57,8 +57,10 @@ func NewPool(targets []Target) (*Pool, error) {
 		)
 		if err != nil {
 			// Acilan baglantilari birakmadan cik: yarim havuz sizinti demektir.
-			_ = pool.Close()
-			return nil, fmt.Errorf("gRPC istemcisi kurulamadi (%s -> %s): %w", target.Name, target.Address, err)
+			// Kapanis da hata verirse o hata yutulmaz; asil hatayla birlikte doner
+			// (errors.Join nil'i atlar, kapanis temizse yalnizca asil hata kalir).
+			setupErr := fmt.Errorf("gRPC istemcisi kurulamadi (%s -> %s): %w", target.Name, target.Address, err)
+			return nil, errors.Join(setupErr, pool.Close())
 		}
 
 		pool.conns[target.Name] = conn
