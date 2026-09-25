@@ -42,12 +42,14 @@
 .c-market-catalog__product {
   display: flex;
   gap: var(--space-3);
+  align-items: center;
   justify-content: space-between;
   padding-block: var(--space-2);
   border-block-end: var(--border-width-thin) solid var(--border-subtle);
 }
 
 .c-market-catalog__price {
+  margin-inline-start: auto;
   font-weight: var(--font-weight-bold);
   white-space: nowrap;
 }

@@ -1,3 +1,6 @@
+import type { Product } from '@getir/contracts';
+import type { ReactNode } from 'react';
+
 import { QueryEmpty, QueryError, QueryLoading } from '../../../shared/ui/query-status/QueryStatus';
 import { useMarketCategories } from '../hooks/useMarketCategories';
 import { useMarketProducts } from '../hooks/useMarketProducts';
@@ -10,6 +13,8 @@ interface MarketCatalogSectionProps {
   readonly marketId: string;
   readonly categoryId: string | undefined;
   readonly onCategoryChange: (categoryId: string | undefined) => void;
+  /** Urun satirindaki eylem; sayfa verir (bkz. MarketProductList). */
+  readonly renderProductAction?: (product: Product) => ReactNode;
 }
 
 /**
@@ -21,6 +26,7 @@ export function MarketCatalogSection({
   marketId,
   categoryId,
   onCategoryChange,
+  renderProductAction,
 }: MarketCatalogSectionProps) {
   const categories = useMarketCategories(marketId);
   const products = useMarketProducts(marketId, categoryId);
@@ -54,7 +60,12 @@ export function MarketCatalogSection({
       {items !== undefined && items.length === 0 && (
         <QueryEmpty>Bu kategoride ürün yok.</QueryEmpty>
       )}
-      {items !== undefined && items.length > 0 && <MarketProductList products={items} />}
+      {items !== undefined && items.length > 0 && (
+        <MarketProductList
+          products={items}
+          {...(renderProductAction === undefined ? {} : { renderAction: renderProductAction })}
+        />
+      )}
 
       {products.hasNextPage && (
         <button
