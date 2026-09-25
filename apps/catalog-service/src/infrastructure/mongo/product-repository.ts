@@ -5,9 +5,10 @@ import { COLLECTIONS } from './documents.js';
 import { ReplaceableRepository } from './replaceable-repository.js';
 
 /**
- * Ortak urun katalogu (ADR-15). Bugun yalnizca seed yazar; okuma uclari
- * (GetProduct, BatchGetProducts) sirasi gelince eklenir. Market sayfasi urunu
- * buradan DEGIL, teklifteki kopyadan okur (offers).
+ * Ortak urun katalogu (ADR-15). Bugun yalnizca seed yazar. Market sayfasi ve
+ * sepet dogrulamasi (BatchGetOffers, T9.3) urunu buradan DEGIL, teklifteki
+ * kopyadan okur (offers): pazaryerinde fiyat teklife aittir. GetProduct T8.4'te
+ * gelir; BatchGetProducts'i kullanan yok.
  */
 export class ProductRepository extends ReplaceableRepository<ProductDocument> {
   constructor(db: Db) {

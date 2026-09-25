@@ -15,7 +15,7 @@
 
 import { z } from 'zod';
 
-import { MIN_SEARCH_QUERY_LENGTH } from '../../config/constants.js';
+import { MAX_BATCH_OFFER_IDS, MIN_SEARCH_QUERY_LENGTH } from '../../config/constants.js';
 
 /** Bos metni "yok" sayan istege bagli alan. */
 const optionalText = z
@@ -76,3 +76,16 @@ export const listNearbyMarketsRequestSchema = z.object({
 export const getMarketRequestSchema = z.object({ marketId: requiredId });
 
 export const listMarketCategoriesRequestSchema = z.object({ marketId: requiredId });
+
+/**
+ * BatchGetOffers (T9.3). En fazla MAX_BATCH_OFFER_IDS kimlik (sozlesme);
+ * bos kimlik reddedilir. Bicimi bozuk ama dolu kimlik REDDEDILMEZ: o kimlikle
+ * teklif yoktur ve `missing`'de doner - toplu okumada tek hatali kalem butun
+ * sepeti dusurmemeli. Bos liste gecerlidir (bos cevap).
+ */
+export const batchGetOffersRequestSchema = z.object({
+  marketId: requiredId,
+  productIds: z
+    .array(requiredId)
+    .max(MAX_BATCH_OFFER_IDS, `en fazla ${MAX_BATCH_OFFER_IDS} urun kimligi`),
+});

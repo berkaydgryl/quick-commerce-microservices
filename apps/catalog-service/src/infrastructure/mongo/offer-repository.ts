@@ -1,5 +1,6 @@
 import type { Db, Filter, IndexDescription } from 'mongodb';
 
+import type { Offer } from '../../domain/catalog.js';
 import { searchKey } from '../../domain/catalog.js';
 import type { OfferFilter, OfferPage, OfferReader, PageQuery } from '../../domain/offer-reader.js';
 import type { OfferDocument } from './documents.js';
@@ -67,6 +68,36 @@ export class OfferRepository extends ReplaceableRepository<OfferDocument> implem
       this.collection.distinct('categoryId', { marketId, isActive: true }),
     );
   }
+
+  /**
+   * Tek sorgu (offersByProductIdsFilter): market_product_unique indeksinden
+   * okunur - entegrasyon testi AYNI filtreyle kazanan plani dogrular. Bos
+   * liste veritabanina gitmez.
+   */
+  async findOffersByProductIds(
+    marketId: string,
+    productIds: readonly string[],
+  ): Promise<readonly Offer[]> {
+    if (productIds.length === 0) {
+      return [];
+    }
+    const documents = await this.run('findOffersByProductIds', () =>
+      this.collection.find(offersByProductIdsFilter(marketId, productIds)).toArray(),
+    );
+    return documents.map(fromOfferDocument);
+  }
+}
+
+/**
+ * BatchGetOffers'in Mongo filtresi. Ayri ve disa acik: depo ve sorgu plani
+ * testi AYNI filtreyi kullanir; biri degisirse test kopya bir sorguyu degil
+ * gercek sorguyu olcer.
+ */
+export function offersByProductIdsFilter(
+  marketId: string,
+  productIds: readonly string[],
+): Filter<OfferDocument> {
+  return { marketId, productId: { $in: [...productIds] } };
 }
 
 function toMongoFilter(filter: OfferFilter): Filter<OfferDocument> {

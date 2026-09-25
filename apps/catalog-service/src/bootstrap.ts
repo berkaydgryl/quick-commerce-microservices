@@ -10,6 +10,7 @@ import type { Logger } from '@getir/core';
 import { catalogV1 } from '@getir/proto';
 import type { GrpcServiceRegistration } from '@getir/service-kit';
 
+import { createBatchGetOffers } from './application/batch-get-offers.js';
 import { createGetMarket } from './application/get-market.js';
 import { createListCategories } from './application/list-categories.js';
 import { createListMarketCategories } from './application/list-market-categories.js';
@@ -37,6 +38,7 @@ export function buildCatalogService(options: BootstrapOptions = {}): GrpcService
     getMarket: createGetMarket({ markets }),
     listMarketCategories: createListMarketCategories({ categories, markets, offers }),
     listProducts: createListProducts({ offers, markets }),
+    batchGetOffers: createBatchGetOffers({ offers, markets }),
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
 

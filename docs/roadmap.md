@@ -1083,6 +1083,8 @@ Her görev tek alana dokunur, tek çıktısı ve tek bitti tanımı vardır. Gü
 
 Gün 7 kontrol noktası: Stok olmadan sipariş→risk→ödeme zinciri çalışıyor olmalı. Çalışmıyorsa Gün 8'e geçilmez; Faz 3 bu zincirin üzerine kurulur.
 
+**Gün 7 uygulama sırası:** T9.3 → T7.2 → T7.1 → T7.3 → T7.4 → T7.5 → T7.6. Saga'nın ödeme adımı (T7.1) ödenecek tutarı bilmek zorunda; tutarı T7.2 hesaplar ve T7.2 fiyatları T9.3'ün `BatchGetOffers` ucundan okur. Numaralar tabloda sabit kalır.
+
 ## Görev Panosu — Gün 8-20
 
 ### Faz 3 — Gateway ve Stok Motoru (Gün 8-11)
@@ -1096,7 +1098,7 @@ Gün 7 kontrol noktası: Stok olmadan sipariş→risk→ödeme zinciri çalış�
 | T8.5  | 8   | web        | Auth akışı (kayıt/giriş formu, zodResolver), token saklama, korumalı rota + geliştirmeye özel persona seçici (`VITE_DEMO_PERSONAS`, derleme zamanı) + CI'da production paketi taraması                                                     | 401 alınan istekte kullanıcı girişe yönlenir, token yenilenir              |
 | T9.1  | 9   | inventory  | stock şeması (marketId + sku), seed, CheckAvailability(marketId, sku[]) RPC                                                                                                                                                                | Ürün listesi gerçek stokla döner                                           |
 | T9.2  | 9   | inventory  | Açılışta Mongo'dan Redis sayaç seed'i + reseed komutu. **Ek (P1):** `noeviction` değilse servis açılmaz                                                                                                                                    | Redis silinip yeniden kurulur                                              |
-| T9.3  | 9   | catalog    | BatchGetOffers: sepet doğrulaması için market + ürün fiyatlarını toplu okuma (N+1 yok)                                                                                                                                                     | 50 kalemlik sepet tek çağrıyla fiyatlanır; başka marketin ürünü reddedilir |
+| T9.3  | 9   | catalog    | BatchGetOffers: sepet doğrulaması için market + ürün fiyatlarını toplu okuma (N+1 yok) — T7.2 öncesi öne alındı (`feat/catalog-toplu-teklif`): yalnızca aktif teklif satılır, pasif / başka marketin / olmayan → `missing`                 | 50 kalemlik sepet tek çağrıyla fiyatlanır; başka marketin ürünü reddedilir |
 | T9.4  | 9   | catalog    | Arama: q parametresi, name metin indeksi, Zod min(2)                                                                                                                                                                                       | Tek harflik sorgu 400 döner, eşleşme harf duyarsız                         |
 | T9.5  | 9   | web        | Arama kutusu (300 ms debounce + AbortController) ve hazır adres seçimi → yakındaki marketler ekranı                                                                                                                                        | Hızlı yazımda tek istek gider; adres değişince market listesi değişir      |
 | T10.1 | 10  | inventory  | reserve.lua + Reserve RPC + resv:index ZSET                                                                                                                                                                                                | Kısmi rezervasyon imkansız, testle kanıtlı                                 |

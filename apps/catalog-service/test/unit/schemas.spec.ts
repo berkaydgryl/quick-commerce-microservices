@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  batchGetOffersRequestSchema,
   getMarketRequestSchema,
   listNearbyMarketsRequestSchema,
   listProductsRequestSchema,
@@ -77,5 +78,36 @@ describe('listNearbyMarketsRequestSchema', () => {
 describe('getMarketRequestSchema', () => {
   it('bos market kimligini reddeder', () => {
     expect(getMarketRequestSchema.safeParse({ marketId: '  ' }).success).toBe(false);
+  });
+});
+
+describe('batchGetOffersRequestSchema (T9.3 siniri)', () => {
+  const ids = (count: number) => Array.from({ length: count }, (_, index) => `prd_${index}`);
+  const parse = (productIds: string[]) =>
+    batchGetOffersRequestSchema.safeParse({ marketId: 'mkt_migros-jet-moda', productIds });
+
+  it('tam 100 kimlik gecer, 101 reddedilir (sinir kaymasi testle yakalanir)', () => {
+    expect(parse(ids(100)).success).toBe(true);
+    const tooMany = parse(ids(101));
+    expect(tooMany.success).toBe(false);
+    expect(tooMany.error?.issues[0]?.path).toEqual(['productIds']);
+  });
+
+  it('50 kalemlik sepet gecer (T7.2 nin gonderecegi en buyuk sepet)', () => {
+    expect(parse(ids(50)).success).toBe(true);
+  });
+
+  it('bos liste gecerlidir', () => {
+    expect(parse([]).success).toBe(true);
+  });
+
+  it('bicimi bozuk ama dolu kimlik REDDEDILMEZ (missing e duser), bosluk kirpilir', () => {
+    const result = parse(['  bozuk id!  ', 'prd_sut-1l']);
+    expect(result.success).toBe(true);
+    expect(result.data?.productIds).toEqual(['bozuk id!', 'prd_sut-1l']);
+  });
+
+  it('bos kimlik reddedilir', () => {
+    expect(parse(['prd_sut-1l', '   ']).success).toBe(false);
   });
 });

@@ -15,22 +15,44 @@ Kullanıcı konumuna hizmet veren marketleri görür ve **birini seçer**; siste
 market kendi kurallarını taşır: minimum sepet, teslimat ücreti, ücretsiz teslimat eşiği,
 teslimat süresi ve puan. Market paneli kapsam dışıdır; değerler seed'dendir.
 
-## Bugünkü durum (T4.8)
+## Bugünkü durum (T9.3 — T7.2 öncesi öne alındı)
 
-| RPC                                  | Durum                                                                            |
-| ------------------------------------ | -------------------------------------------------------------------------------- |
-| `ListCategories`                     | ✅ Platform kategorileri                                                         |
-| `ListNearbyMarkets`                  | ✅ Konumu kapsayan marketler, yakından uzağa; kapalılar dahil; boşsa boş         |
-| `GetMarket`                          | ✅ Puan, süre, fiyat kuralları; yoksa `NOT_FOUND`                                |
-| `ListMarketCategories`               | ✅ Marketin aktif teklifi olan kategoriler (manav yalnızca meyve-sebze)          |
-| `ListProducts`                       | ✅ `market_id` zorunlu; teklifler o marketin fiyatıyla, kategori + arama + imleç |
-| `ResolveDarkStore`                   | ⛔ Deprecated (ADR-15): `UNIMPLEMENTED`, mesaj `ListNearbyMarkets`'i gösterir    |
-| `GetProduct`                         | ⏳ `UNIMPLEMENTED` — T8.4                                                        |
-| `BatchGetProducts`, `BatchGetOffers` | ⏳ `UNIMPLEMENTED` — T9.3                                                        |
+| RPC                    | Durum                                                                                                                                             |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ListCategories`       | ✅ Platform kategorileri                                                                                                                          |
+| `ListNearbyMarkets`    | ✅ Konumu kapsayan marketler, yakından uzağa; kapalılar dahil; boşsa boş                                                                          |
+| `GetMarket`            | ✅ Puan, süre, fiyat kuralları; yoksa `NOT_FOUND`                                                                                                 |
+| `ListMarketCategories` | ✅ Marketin aktif teklifi olan kategoriler (manav yalnızca meyve-sebze)                                                                           |
+| `ListProducts`         | ✅ `market_id` zorunlu; teklifler o marketin fiyatıyla, kategori + arama + imleç                                                                  |
+| `ResolveDarkStore`     | ⛔ Deprecated (ADR-15): `UNIMPLEMENTED`, mesaj `ListNearbyMarkets`'i gösterir                                                                     |
+| `GetProduct`           | ⏳ `UNIMPLEMENTED` — T8.4                                                                                                                         |
+| `BatchGetOffers`       | ✅ Marketin satılabilir teklifleri, **tek sorguda** (en fazla 100 kimlik); pasif / başka marketin / olmayan → `missing`; market yoksa `NOT_FOUND` |
+| `BatchGetProducts`     | ⛔ `UNIMPLEMENTED` — kullanan yok; fiyat teklife ait olduğu için sepet doğrulaması `BatchGetOffers` ile                                           |
 
 T4.2'nin "yarıçap içinde ama kapalı → `STORE_CLOSED`, yarıçap dışı → `OUT_OF_RANGE`" kuralı
 kaybolmadı: tek market için `domain/market-coverage.ts` → `evaluateCoverage`'da duruyor ve
 rezervasyon (T11.4) seçilen marketin hâlâ hizmet verip vermediğini buna soracak.
+
+## BatchGetOffers (T9.3)
+
+Sipariş fiyat doğrulamasının (T7.2) kaynağı: sepetteki her kalemin **o marketteki** fiyatı tek çağrıda.
+
+| Durum                                                                          | Sonuç                                                                     |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| Aktif teklif                                                                   | `offers` (istek sırasında)                                                |
+| Pasif teklif (market satıştan kaldırmış), başka marketin ürünü, olmayan kimlik | `missing` — sessizce atlanmaz                                             |
+| Aynı kimlik iki kez                                                            | Tek sayılır                                                               |
+| Bilinmeyen market                                                              | `NOT_FOUND`                                                               |
+| 100'den fazla kimlik ya da boş kimlik                                          | `VALIDATION_FAILED`                                                       |
+| Biçimi bozuk ama dolu kimlik                                                   | Reddedilmez, `missing`'e düşer (tek hatalı kalem bütün sepeti düşürmesin) |
+
+- **"Satılır mı" kararı use-case'te** (`application/batch-get-offers.ts`); depo pasifler dahil ham teklifleri
+  döner, iş kararı vermez.
+- **Tek sorgu:** `{ marketId, productId: $in }` → `market_product_unique` indeksi. Filtre
+  `offersByProductIdsFilter`'da; depo ve sorgu planı testi aynı fonksiyonu kullanır, test yalnızca
+  **kazanan** planı okur.
+- **Ölçüt testleri:** 50 kalemlik sepet tek çağrıda (gRPC, şemadan geçerek); use-case'te okuyucuya tam bir
+  çağrı; tam 100 kimlik geçer, 101 reddedilir.
 
 ## Veri kaynağı: Mongo ya da MOCK
 
@@ -46,11 +68,11 @@ testinde gerçek Mongo. Veri kaynağını seçip açan tek yer `infrastructure/c
 
 ### Üç port, her use-case yalnızca ihtiyacını alır
 
-| Port             | Metotlar                                             | Kullanan use-case                                    |
-| ---------------- | ---------------------------------------------------- | ---------------------------------------------------- |
-| `CategoryReader` | `listCategories`                                     | `ListCategories`, `ListMarketCategories`             |
-| `MarketReader`   | `getMarket`, `marketExists`, `listMarketsByDistance` | `ListNearbyMarkets`, `GetMarket`, varlık kontrolleri |
-| `OfferReader`    | `listOffers`, `listCategoryIdsWithOffers`            | `ListProducts`, `ListMarketCategories`               |
+| Port             | Metotlar                                                            | Kullanan use-case                                        |
+| ---------------- | ------------------------------------------------------------------- | -------------------------------------------------------- |
+| `CategoryReader` | `listCategories`                                                    | `ListCategories`, `ListMarketCategories`                 |
+| `MarketReader`   | `getMarket`, `marketExists`, `listMarketsByDistance`                | `ListNearbyMarkets`, `GetMarket`, varlık kontrolleri     |
+| `OfferReader`    | `listOffers`, `listCategoryIdsWithOffers`, `findOffersByProductIds` | `ListProducts`, `ListMarketCategories`, `BatchGetOffers` |
 
 ### Belge şekli ve indeksler
 
@@ -93,6 +115,7 @@ src/
 ├── application/           # bir dosya = bir use-case
 │   ├── list-categories.ts, list-nearby-markets.ts, get-market.ts
 │   ├── list-market-categories.ts, list-products.ts, seed-catalog.ts
+│   ├── batch-get-offers.ts       # T9.3: sepet fiyatlaması için toplu teklif okuma
 ├── infrastructure/
 │   ├── fixtures.ts + fixtures/   # demo verisi: katalog, marketler, teklifler (MOCK + seed tek kaynak)
 │   ├── catalog-source.ts         # MOCK ya da Mongo: kaynağı açar, kapanışı verir

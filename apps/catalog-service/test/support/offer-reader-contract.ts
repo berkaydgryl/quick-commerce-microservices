@@ -139,4 +139,44 @@ export function describeOfferReaderContract(name: string, getReader: () => Offer
       expect(await reader.listCategoryIdsWithOffers('mkt_yok')).toEqual([]);
     });
   });
+
+  describe(`OfferReader.findOffersByProductIds sozlesmesi: ${name}`, () => {
+    const ids = (offers: readonly { product: { id: string } }[]) =>
+      offers.map((offer) => offer.product.id).sort();
+
+    it('istenen urunlerin o marketteki tekliflerini doner, fiyatiyla', async () => {
+      const offers = await getReader().findOffersByProductIds(MIGROS_MODA, [
+        'prd_sut-1l',
+        'prd_ekmek-yok',
+      ]);
+
+      expect(offers).toHaveLength(1);
+      expect(offers[0]).toMatchObject({ marketId: MIGROS_MODA, priceMinor: 3490, isActive: true });
+    });
+
+    it('PASIF teklifi de doner: satilir mi karari depo degil use-case isidir', async () => {
+      const offers = await getReader().findOffersByProductIds(MIGROS_MODA, ['prd_camasir-suyu']);
+
+      expect(offers.map((offer) => offer.isActive)).toEqual([false]);
+    });
+
+    it('baska marketin teklifini DONMEZ (manav sut satmaz)', async () => {
+      expect(
+        await getReader().findOffersByProductIds(MANAV, ['prd_sut-1l', 'prd_domates-1k']),
+      ).toSatisfy(
+        (offers: readonly { product: { id: string }; marketId: string }[]) =>
+          offers.length === 1 &&
+          offers[0]?.product.id === 'prd_domates-1k' &&
+          offers[0]?.marketId === MANAV,
+      );
+    });
+
+    it('bircok urunu tek cagrida doner; bos liste bos doner', async () => {
+      const reader = getReader();
+      const wanted = ['prd_sut-1l', 'prd_elma-1k', 'prd_kola-1l', 'prd_su-5l'];
+
+      expect(ids(await reader.findOffersByProductIds(A101, wanted))).toEqual([...wanted].sort());
+      expect(await reader.findOffersByProductIds(A101, [])).toEqual([]);
+    });
+  });
 }
