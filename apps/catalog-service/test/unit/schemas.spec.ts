@@ -21,10 +21,26 @@ describe('listProductsRequestSchema', () => {
     });
 
     expect(parsed).toEqual({
+      filter: { marketId: 'mkt_a' },
+      pageSize: undefined,
+      pageToken: undefined,
+    });
+    // exactOptionalPropertyTypes: bos filtre `undefined` degil, HIC yazilmaz.
+    expect(Object.keys(parsed.filter)).toEqual(['marketId']);
+  });
+
+  it('ciktisi use-case girdisidir: filtre ic ice, sayfa duz', () => {
+    const parsed = listProductsRequestSchema.parse({
       marketId: 'mkt_a',
-      categoryId: undefined,
-      query: undefined,
-      page: undefined,
+      categoryId: 'cat_1',
+      query: 'süt',
+      page: { pageSize: 10, pageToken: 'imlec' },
+    });
+
+    expect(parsed).toEqual({
+      filter: { marketId: 'mkt_a', categoryId: 'cat_1', query: 'süt' },
+      pageSize: 10,
+      pageToken: 'imlec',
     });
   });
 
@@ -34,7 +50,7 @@ describe('listProductsRequestSchema', () => {
       darkStoreId: 'ds_kadikoy',
     });
 
-    expect(Object.hasOwn(parsed, 'darkStoreId')).toBe(false);
+    expect(Object.hasOwn(parsed.filter, 'darkStoreId')).toBe(false);
   });
 
   it('gercek degerleri kirparak alir', () => {
@@ -44,9 +60,7 @@ describe('listProductsRequestSchema', () => {
       query: ' süt ',
     });
 
-    expect(parsed.marketId).toBe('mkt_a');
-    expect(parsed.categoryId).toBe('cat_1');
-    expect(parsed.query).toBe('süt');
+    expect(parsed.filter).toEqual({ marketId: 'mkt_a', categoryId: 'cat_1', query: 'süt' });
   });
 
   it('tek harflik aramayi reddeder', () => {
@@ -59,7 +73,7 @@ describe('listProductsRequestSchema', () => {
       page: { pageSize: 5_000, pageToken: '' },
     });
 
-    expect(parsed.page?.pageSize).toBe(5_000);
+    expect(parsed.pageSize).toBe(5_000);
   });
 });
 
