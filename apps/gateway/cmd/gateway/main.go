@@ -13,23 +13,12 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/gofiber/fiber/v3"
-	"google.golang.org/grpc/health/grpc_health_v1"
-
-	catalogv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/catalog/v1"
-
-	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/assets"
-	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/catalog"
-	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/clients"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/config"
-	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
-	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/httpapi"
 )
 
 // Yapilandirma hatasinda donen cikis kodu (Node tarafiyla ayni: 1).
@@ -61,79 +50,24 @@ func main() {
 	}
 }
 
+// run, acilis sirasini tutar: bagla -> dinle -> kapan -> baglantilari birak.
+// Havuz EN SON kapanir: sunucu dururken devam eden istekler hala gRPC cagirir.
 func run(cfg config.Config, logger *slog.Logger) error {
-	targets := make([]clients.Target, 0, len(cfg.Services))
-	for _, service := range cfg.Services {
-		targets = append(targets, clients.Target{Name: service.Name, Address: service.Address})
-	}
-
-	pool, err := clients.NewPool(targets)
+	app, cleanup, err := bootstrap(cfg, logger)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if closeErr := pool.Close(); closeErr != nil {
-			logger.Warn("baglantilar temiz kapanmadi", slog.Any("err", closeErr))
-		}
-	}()
-
-	healthClients := make(map[string]health.Client, len(targets))
-	for _, target := range targets {
-		conn, ok := pool.Conn(target.Name)
-		if !ok {
-			continue
-		}
-		healthClients[target.Name] = grpc_health_v1.NewHealthClient(conn)
-	}
-
-	catalogConn, ok := pool.Conn(config.CatalogService)
-	if !ok {
-		return fmt.Errorf("%s baglantisi havuzda yok", config.CatalogService)
-	}
-
-	// Tek katalog adaptoru butun katalog uclarini karsilar; yonlendirici her
-	// ucu ayri, dar bir arayuzle gorur (bkz. httpapi.Deps).
-	catalogService := catalog.New(
-		catalogv1.NewCatalogServiceClient(catalogConn),
-		cfg.RequestTimeout,
-		assets.NewResolver(cfg.AssetBaseURL),
-	)
-
-	app := httpapi.New(httpapi.Deps{
-		Health:           health.New(healthClients, cfg.RequestTimeout, cfg.Mock),
-		Categories:       catalogService,
-		NearbyMarkets:    catalogService,
-		Market:           catalogService,
-		MarketCategories: catalogService,
-		MarketProducts:   catalogService,
-		Logger:           logger,
-	})
+	defer cleanup()
 
 	// SIGINT/SIGTERM: orkestrator once nazikce ister, sonra oldurur. O pencereyi
 	// kullanmazsak devam eden istekler yarida kesilir.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	serverErr := make(chan error, 1)
-	go func() {
-		logger.Info("gateway dinlemede",
-			slog.Int("port", cfg.Port),
-			slog.Bool("mock", cfg.Mock),
-			slog.Int("services", len(targets)),
-		)
-		serverErr <- app.Listen(cfg.Addr(), fiber.ListenConfig{DisableStartupMessage: true})
-	}()
-
-	select {
-	case err := <-serverErr:
-		return err
-	case <-ctx.Done():
-		logger.Info("kapanis sinyali alindi", slog.Int64("timeoutMs", cfg.ShutdownTimeout.Milliseconds()))
-		// Devam eden istekler bitsin; sure dolarsa Fiber baglantilari keser.
-		if err := app.ShutdownWithTimeout(cfg.ShutdownTimeout); err != nil {
-			return err
-		}
-		logger.Info("gateway kapandi")
-		return nil
-	}
+	logger.Info("gateway dinlemede",
+		slog.Int("port", cfg.Port),
+		slog.Bool("mock", cfg.Mock),
+		slog.Int("services", len(cfg.Services)),
+	)
+	return serve(ctx, app, cfg.Addr(), cfg.ShutdownTimeout, logger)
 }
