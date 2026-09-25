@@ -2,7 +2,7 @@
 
 Müşteri arayüzü: React 18 + Vite + TypeScript. Tarayıcı yalnızca gateway ile konuşur (`/v1/*`).
 
-## Bugünkü durum (T5.4 — market ekranları, tasarımsız kabuk)
+## Bugünkü durum (T6.4 — sepet, tasarımsız kabuk)
 
 | Parça                   | Durum                                                                                            |
 | ----------------------- | ------------------------------------------------------------------------------------------------ |
@@ -14,7 +14,34 @@ Müşteri arayüzü: React 18 + Vite + TypeScript. Tarayıcı yalnızca gateway 
 | Kırılımlar              | ✅ `@custom-media` (48rem / 64rem), JS karşılığı `shared/config/breakpoints.ts`                  |
 | Market veri hook'ları   | ✅ `useNearbyMarkets`, `useMarket`, `useMarketCategories`, `useMarketProducts` (imleçle sayfalı) |
 | Ortak durumlar          | ✅ `QueryStatus`: yükleniyor / hata / boş; \"Tekrar dene\" yalnızca geçici hatada                |
-| Zustand (sepet, oturum) | ⏳ İlgili web görevlerinde                                                                       |
+| Zustand (sepet, oturum) | ✅ Sepet (`useCartStore`, T6.4); oturum T8.5                                                     |
+
+## Sepet (T6.4) — tasarımsız kabuk
+
+Karar ve hesap **veri katmanında**, arayüz yalnızca çizer. Tasarım baştan değişse (düğmelerin yeri,
+modal, çekmece, ayrı sepet sayfası) yalnızca `features/cart/ui/*` değişir; testlerin hepsi veri
+katmanındadır.
+
+| Katman       | Dosya                                                  | İş                                                                      |
+| ------------ | ------------------------------------------------------ | ----------------------------------------------------------------------- |
+| Saf kurallar | `features/cart/services/cart-state.ts`                 | Tek market + onay, adet (99) ve kalem (50) sınırı, azaltma              |
+| Toplam       | `features/cart/services/cart.service.ts`               | `@getir/pricing` `calculateCart`; kurallar **sepetin marketinden**      |
+| Depo         | `features/cart/stores/useCartStore.ts`                 | Zustand; saf fonksiyonları bağlar, kural yazmaz                         |
+| Hook'lar     | `useCartTotals`, `useAddToCart`                        | Toplam (sepetin marketinin kurallarıyla); onay bekleyen market değişimi |
+| Kabuk        | `ProductCartAction`, `CartSwitchPrompt`, `CartSummary` | Ekle / − adet +, onay satırı, özet                                      |
+
+- **Tek market:** sepette Migros ürünü varken A101'den eklemede ekleme **yapılmaz**, onay istenir:
+  "Sepetinde Migros Jet – Moda ürünleri var. Sepeti boşaltıp A101 – Caferağa ile devam edilsin mi?"
+  ("-den/-dan/-ndan" eki ada göre değiştiği için "ile" kullanıldı.)
+- **Kalem teklif kimliğiyle (`offerId`) tanınır**, ürün kimliğiyle değil: aynı ürünün her markette aynı
+  `prd_` kimliği var. Ürün kimliğiyle tanımak A101 sayfasında Migros sepetindeki adedi gösteriyor ve "−"
+  Migros kalemini azaltıyordu (canlı denemede bulundu, regresyon testi var).
+- **Toplam sepetin marketinin kurallarıyla:** A101'e bakarken sepet Migros'taysa Migros'un minimum
+  sepeti ve teslimat ücreti uygulanır.
+- **Katalog sepeti tanımaz:** ürün listesi yalnızca `renderAction` yuvası sunar; sepet düğmesini
+  `MarketPage` yerleştirir.
+- **Henüz yok:** yenilemede kalıcılık ve stok sınırı (T7.6), kupon alanı (T17.3), oturuma göre ilk
+  sipariş koşulu (T8).
 
 ## Market ekranları (T5.4) — tasarımsız kabuk
 
