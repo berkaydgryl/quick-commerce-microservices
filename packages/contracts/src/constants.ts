@@ -6,7 +6,7 @@
  * docs/api/openapi.yaml ile birebir ayni olmak zorundadir.
  *
  * NEDEN @getir/core'da DEGIL: core, protokolden bagimsiz cekirdek yapi
- * taslarini tutar (hata kodlari, siparis durumlari, Redis anahtarlari). Bir
+ * taslarini tutar (hata kodlari, siparis durumlari, sku bicimi). Bir
  * sifrenin en fazla kac karakter olacagi ise HTTP yuzeyine ait bir karardir ve
  * yalnizca bu paketi ilgilendirir. Servisler arasi paylasilan is sabitleri
  * (ORDER_STATUS, SKU_PATTERN, ERROR_CODES) core'dan import edilir, burada
@@ -41,9 +41,13 @@ export const CART_MAX_ITEMS = 50;
 export const ADDRESS_LINE_MAX_LENGTH = 240;
 export const ADDRESS_NOTE_MAX_LENGTH = 240;
 
-/** Idempotency anahtari (ADR-08). */
-export const IDEMPOTENCY_KEY_MIN_LENGTH = 8;
-export const IDEMPOTENCY_KEY_MAX_LENGTH = 128;
+/**
+ * Idempotency anahtari (ADR-08). Sinirlar @getir/core'da tanimlidir, cunku
+ * ayni kurali REST basligi disinda servislerin gRPC semalari ve redis-kit'in
+ * idem:{key} anahtari da uygular. Burada yalnizca yeniden disa verilir ki REST
+ * yuzeyinin sinirlari tek pakette okunsun; deger burada TEKRAR YAZILMAZ.
+ */
+export { IDEMPOTENCY_KEY_MAX_LENGTH, IDEMPOTENCY_KEY_MIN_LENGTH } from '@getir/core';
 
 /**
  * Sayfalama.

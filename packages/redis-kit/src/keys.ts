@@ -16,13 +16,24 @@
  * suslu parantez YALNIZCA hash-tag olan parcada bulunur.
  */
 
-import { AppError, isSku } from '@getir/core';
+import {
+  AppError,
+  IDEMPOTENCY_KEY_MAX_LENGTH,
+  IDEMPOTENCY_KEY_MIN_LENGTH,
+  isSku,
+} from '@getir/core';
 
 /** Anahtar parcalarinda izin verilen karakterler: ':' ve '{}' ayirici oldugu icin yasak. */
 const COMPONENT_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
-/** Idempotency anahtari istemciden gelir; UUID ve benzeri biraz daha uzun olabilir. */
-const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
+/**
+ * Idempotency anahtari istemciden gelir; UUID ve benzeri biraz daha uzun olabilir.
+ * Uzunluk sinirlari REST sozlesmesiyle ayni kaynaktan gelir (@getir/core): burada
+ * sayi yazilirsa sozlesme degistiginde Redis tarafi sessizce geride kalir.
+ */
+const IDEMPOTENCY_KEY_PATTERN = new RegExp(
+  `^[A-Za-z0-9_-]{${IDEMPOTENCY_KEY_MIN_LENGTH},${IDEMPOTENCY_KEY_MAX_LENGTH}}$`,
+);
 
 /** IPv4 ve IPv6 birlikte: IPv6 iki nokta icerir, bu yuzden ayri desen. */
 const IP_PATTERN = /^[0-9a-fA-F.:]{3,45}$/;
