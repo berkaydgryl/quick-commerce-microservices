@@ -22,6 +22,50 @@ const valid = {
   idempotencyKey: '4f1c3a2b-9d8e-11ee',
 };
 
+/**
+ * Idempotency anahtari (ADR-08) TUM mutasyonlarin ortak kuralidir ve kaynakta tek
+ * alt semadan gelir; bu yuzden bir kez yazilir ve UC semanin hepsinde denenir.
+ * Yeni bir mutasyon eklenince bu tabloya eklenir: anahtari unutan sema burada
+ * kirmizi olur (tek tek yazilan testlerde unutulan sema testsiz kaliyordu).
+ */
+const MUTATIONS = [
+  { name: 'CreateDraftOrder', schema: createDraftOrderRequestSchema, request: valid },
+  {
+    name: 'CreateOrder',
+    schema: createOrderRequestSchema,
+    request: { orderId: 'ord_1', userId: 'usr_1', idempotencyKey: valid.idempotencyKey },
+  },
+  {
+    name: 'CancelOrder',
+    schema: cancelOrderRequestSchema,
+    request: {
+      orderId: 'ord_1',
+      userId: 'usr_1',
+      reason: '',
+      idempotencyKey: valid.idempotencyKey,
+    },
+  },
+];
+
+describe.each(MUTATIONS)('$name: idempotency anahtari (ADR-08)', ({ schema, request }) => {
+  const accepts = (idempotencyKey: string): boolean =>
+    schema.safeParse({ ...request, idempotencyKey }).success;
+
+  it('zorunludur: bos ya da yalnizca bosluk reddedilir', () => {
+    expect(accepts('')).toBe(false);
+    expect(accepts('   ')).toBe(false);
+  });
+
+  it('sozlesmenin uzunluk sinirlarini birebir uygular', () => {
+    // Sinirlar REST basligi ve Redis anahtariyla ayni kaynaktan gelir: REST'in
+    // kabul ettigini order reddetmemeli, reddettigini kabul etmemeli.
+    expect(accepts('a'.repeat(IDEMPOTENCY_KEY_MIN_LENGTH - 1))).toBe(false);
+    expect(accepts('a'.repeat(IDEMPOTENCY_KEY_MIN_LENGTH))).toBe(true);
+    expect(accepts('a'.repeat(IDEMPOTENCY_KEY_MAX_LENGTH))).toBe(true);
+    expect(accepts('a'.repeat(IDEMPOTENCY_KEY_MAX_LENGTH + 1))).toBe(false);
+  });
+});
+
 describe('createDraftOrderRequestSchema', () => {
   it('gecerli istegi kabul eder', () => {
     expect(() => createDraftOrderRequestSchema.parse(valid)).not.toThrow();
@@ -59,32 +103,6 @@ describe('createDraftOrderRequestSchema', () => {
     expect(() => createDraftOrderRequestSchema.parse({ ...valid, deliveryLocation })).toThrow();
   });
 
-  it('idempotency anahtari zorunludur (ADR-08)', () => {
-    expect(() => createDraftOrderRequestSchema.parse({ ...valid, idempotencyKey: '' })).toThrow();
-    expect(() =>
-      createDraftOrderRequestSchema.parse({ ...valid, idempotencyKey: 'kisa' }),
-    ).toThrow();
-  });
-
-  it('idempotency anahtari sozlesmenin uzunluk sinirlarini birebir uygular', () => {
-    // Sinirlar REST basligi ve Redis anahtariyla ayni kaynaktan gelir: REST'in
-    // kabul ettigini order reddetmemeli, reddettigini kabul etmemeli.
-    const withKey = (length: number) => ({ ...valid, idempotencyKey: 'a'.repeat(length) });
-
-    expect(
-      createDraftOrderRequestSchema.safeParse(withKey(IDEMPOTENCY_KEY_MIN_LENGTH - 1)).success,
-    ).toBe(false);
-    expect(
-      createDraftOrderRequestSchema.safeParse(withKey(IDEMPOTENCY_KEY_MIN_LENGTH)).success,
-    ).toBe(true);
-    expect(
-      createDraftOrderRequestSchema.safeParse(withKey(IDEMPOTENCY_KEY_MAX_LENGTH)).success,
-    ).toBe(true);
-    expect(
-      createDraftOrderRequestSchema.safeParse(withKey(IDEMPOTENCY_KEY_MAX_LENGTH + 1)).success,
-    ).toBe(false);
-  });
-
   it('sepet sinirlari sozlesmeyle ayni: kalem sayisi ve adet', () => {
     const line = (quantity: number) => ({ productId: 'prd_01', sku: 'SUT-1L', quantity });
     const withLines = (count: number, quantity = 1) => ({
@@ -115,26 +133,6 @@ describe('cancelOrderRequestSchema', () => {
 
   it('gecerli istegi kabul eder; bos gerekce "gerekce yok" demektir', () => {
     expect(cancelOrderRequestSchema.parse(cancel).reason).toBeUndefined();
-  });
-
-  it('idempotency anahtari zorunludur ve sozlesmenin sinirlarini uygular (ADR-08)', () => {
-    const withKey = (idempotencyKey: string) => ({ ...cancel, idempotencyKey });
-
-    expect(cancelOrderRequestSchema.safeParse(withKey('')).success).toBe(false);
-    expect(
-      cancelOrderRequestSchema.safeParse(withKey('a'.repeat(IDEMPOTENCY_KEY_MIN_LENGTH - 1)))
-        .success,
-    ).toBe(false);
-    expect(
-      cancelOrderRequestSchema.safeParse(withKey('a'.repeat(IDEMPOTENCY_KEY_MIN_LENGTH))).success,
-    ).toBe(true);
-    expect(
-      cancelOrderRequestSchema.safeParse(withKey('a'.repeat(IDEMPOTENCY_KEY_MAX_LENGTH))).success,
-    ).toBe(true);
-    expect(
-      cancelOrderRequestSchema.safeParse(withKey('a'.repeat(IDEMPOTENCY_KEY_MAX_LENGTH + 1)))
-        .success,
-    ).toBe(false);
   });
 });
 
