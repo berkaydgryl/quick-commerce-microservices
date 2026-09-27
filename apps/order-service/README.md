@@ -11,13 +11,13 @@ skor önerir.
 
 ## Bugünkü durum (T4.5 — kalıcılık)
 
-| RPC                | Durum                                                                       |
-| ------------------ | --------------------------------------------------------------------------- |
-| `CreateDraftOrder` | ✅ Kimlik üretir, seçilen markete (`market_id`) `DRAFT` açar ve kaydeder    |
-| `CreateOrder`      | ✅ Tablodan adım adım: `DRAFT → RISK_CHECK → RESERVED → AWAITING_PAYMENT`   |
-| `GetOrder`         | ✅ Tek sipariş, zaman çizelgesi dahil; başkasının siparişi `NOT_FOUND`      |
-| `ListMyOrders`     | ✅ Yeniden eskiye, imleçle sayfalı; sipariş yoksa boş liste                 |
-| `CancelOrder`      | ✅ Kullanıcı iptali: yalnızca `DRAFT`, `RESERVED`, `AWAITING_PAYMENT` (B29) |
+| RPC                | Durum                                                                                                     |
+| ------------------ | --------------------------------------------------------------------------------------------------------- |
+| `CreateDraftOrder` | ✅ Kimlik üretir, seçilen markete (`market_id`) `DRAFT` açar ve kaydeder                                  |
+| `CreateOrder`      | ✅ Tablodan adım adım: `DRAFT → RISK_CHECK → RESERVED → AWAITING_PAYMENT`                                 |
+| `GetOrder`         | ✅ Tek sipariş, zaman çizelgesi dahil; başkasının siparişi `NOT_FOUND`                                    |
+| `ListMyOrders`     | ✅ Yeniden eskiye, imleçle sayfalı; sipariş yoksa boş liste                                               |
+| `CancelOrder`      | ✅ Kullanıcı iptali: yalnızca `DRAFT`, `RESERVED`, `AWAITING_PAYMENT` (B29); Idempotency-Key zorunlu (D4) |
 
 ## Veri kaynağı: Mongo ya da MOCK
 
@@ -95,9 +95,11 @@ olmadan zincir denenemezdi.
 "bu kimlikte bir sipariş var" bilgisi bile sızdırılmamalıdır. Yetki hatası dönmek, sipariş
 kimliklerini deneyerek varlık taraması yapmayı mümkün kılardı.
 
-**Idempotency anahtarı bugünden zorunlu (ADR-08).** Tekrar koruması (`idem:{key}`) henüz
-yok; yalnızca anahtarın varlığı doğrulanıyor. Erken zorunlu tutmanın sebebi: istemciler
-göndermeye bugün alışsın, koruma açıldığında sözleşme değişmesin.
+**Idempotency anahtarı bugünden zorunlu (ADR-08).** Üç mutasyon da (`CreateDraftOrder`,
+`CreateOrder`, `CancelOrder`) anahtar ister; servis yalnızca varlığını ve uzunluğunu (8–128,
+`@getir/contracts`) doğrular. Tekrar koruması (`idem:{key}`, aynı anahtara ilk cevabın
+dönmesi) ADR-08 gereği gateway'dedir ve T8.2'de gelir. Erken zorunlu tutmanın sebebi:
+istemciler göndermeye bugün alışsın, koruma açıldığında sözleşme değişmesin.
 
 ## Katmanlar
 
@@ -159,9 +161,14 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/order/v1/order
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/order/v1/order.proto \
   -d '{"user_id":"usr_1","page":{"page_size":10}}' \
   localhost:50053 getir.order.v1.OrderService/ListMyOrders
+
+# 4) İptal → CANCELLED (anahtarsız istek INVALID_ARGUMENT)
+grpcurl -plaintext -import-path packages/proto/proto -proto getir/order/v1/order.proto \
+  -d '{"order_id":"<1. adımdan>","user_id":"usr_1","reason":"CHANGED_MIND","idempotency_key":"9a8b7c6d-5e4f"}' \
+  localhost:50053 getir.order.v1.OrderService/CancelOrder
 ```
 
-Aynı akışın otomatik karşılığı `test/unit/order-grpc.spec.ts` (bellek) ve
+Aynı akışın otomatik karşılığı `test/unit/grpc/*.spec.ts` (bellek, RPC başına bir dosya) ve
 `test/integration/mongo-order-store.spec.ts` (gerçek Mongo: sözleşme, indeks planı, gRPC →
 `orders` belgesi).
 

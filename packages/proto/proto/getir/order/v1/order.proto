@@ -271,6 +271,11 @@ message CancelOrderRequest {
 
   // Iptal gerekcesi anahtari; zaman cizelgesine ve outbox olayina yazilir.
   string reason = 3;
+
+  // ADR-08 geregi tum mutasyon uclari idempotency anahtari ister (REST'te
+  // DELETE /v1/cart/reserve/{orderId} basligi). Tekrar korumasi gateway'dedir:
+  // ayni anahtarla gelen ikinci istek ilkinin cevabini alir.
+  string idempotency_key = 4;
 }
 
 // Iptal cevabi.

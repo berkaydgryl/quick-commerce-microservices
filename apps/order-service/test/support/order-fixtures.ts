@@ -24,3 +24,17 @@ export function createOrderRequest(
 ): orderV1.CreateOrderRequest {
   return { orderId, userId, paymentMethod: 0, cardToken: '', idempotencyKey: IDEMPOTENCY_KEY };
 }
+
+/** CancelOrder istegi; varsayilan: taslagin sahibi, gerekcesiz, gecerli anahtarla. */
+export function cancelOrderRequest(
+  orderId: string,
+  overrides: Partial<orderV1.CancelOrderRequest> = {},
+): orderV1.CancelOrderRequest {
+  return {
+    orderId,
+    userId: draftRequest.userId,
+    reason: '',
+    idempotencyKey: IDEMPOTENCY_KEY,
+    ...overrides,
+  };
+}
