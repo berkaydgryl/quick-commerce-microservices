@@ -189,6 +189,17 @@ message CreateDraftOrderRequest {
   // ADR-08 geregi tum mutasyon uclari idempotency anahtari ister. Ayni
   // anahtarla gelen ikinci istek YENI taslak acmaz, ilkinin cevabini doner.
   string idempotency_key = 6;
+
+  // Kullanicinin ekranda gordugu toplam (T7.2). Sunucu tutari catalog
+  // fiyatlariyla KENDISI hesaplar ve bununla karsilastirir; tutmazsa
+  // PRICE_CHANGED doner (ayrintida yeni toplam) ve taslak ACILMAZ. ZORUNLU:
+  // istege bagli olsaydi istemci gondermeyerek kontrolu atlayabilirdi.
+  // Fiyat taslakta dondurulur; CreateOrder yeniden hesaplamaz.
+  getir.common.v1.Money expected_total = 8;
+
+  // Kupon kodu (ornek: ILK10). Bos = kupon yok. Gecersizse COUPON_INVALID;
+  // "ilk siparis mi" sorusunu order-service kendi kayitlarindan cevaplar.
+  string coupon_code = 9;
 }
 
 // Taslak siparis cevabi.

@@ -22,3 +22,4 @@ export * from './grpc/server.js';
 export * from './grpc/types.js';
 export * from './grpc/status.js';
 export * from './grpc/unimplemented.js';
+export * from './grpc/unary-call.js';

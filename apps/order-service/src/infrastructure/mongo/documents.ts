@@ -8,15 +8,32 @@
 import type { OrderStatus } from '@getir/core';
 import type { BaseDocument } from '@getir/mongo-kit';
 
+import type { ItemUnit } from '../../domain/order-item.js';
+
 /** Koleksiyon adlari - roadmap "MongoDB Veri Modeli" tablosuyla ayni. */
 export const COLLECTIONS = {
   ORDERS: 'orders',
 } as const;
 
-export interface CartLineDocument {
+/** Fiyati dondurulmus kalem; tutarlar kurus, tam sayi. */
+export interface OrderItemDocument {
   productId: string;
   sku: string;
+  name: string;
+  unit: ItemUnit;
   quantity: number;
+  unitPriceMinor: number;
+  lineTotalMinor: number;
+}
+
+/** Siparisin dondurulmus tutari (T7.2). Kupon yoksa alan HIC yazilmaz. */
+export interface OrderPricingDocument {
+  currency: string;
+  subtotalMinor: number;
+  deliveryFeeMinor: number;
+  discountMinor: number;
+  totalMinor: number;
+  couponCode?: string;
 }
 
 export interface TimelineEntryDocument {
@@ -34,7 +51,8 @@ export interface TimelineEntryDocument {
 export interface OrderDocument extends BaseDocument {
   userId: string;
   marketId: string;
-  lines: CartLineDocument[];
+  items: OrderItemDocument[];
+  pricing: OrderPricingDocument;
   deliveryLocation: { lat: number; lng: number };
   deliveryAddress: string;
   status: OrderStatus;

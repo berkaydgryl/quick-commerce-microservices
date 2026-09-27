@@ -11,6 +11,7 @@ import type { OrderHistoryReader } from '../../src/domain/order-history-reader.j
 import type { OrderRepository } from '../../src/domain/order-repository.js';
 import type { Order } from '../../src/domain/order.js';
 import { createDraftOrder } from '../../src/domain/order.js';
+import { sampleDraftInput } from './order-builders.js';
 
 export type OrderStoreUnderTest = OrderRepository & OrderHistoryReader;
 
@@ -33,15 +34,6 @@ export function createOrderStoreFixtures(suiteName: string): OrderStoreFixtures 
       return `usr_contract-${suiteName}-${userCounter}`;
     },
     draftAt: (userId, epochMs) =>
-      createDraftOrder(
-        {
-          userId,
-          marketId: 'mkt_migros-jet-moda',
-          lines: [{ productId: 'prd_sut-1l', sku: 'SUT-1L', quantity: 2 }],
-          deliveryLocation: { lat: 40.9885, lng: 29.0262 },
-          deliveryAddress: 'Caferağa, Kadıköy',
-        },
-        fixedClock(epochMs),
-      ),
+      createDraftOrder(sampleDraftInput({ userId }), fixedClock(epochMs)),
   };
 }

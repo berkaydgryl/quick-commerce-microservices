@@ -8,6 +8,7 @@ import { orderV1 } from '@getir/proto';
 import type { GrpcServiceRegistration } from '@getir/service-kit';
 
 import { createCancelOrder } from './application/cancel-order.js';
+import type { CatalogPricing } from './application/catalog-pricing.js';
 import { createCreateDraftOrder } from './application/create-draft-order.js';
 import { createCreateOrder } from './application/create-order.js';
 import { createGetOrder } from './application/get-order.js';
@@ -25,6 +26,8 @@ export interface OrderPorts {
 }
 
 export interface BootstrapOptions {
+  /** Fiyat kaynagi (T7.2): uretimde catalog gRPC istemcisi, testte sahtesi. ZORUNLU. */
+  readonly catalog: CatalogPricing;
   readonly logger?: Logger;
   /** Siparis portlari. Verilmezse bellek kullanilir (testler). */
   readonly store?: OrderPorts;
@@ -37,12 +40,17 @@ function inMemoryPorts(): OrderPorts {
   return { repository: memory, history: memory };
 }
 
-export function buildOrderService(options: BootstrapOptions = {}): GrpcServiceRegistration {
+export function buildOrderService(options: BootstrapOptions): GrpcServiceRegistration {
   const { repository, history } = options.store ?? inMemoryPorts();
   const clock = options.clock ?? systemClock;
 
   const implementation = createOrderImplementation({
-    createDraftOrder: createCreateDraftOrder({ repository, clock }),
+    createDraftOrder: createCreateDraftOrder({
+      repository,
+      history,
+      catalog: options.catalog,
+      clock,
+    }),
     createOrder: createCreateOrder({ repository, clock }),
     getOrder: createGetOrder({ repository }),
     listMyOrders: createListMyOrders({ history }),

@@ -45,14 +45,20 @@ export function createOrderImplementation(deps: OrderHandlerDeps): UntypedServic
       name: 'CreateDraftOrder',
       schema: createDraftOrderRequestSchema,
       ...(logger === undefined ? {} : { logger }),
-      handle: async (input): Promise<orderV1.CreateDraftOrderResponse> => {
-        const order = await deps.createDraftOrder({
-          userId: input.userId,
-          marketId: input.marketId,
-          lines: input.lines,
-          deliveryLocation: input.deliveryLocation,
-          deliveryAddress: input.deliveryAddress,
-        });
+      handle: async (input, ctx): Promise<orderV1.CreateDraftOrderResponse> => {
+        const order = await deps.createDraftOrder(
+          {
+            userId: input.userId,
+            marketId: input.marketId,
+            lines: input.lines,
+            deliveryLocation: input.deliveryLocation,
+            deliveryAddress: input.deliveryAddress,
+            expectedTotalMinor: input.expectedTotal.amountMinor,
+            couponCode: input.couponCode,
+          },
+          // catalog cagrisi bu requestId'yi AYNEN tasir (yeniden uretilmez).
+          { requestId: ctx.requestId, logger: ctx.logger },
+        );
 
         // reservationExpiresAt BOS: stok henuz kilitlenmiyor (T11.2). Sozlesme
         // "yalnizca RESERVED/AWAITING_PAYMENT durumlarinda doludur" diyor;

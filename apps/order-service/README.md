@@ -9,15 +9,15 @@ Bu serviste **olmayanlar**, bilinçli: stok sayacı `inventory-service`'in, kart
 (kapıda ödeme kapalı, rezervasyon süresi, reddet) burada verilir — risk servisi yalnızca
 skor önerir.
 
-## Bugünkü durum (T4.5 — kalıcılık)
+## Bugünkü durum (T7.2 — sunucu tarafı fiyat)
 
-| RPC                | Durum                                                                                                     |
-| ------------------ | --------------------------------------------------------------------------------------------------------- |
-| `CreateDraftOrder` | ✅ Kimlik üretir, seçilen markete (`market_id`) `DRAFT` açar ve kaydeder                                  |
-| `CreateOrder`      | ✅ Tablodan adım adım: `DRAFT → RISK_CHECK → RESERVED → AWAITING_PAYMENT`                                 |
-| `GetOrder`         | ✅ Tek sipariş, zaman çizelgesi dahil; başkasının siparişi `NOT_FOUND`                                    |
-| `ListMyOrders`     | ✅ Yeniden eskiye, imleçle sayfalı; sipariş yoksa boş liste                                               |
-| `CancelOrder`      | ✅ Kullanıcı iptali: yalnızca `DRAFT`, `RESERVED`, `AWAITING_PAYMENT` (B29); Idempotency-Key zorunlu (D4) |
+| RPC                | Durum                                                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `CreateDraftOrder` | ✅ Fiyatı catalog'dan okur, sunucuda hesaplar, `expected_total` ile karşılaştırır; tutarı taslakta dondurur (T7.2) |
+| `CreateOrder`      | ✅ Tablodan adım adım: `DRAFT → RISK_CHECK → RESERVED → AWAITING_PAYMENT`                                          |
+| `GetOrder`         | ✅ Tek sipariş, zaman çizelgesi dahil; başkasının siparişi `NOT_FOUND`                                             |
+| `ListMyOrders`     | ✅ Yeniden eskiye, imleçle sayfalı; sipariş yoksa boş liste                                                        |
+| `CancelOrder`      | ✅ Kullanıcı iptali: yalnızca `DRAFT`, `RESERVED`, `AWAITING_PAYMENT` (B29); Idempotency-Key zorunlu (D4)          |
 
 ## Veri kaynağı: Mongo ya da MOCK
 
@@ -101,21 +101,47 @@ kimliklerini deneyerek varlık taraması yapmayı mümkün kılardı.
 dönmesi) ADR-08 gereği gateway'dedir ve T8.2'de gelir. Erken zorunlu tutmanın sebebi:
 istemciler göndermeye bugün alışsın, koruma açıldığında sözleşme değişmesin.
 
+## Sunucu tarafı fiyat (T7.2)
+
+Tutar istemciye güvenilmeden sunucuda hesaplanır ve **taslakta dondurulur**; `CreateOrder` ve
+saga (T7.1) yeniden hesaplamaz, kullanıcı rezervasyon boyunca gördüğü fiyattan öder.
+
+1. **Catalog'dan tek seferde:** `GetMarket` (minimum sepet, teslimat ücreti, ücretsiz eşik) ve
+   `BatchGetOffers` (sepetteki ürünlerin o marketteki fiyatları, N+1 yok) paralel çağrılır.
+   İsteğin `x-request-id`'si catalog'a **aynen** gider; çağrının süre sınırı 2 sn
+   (`CATALOG_CALL_TIMEOUT_MS`). Adres `CATALOG_GRPC_ADDR` (gateway'le aynı değişken).
+2. **Hesap web'le aynı fonksiyon:** `@getir/pricing` `calculateCart`. ILK10'un "ilk sipariş mi"
+   sorusunu order kendi kaydından cevaplar (`hasPaidOrder`, yalnızca kupon girildiyse).
+3. **Kontrol sırası ve hatalar** (hiçbirinde taslak açılmaz):
+
+| Durum                                      | Kod (gRPC)                                 | Ayrıntı                                    |
+| ------------------------------------------ | ------------------------------------------ | ------------------------------------------ |
+| Ürün o markette satılmıyor / sku uyuşmuyor | `VALIDATION_FAILED` (INVALID_ARGUMENT)     | `unavailableProductIds`, `skuMismatch…`    |
+| Kupon uygulanamadı                         | `COUPON_INVALID`                           | `couponCode`, `reason`                     |
+| Minimum sepet altı                         | `MIN_BASKET_NOT_MET` (FAILED_PRECONDITION) | `amountToMinBasketMinor`, `minBasketMinor` |
+| `expected_total` sunucunun toplamı değil   | `PRICE_CHANGED` (ABORTED)                  | `expectedTotalMinor`, `totalMinor`         |
+| Catalog'a ulaşılamadı / süre doldu         | `SERVICE_UNAVAILABLE` (UNAVAILABLE)        | —                                          |
+
 ## Katmanlar
 
 ```text
 src/
 ├── domain/            # saf iş kuralı — mongodb/grpc/proto importu YOK
 │   ├── order.ts                 # Order, createDraftOrder, transitionOrder (timeline + version)
+│   ├── order-item.ts            # dondurulmuş kalem (OrderItem) ve tutar (OrderPricing)
+│   ├── price-draft.ts           # saf fiyat kuralı: priceDraft, assertExpectedTotal (T7.2)
 │   ├── order-state-machine.ts   # geçiş tablosu, USER_CANCELLABLE
 │   ├── order-repository.ts      # port: insert / update(sürümlü) / findById + hataları
-│   ├── order-history-reader.ts  # port: listByUser (sayfalı geçmiş)
+│   ├── order-history-reader.ts  # port: listByUser (sayfalı geçmiş), hasPaidOrder (ILK10)
 │   └── order-history-cursor.ts  # geçmiş sırası ve imleç
 ├── application/       # bir dosya = bir use-case
 │   ├── create-draft-order.ts, create-order.ts, cancel-order.ts
-│   └── get-order.ts, list-my-orders.ts
+│   ├── get-order.ts, list-my-orders.ts
+│   ├── catalog-pricing.ts       # port: marketRules, activeOffers (T7.2)
+│   └── request-scope.ts         # use-case'e taşınan requestId + çağrının logger'ı
 ├── infrastructure/
 │   ├── order-store.ts           # MOCK ya da Mongo: depoyu açar, kapanışı verir
+│   ├── catalog/                 # order -> catalog gRPC istemcisi (service-kit callUnary)
 │   ├── memory/                  # MOCK: bellek deposu
 │   └── mongo/                   # belge şekli, çeviriciler, sorgular (orders-collection), portlar
 ├── interfaces/grpc/   # ince handler'lar: doğrula → çağır → çevir
@@ -147,10 +173,15 @@ MONGO_URI="mongodb://localhost:27017/getir?directConnection=true" \
 # 1) Taslak aç → orderId
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/order/v1/order.proto \
   -d '{"user_id":"usr_1","market_id":"mkt_migros-jet-moda",
-       "lines":[{"product_id":"prd_sut-1l","sku":"SUT-1L","quantity":2}],
+       "lines":[{"product_id":"prd_bulasik-deterjan","sku":"BULASIK-DETERJAN","quantity":2},
+                {"product_id":"prd_cikolata-80","sku":"CIKOLATA-80","quantity":1}],
        "delivery_location":{"lat":40.99,"lng":29.02},
-       "delivery_address":"Kadıköy","idempotency_key":"4f1c3a2b-9d8e"}' \
+       "delivery_address":"Kadıköy","idempotency_key":"4f1c3a2b-9d8e",
+       "expected_total":{"amount_minor":19360,"currency":"TRY"}}' \
   localhost:50053 getir.order.v1.OrderService/CreateDraftOrder
+# seed fiyatlarıyla: 2 x 67,90 + 32,90 = 168,70 + 24,90 teslimat = 193,60 TL.
+# Farklı toplam gönderirsen ABORTED + PRICE_CHANGED (ayrıntıda doğru toplam).
+# catalog-service (50051) ayakta olmalı: fiyatlar oradan okunur.
 
 # 2) Siparişe çevir → AWAITING_PAYMENT
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/order/v1/order.proto \

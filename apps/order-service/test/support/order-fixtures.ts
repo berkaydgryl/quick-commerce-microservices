@@ -6,6 +6,12 @@ import type { orderV1 } from '@getir/proto';
 
 export const IDEMPOTENCY_KEY = '4f1c3a2b-9d8e-11ee';
 
+/**
+ * Sahte catalog'a (fake-catalog-pricing.ts) gore taslagin toplami:
+ * 2 x 32,50 TL sut = 65,00 ara toplam + 14,90 teslimat = 79,90 TL.
+ */
+export const DRAFT_TOTAL_MINOR = 7_990;
+
 export const draftRequest: orderV1.CreateDraftOrderRequest = {
   userId: 'usr_1',
   // Kullanimdan kalkan alan (ADR-15): sunucu okumaz, yeni istemci doldurmaz.
@@ -15,6 +21,8 @@ export const draftRequest: orderV1.CreateDraftOrderRequest = {
   deliveryLocation: { lat: 40.99, lng: 29.02 },
   deliveryAddress: 'Kadıköy, İstanbul',
   idempotencyKey: IDEMPOTENCY_KEY,
+  expectedTotal: { amountMinor: DRAFT_TOTAL_MINOR, currency: 'TRY' },
+  couponCode: '',
 };
 
 /** Kapida odemeyle CreateOrder istegi; kullanici verilmezse taslagin sahibi. */

@@ -8,6 +8,8 @@
 import { MongoRepository } from '@getir/mongo-kit';
 import type { Db, Filter, IndexDescription } from 'mongodb';
 
+import type { OrderStatus } from '@getir/core';
+
 import type { OrderHistoryCursor } from '../../domain/order-history-cursor.js';
 import type { OrderDocument } from './documents.js';
 import { COLLECTIONS } from './documents.js';
@@ -52,6 +54,21 @@ export class OrdersCollection extends MongoRepository<OrderDocument> {
         .limit(limit)
         .toArray(),
     );
+  }
+
+  /**
+   * Kullanicinin verilen durumlardan birinde en az bir siparisi var mi?
+   * userId esitligi mevcut userId_createdAt_id indeksinin onekini kullanir;
+   * durum filtresi yalnizca o kullanicinin siparisleri uzerinde calisir.
+   */
+  async existsWithStatus(userId: string, statuses: readonly OrderStatus[]): Promise<boolean> {
+    const found = await this.run('existsWithStatus', () =>
+      this.collection.findOne(
+        { userId, status: { $in: [...statuses] } },
+        { projection: { _id: 1 } },
+      ),
+    );
+    return found !== null;
   }
 }
 

@@ -8,8 +8,10 @@
 
 import { ORDER_STATUS } from '@getir/core';
 import type { OrderStatus } from '@getir/core';
-import { orderV1 } from '@getir/proto';
+import { commonV1, orderV1 } from '@getir/proto';
 
+import { ITEM_UNIT } from '../../domain/order-item.js';
+import type { ItemUnit, OrderItem } from '../../domain/order-item.js';
 import type { Order, TimelineEntry } from '../../domain/order.js';
 
 const STATUS_TO_PROTO: Readonly<Record<OrderStatus, orderV1.OrderStatus>> = {
@@ -28,8 +30,31 @@ const STATUS_TO_PROTO: Readonly<Record<OrderStatus, orderV1.OrderStatus>> = {
   [ORDER_STATUS.DELIVERED]: orderV1.OrderStatus.ORDER_STATUS_DELIVERED,
 };
 
+const UNIT_TO_PROTO: Readonly<Record<ItemUnit, commonV1.Unit>> = {
+  [ITEM_UNIT.UNSPECIFIED]: commonV1.Unit.UNIT_UNSPECIFIED,
+  [ITEM_UNIT.PIECE]: commonV1.Unit.UNIT_PIECE,
+  [ITEM_UNIT.KILOGRAM]: commonV1.Unit.UNIT_KILOGRAM,
+  [ITEM_UNIT.LITER]: commonV1.Unit.UNIT_LITER,
+  [ITEM_UNIT.PACK]: commonV1.Unit.UNIT_PACK,
+};
+
 export function toProtoOrderStatus(status: OrderStatus): orderV1.OrderStatus {
   return STATUS_TO_PROTO[status];
+}
+
+function money(amountMinor: number, currency: string): commonV1.Money {
+  return { amountMinor, currency };
+}
+
+function toProtoItem(item: OrderItem, currency: string): orderV1.OrderItem {
+  return {
+    productId: item.productId,
+    sku: item.sku,
+    name: item.name,
+    quantity: { value: item.quantity, unit: UNIT_TO_PROTO[item.unit] },
+    unitPrice: money(item.unitPriceMinor, currency),
+    lineTotal: money(item.lineTotalMinor, currency),
+  };
 }
 
 function toProtoTimelineEntry(entry: TimelineEntry): orderV1.OrderTimelineEntry {
@@ -37,13 +62,9 @@ function toProtoTimelineEntry(entry: TimelineEntry): orderV1.OrderTimelineEntry 
 }
 
 /**
- * Siparis -> proto Order.
+ * Siparis -> proto Order. Kalemler ve tutar taslakta dondurulmus degerlerdir (T7.2).
  *
  * BILEREK BOS BIRAKILANLAR (sozlesme bunlara izin verir, uydurma deger yazilmaz):
- *   - items, subtotal, delivery_fee, discount, total: siparis bugun HAM sepet
- *     satiri tasir; fiyati dondurulmus kalem ve toplamlar, katalog teklifleri
- *     toplu okununca (BatchGetOffers, T9.3) ve pricing baglaninca olusur.
- *     "0 TL" yazmak istemciye yanlis bir tutar gosterirdi; alan yok = hesaplanmadi.
  *   - reservation_expires_at: stok rezervasyonu T11.2'de.
  *   - dark_store_id: kullanimdan kalkti (ADR-15); yerini market_id aldi.
  */
@@ -54,7 +75,11 @@ export function toProtoOrder(order: Order): orderV1.Order {
     darkStoreId: '',
     marketId: order.marketId,
     status: toProtoOrderStatus(order.status),
-    items: [],
+    items: order.items.map((item) => toProtoItem(item, order.pricing.currency)),
+    subtotal: money(order.pricing.subtotalMinor, order.pricing.currency),
+    deliveryFee: money(order.pricing.deliveryFeeMinor, order.pricing.currency),
+    discount: money(order.pricing.discountMinor, order.pricing.currency),
+    total: money(order.pricing.totalMinor, order.pricing.currency),
     deliveryLocation: { lat: order.deliveryLocation.lat, lng: order.deliveryLocation.lng },
     deliveryAddress: order.deliveryAddress,
     createdAt: order.createdAt,
