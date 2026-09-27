@@ -5,41 +5,20 @@
 
 import { ERROR_CODES, GRPC_STATUS, MOCK_THREEDS_CODE } from '@getir/core';
 import { paymentV1 } from '@getir/proto';
-import { startGrpcServer } from '@getir/service-kit';
-import type { GrpcServerHandle } from '@getir/service-kit';
-import { Client, credentials, Metadata } from '@grpc/grpc-js';
 import type { MethodDefinition, ServiceError } from '@grpc/grpc-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { buildPaymentService } from '../../src/bootstrap.js';
 import { appErrorOf } from '../support/grpc-error.js';
+import { startPaymentService, unaryCall } from '../support/payment-grpc-client.js';
+import type { CallResult, RunningPaymentService } from '../support/payment-grpc-client.js';
 
-const EPHEMERAL_PORT = 0;
-
-let handle: GrpcServerHandle;
-let client: Client;
-
-interface CallResult<TResponse> {
-  readonly error: ServiceError | undefined;
-  readonly response: TResponse | undefined;
-}
+let service: RunningPaymentService;
 
 function call<TRequest, TResponse>(
   method: MethodDefinition<TRequest, TResponse>,
   request: TRequest,
 ): Promise<CallResult<TResponse>> {
-  return new Promise((resolve) => {
-    client.makeUnaryRequest(
-      method.path,
-      method.requestSerialize,
-      method.responseDeserialize,
-      request,
-      new Metadata(),
-      (error, response) => {
-        resolve({ error: error ?? undefined, response: response ?? undefined });
-      },
-    );
-  });
+  return unaryCall(service.client, method, request);
 }
 
 const errorCodeOf = (error: ServiceError | undefined): string | undefined =>
@@ -61,18 +40,11 @@ function chargeRequest(cardToken: string): paymentV1.ChargeRequest {
 }
 
 beforeAll(async () => {
-  handle = await startGrpcServer({
-    serviceName: 'payment-test',
-    host: '127.0.0.1',
-    port: EPHEMERAL_PORT,
-    services: [buildPaymentService()],
-  });
-  client = new Client(`127.0.0.1:${handle.port}`, credentials.createInsecure());
+  service = await startPaymentService();
 });
 
 afterAll(async () => {
-  client?.close();
-  await handle?.shutdown('test bitti');
+  await service?.stop();
 });
 
 describe('PaymentService/Charge', () => {

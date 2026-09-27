@@ -6,13 +6,13 @@
 
 import type { LogFields, Logger } from '@getir/core';
 import { paymentV1 } from '@getir/proto';
-import { REQUEST_ID_METADATA_KEY, startGrpcServer } from '@getir/service-kit';
-import type { GrpcServerHandle } from '@getir/service-kit';
-import { Client, credentials, Metadata } from '@grpc/grpc-js';
+import { REQUEST_ID_METADATA_KEY } from '@getir/service-kit';
+import { Metadata } from '@grpc/grpc-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { buildPaymentService } from '../../src/bootstrap.js';
 import type { PaymentProvider } from '../../src/domain/payment-provider.js';
+import { startPaymentService, unaryCall } from '../support/payment-grpc-client.js';
+import type { RunningPaymentService } from '../support/payment-grpc-client.js';
 
 const REQUEST_ID = 'req_log_baglami_payment';
 
@@ -45,31 +45,23 @@ const unreachableProvider: PaymentProvider = {
   verifyChallenge: () => Promise.reject(new Error('saglayici yok')),
 };
 
-let handle: GrpcServerHandle;
-let client: Client;
+let service: RunningPaymentService;
 
 beforeAll(async () => {
-  handle = await startGrpcServer({
-    serviceName: 'payment-log-test',
-    host: '127.0.0.1',
-    port: 0,
-    services: [
-      buildPaymentService({ provider: unreachableProvider, logger: recordingLogger(lines) }),
-    ],
-  });
-  client = new Client(`127.0.0.1:${handle.port}`, credentials.createInsecure());
+  service = await startPaymentService(
+    { provider: unreachableProvider, logger: recordingLogger(lines) },
+    'payment-log-test',
+  );
 });
 
 afterAll(async () => {
-  client?.close();
-  await handle?.shutdown('test bitti');
+  await service?.stop();
 });
 
 describe('Charge - log baglami', () => {
   it("saglayici hatasi satiri istegin requestId'sini ve rpc adini tasir", async () => {
     const metadata = new Metadata();
     metadata.set(REQUEST_ID_METADATA_KEY, REQUEST_ID);
-    const method = paymentV1.PaymentServiceService.charge;
     const request: paymentV1.ChargeRequest = {
       orderId: 'ord_log',
       userId: 'usr_1',
@@ -80,16 +72,15 @@ describe('Charge - log baglami', () => {
       requireThreeDs: false,
     };
 
-    await new Promise<void>((resolve, reject) => {
-      client.makeUnaryRequest(
-        method.path,
-        method.requestSerialize,
-        method.responseDeserialize,
-        request,
-        metadata,
-        (error) => (error === null ? resolve() : reject(error)),
-      );
-    });
+    const { error } = await unaryCall(
+      service.client,
+      paymentV1.PaymentServiceService.charge,
+      request,
+      metadata,
+    );
+
+    // Saglayiciya ulasilamamasi gRPC hatasi degil: kayit FAILED olur, cevap doner.
+    expect(error).toBeUndefined();
 
     const failure = lines.find((line) => line.message === 'odeme saglayicisina ulasilamadi');
     expect(failure).toMatchObject({

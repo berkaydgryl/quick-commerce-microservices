@@ -116,7 +116,7 @@ değildir.
 
 ```text
 src/
-  domain/          payment.ts (durumlar, geçişler), three-ds.ts (3DS kuralları), refund.ts (iade), portlar
+  domain/          payment.ts (sözlük + Payment + withAttempt), charge.ts (çekim), three-ds.ts (3DS), refund.ts (iade), portlar
   application/     charge.ts, confirm-3ds.ts, refund.ts
   infrastructure/  memory/ ve mongo/ (depo), payment-store.ts (mod seçimi), mock-provider/
   interfaces/grpc/ şema (Zod), eşleme (Record), handler
