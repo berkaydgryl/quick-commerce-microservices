@@ -23,3 +23,6 @@ export const THREEDS_MAX_ATTEMPTS = 3;
  * deneme kesinlesir, hak sayisi kadar tur yeter.
  */
 export const CONFIRM_3DS_MAX_WRITE_RETRIES = THREEDS_MAX_ATTEMPTS;
+
+/** Iade gerekcesi anahtarinin en uzun hali (ornek: "order_cancelled_during_payment"). */
+export const MAX_REFUND_REASON_LENGTH = 64;

@@ -6,7 +6,7 @@ import { paymentV1 } from '@getir/proto';
 import { describe, expect, it } from 'vitest';
 
 import { PAYMENT_METHOD } from '../../src/domain/payment.js';
-import { chargeRequestSchema } from '../../src/interfaces/grpc/schemas.js';
+import { chargeRequestSchema, refundRequestSchema } from '../../src/interfaces/grpc/schemas.js';
 
 const request = (overrides: Partial<paymentV1.ChargeRequest> = {}): paymentV1.ChargeRequest => ({
   orderId: 'ord_1',
@@ -15,6 +15,7 @@ const request = (overrides: Partial<paymentV1.ChargeRequest> = {}): paymentV1.Ch
   method: paymentV1.PaymentMethod.PAYMENT_METHOD_CARD,
   cardToken: 'tok_test_4242',
   idempotencyKey: 'anahtar-0001',
+  requireThreeDs: false,
   ...overrides,
 });
 
@@ -50,5 +51,41 @@ describe('chargeRequestSchema', () => {
     ['orderId bos', { orderId: ' ' }],
   ])('reddeder: %s', (_, overrides) => {
     expect(chargeRequestSchema.safeParse(request(overrides)).success).toBe(false);
+  });
+});
+
+describe('chargeRequestSchema - risk 3DS bayragi (T7.1)', () => {
+  it('kartli odemede tasinir; gonderilmezse (proto3) false', () => {
+    expect(chargeRequestSchema.parse(request({ requireThreeDs: true })).requireThreeDs).toBe(true);
+    expect(chargeRequestSchema.parse(request()).requireThreeDs).toBe(false);
+  });
+
+  it('kapida odemede 3DS istenemez: celiskili istek sessizce yok sayilmaz', () => {
+    const result = chargeRequestSchema.safeParse(
+      request({
+        method: paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY,
+        cardToken: '',
+        requireThreeDs: true,
+      }),
+    );
+
+    expect(result.error?.issues.map((issue) => [issue.path.join('.'), issue.message])).toEqual([
+      ['requireThreeDs', 'kapida odemede 3DS istenemez'],
+    ]);
+  });
+});
+
+describe('refundRequestSchema (T7.1)', () => {
+  const valid = { orderId: 'ord_1', reason: 'order_cancelled', idempotencyKey: 'iade-ord_1' };
+
+  it('gerekce anahtari kucuk harf, rakam ve alt cizgi', () => {
+    expect(refundRequestSchema.parse(valid)).toEqual(valid);
+    expect(refundRequestSchema.safeParse({ ...valid, reason: 'Siparis iptal' }).success).toBe(
+      false,
+    );
+  });
+
+  it('iade de mutasyondur: anahtar zorunlu (ADR-08)', () => {
+    expect(refundRequestSchema.safeParse({ ...valid, idempotencyKey: '' }).success).toBe(false);
   });
 });

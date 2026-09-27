@@ -4,7 +4,10 @@
  * NASIL hesaplandigi price-draft testlerinin konusudur, burada sabit ornektir.
  */
 
-import type { Clock } from '@getir/core';
+import { RISK_BANDS } from '@getir/core';
+import type { Clock, RiskBand } from '@getir/core';
+
+import { applyRiskDecision, decideRisk } from '../../src/domain/checkout-risk.js';
 
 import { ITEM_UNIT } from '../../src/domain/order-item.js';
 import type { OrderItem, OrderPricing } from '../../src/domain/order-item.js';
@@ -53,4 +56,19 @@ export async function insertDraft(
   const order = createDraftOrder(sampleDraftInput(overrides), clock);
   await repository.insert(order);
   return order;
+}
+
+/**
+ * Risk adimindan gecmis, ODEME BEKLEYEN siparis yazar (T7.1): odeme adimini
+ * ya da iptali test eden senaryolarin on kosulu. Bant verilmezse LOW.
+ */
+export async function insertAwaitingPayment(
+  repository: Pick<OrderRepository, 'insert' | 'update'>,
+  clock: Clock,
+  band: RiskBand = RISK_BANDS.LOW,
+): Promise<Order> {
+  const draft = await insertDraft(repository, clock);
+  const awaiting = applyRiskDecision(draft, band, decideRisk(band), clock);
+  await repository.update(awaiting, draft.version);
+  return awaiting;
 }

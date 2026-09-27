@@ -1,68 +1,56 @@
 /**
- * Use-case: taslak siparisi odeme adimina getirir.
+ * Use-case: siparis saga'si (T7.1) - taslagi odenmis siparise getirir.
  *
- * DURUM MAKINESI (T4.4): siparis tablodaki yolu ADIM ADIM yurur:
- *   DRAFT -> RISK_CHECK -> RESERVED -> AWAITING_PAYMENT
- * T3.2 iskeleti DRAFT'tan dogrudan AWAITING_PAYMENT'a atliyordu; tablo zorunlu
- * olunca o kisayol ORDER_STATE_INVALID olur.
+ *   DRAFT -> RISK_CHECK -> RESERVED -> AWAITING_PAYMENT -> PAID
+ *                      \-> REVIEW / REJECTED        \-> PAYMENT_FAILED
  *
- * GECICI ADIMLAR (bilerek ve gorunur): risk-svc (T6.3) ve stok rezervasyonu
- * (T11.2) henuz bagli degil. Bu iki adim bugun degerlendirmesiz/kilitsiz
- * gecer ve zaman cizelgesine NEDENIYLE yazilir (PENDING_RISK_SERVICE,
- * PENDING_RESERVATION) - sessizce atlanmaz. Saga geldiginde (T7.1, T11.2) bu
- * adimlarin yerini gercek cagrilar alir; tablo ve timeline degismez.
- * Odeme cekimi T7.1'dedir.
+ * Adimlar: risk (risk-step.ts) ve odeme (payment-step.ts). Stok rezervasyonu
+ * T11.2'de eklenir; o adim bugun kilitsiz gecer ve zaman cizelgesine
+ * PENDING_RESERVATION notuyla yazilir.
+ *
+ * TEKRAR DENEME: siparis odeme adimina yazildiktan sonra cekim cevabi
+ * kaybolursa (payment-svc'ye ulasilamadi) siparis AWAITING_PAYMENT kalir.
+ * Ayni CreateOrder tekrar gelince risk yeniden sorulmaz; cekim siparisten
+ * turetilen AYNI anahtarla tekrarlanir, payment-svc ikinci kez cekmez.
  */
 
-import { AppError, ORDER_STATUS } from '@getir/core';
+import { ORDER_STATUS } from '@getir/core';
 import type { Clock } from '@getir/core';
 
+import type { OrderHistoryReader } from '../domain/order-history-reader.js';
 import type { OrderRepository } from '../domain/order-repository.js';
-import type { Order } from '../domain/order.js';
-import { TIMELINE_NOTE, transitionOrder } from '../domain/order.js';
+import { findOwnOrder } from './own-order.js';
+import { chargeOrder } from './payment-step.js';
+import type { CheckoutResult, PaymentChoice } from './payment-step.js';
+import type { Payments } from './payments.js';
+import type { RequestScope } from './request-scope.js';
+import type { RiskAssessment } from './risk-assessment.js';
+import { passRiskStep } from './risk-step.js';
 
 export interface CreateOrderDeps {
   readonly repository: OrderRepository;
+  readonly history: Pick<OrderHistoryReader, 'riskHistory'>;
+  readonly risk: RiskAssessment;
+  readonly payments: Payments;
   readonly clock: Clock;
 }
 
-export interface CreateOrderInput {
+export interface CreateOrderInput extends PaymentChoice {
   readonly orderId: string;
   readonly userId: string;
 }
 
-export type CreateOrder = (input: CreateOrderInput) => Promise<Order>;
+export type CreateOrder = (input: CreateOrderInput, scope: RequestScope) => Promise<CheckoutResult>;
 
 export function createCreateOrder(deps: CreateOrderDeps): CreateOrder {
-  return async ({ orderId, userId }) => {
-    const order = await deps.repository.findById(orderId);
+  return async ({ orderId, userId, ...choice }, scope) => {
+    const order = await findOwnOrder(deps.repository, orderId, userId);
 
-    // SAHIPLIK KONTROLU (sozlesme yorumu): baskasinin siparisi icin
-    // PERMISSION_DENIED DEGIL, NOT_FOUND doneriz - "bu kimlikte bir siparis
-    // var" bilgisi bile sizdirilmamalidir.
-    if (order === null || order.userId !== userId) {
-      throw AppError.notFound('Siparis bulunamadi', { details: { orderId } });
-    }
+    const awaitingPayment =
+      order.status === ORDER_STATUS.AWAITING_PAYMENT
+        ? order
+        : await passRiskStep(deps, order, choice.method, scope);
 
-    // Ilk gecis tablodan kontrol edilir: DRAFT disindaki bir siparis (ornegin
-    // ikinci CreateOrder) burada ORDER_STATE_INVALID alir, hicbir sey yazilmaz.
-    const riskChecked = transitionOrder(
-      order,
-      ORDER_STATUS.RISK_CHECK,
-      deps.clock,
-      TIMELINE_NOTE.PENDING_RISK_SERVICE,
-    );
-    const reserved = transitionOrder(
-      riskChecked,
-      ORDER_STATUS.RESERVED,
-      deps.clock,
-      TIMELINE_NOTE.PENDING_RESERVATION,
-    );
-    const awaitingPayment = transitionOrder(reserved, ORDER_STATUS.AWAITING_PAYMENT, deps.clock);
-
-    // Okundugu surumun USTUNE yazilir: arada ayni taslaga ikinci bir
-    // CreateOrder/CancelOrder yazdiysa bu cagri CONFLICT alir.
-    await deps.repository.update(awaitingPayment, order.version);
-    return awaitingPayment;
+    return chargeOrder(deps, awaitingPayment, choice, scope);
   };
 }

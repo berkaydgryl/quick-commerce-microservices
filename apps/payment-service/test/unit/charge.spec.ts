@@ -24,6 +24,7 @@ const cardCharge = (overrides: Partial<ChargeInput> = {}): ChargeInput => ({
   method: PAYMENT_METHOD.CARD,
   cardToken: 'tok_test_4242',
   idempotencyKey: 'anahtar-0001',
+  requireThreeDs: false,
   ...overrides,
 });
 
@@ -110,6 +111,30 @@ describe('Charge - test kartlari', () => {
   it('taninmayan jeton reddedilir', async () => {
     const payment = await charge(cardCharge({ cardToken: 'tok_bilinmeyen' }));
     expect(payment.failureCode).toBe(ERROR_CODES.PAYMENT_DECLINED);
+  });
+});
+
+describe('Charge - risk bandina gore 3DS (T7.1)', () => {
+  it('3DS zorunluysa onaylanacak kart bile REQUIRES_3DS doner; karar gecmiste gorunur', async () => {
+    const payment = await charge(cardCharge({ requireThreeDs: true }));
+
+    expect(payment.status).toBe(PAYMENT_STATUS.REQUIRES_3DS);
+    expect(payment.challenge?.id).toMatch(/^tds_/);
+    expect(payment.attempts.map((attempt) => attempt.outcome)).toEqual(['CHALLENGE_REQUIRED']);
+  });
+
+  it('reddedilecek kart 3DS e gitmez, yine FAILED + PAYMENT_DECLINED', async () => {
+    const payment = await charge(cardCharge({ cardToken: 'tok_test_0002', requireThreeDs: true }));
+
+    expect(payment.status).toBe(PAYMENT_STATUS.FAILED);
+    expect(payment.failureCode).toBe(ERROR_CODES.PAYMENT_DECLINED);
+    expect(payment.challenge).toBeUndefined();
+  });
+
+  it('bayrak cekim niyetinin parcasi degil: ayni anahtarli tekrar istek ilk kaydi doner', async () => {
+    const first = await charge(cardCharge({ requireThreeDs: true }));
+
+    await expect(charge(cardCharge({ requireThreeDs: false }))).resolves.toEqual(first);
   });
 });
 

@@ -39,8 +39,43 @@ export interface OrderHistoryPage {
   readonly next?: OrderHistoryCursor | undefined;
 }
 
+/**
+ * Risk degerlendirmesi icin kullanicinin gecmisi (T7.1): order-history ve
+ * basket-anomaly kurallarinin girdisi. Sayilar sunucudaki siparislerden
+ * cikar, istemciden gelmez (B9).
+ */
+export interface RiskHistory {
+  /** DELIVERED siparis sayisi. */
+  readonly deliveredCount: number;
+  /** CANCELLED siparis sayisi (kullanici ya da sistem iptali). */
+  readonly cancelledCount: number;
+  /**
+   * Teslim edilmis siparislerin ortalama tutari (kurus, tam sayiya yuvarlanmis).
+   * Teslim edilmis siparis yoksa YOK: "ortalama 0" sepet anomalisini
+   * her sepette tetiklerdi.
+   */
+  readonly averageBasketMinor?: number;
+}
+
 export interface OrderHistoryReader {
   listByUser(query: OrderHistoryQuery): Promise<OrderHistoryPage>;
   /** Kullanicinin PAID_ORDER_STATUSES'ta en az bir siparisi var mi? (ILK10) */
   hasPaidOrder(userId: string): Promise<boolean>;
+  /** Risk adimi icin sayilar ve ortalama sepet (T7.1). */
+  riskHistory(userId: string): Promise<RiskHistory>;
+}
+
+/** Sayilardan RiskHistory kurar; bellek ve Mongo ayni yuvarlama kuralini kullanir. */
+export function toRiskHistory(
+  deliveredCount: number,
+  cancelledCount: number,
+  deliveredTotalMinor: number,
+): RiskHistory {
+  return deliveredCount === 0
+    ? { deliveredCount, cancelledCount }
+    : {
+        deliveredCount,
+        cancelledCount,
+        averageBasketMinor: Math.round(deliveredTotalMinor / deliveredCount),
+      };
 }

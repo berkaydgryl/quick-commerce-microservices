@@ -9,6 +9,7 @@ import type { GrpcServiceRegistration } from '@getir/service-kit';
 
 import { createCharge } from './application/charge.js';
 import { createConfirm3Ds } from './application/confirm-3ds.js';
+import { createRefund } from './application/refund.js';
 import {
   CONFIRM_3DS_MAX_WRITE_RETRIES,
   PAYMENT_SERVICE_FULL_NAME,
@@ -61,6 +62,7 @@ export function buildPaymentService(options: BootstrapOptions = {}): GrpcService
     implementation: createPaymentImplementation({
       charge,
       confirm3Ds,
+      refund: createRefund({ repository, clock }),
       ...(logger === undefined ? {} : { logger }),
     }),
   };

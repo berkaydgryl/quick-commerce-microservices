@@ -1,6 +1,6 @@
 /**
  * Idempotency anahtari (ADR-08) TUM mutasyonlarin ortak kuralidir ve kaynakta tek
- * alt semadan gelir; bu yuzden bir kez yazilir ve UC semanin hepsinde denenir.
+ * alt semadan gelir; bu yuzden bir kez yazilir ve TUM mutasyon semalarinda denenir.
  * Yeni bir mutasyon eklenince bu tabloya eklenir: anahtari unutan sema burada
  * kirmizi olur (tek tek yazilan testlerde unutulan sema testsiz kaliyordu).
  */
@@ -10,23 +10,26 @@ import { describe, expect, it } from 'vitest';
 
 import {
   cancelOrderRequestSchema,
+  confirmPaymentRequestSchema,
   createDraftOrderRequestSchema,
   createOrderRequestSchema,
 } from '../../../src/interfaces/grpc/schemas.js';
-import { IDEMPOTENCY_KEY, draftRequest } from '../../support/order-fixtures.js';
+import {
+  cancelOrderRequest,
+  confirmPaymentRequest,
+  createOrderRequest,
+  draftRequest,
+} from '../../support/order-fixtures.js';
 
 const MUTATIONS = [
   { name: 'CreateDraftOrder', schema: createDraftOrderRequestSchema, request: draftRequest },
+  { name: 'CreateOrder', schema: createOrderRequestSchema, request: createOrderRequest('ord_1') },
   {
-    name: 'CreateOrder',
-    schema: createOrderRequestSchema,
-    request: { orderId: 'ord_1', userId: 'usr_1', idempotencyKey: IDEMPOTENCY_KEY },
+    name: 'ConfirmPayment',
+    schema: confirmPaymentRequestSchema,
+    request: confirmPaymentRequest('ord_1', 'tds_1'),
   },
-  {
-    name: 'CancelOrder',
-    schema: cancelOrderRequestSchema,
-    request: { orderId: 'ord_1', userId: 'usr_1', reason: '', idempotencyKey: IDEMPOTENCY_KEY },
-  },
+  { name: 'CancelOrder', schema: cancelOrderRequestSchema, request: cancelOrderRequest('ord_1') },
 ];
 
 describe.each(MUTATIONS)('$name: idempotency anahtari (ADR-08)', ({ schema, request }) => {

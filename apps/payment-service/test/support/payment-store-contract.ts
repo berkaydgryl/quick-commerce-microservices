@@ -76,6 +76,24 @@ export function describePaymentStoreContract(
       expect(await store.findByIdempotencyKey(locked.idempotencyKey)).toEqual(locked);
     });
 
+    it('iade edilmis odeme: gerekce ve REFUND denemesi birebir korunur (T7.1)', async () => {
+      const store = getStore();
+      const at = new Date(START_MS + 9_000);
+      const refunded: Payment = {
+        ...pending(),
+        status: PAYMENT_STATUS.REFUNDED,
+        refundReason: 'order_cancelled',
+        attempts: [
+          { kind: ATTEMPT_KIND.CHARGE, outcome: ATTEMPT_OUTCOME.APPROVED, at },
+          { kind: ATTEMPT_KIND.REFUND, outcome: ATTEMPT_OUTCOME.REFUNDED, at },
+        ],
+      };
+
+      await store.insert(refunded);
+
+      expect(await store.findByOrderId(refunded.orderId)).toEqual(refunded);
+    });
+
     it('olmayan siparis ve anahtar null doner', async () => {
       const store = getStore();
       expect(await store.findByOrderId('ord_hic-yok')).toBeNull();

@@ -57,6 +57,7 @@ async function chargeWith3Ds(orderId = 'ord_1'): Promise<Payment> {
       method: PAYMENT_METHOD.CARD,
       cardToken: 'tok_test_3184',
       idempotencyKey: `anahtar-${orderId}`,
+      requireThreeDs: false,
     },
     silentLogger,
   );

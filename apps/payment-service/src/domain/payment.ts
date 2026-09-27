@@ -34,11 +34,13 @@ export type PaymentMethod = (typeof PAYMENT_METHOD)[keyof typeof PAYMENT_METHOD]
 export const ATTEMPT_KIND = {
   CHARGE: 'CHARGE',
   THREEDS: 'THREEDS',
+  /** Siparis saga'sinin telafi adimi (T7.1): cekilen tutar geri verildi. */
+  REFUND: 'REFUND',
 } as const;
 
 export type AttemptKind = (typeof ATTEMPT_KIND)[keyof typeof ATTEMPT_KIND];
 
-/** Denemenin sonucu. CHARGE icin ilk dordu, THREEDS icin son ucu kullanilir. */
+/** Denemenin sonucu. CHARGE icin ilk dordu, THREEDS icin sonraki ucu, REFUND icin sonuncusu. */
 export const ATTEMPT_OUTCOME = {
   APPROVED: 'APPROVED',
   DECLINED: 'DECLINED',
@@ -47,6 +49,7 @@ export const ATTEMPT_OUTCOME = {
   CODE_ACCEPTED: 'CODE_ACCEPTED',
   CODE_REJECTED: 'CODE_REJECTED',
   EXPIRED: 'EXPIRED',
+  REFUNDED: 'REFUNDED',
 } as const;
 
 export type AttemptOutcome = (typeof ATTEMPT_OUTCOME)[keyof typeof ATTEMPT_OUTCOME];
@@ -99,6 +102,8 @@ export interface Payment {
   readonly failureCode?: ErrorCode;
   /** 3DS istenen odemede dolu; sonuclandiktan sonra da kalir (tekrar istek icin). */
   readonly challenge?: ThreeDsChallenge;
+  /** Yalnizca REFUNDED durumunda dolu: iadeyi isteyen tarafin gerekce anahtari. */
+  readonly refundReason?: string;
   /**
    * Denetim gecmisi (T5.3): odemede olan her karar, eskiden yeniye. Durumu
    * degistirmeyen istekler (tekrar istek, bicimi bozuk kod, ulasilamayan
@@ -176,6 +181,18 @@ export function settlePayment(
         },
       };
   }
+}
+
+/**
+ * Risk'in "3DS zorunlu" karari (T7.1, orta bant): banka onaylayacak olsa bile
+ * dogrulama istenir. Karar risk'e aittir, payment yalnizca uygular. Ret ve
+ * zaten dogrulama isteyen karar degismez: reddedilecek kart 3DS'e gitmez.
+ */
+export function withRequiredThreeDs(
+  decision: ProviderDecision,
+  requireThreeDs: boolean,
+): ProviderDecision {
+  return requireThreeDs && decision === 'APPROVED' ? 'CHALLENGE_REQUIRED' : decision;
 }
 
 /**

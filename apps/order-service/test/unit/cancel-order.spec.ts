@@ -6,20 +6,17 @@ import { AppError, ERROR_CODES, fixedClock, ORDER_STATUS } from '@getir/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createCancelOrder } from '../../src/application/cancel-order.js';
-import { createCreateOrder } from '../../src/application/create-order.js';
 import { transitionOrder } from '../../src/domain/order.js';
 import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-order-store.js';
-import { insertDraft } from '../support/order-builders.js';
+import { insertAwaitingPayment, insertDraft } from '../support/order-builders.js';
 
 const clock = fixedClock(1_760_000_000_000);
 
 let repository: InMemoryOrderStore;
-let create: ReturnType<typeof createCreateOrder>;
 let cancel: ReturnType<typeof createCancelOrder>;
 
 beforeEach(() => {
   repository = new InMemoryOrderStore();
-  create = createCreateOrder({ repository, clock });
   cancel = createCancelOrder({ repository, clock });
 });
 
@@ -41,8 +38,7 @@ describe('cancelOrder use-case', () => {
   });
 
   it('odeme bekleyen siparisi verilen gerekceyle iptal eder', async () => {
-    const { id } = await insertDraft(repository, clock);
-    await create({ orderId: id, userId: 'usr_1' });
+    const { id } = await insertAwaitingPayment(repository, clock);
 
     const order = await cancel({ orderId: id, userId: 'usr_1', reason: 'CHANGED_MIND' });
 
@@ -50,8 +46,8 @@ describe('cancelOrder use-case', () => {
   });
 
   it('odenmis siparisi kullanici iptal EDEMEZ (iade sistemin telafi adimi, B20c)', async () => {
-    const { id } = await insertDraft(repository, clock);
-    const awaiting = await create({ orderId: id, userId: 'usr_1' });
+    const awaiting = await insertAwaitingPayment(repository, clock);
+    const { id } = awaiting;
     await repository.update(transitionOrder(awaiting, ORDER_STATUS.PAID, clock), awaiting.version);
 
     const failing = cancel({ orderId: id, userId: 'usr_1' });

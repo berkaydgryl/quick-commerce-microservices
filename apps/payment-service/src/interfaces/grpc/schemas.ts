@@ -12,6 +12,7 @@ import { CURRENCY } from '@getir/core';
 import { paymentV1 } from '@getir/proto';
 import { z } from 'zod';
 
+import { MAX_REFUND_REASON_LENGTH } from '../../config/constants.js';
 import { PAYMENT_METHOD } from '../../domain/payment.js';
 import type { PaymentMethod } from '../../domain/payment.js';
 
@@ -67,9 +68,19 @@ export const chargeRequestSchema = z
     method,
     cardToken: z.string().trim(),
     idempotencyKey,
+    // proto3 bool: gonderilmezse false (3DS'i banka karari belirler).
+    requireThreeDs: z.boolean(),
   })
   .superRefine((input, ctx) => {
     const isCard = input.method === PAYMENT_METHOD.CARD;
+    // Kapida odemede dogrulanacak kart yok: istek celiskili, sessizce yok sayilmaz.
+    if (!isCard && input.requireThreeDs) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['requireThreeDs'],
+        message: 'kapida odemede 3DS istenemez',
+      });
+    }
     if (isCard && input.cardToken === '') {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -105,3 +116,24 @@ export const confirm3DsRequestSchema = z.object({
 });
 
 export type Confirm3DsRequestInput = z.infer<typeof confirm3DsRequestSchema>;
+
+/** Iade gerekcesi ANAHTARI (metin degil): kucuk harf, rakam ve alt cizgi. */
+const refundReason = z
+  .string()
+  .trim()
+  .min(1, 'reason zorunlu')
+  .max(MAX_REFUND_REASON_LENGTH, `en fazla ${MAX_REFUND_REASON_LENGTH} karakter olmali`)
+  .regex(/^[a-z0-9_]+$/, 'gerekce kucuk harf, rakam ve alt cizgiden olusan bir anahtar olmali');
+
+/**
+ * Refund (T7.1). Iade de bir mutasyondur (ADR-08): anahtar zorunlu. Tekrar
+ * korumasi kaydin durumundadir (zaten REFUNDED ise ikinci iade yapilmaz),
+ * anahtar burada yalnizca varlik ve bicim olarak dogrulanir.
+ */
+export const refundRequestSchema = z.object({
+  orderId: requiredText('orderId'),
+  reason: refundReason,
+  idempotencyKey,
+});
+
+export type RefundRequestInput = z.infer<typeof refundRequestSchema>;

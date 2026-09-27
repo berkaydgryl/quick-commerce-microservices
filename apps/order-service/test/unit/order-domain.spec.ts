@@ -41,7 +41,7 @@ describe('transitionOrder', () => {
       draft,
       ORDER_STATUS.RISK_CHECK,
       later,
-      TIMELINE_NOTE.PENDING_RISK_SERVICE,
+      TIMELINE_NOTE.USER_CANCELLED,
     );
 
     expect(draft.status).toBe(ORDER_STATUS.DRAFT);
@@ -52,7 +52,7 @@ describe('transitionOrder', () => {
       {
         status: ORDER_STATUS.RISK_CHECK,
         at: new Date(CLOCK_EPOCH_MS + 5_000),
-        note: 'PENDING_RISK_SERVICE',
+        note: 'USER_CANCELLED',
       },
     ]);
     expect(next.updatedAt.getTime()).toBe(CLOCK_EPOCH_MS + 5_000);

@@ -14,8 +14,12 @@ import type { MethodDefinition, ServiceError } from '@grpc/grpc-js';
 import { afterAll, beforeAll } from 'vitest';
 
 import type { CatalogPricing } from '../../src/application/catalog-pricing.js';
+import type { Payments } from '../../src/application/payments.js';
+import type { RiskAssessment } from '../../src/application/risk-assessment.js';
 import { buildOrderService } from '../../src/bootstrap.js';
 import { FakeCatalogPricing } from './fake-catalog-pricing.js';
+import { FakePayments } from './fake-payments.js';
+import { FakeRiskAssessment } from './fake-risk-assessment.js';
 import { draftRequest } from './order-fixtures.js';
 
 const EPHEMERAL_PORT = 0;
@@ -30,11 +34,22 @@ export type UnaryCall = <TRequest, TResponse>(
   request: TRequest,
 ) => Promise<CallResult<TResponse>>;
 
+/** Sunucunun dis bagimliliklari; verilmeyen sahtesiyle kurulur. */
+export interface OrderServerDeps {
+  readonly catalog?: CatalogPricing;
+  readonly risk?: RiskAssessment;
+  readonly payments?: Payments;
+}
+
 /**
  * Sunucuyu dosyanin omru boyunca ayakta tutar; tipli unary cagri fonksiyonu doner.
- * Fiyat kaynagi verilmezse sahte catalog (sabit kurallar ve teklifler).
+ * Verilmeyen bagimlilik sahtedir: catalog sabit kurallar ve teklifler, risk LOW,
+ * odeme test kartlari (fake-payments.ts).
  */
-export function useOrderGrpcServer(catalog: CatalogPricing = new FakeCatalogPricing()): UnaryCall {
+export function useOrderGrpcServer(deps: OrderServerDeps = {}): UnaryCall {
+  const catalog = deps.catalog ?? new FakeCatalogPricing();
+  const risk = deps.risk ?? new FakeRiskAssessment();
+  const payments = deps.payments ?? new FakePayments();
   let handle: GrpcServerHandle | undefined;
   let client: Client | undefined;
 
@@ -43,7 +58,7 @@ export function useOrderGrpcServer(catalog: CatalogPricing = new FakeCatalogPric
       serviceName: 'order-test',
       host: '127.0.0.1',
       port: EPHEMERAL_PORT,
-      services: [buildOrderService({ catalog })],
+      services: [buildOrderService({ catalog, risk, payments })],
     });
     client = new Client(`127.0.0.1:${handle.port}`, credentials.createInsecure());
   });

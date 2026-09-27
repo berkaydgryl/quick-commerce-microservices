@@ -126,6 +126,7 @@ async function chargeWith3Ds(client: Client, orderId: string): Promise<string> {
     method: paymentV1.PaymentMethod.PAYMENT_METHOD_CARD,
     cardToken: 'tok_test_3184',
     idempotencyKey: `anahtar-${orderId}`,
+    requireThreeDs: false,
   });
   return response?.challengeId ?? '';
 }

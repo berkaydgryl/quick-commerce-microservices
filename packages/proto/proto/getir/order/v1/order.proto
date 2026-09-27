@@ -33,9 +33,15 @@ service OrderService {
   // Gateway karsiligi: POST /v1/cart/reserve
   rpc CreateDraftOrder(CreateDraftOrderRequest) returns (CreateDraftOrderResponse);
 
-  // Taslak siparisi gercek siparise cevirir: ikinci risk gecisi, odeme ve
-  // stok dusumu. Gateway karsiligi: POST /v1/orders
+  // Taslak siparisi gercek siparise cevirir: risk gecisi, odeme ve stok
+  // dusumu (saga, T7.1). Gateway karsiligi: POST /v1/orders
   rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
+
+  // 3DS kodunu dogrular ve siparisi odeme sonucuna gore ilerletir (T7.1):
+  // kod dogruysa PAID; hak biter ya da sure dolarsa PAYMENT_FAILED. Yanlis kod
+  // THREEDS_FAILED doner, siparis beklemede kalir.
+  // Gateway karsiligi: POST /v1/orders/{id}/3ds
+  rpc ConfirmPayment(ConfirmPaymentRequest) returns (ConfirmPaymentResponse);
 
   // Tek siparis detayi; zaman cizelgesi dahil.
   rpc GetOrder(GetOrderRequest) returns (GetOrderResponse);
@@ -249,6 +255,25 @@ message CreateOrderResponse {
   // Bos DEGILSE 3DS dogrulamasi bekleniyor demektir. Ayrica bir bayrak alani
   // tutulmaz; iki kaynak birbiriyle celisebilirdi.
   string challenge_id = 3;
+}
+
+message ConfirmPaymentRequest {
+  string order_id = 1;
+  string user_id = 2;
+
+  // CreateOrder cevabindaki jeton.
+  string challenge_id = 3;
+
+  // Kullanicinin girdigi dogrulama kodu: 6 hane (contracts OTP_PATTERN).
+  // Bicimi bozuk kod DENEME SAYILMAZ, VALIDATION_FAILED doner.
+  string code = 4;
+
+  string idempotency_key = 5;
+}
+
+message ConfirmPaymentResponse {
+  string order_id = 1;
+  OrderStatus status = 2;
 }
 
 message GetOrderRequest {

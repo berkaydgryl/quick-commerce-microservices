@@ -56,6 +56,7 @@ function chargeRequest(cardToken: string): paymentV1.ChargeRequest {
     method: paymentV1.PaymentMethod.PAYMENT_METHOD_CARD,
     cardToken,
     idempotencyKey: `anahtar-${sequence}-000`,
+    requireThreeDs: false,
   };
 }
 
@@ -103,6 +104,16 @@ describe('PaymentService/Charge', () => {
       paymentV1.PaymentServiceService.charge,
       chargeRequest('tok_test_3184'),
     );
+
+    expect(response?.payment?.status).toBe(paymentV1.PaymentStatus.PAYMENT_STATUS_REQUIRES_3DS);
+    expect(response?.challengeId).toMatch(/^tds_[0-9a-f]{32}$/);
+  });
+
+  it('risk 3DS isterse (T7.1) onaylanacak kart da REQUIRES_3DS + challengeId doner', async () => {
+    const { response } = await call(paymentV1.PaymentServiceService.charge, {
+      ...chargeRequest('tok_test_4242'),
+      requireThreeDs: true,
+    });
 
     expect(response?.payment?.status).toBe(paymentV1.PaymentStatus.PAYMENT_STATUS_REQUIRES_3DS);
     expect(response?.challengeId).toMatch(/^tds_[0-9a-f]{32}$/);
@@ -178,5 +189,59 @@ describe('PaymentService/Confirm3Ds', () => {
   it('henuz yazilmayan GetPayment UNIMPLEMENTED doner', async () => {
     const { error } = await call(paymentV1.PaymentServiceService.getPayment, { orderId: 'ord_1' });
     expect(error?.code).toBe(GRPC_STATUS.UNIMPLEMENTED);
+  });
+});
+
+describe('PaymentService/Refund (T7.1)', () => {
+  const refundRequest = (orderId: string): paymentV1.RefundRequest => ({
+    orderId,
+    reason: 'order_cancelled',
+    idempotencyKey: `iade-${orderId}`,
+  });
+
+  it('onaylanmis cekim iade edilir; tekrar istek already_refunded = true', async () => {
+    const request = chargeRequest('tok_test_4242');
+    await call(paymentV1.PaymentServiceService.charge, request);
+
+    const first = await call(
+      paymentV1.PaymentServiceService.refund,
+      refundRequest(request.orderId),
+    );
+    const second = await call(
+      paymentV1.PaymentServiceService.refund,
+      refundRequest(request.orderId),
+    );
+
+    expect(first.error).toBeUndefined();
+    expect(first.response?.payment?.status).toBe(paymentV1.PaymentStatus.PAYMENT_STATUS_REFUNDED);
+    expect(first.response?.alreadyRefunded).toBe(false);
+    expect(second.response?.alreadyRefunded).toBe(true);
+  });
+
+  it('reddedilmis cekim iade edilemez: ABORTED + CONFLICT', async () => {
+    const request = chargeRequest('tok_test_0002');
+    await call(paymentV1.PaymentServiceService.charge, request);
+
+    const { error } = await call(
+      paymentV1.PaymentServiceService.refund,
+      refundRequest(request.orderId),
+    );
+
+    expect(error?.code).toBe(GRPC_STATUS.ABORTED);
+    expect(errorCodeOf(error)).toBe(ERROR_CODES.CONFLICT);
+  });
+
+  it('gerekce ve anahtar zorunlu: VALIDATION_FAILED', async () => {
+    const { error } = await call(paymentV1.PaymentServiceService.refund, {
+      orderId: 'ord_1',
+      reason: '',
+      idempotencyKey: '',
+    });
+
+    expect(errorCodeOf(error)).toBe(ERROR_CODES.VALIDATION_FAILED);
+    expect(Object.keys(errorDetailsOf(error) as object).sort()).toEqual([
+      'idempotencyKey',
+      'reason',
+    ]);
   });
 });

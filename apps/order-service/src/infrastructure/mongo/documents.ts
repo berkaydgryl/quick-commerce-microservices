@@ -5,7 +5,7 @@
  * domain ve use-case'ler etkilenmez. Ceviri tek yerdedir: mappers.ts.
  */
 
-import type { OrderStatus } from '@getir/core';
+import type { OrderStatus, RiskBand } from '@getir/core';
 import type { BaseDocument } from '@getir/mongo-kit';
 
 import type { ItemUnit } from '../../domain/order-item.js';
@@ -57,6 +57,8 @@ export interface OrderDocument extends BaseDocument {
   deliveryAddress: string;
   status: OrderStatus;
   timeline: TimelineEntryDocument[];
+  /** Risk adimindan once HIC yazilmaz (T7.1). */
+  riskBand?: RiskBand;
   createdAt: Date;
   updatedAt: Date;
   /** Iyimser kilit surumu; guncelleme filtresi bunu kosul olarak kullanir. */

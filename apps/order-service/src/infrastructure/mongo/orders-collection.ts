@@ -61,6 +61,32 @@ export class OrdersCollection extends MongoRepository<OrderDocument> {
    * userId esitligi mevcut userId_createdAt_id indeksinin onekini kullanir;
    * durum filtresi yalnizca o kullanicinin siparisleri uzerinde calisir.
    */
+  /**
+   * Kullanicinin verilen durumlardaki siparis sayisi ve tutar toplami, durum
+   * basina TEK aggregation (en fazla statuses.length satir doner). userId
+   * esitligi userId_createdAt_id indeksinin onekini kullanir.
+   */
+  async countAndSumByStatus(
+    userId: string,
+    statuses: readonly OrderStatus[],
+  ): Promise<ReadonlyMap<OrderStatus, { readonly count: number; readonly totalMinor: number }>> {
+    const rows = await this.run('countAndSumByStatus', () =>
+      this.collection
+        .aggregate<{ _id: OrderStatus; count: number; totalMinor: number }>([
+          { $match: { userId, status: { $in: [...statuses] } } },
+          {
+            $group: {
+              _id: '$status',
+              count: { $sum: 1 },
+              totalMinor: { $sum: '$pricing.totalMinor' },
+            },
+          },
+        ])
+        .toArray(),
+    );
+    return new Map(rows.map((row) => [row._id, { count: row.count, totalMinor: row.totalMinor }]));
+  }
+
   async existsWithStatus(userId: string, statuses: readonly OrderStatus[]): Promise<boolean> {
     const found = await this.run('existsWithStatus', () =>
       this.collection.findOne(
