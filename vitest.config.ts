@@ -13,7 +13,8 @@ export default defineConfig({
   test: {
     name: 'unit',
     environment: 'node',
-    include: ['{apps,packages}/**/test/unit/**/*.spec.ts'],
+    // scripts/test: kok betiklerin (git-conventions.mjs) testleri; betikler duz JS oldugu icin .mjs.
+    include: ['{apps,packages}/**/test/unit/**/*.spec.ts', 'scripts/test/**/*.spec.mjs'],
     exclude: ['**/node_modules/**', '**/dist/**', '**/.turbo/**', '**/gen/**'],
     testTimeout: UNIT_TEST_TIMEOUT_MS,
     hookTimeout: UNIT_HOOK_TIMEOUT_MS,

@@ -20,13 +20,18 @@ yeni ADR oner.
 
 ## Git
 
-- Dal adi: `feat/<alan>-<kisa-aciklama>` (ornek: `feat/contract-order-proto`, `feat/platform-service-kit`).
-- Commit: conventional commits, Turkce aciklama, sonunda gorev kimligi:
-  `feat(contract): order ve payment proto sozlesmeleri (T2.1)`.
+- Dal adi: `<tip>/<alan>-<kisa-aciklama>`; tip conventional commits tiplerinden biridir (feat, fix,
+  refactor, docs, test, chore, ci, perf, build). Ornek: `feat/contract-order-proto`, `refactor/order-test-bolme`.
+- Commit: conventional commits, Turkce aciklama, sonunda gorev kimligi: roadmap gorevi `T<gun>.<no>` ya da
+  denetim duzeltmesi `D<no>`. Ornek: `feat(contract): order ve payment proto sozlesmeleri (T2.1)`.
 - Alan etiketleri: contract, platform, gateway, catalog, inventory, order, payment, risk, courier, realtime, web.
+- Dal adi ve commit basligi CI'da kontrol edilir ("Git kurallari" isi, `scripts/git-conventions.mjs`); alan
+  listesi yukaridaki satirdan okunur, baska yerde tekrar yazilmaz.
 - Git kancasi yok (Windows/WSL gerekcesi); kapi `pnpm verify` + CI'dir. `main`'e dogrudan push yok, PR ile.
 - PR tek amaca hizmet eder; gorev disi degisiklik ayri dala alinir. Devasa PR acilmaz.
-- `main` korumalidir: merge icin CI yesil olmali ve en az bir inceleme onayi bulunmalidir.
+- `main` korumalidir: dogrudan push yok; merge icin CI yesil olmalidir (zorunlu durum kontrolleri). Tek
+  gelistiricili repoda GitHub onayi zorunlu tutulmaz (kisi kendi PR'ini onaylayamaz); onun yerine her PR
+  aciklamasina inceleme raporu yazilir: ne degisti, neden, risk, nasil dogrulandi.
 
 ## Mimari degismezler
 

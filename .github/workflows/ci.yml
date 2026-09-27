@@ -19,6 +19,42 @@ permissions:
   contents: read
 
 jobs:
+  # Git kurallari (proje-kurallari.mdc "Git", D13): commit basligi ve dal adi.
+  # Yalnizca PR'larda ve yalnizca PR'IN KENDI commit'lerine bakar: main'in eski
+  # gecmisi yeniden yazilmadi, onu her kosuda kirmiziya boyamak anlamsiz olurdu.
+  # main'e dogrudan push bu isi hic tetiklemez; onu GitHub dal korumasi durdurur.
+  git-conventions:
+    name: Git kurallari (commit basligi + dal adi)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-depth: 0 ZORUNLU - taban..uc araligindaki commit'leri okumak icin
+      # tam gecmis gerekir; sig klonda taban commit'i bulunmaz.
+      - name: Depoyu al
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Betik bagimliliksiz duz Node (scripts/git-conventions.mjs): pnpm kurulumu gerekmez.
+      - name: Node kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Dal adi ve sha'lar ORTAM DEGISKENIYLE gecer, ${{ }} ile komuta yazilmaz:
+      # dal adini PR'i acan kisi secer; komuta gomulen deger kabuk enjeksiyonuna
+      # acik olurdu (orn. dal adinda "$(...)").
+      - name: Dal adi
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: node scripts/git-conventions.mjs branch "$HEAD_REF"
+
+      - name: Commit basliklari
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/git-conventions.mjs commits "$BASE_SHA" "$HEAD_SHA"
+
   quality:
     name: Kalite (lint, format, typecheck, build, unit)
     runs-on: ubuntu-latest
