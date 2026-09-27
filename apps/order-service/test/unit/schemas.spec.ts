@@ -1,3 +1,9 @@
+import {
+  CART_ITEM_MAX_QUANTITY,
+  CART_MAX_ITEMS,
+  IDEMPOTENCY_KEY_MAX_LENGTH,
+  IDEMPOTENCY_KEY_MIN_LENGTH,
+} from '@getir/contracts';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -57,6 +63,44 @@ describe('createDraftOrderRequestSchema', () => {
     expect(() =>
       createDraftOrderRequestSchema.parse({ ...valid, idempotencyKey: 'kisa' }),
     ).toThrow();
+  });
+
+  it('idempotency anahtari sozlesmenin uzunluk sinirlarini birebir uygular', () => {
+    // Sinirlar REST basligi ve Redis anahtariyla ayni kaynaktan gelir: REST'in
+    // kabul ettigini order reddetmemeli, reddettigini kabul etmemeli.
+    const withKey = (length: number) => ({ ...valid, idempotencyKey: 'a'.repeat(length) });
+
+    expect(
+      createDraftOrderRequestSchema.safeParse(withKey(IDEMPOTENCY_KEY_MIN_LENGTH - 1)).success,
+    ).toBe(false);
+    expect(
+      createDraftOrderRequestSchema.safeParse(withKey(IDEMPOTENCY_KEY_MIN_LENGTH)).success,
+    ).toBe(true);
+    expect(
+      createDraftOrderRequestSchema.safeParse(withKey(IDEMPOTENCY_KEY_MAX_LENGTH)).success,
+    ).toBe(true);
+    expect(
+      createDraftOrderRequestSchema.safeParse(withKey(IDEMPOTENCY_KEY_MAX_LENGTH + 1)).success,
+    ).toBe(false);
+  });
+
+  it('sepet sinirlari sozlesmeyle ayni: kalem sayisi ve adet', () => {
+    const line = (quantity: number) => ({ productId: 'prd_01', sku: 'SUT-1L', quantity });
+    const withLines = (count: number, quantity = 1) => ({
+      ...valid,
+      lines: Array.from({ length: count }, () => line(quantity)),
+    });
+
+    expect(createDraftOrderRequestSchema.safeParse(withLines(CART_MAX_ITEMS)).success).toBe(true);
+    expect(createDraftOrderRequestSchema.safeParse(withLines(CART_MAX_ITEMS + 1)).success).toBe(
+      false,
+    );
+    expect(
+      createDraftOrderRequestSchema.safeParse(withLines(1, CART_ITEM_MAX_QUANTITY)).success,
+    ).toBe(true);
+    expect(
+      createDraftOrderRequestSchema.safeParse(withLines(1, CART_ITEM_MAX_QUANTITY + 1)).success,
+    ).toBe(false);
   });
 });
 
