@@ -120,6 +120,10 @@ Mongo'yu doldurmak: `pnpm seed` (kök). Dört koleksiyon **tek transaction**'da 
 yazılır; tekrar koşmak güvenlidir, yarıda kalan seed hiçbir koleksiyonu değiştirmez.
 `NODE_ENV=production` iken reddeder.
 
+**Bütünlük kuralı domain'de:** olmayan ürüne işaret eden teklif sessizce atlanmaz. Teklifleri ürünleriyle
+birleştiren tek fonksiyon `domain/catalog-snapshot.ts` → `joinOfferSeeds`; bellek okuyucusu açılışta,
+Mongo seeder transaction başlamadan onu çağırır (D7'ye kadar iki adaptörde kopyaydı).
+
 > **Eski yerel veri:** T4.1–T4.2'de seed edilmiş bir geliştirme veritabanında `darkstores`
 > koleksiyonu kalır; yeni seed onu silmez (şema değişikliği seed'in işi değil). Temizlemek için
 > `pnpm infra:reset && pnpm infra:up && pnpm seed`.
@@ -132,11 +136,11 @@ src/
 │   ├── catalog.ts             # Category, Product, Market, Offer + sıralama/arama/kimlik kuralları
 │   ├── market-coverage.ts     # hangi market hizmet verir (kapsama, kapalı/yarıçap dışı)
 │   ├── geo.ts                 # mesafe (haversine, MongoDB yarıçapı)
-│   ├── pagination.ts          # sayfa boyutu sınırları + imleçle dilimleme
+│   ├── pagination.ts          # sayfa boyutu (sınırlar contracts'tan) + imleçle dilimleme
 │   ├── category-reader.ts     # okuma portları: kategori,
 │   ├── market-reader.ts       #   market,
 │   ├── offer-reader.ts        #   teklif (filtre, sayfa)
-│   └── catalog-snapshot.ts    # seed portu + katalogun tamamı
+│   └── catalog-snapshot.ts    # seed portu + katalogun tamamı + teklif-ürün birleştirme kuralı
 ├── application/           # bir dosya = bir use-case
 │   ├── list-categories.ts, list-nearby-markets.ts, get-market.ts
 │   ├── list-market-categories.ts, list-products.ts, seed-catalog.ts
@@ -146,7 +150,7 @@ src/
 │   ├── catalog-source.ts         # MOCK ya da Mongo: kaynağı açar, kapanışı verir
 │   ├── memory/                   # MOCK: port başına bellek okuyucusu
 │   └── mongo/                    # belgeler, çeviriciler, koleksiyon başına repository, seed yazıcısı
-├── interfaces/grpc/       # ince handler'lar: doğrula → çağır → çevir
+├── interfaces/grpc/       # ince handler'lar: doğrula → çağır → çevir (mesafe yuvarlama mapper'da)
 ├── config/                # env.ts (process.env yalnızca burada) + constants.ts
 ├── bootstrap.ts           # elle bağımlılık kurulumu
 ├── main.ts                # süreç yaşam döngüsü
@@ -178,8 +182,10 @@ $G -d '{"market_id":"mkt_kardesler-manavi"}' \
   localhost:50051 getir.catalog.v1.CatalogService/ListMarketCategories  # yalnizca meyve-sebze
 ```
 
-Aynı akışın otomatik karşılığı `test/unit/catalog-grpc.spec.ts`: gerçek sunucu, gerçek istemci,
-dış bağımlılık yok.
+Aynı akışın otomatik karşılığı `test/unit/grpc/*.spec.ts` (kategoriler, marketler, ürünler, toplu
+teklif, uygulanmamış RPC'ler): gerçek sunucu, gerçek istemci, dış bağımlılık yok. Düzenek
+`test/support/catalog-grpc-harness.ts`; hata metadata'sı `test/support/grpc-error.ts` ile Zod'dan geçerek
+okunur.
 
 ## Docker
 

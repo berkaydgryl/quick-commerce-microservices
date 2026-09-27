@@ -13,17 +13,21 @@
  * bilgisidir; kayitlar kimlige gore sirali oldugu icin sonraki sayfa
  * "kimligi bundan buyuk olanlar" ile deterministik bicimde bulunur. Ayni
  * mantik Mongo'da `_id > token` sorgusuna birebir cevrilir (mongo/product-repository.ts).
+ *
+ * SAYILAR SOZLESMEDEN: varsayilan ve ust sinir REST ile ayni degerlerdir
+ * (@getir/contracts PAGE_SIZE_DEFAULT / PAGE_SIZE_MAX); burada tekrar yazilmaz.
+ * Alt uc bilerek farkli: proto3'te gonderilmeyen page_size 0 gelir, bu yuzden
+ * gRPC'de 0 ve negatif "varsayilan" demektir (REST'te en az 1'e kirpilir).
  */
 
-export const DEFAULT_PAGE_SIZE = 20;
-export const MAX_PAGE_SIZE = 100;
+import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '@getir/contracts';
 
 /** Istenen sayfa boyutunu sozlesmedeki sinirlara oturtur. */
 export function normalizePageSize(requested: number | undefined): number {
   if (requested === undefined || !Number.isFinite(requested) || requested <= 0) {
-    return DEFAULT_PAGE_SIZE;
+    return PAGE_SIZE_DEFAULT;
   }
-  return Math.min(Math.trunc(requested), MAX_PAGE_SIZE);
+  return Math.min(Math.trunc(requested), PAGE_SIZE_MAX);
 }
 
 export interface PageSlice<T> {

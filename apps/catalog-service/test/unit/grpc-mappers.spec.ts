@@ -5,8 +5,15 @@
 
 import { describe, expect, it } from 'vitest';
 
+import type { Market } from '../../src/domain/catalog.js';
+import { MARKETS } from '../../src/infrastructure/fixtures.js';
 import { createInMemoryReaders } from '../../src/infrastructure/memory/in-memory-catalog.js';
-import { toListProductsResponse, toProtoOffer } from '../../src/interfaces/grpc/mappers.js';
+import {
+  toListProductsResponse,
+  toProtoMarket,
+  toProtoNearbyMarket,
+  toProtoOffer,
+} from '../../src/interfaces/grpc/mappers.js';
 
 const MIGROS = 'mkt_migros-jet-moda';
 const PAGE_SIZE = 2;
@@ -34,5 +41,31 @@ describe('toListProductsResponse', () => {
       offers: [],
       page: { nextPageToken: '', totalSize: 0 },
     });
+  });
+});
+
+describe('toProtoNearbyMarket (D7: yuvarlama tasima katmaninda)', () => {
+  const market = MARKETS[0] as Market;
+
+  it.each([
+    [404.6, 405],
+    [215.5, 216],
+    [100.49, 100],
+  ])('ham mesafe %d m proto int32 icin %d m olur', (raw, expected) => {
+    expect(toProtoNearbyMarket({ market, distanceMeters: raw }).distanceMeters).toBe(expected);
+  });
+
+  it('yaricaptan yarim metreden az kisa mesafe yaricapa yuvarlanir, asmaz', () => {
+    const edge = market.deliveryRadiusMeters - 0.4;
+
+    expect(toProtoNearbyMarket({ market, distanceMeters: edge }).distanceMeters).toBe(
+      market.deliveryRadiusMeters,
+    );
+  });
+
+  it('market bilgisi toProtoMarket ile aynidir', () => {
+    expect(toProtoNearbyMarket({ market, distanceMeters: 1 }).market).toEqual(
+      toProtoMarket(market),
+    );
   });
 });

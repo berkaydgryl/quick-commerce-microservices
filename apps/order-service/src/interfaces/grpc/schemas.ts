@@ -17,7 +17,7 @@ import {
   PAGE_SIZE_DEFAULT,
   PAGE_SIZE_MAX,
 } from '@getir/contracts';
-import { isSku } from '@getir/core';
+import { CURRENCY, isSku } from '@getir/core';
 import { z } from 'zod';
 
 import type { OrderHistoryCursor } from '../../domain/order-history-cursor.js';
@@ -69,7 +69,7 @@ const requiredMoney = z.object(
     amountMinor: moneySchema.shape.amountMinor,
     currency: z
       .string()
-      .transform((currency) => (currency === '' ? moneySchema.shape.currency.value : currency))
+      .transform((currency) => (currency === '' ? CURRENCY : currency))
       .pipe(moneySchema.shape.currency),
   },
   { required_error: 'zorunlu' },

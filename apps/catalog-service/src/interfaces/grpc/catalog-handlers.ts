@@ -18,7 +18,13 @@ import type { ListCategories } from '../../application/list-categories.js';
 import type { ListMarketCategories } from '../../application/list-market-categories.js';
 import type { ListNearbyMarkets } from '../../application/list-nearby-markets.js';
 import type { ListProducts } from '../../application/list-products.js';
-import { toListProductsResponse, toProtoCategory, toProtoMarket, toProtoOffer } from './mappers.js';
+import {
+  toListProductsResponse,
+  toProtoCategory,
+  toProtoMarket,
+  toProtoNearbyMarket,
+  toProtoOffer,
+} from './mappers.js';
 import {
   batchGetOffersRequestSchema,
   getMarketRequestSchema,
@@ -58,12 +64,7 @@ export function createCatalogImplementation(
       schema: listNearbyMarketsRequestSchema,
       ...logger,
       handle: async (input): Promise<catalogV1.ListNearbyMarketsResponse> => ({
-        markets: (await deps.listNearbyMarkets(input.location)).map(
-          ({ market, distanceMeters }) => ({
-            market: toProtoMarket(market),
-            distanceMeters,
-          }),
-        ),
+        markets: (await deps.listNearbyMarkets(input.location)).map(toProtoNearbyMarket),
       }),
     }),
 

@@ -8,10 +8,10 @@ import {
   IDEMPOTENCY_KEY_MIN_LENGTH,
   OTP_PATTERN,
 } from '@getir/contracts';
+import { CURRENCY } from '@getir/core';
 import { paymentV1 } from '@getir/proto';
 import { z } from 'zod';
 
-import { SUPPORTED_CURRENCY } from '../../config/constants.js';
 import { PAYMENT_METHOD } from '../../domain/payment.js';
 import type { PaymentMethod } from '../../domain/payment.js';
 
@@ -47,11 +47,8 @@ const amount = z.object(
     amountMinor: z.number().int().positive('tutar pozitif olmali'),
     currency: z
       .string()
-      .transform((value) => (value === '' ? SUPPORTED_CURRENCY : value))
-      .refine(
-        (value) => value === SUPPORTED_CURRENCY,
-        `yalnizca ${SUPPORTED_CURRENCY} desteklenir`,
-      ),
+      .transform((value) => (value === '' ? CURRENCY : value))
+      .refine((value) => value === CURRENCY, `yalnizca ${CURRENCY} desteklenir`),
   },
   { required_error: 'amount zorunlu' },
 );

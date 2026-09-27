@@ -19,13 +19,19 @@ const listMarketCategories = createListMarketCategories(readers);
 
 describe('listNearbyMarkets', () => {
   it.each(['Ev', 'İş', 'Yazlık'] as const)(
-    '%s: hizmet veren marketler, yakindan uzaga, tam sayi metre',
+    '%s: hizmet veren marketler, yakindan uzaga; mesafe yuvarlanmamis metre',
     async (title: DemoAddressTitle) => {
       const nearby = await listNearbyMarkets(demoLocation(title));
+      const expected = EXPECTED_NEARBY[title];
 
-      expect(
-        nearby.map((entry) => ({ marketId: entry.market.id, meters: entry.distanceMeters })),
-      ).toEqual(EXPECTED_NEARBY[title]);
+      expect(nearby.map((entry) => entry.market.id)).toEqual(
+        expected.map((entry) => entry.marketId),
+      );
+      // Tam sayiya yuvarlama tasima isidir (mapper); burada ham mesafe,
+      // beklenen tam sayiya yarim metreden yakin.
+      nearby.forEach((entry, index) => {
+        expect(entry.distanceMeters).toBeCloseTo(expected[index]?.meters ?? Number.NaN, 0);
+      });
     },
   );
 

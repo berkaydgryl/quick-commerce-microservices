@@ -7,7 +7,7 @@
  * (amount_minor -> amountMinor, next_page_token -> nextPageToken).
  */
 
-import { ID_PREFIX } from '@getir/core';
+import { CURRENCY, ID_PREFIX } from '@getir/core';
 import { z } from 'zod';
 
 import {
@@ -72,7 +72,7 @@ export const isoDateTimeSchema = z.string().datetime();
  */
 export const moneySchema = z.object({
   amountMinor: z.number().int().min(0),
-  currency: z.literal('TRY'),
+  currency: z.literal(CURRENCY),
 });
 
 /** Eksik alan ve tip hatasi mesajlari; gateway'in bicim hatalariyla ayni sozcukler (params.go). */

@@ -1,24 +1,20 @@
+import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '@getir/contracts';
 import { describe, expect, it } from 'vitest';
 
-import {
-  DEFAULT_PAGE_SIZE,
-  MAX_PAGE_SIZE,
-  normalizePageSize,
-  sliceByCursor,
-} from '../../src/domain/pagination.js';
+import { normalizePageSize, sliceByCursor } from '../../src/domain/pagination.js';
 
 const items = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }, { id: 'e' }];
 
 describe('normalizePageSize', () => {
   it('verilmeyen, sifir ve negatif degerde varsayilani uygular', () => {
-    expect(normalizePageSize(undefined)).toBe(DEFAULT_PAGE_SIZE);
-    expect(normalizePageSize(0)).toBe(DEFAULT_PAGE_SIZE);
-    expect(normalizePageSize(-5)).toBe(DEFAULT_PAGE_SIZE);
+    expect(normalizePageSize(undefined)).toBe(PAGE_SIZE_DEFAULT);
+    expect(normalizePageSize(0)).toBe(PAGE_SIZE_DEFAULT);
+    expect(normalizePageSize(-5)).toBe(PAGE_SIZE_DEFAULT);
   });
 
   it('ust siniri asan degeri REDDETMEZ, kirpar', () => {
     // Sozlesme boyle diyor: istek reddedilmez, sessizce kirpilir.
-    expect(normalizePageSize(1_000)).toBe(MAX_PAGE_SIZE);
+    expect(normalizePageSize(1_000)).toBe(PAGE_SIZE_MAX);
   });
 
   it('gecerli degeri oldugu gibi birakir', () => {
