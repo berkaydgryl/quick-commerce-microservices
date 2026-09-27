@@ -2,10 +2,11 @@
  * OrderRepository portunun sozlesmesi: yazma/okuma, cakisma ve iyimser kilit.
  */
 
-import { AppError, ERROR_CODES, fixedClock, ORDER_STATUS } from '@getir/core';
+import { AppError, ERROR_CODES, fixedClock, ORDER_STATUS, RISK_BANDS } from '@getir/core';
 import { describe, expect, it } from 'vitest';
 
 import type { OrderRepository } from '../../src/domain/order-repository.js';
+import type { Order } from '../../src/domain/order.js';
 import { TIMELINE_NOTE, transitionOrder } from '../../src/domain/order.js';
 import type { OrderStoreFixtures } from './order-store-fixtures.js';
 import { START_MS } from './order-store-fixtures.js';
@@ -19,17 +20,22 @@ export function describeOrderRepositoryContract(
     it('yazilan siparis ALAN KAYBI olmadan geri okunur (timeline notu ve tarihler dahil)', async () => {
       const store = getStore();
       const draft = draftAt(newUserId(), START_MS);
-      const walked = transitionOrder(
-        draft,
-        ORDER_STATUS.RISK_CHECK,
-        fixedClock(START_MS + 1_000),
-        TIMELINE_NOTE.PENDING_RISK_SERVICE,
+      // Not ve risk bandi (T7.1) istege bagli alanlardir: ikisi de geri okunmali.
+      const walked: Order = {
+        ...transitionOrder(draft, ORDER_STATUS.RISK_CHECK, fixedClock(START_MS + 1_000)),
+        riskBand: RISK_BANDS.MEDIUM,
+      };
+      const reserved = transitionOrder(
+        walked,
+        ORDER_STATUS.RESERVED,
+        fixedClock(START_MS + 2_000),
+        TIMELINE_NOTE.PENDING_RESERVATION,
       );
 
-      await store.insert(walked);
+      await store.insert(reserved);
 
-      const read = await store.findById(walked.id);
-      expect(read).toEqual(walked);
+      const read = await store.findById(reserved.id);
+      expect(read).toEqual(reserved);
       expect(read?.timeline[1]?.at).toBeInstanceOf(Date);
     });
 

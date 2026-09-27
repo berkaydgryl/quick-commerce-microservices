@@ -686,9 +686,12 @@ paths:
       operationId: createOrder
       summary: Rezervasyonu siparişe çevir (saga başlangıcı)
       description: |
-        Rezervasyon kimliği (`orderId`) ile risk skorlama, ödeme ve kurye
-        atama saga'sını başlatır. Risk orta seviyede ise ödeme 3DS ister ve
-        sipariş `AWAITING_PAYMENT` durumunda döner.
+        Rezervasyon kimliği (`orderId`) ile risk skorlama ve ödeme saga'sını
+        başlatır (T7.1). Risk orta seviyede ise kart + 3DS zorunludur: ödeme
+        3DS ister, sipariş `AWAITING_PAYMENT` durumunda `challengeId` ile döner
+        ve `/v1/orders/{id}/3ds` ile tamamlanır. Kapıda ödeme yalnızca düşük
+        risk bandında açıktır. Yüksek bant siparişi manuel incelemeye alır
+        (`202 RISK_REVIEW`), kritik bant reddeder (`403 RISK_BLOCKED`).
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -741,8 +744,18 @@ paths:
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "202":
+          description: |
+            Risk yüksek (HIGH): sipariş `REVIEW` durumunda, manuel inceleme
+            bekliyor (`RISK_REVIEW`). Ödeme alınmadı.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
         "402":
-          description: Ödeme reddedildi
+          description: |
+            Ödeme reddedildi: sipariş `PAYMENT_FAILED` durumuna geçti (tutar
+            çekilmedi). Kullanıcı yeni bir sepetle tekrar dener.
           content:
             application/json:
               schema:
@@ -754,10 +767,19 @@ paths:
                     success: false
                     error:
                       code: PAYMENT_DECLINED
-                      message: "Ödeme reddedildi, rezervasyon geri alındı."
+                      message: "Ödeme alınamadı. Başka bir kart deneyebilirsin."
                       details:
-                        reason: INSUFFICIENT_FUNDS
+                        orderId: "ord_db77f4c0e24f49919cc1d78a649c9c94"
+                        status: PAYMENT_FAILED
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "403":
+          description: |
+            Risk kritik (CRITICAL): sipariş `REJECTED` durumunda (`RISK_BLOCKED`).
+            Ödeme alınmadı.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
         "404":
           description: Rezervasyon bulunamadı
           content:
@@ -803,22 +825,25 @@ paths:
                         status: PAID
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "422":
-          description: İş kuralı engeli (risk veya minimum sepet)
+          description: |
+            İş kuralı engeli: kapıda ödeme bu risk bandında kapalı
+            (`PAYMENT_METHOD_NOT_ALLOWED`; sipariş taslakta kalır, kartla tekrar
+            denenir) ya da minimum sepet sağlanmadı.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
               examples:
-                riskRejected:
-                  summary: RISK_BLOCKED
+                paymentMethodNotAllowed:
+                  summary: PAYMENT_METHOD_NOT_ALLOWED
                   value:
                     success: false
                     error:
-                      code: RISK_BLOCKED
-                      message: "Sipariş risk kuralları nedeniyle reddedildi."
+                      code: PAYMENT_METHOD_NOT_ALLOWED
+                      message: "Bu sipariş için kapıda ödeme kullanılamıyor. Kartla ödemeyi dener misin?"
                       details:
-                        score: 91
-                        triggeredRules: ["VELOCITY_5M", "NEW_ACCOUNT_HIGH_BASKET"]
+                        orderId: "ord_db77f4c0e24f49919cc1d78a649c9c94"
+                        paymentMethod: CASH_ON_DELIVERY
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
                 minBasketNotMet:
                   summary: MIN_BASKET_NOT_MET
@@ -1284,6 +1309,7 @@ components:
         - PAYMENT_DECLINED
         - THREEDS_REQUIRED
         - THREEDS_FAILED
+        - PAYMENT_METHOD_NOT_ALLOWED
         # Sepet, fiyat ve siparis
         - PRICE_CHANGED
         - COUPON_INVALID

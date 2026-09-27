@@ -17,7 +17,7 @@ const call = useOrderGrpcServer();
 // Ayri sunucu: catalog'a ulasilamayan order.
 const unreachableCatalog = new FakeCatalogPricing();
 unreachableCatalog.failure = new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'catalog yok');
-const callWithoutCatalog = useOrderGrpcServer(unreachableCatalog);
+const callWithoutCatalog = useOrderGrpcServer({ catalog: unreachableCatalog });
 
 describe('CreateDraftOrder', () => {
   it('onekli orderId ve DRAFT durumu doner', async () => {

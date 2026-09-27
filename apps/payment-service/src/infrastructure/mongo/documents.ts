@@ -44,6 +44,8 @@ export interface PaymentDocument extends BaseDocument {
   status: PaymentStatus;
   failureCode?: ErrorCode;
   threeDS?: ThreeDsDocument;
+  /** Yalnizca iade edilmis odemede yazilir. */
+  refundReason?: string;
   attempts: AttemptDocument[];
   idempotencyKey: string;
   /** Iyimser kilit surumu; guncelleme filtresi bunu kosul olarak kullanir. */

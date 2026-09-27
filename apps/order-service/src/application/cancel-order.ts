@@ -16,6 +16,7 @@ import type { OrderRepository } from '../domain/order-repository.js';
 import type { Order } from '../domain/order.js';
 import { TIMELINE_NOTE, transitionOrder } from '../domain/order.js';
 import { USER_CANCELLABLE } from '../domain/order-state-machine.js';
+import { findOwnOrder } from './own-order.js';
 
 export interface CancelOrderDeps {
   readonly repository: OrderRepository;
@@ -33,12 +34,7 @@ export type CancelOrder = (input: CancelOrderInput) => Promise<Order>;
 
 export function createCancelOrder(deps: CancelOrderDeps): CancelOrder {
   return async ({ orderId, userId, reason }) => {
-    const order = await deps.repository.findById(orderId);
-
-    // Baskasinin siparisi NOT_FOUND (varlik bilgisi sizmasin) - CreateOrder ile ayni kural.
-    if (order === null || order.userId !== userId) {
-      throw AppError.notFound('Siparis bulunamadi', { details: { orderId } });
-    }
+    const order = await findOwnOrder(deps.repository, orderId, userId);
 
     // Tabloda CANCELLED'a kenar olsa bile (PAID -> CANCELLED) kullanici
     // tetikleyemez: o kenar sistemin telafi adimidir.

@@ -77,6 +77,7 @@ describe('Charge - log baglami', () => {
       method: paymentV1.PaymentMethod.PAYMENT_METHOD_CARD,
       cardToken: 'tok_test_4242',
       idempotencyKey: 'anahtar-log-0001',
+      requireThreeDs: false,
     };
 
     await new Promise<void>((resolve, reject) => {

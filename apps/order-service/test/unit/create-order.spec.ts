@@ -1,94 +1,218 @@
 /**
- * Use-case testi: sahte depo (bellek) ile, ag ve veritabani olmadan.
+ * CreateOrder saga'si (T7.1), RISK adimi: bellek deposu, sahte risk ve odeme.
+ * Odeme adiminin sonuclari ve telafi create-order-payment.spec.ts'te.
  */
 
-import { AppError, ERROR_CODES, ORDER_STATUS, systemClock } from '@getir/core';
+import {
+  AppError,
+  ERROR_CODES,
+  fixedClock,
+  ORDER_STATUS,
+  RISK_BANDS,
+  silentLogger,
+} from '@getir/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createCreateOrder } from '../../src/application/create-order.js';
+import { PAYMENT_METHOD } from '../../src/domain/checkout-payment.js';
+import { transitionOrder } from '../../src/domain/order.js';
 import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-order-store.js';
-import { insertDraft } from '../support/order-builders.js';
+import { FakePayments, TEST_CARD } from '../support/fake-payments.js';
+import { FakeRiskAssessment } from '../support/fake-risk-assessment.js';
+import { insertDraft, SAMPLE_PRICING } from '../support/order-builders.js';
+
+const DRAFT_AT_MS = 1_760_000_000_000;
+/** Taslak ile siparis arasi: checkout-dwell sinyali sunucuda olculur (B9). */
+const DWELL_MS = 45_000;
+const scope = { requestId: 'req_saga_1', logger: silentLogger };
+const byCard = { method: PAYMENT_METHOD.CARD, cardToken: TEST_CARD.APPROVED } as const;
+const cashOnDelivery = { method: PAYMENT_METHOD.CASH_ON_DELIVERY } as const;
 
 let repository: InMemoryOrderStore;
+let risk: FakeRiskAssessment;
+let payments: FakePayments;
 let create: ReturnType<typeof createCreateOrder>;
 
 beforeEach(() => {
   repository = new InMemoryOrderStore();
-  create = createCreateOrder({ repository, clock: systemClock });
+  risk = new FakeRiskAssessment();
+  payments = new FakePayments();
+  create = createCreateOrder({
+    repository,
+    history: repository,
+    risk,
+    payments,
+    clock: fixedClock(DRAFT_AT_MS + DWELL_MS),
+  });
 });
 
-describe('createOrder use-case', () => {
-  it('taslagi AWAITING_PAYMENT durumuna gecirir', async () => {
-    const { id } = await insertDraft(repository, systemClock);
+const draft = () => insertDraft(repository, fixedClock(DRAFT_AT_MS));
 
-    const order = await create({ orderId: id, userId: 'usr_1' });
+describe('CreateOrder - mutlu yol (LOW, kart)', () => {
+  it('taslak odenmis siparis olur; tablo ADIM ADIM yurunur, bant kaydedilir', async () => {
+    const { id } = await draft();
 
-    expect(order.status).toBe(ORDER_STATUS.AWAITING_PAYMENT);
-    // Yeni kayit acilmaz, ayni siparis guncellenir.
-    expect(repository.size).toBe(1);
-  });
+    const { order, challengeId } = await create({ orderId: id, userId: 'usr_1', ...byCard }, scope);
 
-  it('tablodaki yolu ADIM ADIM yurur; gecici adimlar nedeniyle zaman cizelgesinde (T4.4)', async () => {
-    const { id } = await insertDraft(repository, systemClock);
-
-    const order = await create({ orderId: id, userId: 'usr_1' });
-
+    expect(order.status).toBe(ORDER_STATUS.PAID);
+    expect(challengeId).toBeUndefined();
     expect(order.timeline.map((entry) => [entry.status, entry.note])).toEqual([
       [ORDER_STATUS.DRAFT, undefined],
-      // risk-svc (T6.3) ve rezervasyon (T11.2) henuz yok: sessizce atlanmaz.
-      [ORDER_STATUS.RISK_CHECK, 'PENDING_RISK_SERVICE'],
+      [ORDER_STATUS.RISK_CHECK, undefined],
+      // Stok rezervasyonu T11.2'de: adim sessizce atlanmaz, notuyla gorunur.
       [ORDER_STATUS.RESERVED, 'PENDING_RESERVATION'],
       [ORDER_STATUS.AWAITING_PAYMENT, undefined],
+      [ORDER_STATUS.PAID, undefined],
     ]);
-    await expect(repository.findById(id)).resolves.toMatchObject({ timeline: order.timeline });
+    await expect(repository.findById(id)).resolves.toEqual(order);
+    expect(order.riskBand).toBe(RISK_BANDS.LOW);
   });
 
-  it('olmayan sipariste NOT_FOUND verir', async () => {
-    const failing = create({ orderId: 'ord_yok', userId: 'usr_1' });
+  it('cekim dondurulmus toplamla, siparisten turetilen anahtarla, 3DS zorunlu olmadan', async () => {
+    const { id } = await draft();
 
-    await expect(failing).rejects.toBeInstanceOf(AppError);
-    await expect(failing).rejects.toMatchObject({ code: ERROR_CODES.NOT_FOUND });
+    await create({ orderId: id, userId: 'usr_1', ...byCard }, scope);
+
+    expect(payments.charges).toEqual([
+      {
+        orderId: id,
+        userId: 'usr_1',
+        amountMinor: SAMPLE_PRICING.totalMinor,
+        currency: 'TRY',
+        method: PAYMENT_METHOD.CARD,
+        cardToken: TEST_CARD.APPROVED,
+        idempotencyKey: `charge-${id}`,
+        requireThreeDs: false,
+      },
+    ]);
   });
 
-  it('baskasinin siparisinde de NOT_FOUND verir (varlik bilgisi sizmasin)', async () => {
-    const { id } = await insertDraft(repository, systemClock);
+  it('risk baglami sunucudaki veriden: tutar, konum, gecmis ve olculen bekleme suresi', async () => {
+    const { id } = await draft();
 
-    // PERMISSION_DENIED donseydi "bu kimlikte siparis var" bilgisi sizardi.
-    await expect(create({ orderId: id, userId: 'usr_2' })).rejects.toMatchObject({
-      code: ERROR_CODES.NOT_FOUND,
+    await create({ orderId: id, userId: 'usr_1', ...byCard }, scope);
+
+    expect(risk.contexts).toEqual([
+      {
+        userId: 'usr_1',
+        orderId: id,
+        marketId: 'mkt_migros-jet-moda',
+        deliveredOrderCount: 0,
+        cancelledOrderCount: 0,
+        basketTotalMinor: SAMPLE_PRICING.totalMinor,
+        currency: 'TRY',
+        checkoutDwellMs: DWELL_MS,
+        deliveryLocation: { lat: 40.9885, lng: 29.0262 },
+      },
+    ]);
+  });
+
+  it('LOW bantta kapida odeme acik: cekim yok, siparis PAID (not CASH_ON_DELIVERY)', async () => {
+    const { id } = await draft();
+
+    const { order } = await create({ orderId: id, userId: 'usr_1', ...cashOnDelivery }, scope);
+
+    expect(order.status).toBe(ORDER_STATUS.PAID);
+    expect(order.timeline.at(-1)?.note).toBe('CASH_ON_DELIVERY');
+    expect(payments.charges[0]).toMatchObject({ method: 'CASH_ON_DELIVERY' });
+    expect(payments.charges[0]).not.toHaveProperty('cardToken');
+  });
+});
+
+describe('CreateOrder - bantlar', () => {
+  it('MEDIUM: kart + 3DS zorunlu; siparis odeme bekler, challengeId doner', async () => {
+    risk.band = RISK_BANDS.MEDIUM;
+    const { id } = await draft();
+
+    const { order, challengeId } = await create({ orderId: id, userId: 'usr_1', ...byCard }, scope);
+
+    expect(payments.charges[0]?.requireThreeDs).toBe(true);
+    expect(challengeId).toBe('tds_sahte_dogrulama');
+    expect(order.status).toBe(ORDER_STATUS.AWAITING_PAYMENT);
+    await expect(repository.findById(id)).resolves.toMatchObject({
+      status: ORDER_STATUS.AWAITING_PAYMENT,
+      riskBand: RISK_BANDS.MEDIUM,
     });
   });
 
-  it('ayni siparis iki kez olusturulamaz', async () => {
-    const { id } = await insertDraft(repository, systemClock);
-    await create({ orderId: id, userId: 'usr_1' });
+  it('MEDIUM + kapida odeme: PAYMENT_METHOD_NOT_ALLOWED, siparis DRAFT kalir, cekim yok', async () => {
+    risk.band = RISK_BANDS.MEDIUM;
+    const original = await draft();
 
-    await expect(create({ orderId: id, userId: 'usr_1' })).rejects.toMatchObject({
+    const failing = create({ orderId: original.id, userId: 'usr_1', ...cashOnDelivery }, scope);
+
+    await expect(failing).rejects.toMatchObject({
+      code: ERROR_CODES.PAYMENT_METHOD_NOT_ALLOWED,
+      details: { orderId: original.id, paymentMethod: 'CASH_ON_DELIVERY' },
+    });
+    await expect(repository.findById(original.id)).resolves.toEqual(original);
+    expect(payments.charges).toEqual([]);
+  });
+
+  it.each([
+    [RISK_BANDS.HIGH, ORDER_STATUS.REVIEW, ERROR_CODES.RISK_REVIEW],
+    [RISK_BANDS.CRITICAL, ORDER_STATUS.REJECTED, ERROR_CODES.RISK_BLOCKED],
+  ])('%s: siparis %s yazilir, %s doner, odeme alinmaz', async (band, status, code) => {
+    risk.band = band;
+    const { id } = await draft();
+
+    const failing = create({ orderId: id, userId: 'usr_1', ...byCard }, scope);
+
+    await expect(failing).rejects.toMatchObject({ code, details: { orderId: id, status } });
+    const stored = await repository.findById(id);
+    expect(stored?.timeline.map((entry) => [entry.status, entry.note])).toEqual([
+      [ORDER_STATUS.DRAFT, undefined],
+      [ORDER_STATUS.RISK_CHECK, undefined],
+      [status, code],
+    ]);
+    expect(stored?.riskBand).toBe(band);
+    expect(payments.charges).toEqual([]);
+  });
+});
+
+describe('CreateOrder - on kosullar', () => {
+  it('risk servisine ulasilamazsa HICBIR SEY yazilmaz: riski atlayarak odeme alinmaz', async () => {
+    risk.failure = new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'risk kapali');
+    const original = await draft();
+
+    await expect(
+      create({ orderId: original.id, userId: 'usr_1', ...byCard }, scope),
+    ).rejects.toMatchObject({ code: ERROR_CODES.SERVICE_UNAVAILABLE });
+    await expect(repository.findById(original.id)).resolves.toEqual(original);
+    expect(payments.charges).toEqual([]);
+  });
+
+  it.each([
+    ['olmayan siparis', 'ord_yok', 'usr_1'],
+    ['baskasinin siparisi (varlik bilgisi sizmasin)', undefined, 'usr_2'],
+  ])('%s: NOT_FOUND, risk sorulmaz', async (_name, orderId, userId) => {
+    const { id } = await draft();
+
+    await expect(
+      create({ orderId: orderId ?? id, userId, ...byCard }, scope),
+    ).rejects.toMatchObject({ code: ERROR_CODES.NOT_FOUND });
+    expect(risk.contexts).toEqual([]);
+  });
+
+  it('odenmis siparis ikinci kez olusturulamaz: ORDER_STATE_INVALID, risk sorulmaz', async () => {
+    const { id } = await draft();
+    await create({ orderId: id, userId: 'usr_1', ...byCard }, scope);
+
+    await expect(create({ orderId: id, userId: 'usr_1', ...byCard }, scope)).rejects.toMatchObject({
       code: ERROR_CODES.ORDER_STATE_INVALID,
     });
-    // Basarisiz ikinci deneme kayitli siparisi DEGISTIRMEZ.
-    await expect(repository.findById(id)).resolves.toMatchObject({
-      status: ORDER_STATUS.AWAITING_PAYMENT,
-    });
+    expect(risk.contexts).toHaveLength(1);
+    expect(payments.charges).toHaveLength(1);
   });
 
-  it('ayni taslaga ES ZAMANLI iki CreateOrder: biri gecer, digeri CONFLICT (surum kontrolu)', async () => {
-    const { id } = await insertDraft(repository, systemClock);
+  it('iptal edilmis taslak: ORDER_STATE_INVALID', async () => {
+    const original = await draft();
+    const cancelled = transitionOrder(original, ORDER_STATUS.CANCELLED, fixedClock(DRAFT_AT_MS));
+    await repository.update(cancelled, original.version);
 
-    // Ikisi de taslagi DRAFT olarak okur; surum kontrolu olmasa ikisi de yazardi.
-    const results = await Promise.allSettled([
-      create({ orderId: id, userId: 'usr_1' }),
-      create({ orderId: id, userId: 'usr_1' }),
-    ]);
-
-    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
-    expect(results.find((result) => result.status === 'rejected')).toMatchObject({
-      reason: { code: ERROR_CODES.CONFLICT },
-    });
-    await expect(repository.findById(id)).resolves.toMatchObject({
-      status: ORDER_STATUS.AWAITING_PAYMENT,
-      // DRAFT(1) -> RISK_CHECK -> RESERVED -> AWAITING_PAYMENT: tek yurume, uc gecis.
-      version: 4,
-    });
+    await expect(
+      create({ orderId: original.id, userId: 'usr_1', ...byCard }, scope),
+    ).rejects.toMatchObject({ code: ERROR_CODES.ORDER_STATE_INVALID });
+    expect(risk.contexts).toEqual([]);
   });
 });

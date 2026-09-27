@@ -10,7 +10,7 @@
 
 import { connectMongo } from '@getir/mongo-kit';
 import type { MongoConnection } from '@getir/mongo-kit';
-import { orderV1 } from '@getir/proto';
+import { orderV1, paymentV1 } from '@getir/proto';
 import { startGrpcServer } from '@getir/service-kit';
 import type { GrpcServerHandle } from '@getir/service-kit';
 import { Client, credentials, Metadata } from '@grpc/grpc-js';
@@ -23,6 +23,8 @@ import { z } from 'zod';
 
 import { buildOrderService } from '../../src/bootstrap.js';
 import { FakeCatalogPricing } from '../support/fake-catalog-pricing.js';
+import { FakePayments, TEST_CARD } from '../support/fake-payments.js';
+import { FakeRiskAssessment } from '../support/fake-risk-assessment.js';
 import { DRAFT_TOTAL_MINOR, draftRequest } from '../support/order-fixtures.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
 import { OrderMongoStore } from '../../src/infrastructure/mongo/order-mongo-store.js';
@@ -105,6 +107,8 @@ describe('gRPC -> Mongo (T4.5 bitti sayilir: siparis Mongo da gorulur)', () => {
         buildOrderService({
           store: { repository: store, history: store },
           catalog: new FakeCatalogPricing(),
+          risk: new FakeRiskAssessment(),
+          payments: new FakePayments(),
         }),
       ],
     });
@@ -116,7 +120,7 @@ describe('gRPC -> Mongo (T4.5 bitti sayilir: siparis Mongo da gorulur)', () => {
     await handle?.shutdown('test bitti');
   });
 
-  it('taslak -> siparis: belge orders koleksiyonunda, zaman cizelgesi ve surumuyle', async () => {
+  it('taslak -> odenmis siparis (saga, T7.1): belge orders koleksiyonunda, zaman cizelgesi, bant ve surumuyle', async () => {
     const draft = await call(orderV1.OrderServiceService.createDraftOrder, {
       ...draftRequest,
       userId: 'usr_grpc',
@@ -125,8 +129,8 @@ describe('gRPC -> Mongo (T4.5 bitti sayilir: siparis Mongo da gorulur)', () => {
     await call(orderV1.OrderServiceService.createOrder, {
       orderId,
       userId: 'usr_grpc',
-      paymentMethod: 0,
-      cardToken: '',
+      paymentMethod: paymentV1.PaymentMethod.PAYMENT_METHOD_CARD,
+      cardToken: TEST_CARD.APPROVED,
       idempotencyKey: '4f1c3a2b-9d8e-11ef',
     });
 
@@ -138,8 +142,9 @@ describe('gRPC -> Mongo (T4.5 bitti sayilir: siparis Mongo da gorulur)', () => {
     expect(document).toMatchObject({
       userId: 'usr_grpc',
       marketId: 'mkt_migros-jet-moda',
-      status: 'AWAITING_PAYMENT',
-      version: 4,
+      status: 'PAID',
+      riskBand: 'LOW',
+      version: 5,
       items: [
         {
           productId: 'prd_01',
@@ -162,15 +167,16 @@ describe('gRPC -> Mongo (T4.5 bitti sayilir: siparis Mongo da gorulur)', () => {
     expect(document?.['pricing']).not.toHaveProperty('couponCode');
     expect(document?.['timeline']).toMatchObject([
       { status: 'DRAFT' },
-      { status: 'RISK_CHECK', note: 'PENDING_RISK_SERVICE' },
+      { status: 'RISK_CHECK' },
       { status: 'RESERVED', note: 'PENDING_RESERVATION' },
       { status: 'AWAITING_PAYMENT' },
+      { status: 'PAID' },
     ]);
 
     // Ayni kayit GetOrder ve ListMyOrders ile de okunur (servis yeniden baslasa da).
     const got = await call(orderV1.OrderServiceService.getOrder, { orderId, userId: 'usr_grpc' });
     const listed = await call(orderV1.OrderServiceService.listMyOrders, { userId: 'usr_grpc' });
-    expect(got.response?.order?.status).toBe(orderV1.OrderStatus.ORDER_STATUS_AWAITING_PAYMENT);
+    expect(got.response?.order?.status).toBe(orderV1.OrderStatus.ORDER_STATUS_PAID);
     expect(listed.response?.orders.map((order) => order.id)).toEqual([orderId]);
   });
 });

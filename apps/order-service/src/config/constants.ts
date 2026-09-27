@@ -24,6 +24,20 @@ export const DEFAULT_CATALOG_GRPC_ADDR = 'localhost:50051';
  */
 export const CATALOG_CALL_TIMEOUT_MS = 2_000;
 
+/** Risk ve odeme servislerinin varsayilan adresleri (roadmap port haritasi). */
+export const DEFAULT_RISK_GRPC_ADDR = 'localhost:50055';
+export const DEFAULT_PAYMENT_GRPC_ADDR = 'localhost:50054';
+
+/**
+ * Saga cagrilarinin sure sinirlari (ms), T7.1. CreateOrder'da ikisi arka arkaya
+ * calisir ve toplami gateway'in 5 sn'lik sinirinin ALTINDA kalmali
+ * (GATEWAY_REQUEST_TIMEOUT_MS): once order kendi hatasini (SERVICE_UNAVAILABLE)
+ * dondurmeli. Risk kurallari kendi zaman asimlariyla sinirlidir, 1 sn yeter;
+ * odeme bankaya gittigi icin daha uzun.
+ */
+export const RISK_CALL_TIMEOUT_MS = 1_000;
+export const PAYMENT_CALL_TIMEOUT_MS = 3_000;
+
 /**
  * Kupon kodunun en uzun hali. Bilinmeyen kod zaten COUPON_INVALID alir; sinir
  * sinirsiz metnin kapidan gecmemesi icindir. REST karsiligi T7.5'te ayni degeri alir.

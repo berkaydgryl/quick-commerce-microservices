@@ -19,6 +19,7 @@ import {
   PAYMENT_METHOD,
   settlePayment,
   startPayment,
+  withRequiredThreeDs,
 } from '../domain/payment.js';
 import type { ChargeCommand, Payment } from '../domain/payment.js';
 import type { PaymentProvider } from '../domain/payment-provider.js';
@@ -36,6 +37,12 @@ export interface ChargeDeps {
 export interface ChargeInput extends ChargeCommand {
   /** Kartli odemede zorunlu, kapida odemede bos (sema dogrular). */
   readonly cardToken: string | undefined;
+  /**
+   * Risk'in "3DS zorunlu" karari (T7.1). Cekim NIYETININ parcasi degil,
+   * politikadir: tekrar-istek karsilastirmasina (isSameCharge) girmez ve
+   * kayda yazilmaz; etkisi karar ve deneme gecmisinde gorunur.
+   */
+  readonly requireThreeDs: boolean;
 }
 
 /**
@@ -46,7 +53,7 @@ export interface ChargeInput extends ChargeCommand {
 export type Charge = (input: ChargeInput, logger: Logger) => Promise<Payment>;
 
 export function createCharge(deps: ChargeDeps): Charge {
-  return async ({ cardToken, ...command }, logger) => {
+  return async ({ cardToken, requireThreeDs, ...command }, logger) => {
     const replay = await findReplay(deps.repository, command);
     if (replay !== null) {
       return replay;
@@ -72,7 +79,7 @@ export function createCharge(deps: ChargeDeps): Charge {
     if (command.method === PAYMENT_METHOD.CASH_ON_DELIVERY || cardToken === undefined) {
       return pending;
     }
-    const settled = await authorizeAndSettle(deps, pending, cardToken, logger);
+    const settled = await authorizeAndSettle(deps, pending, { cardToken, requireThreeDs }, logger);
     await deps.repository.update(settled, pending.version);
     return settled;
   };
@@ -98,12 +105,16 @@ async function findReplay(
 async function authorizeAndSettle(
   deps: ChargeDeps,
   pending: Payment,
-  cardToken: string,
+  card: { readonly cardToken: string; readonly requireThreeDs: boolean },
   logger: Logger,
 ): Promise<Payment> {
   try {
-    const decision = await deps.provider.authorize({ cardToken, amount: pending.amount });
-    return settlePayment(pending, decision, deps.clock, deps.challengeTtlMs);
+    const decision = await deps.provider.authorize({
+      cardToken: card.cardToken,
+      amount: pending.amount,
+    });
+    const effective = withRequiredThreeDs(decision, card.requireThreeDs);
+    return settlePayment(pending, effective, deps.clock, deps.challengeTtlMs);
   } catch (error) {
     // Hata istemciye degil gunluge: tutar cekilmedi, kayit FAILED olur.
     logger.error({ err: error, orderId: pending.orderId }, 'odeme saglayicisina ulasilamadi');

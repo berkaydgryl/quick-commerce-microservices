@@ -14,12 +14,16 @@ import {
   IDEMPOTENCY_KEY_MIN_LENGTH,
   marketIdSchema,
   moneySchema,
+  OTP_PATTERN,
   PAGE_SIZE_DEFAULT,
   PAGE_SIZE_MAX,
 } from '@getir/contracts';
 import { CURRENCY, isSku } from '@getir/core';
+import { paymentV1 } from '@getir/proto';
 import { z } from 'zod';
 
+import { PAYMENT_METHOD } from '../../domain/checkout-payment.js';
+import type { PaymentMethod } from '../../domain/checkout-payment.js';
 import type { OrderHistoryCursor } from '../../domain/order-history-cursor.js';
 
 import { MAX_CANCEL_REASON_LENGTH, MAX_COUPON_CODE_LENGTH } from '../../config/constants.js';
@@ -101,13 +105,77 @@ export const createDraftOrderRequestSchema = z.object({
   couponCode,
 });
 
-export const createOrderRequestSchema = z.object({
+/**
+ * Proto yontemi -> order'in sozlugu. Record TUM enum degerlerini ister: proto'ya
+ * yontem eklenirse burasi DERLEMEDE kirilir. UNSPECIFIED/UNRECOGNIZED gecersiz.
+ */
+const METHOD_FROM_PROTO: Readonly<Record<paymentV1.PaymentMethod, PaymentMethod | undefined>> = {
+  [paymentV1.PaymentMethod.PAYMENT_METHOD_UNSPECIFIED]: undefined,
+  [paymentV1.PaymentMethod.PAYMENT_METHOD_CARD]: PAYMENT_METHOD.CARD,
+  [paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY]: PAYMENT_METHOD.CASH_ON_DELIVERY,
+  [paymentV1.PaymentMethod.UNRECOGNIZED]: undefined,
+};
+
+const paymentMethod = z.nativeEnum(paymentV1.PaymentMethod).transform((value, ctx) => {
+  const mapped = METHOD_FROM_PROTO[value];
+  if (mapped === undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'odeme yontemi zorunlu' });
+    return z.NEVER;
+  }
+  return mapped;
+});
+
+/**
+ * CreateOrder (T7.1): odeme yontemi ve kart jetonu artik okunur. Kartli odemede
+ * jeton zorunlu; kapida odemede dolu jeton sessizce yok sayilmaz (istemci
+ * yontemi yanlis secmis olabilir) - payment-svc'deki kuralla ayni.
+ * Kapida odemenin RISK bandina gore kapali olmasi is kuralidir, use-case'tedir.
+ */
+export const createOrderRequestSchema = z
+  .object({
+    orderId: requiredText('orderId'),
+    userId: requiredText('userId'),
+    paymentMethod,
+    cardToken: z.string().trim(),
+    idempotencyKey,
+  })
+  .superRefine((input, ctx) => {
+    // Yontem gecersizse jeton kurali ikinci bir hata uretmesin: istemci once yontemi duzeltir.
+    const knownMethods: readonly unknown[] = Object.values(PAYMENT_METHOD);
+    if (!knownMethods.includes(input.paymentMethod)) {
+      return;
+    }
+    const isCard = input.paymentMethod === PAYMENT_METHOD.CARD;
+    if (isCard && input.cardToken === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['cardToken'],
+        message: 'kartli odemede zorunlu',
+      });
+    }
+    if (!isCard && input.cardToken !== '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['cardToken'],
+        message: 'kapida odemede bos olmali',
+      });
+    }
+  })
+  .transform(({ cardToken, ...rest }) => ({
+    ...rest,
+    ...(cardToken === '' ? {} : { cardToken }),
+  }));
+
+/**
+ * ConfirmPayment (T7.1). Kod bicimi sozlesmedeki OTP kuraliyla ayni (6 hane);
+ * bicimi bozuk kod payment-svc'ye hic gitmez, hak yanmaz.
+ */
+export const confirmPaymentRequestSchema = z.object({
   orderId: requiredText('orderId'),
   userId: requiredText('userId'),
+  challengeId: requiredText('challengeId'),
+  code: z.string().trim().regex(OTP_PATTERN, '6 haneli kod olmali'),
   idempotencyKey,
-  // paymentMethod ve cardToken BUGUN OKUNMUYOR: odeme cekimi T7.1'de gelecek.
-  // Semaya simdiden koymak, dogrulanip hicbir yerde kullanilmayan bir alan
-  // uretirdi; sozlesmede duruyor olmasi yeterli.
 });
 
 /**

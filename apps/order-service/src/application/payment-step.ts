@@ -1,0 +1,182 @@
+/**
+ * Saga'nin odeme adimi (T7.1): cekim ve sonucun siparise islenmesi.
+ * CreateOrder (cekim) ve ConfirmPayment (3DS onayi) ayni isleme yolunu kullanir.
+ *
+ * TELAFI: cekim basarili oldu ama siparis PAID yazilamadi (surum cakismasi -
+ * ornegin kullanici tam o anda iptal etti) -> para GERI VERILIR, istemci
+ * CONFLICT alir. Cakismanin sebebi ayni odemenin es zamanli ikinci istegiyse
+ * (siparis zaten PAID) iade YAPILMAZ: kazanan istek siparisi odenmis yazmistir.
+ */
+
+import { AppError, ERROR_CODES, ORDER_STATUS } from '@getir/core';
+import type { Clock, ErrorCode } from '@getir/core';
+
+import {
+  chargeIdempotencyKey,
+  decidePayment,
+  PAYMENT_STATUS,
+  REFUND_REASON,
+  refundIdempotencyKey,
+} from '../domain/checkout-payment.js';
+import type { PaymentMethod, PaymentResult } from '../domain/checkout-payment.js';
+import { assertPaymentMethodAllowed, paymentPolicyOf } from '../domain/checkout-risk.js';
+import type { OrderRepository } from '../domain/order-repository.js';
+import type { Order } from '../domain/order.js';
+import { transitionOrder } from '../domain/order.js';
+import type { Payments } from './payments.js';
+import type { RequestScope } from './request-scope.js';
+
+export interface PaymentStepDeps {
+  readonly repository: Pick<OrderRepository, 'update' | 'findById'>;
+  readonly payments: Payments;
+  readonly clock: Clock;
+}
+
+export interface CheckoutResult {
+  readonly order: Order;
+  /** Yalnizca 3DS bekleniyorsa dolu; istemci ConfirmPayment'a geri verir. */
+  readonly challengeId?: string;
+}
+
+export interface PaymentChoice {
+  readonly method: PaymentMethod;
+  readonly cardToken?: string;
+}
+
+/** Odeme bekleyen siparisin tutarini ceker. Tekrar denemede ayni anahtar gider. */
+export async function chargeOrder(
+  deps: PaymentStepDeps,
+  order: Order,
+  choice: PaymentChoice,
+  scope: RequestScope,
+): Promise<CheckoutResult> {
+  const policy = paymentPolicyOf(order);
+  assertPaymentMethodAllowed(order.id, choice.method, policy);
+
+  const result = await deps.payments.charge(
+    {
+      orderId: order.id,
+      userId: order.userId,
+      amountMinor: order.pricing.totalMinor,
+      currency: order.pricing.currency,
+      method: choice.method,
+      ...(choice.cardToken === undefined ? {} : { cardToken: choice.cardToken }),
+      idempotencyKey: chargeIdempotencyKey(order.id),
+      requireThreeDs: policy.requireThreeDs,
+    },
+    scope,
+  );
+  return settleOrderPayment(deps, order, choice.method, result, scope);
+}
+
+/** Odeme sonucunu siparise isler: PAID, PAYMENT_FAILED ya da 3DS beklemesi. */
+export async function settleOrderPayment(
+  deps: PaymentStepDeps,
+  order: Order,
+  method: PaymentMethod,
+  result: PaymentResult,
+  scope: RequestScope,
+): Promise<CheckoutResult> {
+  const decision = decidePayment(order.id, method, result);
+  switch (decision.kind) {
+    case 'awaiting-3ds':
+      return { order, challengeId: decision.challengeId };
+    case 'failed':
+      await markPaymentFailed(deps, order, decision.code);
+      throw new AppError(decision.code, 'Odeme alinamadi', {
+        details: { orderId: order.id, status: ORDER_STATUS.PAYMENT_FAILED },
+      });
+    case 'paid':
+      return { order: await markPaid(deps, order, result, decision.note, scope) };
+  }
+}
+
+/**
+ * Siparisi PAYMENT_FAILED yazar (not: hata anahtari). Hatayi CAGIRAN firlatir:
+ * 3DS kapanisinda payment-svc'nin kendi hatasi (kalan hak, sebep) istemciye
+ * aynen gitmeli. Cekim YAPILMADI; telafi gerekmez (rezervasyonun serbest
+ * birakilmasi T11.2).
+ */
+export async function markPaymentFailed(
+  deps: PaymentStepDeps,
+  order: Order,
+  code: ErrorCode,
+): Promise<Order> {
+  const failed = transitionOrder(order, ORDER_STATUS.PAYMENT_FAILED, deps.clock, code);
+  return writeTransition(deps.repository, order, failed);
+}
+
+async function markPaid(
+  deps: PaymentStepDeps,
+  order: Order,
+  result: PaymentResult,
+  note: string | undefined,
+  scope: RequestScope,
+): Promise<Order> {
+  const paid = transitionOrder(order, ORDER_STATUS.PAID, deps.clock, note);
+  try {
+    return await writeTransition(deps.repository, order, paid);
+  } catch (error) {
+    if (isConflict(error) && result.status === PAYMENT_STATUS.SUCCEEDED) {
+      await refundCharge(deps, order.id, scope);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Surum kontrollu yazar. Cakismada kayit tekrar okunur: zaten hedef durumdaysa
+ * (ayni istegin es zamanli tekrari yazdi) o kayit doner; degilse CONFLICT.
+ */
+async function writeTransition(
+  repository: PaymentStepDeps['repository'],
+  current: Order,
+  next: Order,
+): Promise<Order> {
+  try {
+    await repository.update(next, current.version);
+    return next;
+  } catch (error) {
+    if (!isConflict(error)) {
+      throw error;
+    }
+    const latest = await repository.findById(current.id);
+    if (latest?.status === next.status) {
+      return latest;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Telafi: alinan tutari geri verir. Iade de basarisiz olursa istemciye yine
+ * siparisin CONFLICT'i doner (siparis olusmadi); para ise alinmis durumdadir -
+ * bu satir ERROR seviyesinde gunluge dusar ve elle mudahale gerektirir. Kalici
+ * tekrar deneme outbox ile gelir (T7.3).
+ */
+async function refundCharge(
+  deps: PaymentStepDeps,
+  orderId: string,
+  scope: RequestScope,
+): Promise<void> {
+  try {
+    await deps.payments.refund(
+      {
+        orderId,
+        reason: REFUND_REASON.ORDER_CHANGED_DURING_PAYMENT,
+        idempotencyKey: refundIdempotencyKey(orderId),
+      },
+      scope,
+    );
+    scope.logger.warn({ orderId }, 'odeme alindi ama siparis PAID yazilamadi; tutar iade edildi');
+  } catch (refundError: unknown) {
+    scope.logger.error(
+      { err: refundError, orderId },
+      'TELAFI BASARISIZ: odeme alindi, siparis yazilamadi ve iade edilemedi',
+    );
+  }
+}
+
+function isConflict(error: unknown): boolean {
+  return error instanceof AppError && error.code === ERROR_CODES.CONFLICT;
+}

@@ -109,6 +109,12 @@ message ChargeRequest {
   // ADR-08: ayni anahtarla gelen ikinci cagri TEKRAR cekim yapmaz, ilk
   // cekimin kaydini doner. Odeme tarafinda bu kural en kritik yerdedir.
   string idempotency_key = 6;
+
+  // true ise banka onaylayacak olsa bile 3DS istenir (T7.1). Orta risk
+  // bandinda order-svc doldurur ("kart + 3DS zorunlu"); karar risk'e aittir,
+  // payment yalnizca uygular. Reddedilecek kart yine reddedilir. Kapida
+  // odemede anlamsizdir: true gelirse VALIDATION_FAILED.
+  bool require_three_ds = 7;
 }
 
 // Cekim cevabi.

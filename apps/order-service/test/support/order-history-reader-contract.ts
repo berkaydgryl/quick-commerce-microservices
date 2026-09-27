@@ -102,11 +102,6 @@ export function describeOrderHistoryReaderContract(
     it('hasPaidOrder: yalnizca odemesi ALINMIS siparis sayilir (ILK10)', async () => {
       const store = getStore();
       const userId = newUserId();
-      const walk = (order: Order, steps: readonly OrderStatus[]): Order =>
-        steps.reduce(
-          (current, status) => transitionOrder(current, status, fixedClock(START_MS)),
-          order,
-        );
 
       await expect(store.hasPaidOrder(userId)).resolves.toBe(false);
 
@@ -115,17 +110,64 @@ export function describeOrderHistoryReaderContract(
       await store.insert(walk(draftAt(userId, START_MS + 1), [ORDER_STATUS.CANCELLED]));
       await expect(store.hasPaidOrder(userId)).resolves.toBe(false);
 
-      await store.insert(
-        walk(draftAt(userId, START_MS + 2), [
-          ORDER_STATUS.RISK_CHECK,
-          ORDER_STATUS.RESERVED,
-          ORDER_STATUS.AWAITING_PAYMENT,
-          ORDER_STATUS.PAID,
-        ]),
-      );
+      await store.insert(walk(draftAt(userId, START_MS + 2), TO_PAID));
       await expect(store.hasPaidOrder(userId)).resolves.toBe(true);
       // Baska kullanicinin odemesi bu kullaniciyi etkilemez.
       await expect(store.hasPaidOrder(newUserId())).resolves.toBe(false);
     });
+
+    it('riskHistory (T7.1): teslim / iptal sayisi ve teslim edilenlerin ortalama sepeti', async () => {
+      const store = getStore();
+      const userId = newUserId();
+      const withTotal = (order: Order, totalMinor: number): Order => ({
+        ...order,
+        pricing: { ...order.pricing, totalMinor },
+      });
+
+      await store.insert(walk(withTotal(draftAt(userId, START_MS), 7_990), TO_DELIVERED));
+      await store.insert(walk(withTotal(draftAt(userId, START_MS + 1), 10_001), TO_DELIVERED));
+      await store.insert(walk(draftAt(userId, START_MS + 2), [ORDER_STATUS.CANCELLED]));
+      // Taslak ve odenmis ama teslim edilmemis siparis sayilmaz, ortalamaya girmez.
+      await store.insert(draftAt(userId, START_MS + 3));
+      await store.insert(walk(withTotal(draftAt(userId, START_MS + 4), 99_999), TO_PAID));
+      // Baska kullanicinin teslimati bu kullaniciyi etkilemez.
+      await store.insert(walk(draftAt(newUserId(), START_MS), TO_DELIVERED));
+
+      // (7_990 + 10_001) / 2 = 8_995,5 -> tam sayi kurus: 8_996.
+      await expect(store.riskHistory(userId)).resolves.toEqual({
+        deliveredCount: 2,
+        cancelledCount: 1,
+        averageBasketMinor: 8_996,
+      });
+    });
+
+    it('riskHistory: teslimati olmayan kullanicida ortalama YOK (0 degil)', async () => {
+      await expect(getStore().riskHistory(newUserId())).resolves.toEqual({
+        deliveredCount: 0,
+        cancelledCount: 0,
+      });
+    });
   });
+}
+
+const TO_PAID: readonly OrderStatus[] = [
+  ORDER_STATUS.RISK_CHECK,
+  ORDER_STATUS.RESERVED,
+  ORDER_STATUS.AWAITING_PAYMENT,
+  ORDER_STATUS.PAID,
+];
+
+const TO_DELIVERED: readonly OrderStatus[] = [
+  ...TO_PAID,
+  ORDER_STATUS.PREPARING,
+  ORDER_STATUS.ON_THE_WAY,
+  ORDER_STATUS.DELIVERED,
+];
+
+/** Siparisi tablodaki yoldan verilen durumlara yurutur (sabit saat). */
+function walk(order: Order, steps: readonly OrderStatus[]): Order {
+  return steps.reduce(
+    (current, status) => transitionOrder(current, status, fixedClock(START_MS)),
+    order,
+  );
 }

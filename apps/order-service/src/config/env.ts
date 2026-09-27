@@ -14,13 +14,21 @@ import { mongoEnvSchema } from '@getir/mongo-kit';
 import { grpcPort, serviceEnvSchema } from '@getir/service-kit';
 import { z } from 'zod';
 
-import { DEFAULT_CATALOG_GRPC_ADDR, DEFAULT_ORDER_GRPC_PORT } from './constants.js';
+import {
+  DEFAULT_CATALOG_GRPC_ADDR,
+  DEFAULT_ORDER_GRPC_PORT,
+  DEFAULT_PAYMENT_GRPC_ADDR,
+  DEFAULT_RISK_GRPC_ADDR,
+} from './constants.js';
 
 const serviceSchema = serviceEnvSchema.extend({
   ORDER_GRPC_PORT: grpcPort(DEFAULT_ORDER_GRPC_PORT),
   // Fiyatlar catalog'dan okunur (T7.2). Ad gateway'le ayni: iki servis ayni
   // catalog'a ayni degiskenle baglanir.
   CATALOG_GRPC_ADDR: envString(DEFAULT_CATALOG_GRPC_ADDR),
+  // Siparis saga'si (T7.1): risk degerlendirmesi ve odeme.
+  RISK_GRPC_ADDR: envString(DEFAULT_RISK_GRPC_ADDR),
+  PAYMENT_GRPC_ADDR: envString(DEFAULT_PAYMENT_GRPC_ADDR),
 });
 
 export type OrderServiceEnv = z.infer<typeof serviceSchema> & {

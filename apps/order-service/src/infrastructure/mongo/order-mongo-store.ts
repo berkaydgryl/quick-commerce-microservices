@@ -6,15 +6,16 @@
  * (test/support/order-repository-contract.ts).
  */
 
-import { ERROR_CODES, isAppError } from '@getir/core';
+import { ERROR_CODES, isAppError, ORDER_STATUS } from '@getir/core';
 
 import { cursorOf } from '../../domain/order-history-cursor.js';
 import type {
   OrderHistoryPage,
   OrderHistoryQuery,
   OrderHistoryReader,
+  RiskHistory,
 } from '../../domain/order-history-reader.js';
-import { PAID_ORDER_STATUSES } from '../../domain/order-history-reader.js';
+import { PAID_ORDER_STATUSES, toRiskHistory } from '../../domain/order-history-reader.js';
 import type { OrderRepository } from '../../domain/order-repository.js';
 import { orderAlreadyExists, orderVersionConflict } from '../../domain/order-repository.js';
 import type { Order } from '../../domain/order.js';
@@ -60,5 +61,18 @@ export class OrderMongoStore implements OrderRepository, OrderHistoryReader {
 
   hasPaidOrder(userId: string): Promise<boolean> {
     return this.orders.existsWithStatus(userId, PAID_ORDER_STATUSES);
+  }
+
+  async riskHistory(userId: string): Promise<RiskHistory> {
+    const byStatus = await this.orders.countAndSumByStatus(userId, [
+      ORDER_STATUS.DELIVERED,
+      ORDER_STATUS.CANCELLED,
+    ]);
+    const delivered = byStatus.get(ORDER_STATUS.DELIVERED);
+    return toRiskHistory(
+      delivered?.count ?? 0,
+      byStatus.get(ORDER_STATUS.CANCELLED)?.count ?? 0,
+      delivered?.totalMinor ?? 0,
+    );
   }
 }

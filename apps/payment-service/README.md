@@ -4,14 +4,15 @@
 gerçek bir sağlayıcı takılabilecek biçimde kuruldu: sağlayıcı bir port (`PaymentProvider`),
 idempotency ve durum makinesi baştan yerinde.
 
-## Bugünkü durum (T5.3 — kalıcılık ve deneme geçmişi)
+## Bugünkü durum (T7.1 — sipariş saga'sının ödeme adımı)
 
-| Uç                     | Durum                                                                           |
-| ---------------------- | ------------------------------------------------------------------------------- |
-| `Charge`               | ✅ Test kartına göre onay / ret / 3DS; kapıda ödeme `PENDING`                   |
-| `Confirm3Ds`           | ✅ Sabit kod, 60 sn ömür, 3 yanlışta kilit, tekrar istek güvenli (T5.2)         |
-| `payments`             | ✅ Mongo (`MOCK=false`) ya da bellek (`MOCK=true`); `attempts[]` geçmişi (T5.3) |
-| `GetPayment`, `Refund` | ⏳ Sipariş zinciri görevlerinde                                                 |
+| Uç           | Durum                                                                                      |
+| ------------ | ------------------------------------------------------------------------------------------ |
+| `Charge`     | ✅ Test kartına göre onay / ret / 3DS; kapıda ödeme `PENDING`; risk 3DS isteyebilir (T7.1) |
+| `Confirm3Ds` | ✅ Sabit kod, 60 sn ömür, 3 yanlışta kilit, tekrar istek güvenli (T5.2)                    |
+| `payments`   | ✅ Mongo (`MOCK=false`) ya da bellek (`MOCK=true`); `attempts[]` geçmişi (T5.3)            |
+| `Refund`     | ✅ Saga'nın telafisi (T7.1): yalnızca tamamlanmış çekim; tekrar istek `already_refunded`   |
+| `GetPayment` | ⏳ Henüz çağıran yok (`UNIMPLEMENTED`)                                                     |
 
 ## Test kartları
 
@@ -24,6 +25,12 @@ sözleşmeden geçmez"). İstemcideki demo sağlayıcı numarayı jetona çeviri
 | `tok_test_0002` | `4000 0000 0000 0002` | `FAILED` + `PAYMENT_DECLINED`                    |
 | `tok_test_3184` | `4000 0027 6000 3184` | `REQUIRES_3DS` + `challenge_id` (`tds_…`, 60 sn) |
 | başka her jeton | —                     | `FAILED` + `PAYMENT_DECLINED`                    |
+
+**Risk 3DS isteyebilir (T7.1):** `require_three_ds = true` gelirse (order-svc orta risk bandında
+doldurur) bankanın onaylayacağı kart da `REQUIRES_3DS` döner; reddedilecek kart yine reddedilir.
+Bayrak çekim **niyetinin** parçası değil, politikadır: tekrar-istek karşılaştırmasına girmez,
+kayda yazılmaz, etkisi karar ve `attempts[]` geçmişinde görünür. Kapıda ödemede
+`VALIDATION_FAILED`.
 
 **Kart reddi gRPC hatası değildir.** Cevap `status=FAILED`, `failure_code=PAYMENT_DECLINED` taşır:
 red normal bir iş sonucudur, saga onu okuyup rezervasyonu bırakır.
@@ -41,6 +48,22 @@ Sıra kasıtlı: sağlayıcıya önce gidilseydi aynı anahtarla eşzamanlı iki
 yapabilirdi. Şimdi ikincisi 3. adımda çakışır, tekrar-istek yoluna düşer ve kazananın kaydını döner
 (test: `charge.spec.ts` → "es zamanli ayni anahtar"). Sağlayıcıya ulaşılamazsa tutar çekilmemiştir;
 kayıt `FAILED` + `SERVICE_UNAVAILABLE` olur, `PENDING`'de takılı kalmaz.
+
+## İade (Refund, T7.1)
+
+Sipariş saga'sının telafisi: çekim başarılı oldu ama sipariş `PAID` yazılamadı (örneğin kullanıcı
+aynı anda iptal etti). Siparişin tek ödemesi vardır, iade sipariş kimliğiyle bulunur.
+
+| Ödeme durumu                        | Sonuç                                                             |
+| ----------------------------------- | ----------------------------------------------------------------- |
+| `SUCCEEDED`                         | `REFUNDED`; gerekçe (`refundReason`) ve `REFUND` denemesi yazılır |
+| `REFUNDED`                          | aynı kayıt, `already_refunded = true` (tekrar istek)              |
+| `PENDING`, `REQUIRES_3DS`, `FAILED` | `CONFLICT`: geri verilecek tutar yok                              |
+| ödeme yok                           | `NOT_FOUND`                                                       |
+
+Eş zamanlı iki iade: biri yazar, diğeri sürüm çakışmasında kaydı yeniden okur ve "zaten iade
+edildi" döner — para iki kez geri verilmez. Gerekçe bir anahtardır (`order_changed_during_payment`),
+Idempotency-Key zorunludur (ADR-08); tekrar koruması kaydın durumundadır.
 
 ## Veri kaynağı: Mongo ya da MOCK
 
@@ -93,8 +116,8 @@ değildir.
 
 ```text
 src/
-  domain/          payment.ts (durumlar, geçişler), three-ds.ts (3DS kuralları), portlar
-  application/     charge.ts, confirm-3ds.ts
+  domain/          payment.ts (durumlar, geçişler), three-ds.ts (3DS kuralları), refund.ts (iade), portlar
+  application/     charge.ts, confirm-3ds.ts, refund.ts
   infrastructure/  memory/ ve mongo/ (depo), payment-store.ts (mod seçimi), mock-provider/
   interfaces/grpc/ şema (Zod), eşleme (Record), handler
   config/          env.ts, constants.ts (THREEDS_CHALLENGE_TTL_MS = 60 000, THREEDS_MAX_ATTEMPTS = 3)

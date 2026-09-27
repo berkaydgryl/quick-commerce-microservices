@@ -45,6 +45,9 @@ const CodePaymentDeclined Code = "PAYMENT_DECLINED"
 // CodeThreedsFailed = THREEDS_FAILED.
 const CodeThreedsFailed Code = "THREEDS_FAILED"
 
+// CodePaymentMethodNotAllowed = PAYMENT_METHOD_NOT_ALLOWED.
+const CodePaymentMethodNotAllowed Code = "PAYMENT_METHOD_NOT_ALLOWED"
+
 // CodePriceChanged = PRICE_CHANGED.
 const CodePriceChanged Code = "PRICE_CHANGED"
 
@@ -87,6 +90,7 @@ var codeTable = []codeEntry{
 	{code: CodeRiskReview, httpStatus: 202, message: "Siparişin kontrol ediliyor. Sonucu birazdan bildireceğiz."},
 	{code: CodePaymentDeclined, httpStatus: 402, message: "Ödeme alınamadı. Başka bir kart deneyebilirsin."},
 	{code: CodeThreedsFailed, httpStatus: 402, message: "Doğrulama kodu geçersiz. Tekrar dener misin?"},
+	{code: CodePaymentMethodNotAllowed, httpStatus: 422, message: "Bu sipariş için kapıda ödeme kullanılamıyor. Kartla ödemeyi dener misin?"},
 	{code: CodePriceChanged, httpStatus: 409, message: "Sepetindeki fiyatlar güncellendi. Yeni tutarı onaylar mısın?"},
 	{code: CodeCouponInvalid, httpStatus: 422, message: "Bu kupon kullanılamıyor."},
 	{code: CodeMinBasketNotMet, httpStatus: 422, message: "Minimum sepet tutarına ulaşmadın."},

@@ -37,6 +37,8 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   [ERROR_CODES.PAYMENT_DECLINED]: 'Ödeme alınamadı. Başka bir kart deneyebilirsin.',
   [ERROR_CODES.THREEDS_REQUIRED]: 'Ödemeyi tamamlamak için doğrulama kodunu girmen gerekiyor.',
   [ERROR_CODES.THREEDS_FAILED]: 'Doğrulama kodu geçersiz. Tekrar dener misin?',
+  [ERROR_CODES.PAYMENT_METHOD_NOT_ALLOWED]:
+    'Bu sipariş için kapıda ödeme kullanılamıyor. Kartla ödemeyi dener misin?',
   [ERROR_CODES.PRICE_CHANGED]: 'Sepetindeki fiyatlar güncellendi. Yeni tutarı onaylar mısın?',
   [ERROR_CODES.COUPON_INVALID]: 'Bu kupon kullanılamıyor.',
   [ERROR_CODES.MIN_BASKET_NOT_MET]: 'Minimum sepet tutarına ulaşmadın.',

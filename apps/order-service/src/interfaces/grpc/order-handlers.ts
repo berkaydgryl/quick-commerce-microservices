@@ -11,6 +11,7 @@ import { unaryHandler } from '@getir/service-kit';
 import type { UntypedServiceImplementation } from '@grpc/grpc-js';
 
 import type { CancelOrder } from '../../application/cancel-order.js';
+import type { ConfirmPayment } from '../../application/confirm-payment.js';
 import type { CreateDraftOrder } from '../../application/create-draft-order.js';
 import type { CreateOrder } from '../../application/create-order.js';
 import type { GetOrder } from '../../application/get-order.js';
@@ -19,6 +20,7 @@ import { toProtoOrder, toProtoOrderStatus } from './mappers.js';
 import { encodePageToken } from './page-token.js';
 import {
   cancelOrderRequestSchema,
+  confirmPaymentRequestSchema,
   createDraftOrderRequestSchema,
   createOrderRequestSchema,
   getOrderRequestSchema,
@@ -31,6 +33,7 @@ const TOTAL_SIZE_NOT_COUNTED = 0;
 export interface OrderHandlerDeps {
   readonly createDraftOrder: CreateDraftOrder;
   readonly createOrder: CreateOrder;
+  readonly confirmPayment: ConfirmPayment;
   readonly getOrder: GetOrder;
   readonly listMyOrders: ListMyOrders;
   readonly cancelOrder: CancelOrder;
@@ -71,13 +74,42 @@ export function createOrderImplementation(deps: OrderHandlerDeps): UntypedServic
       name: 'CreateOrder',
       schema: createOrderRequestSchema,
       ...(logger === undefined ? {} : { logger }),
-      handle: async (input): Promise<orderV1.CreateOrderResponse> => {
-        const order = await deps.createOrder({ orderId: input.orderId, userId: input.userId });
+      handle: async (input, ctx): Promise<orderV1.CreateOrderResponse> => {
+        const { order, challengeId } = await deps.createOrder(
+          {
+            orderId: input.orderId,
+            userId: input.userId,
+            method: input.paymentMethod,
+            ...(input.cardToken === undefined ? {} : { cardToken: input.cardToken }),
+          },
+          // risk ve payment cagrilari bu requestId'yi AYNEN tasir.
+          { requestId: ctx.requestId, logger: ctx.logger },
+        );
 
-        // challengeId BOS: 3DS akisi T5.2 ve T7.1 ile gelecek. Sozlesme
-        // "bos degilse 3DS bekleniyor demektir" diyor; bos birakmak
-        // "beklenmiyor" anlamina gelir ve bugun dogru olan budur.
-        return { orderId: order.id, status: toProtoOrderStatus(order.status), challengeId: '' };
+        // Sozlesme: challengeId bos DEGILSE 3DS bekleniyor demektir.
+        return {
+          orderId: order.id,
+          status: toProtoOrderStatus(order.status),
+          challengeId: challengeId ?? '',
+        };
+      },
+    }),
+
+    confirmPayment: unaryHandler({
+      name: 'ConfirmPayment',
+      schema: confirmPaymentRequestSchema,
+      ...(logger === undefined ? {} : { logger }),
+      handle: async (input, ctx): Promise<orderV1.ConfirmPaymentResponse> => {
+        const order = await deps.confirmPayment(
+          {
+            orderId: input.orderId,
+            userId: input.userId,
+            challengeId: input.challengeId,
+            code: input.code,
+          },
+          { requestId: ctx.requestId, logger: ctx.logger },
+        );
+        return { orderId: order.id, status: toProtoOrderStatus(order.status) };
       },
     }),
 

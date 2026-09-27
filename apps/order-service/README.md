@@ -9,15 +9,16 @@ Bu serviste **olmayanlar**, bilinçli: stok sayacı `inventory-service`'in, kart
 (kapıda ödeme kapalı, rezervasyon süresi, reddet) burada verilir — risk servisi yalnızca
 skor önerir.
 
-## Bugünkü durum (T7.2 — sunucu tarafı fiyat)
+## Bugünkü durum (T7.1 — sipariş saga'sı: risk + ödeme)
 
-| RPC                | Durum                                                                                                              |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| `CreateDraftOrder` | ✅ Fiyatı catalog'dan okur, sunucuda hesaplar, `expected_total` ile karşılaştırır; tutarı taslakta dondurur (T7.2) |
-| `CreateOrder`      | ✅ Tablodan adım adım: `DRAFT → RISK_CHECK → RESERVED → AWAITING_PAYMENT`                                          |
-| `GetOrder`         | ✅ Tek sipariş, zaman çizelgesi dahil; başkasının siparişi `NOT_FOUND`                                             |
-| `ListMyOrders`     | ✅ Yeniden eskiye, imleçle sayfalı; sipariş yoksa boş liste                                                        |
-| `CancelOrder`      | ✅ Kullanıcı iptali: yalnızca `DRAFT`, `RESERVED`, `AWAITING_PAYMENT` (B29); Idempotency-Key zorunlu (D4)          |
+| RPC                | Durum                                                                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `CreateDraftOrder` | ✅ Fiyatı catalog'dan okur, sunucuda hesaplar, `expected_total` ile karşılaştırır; tutarı taslakta dondurur (T7.2)             |
+| `CreateOrder`      | ✅ Saga (T7.1): risk-svc → bant kararı → payment-svc çekimi; `PAID`, `PAYMENT_FAILED`, 3DS beklemesi ya da `REVIEW`/`REJECTED` |
+| `ConfirmPayment`   | ✅ 3DS kodu (T7.1): doğruysa `PAID`; hak biter / süre dolarsa `PAYMENT_FAILED`                                                 |
+| `GetOrder`         | ✅ Tek sipariş, zaman çizelgesi dahil; başkasının siparişi `NOT_FOUND`                                                         |
+| `ListMyOrders`     | ✅ Yeniden eskiye, imleçle sayfalı; sipariş yoksa boş liste                                                                    |
+| `CancelOrder`      | ✅ Kullanıcı iptali: yalnızca `DRAFT`, `RESERVED`, `AWAITING_PAYMENT` (B29); Idempotency-Key zorunlu (D4)                      |
 
 ## Veri kaynağı: Mongo ya da MOCK
 
@@ -70,17 +71,15 @@ Tablo `Record<OrderStatus, …>`: `@getir/core`'a yeni durum eklenip tabloya ekl
 kırılır. Testi tabloyu diyagramdaki kenar listesiyle **birebir** karşılaştırır; ayrıca her durum
 `DRAFT`'tan erişilebilir ve her ara durumdan bir son duruma varılabilir.
 
-**Geçici adımlar, görünür:** risk servisi (T6.3) ve stok rezervasyonu (T11.2) henüz bağlı değil.
-`CreateOrder` bu iki adımı yine tablodan geçer ama zaman çizelgesine nedeniyle yazar
-(`PENDING_RISK_SERVICE`, `PENDING_RESERVATION`) — sessizce atlanmaz. Saga gelince (T7.1, T11.2)
-yerlerini gerçek çağrılar alır; tablo ve zaman çizelgesi değişmez.
+**Geçici adım, görünür:** stok rezervasyonu (T11.2) henüz bağlı değil. `CreateOrder` bu adımı
+yine tablodan geçer ama zaman çizelgesine nedeniyle yazar (`PENDING_RESERVATION`) — sessizce
+atlanmaz. T11.2'de yerini gerçek çağrı alır; tablo ve zaman çizelgesi değişmez. (Risk adımının
+geçici notu `PENDING_RISK_SERVICE` T7.1'de kalktı: risk artık gerçekten soruluyor.)
 
 **Kullanıcı iptali (B29):** kullanıcı yalnızca `DRAFT`, `RESERVED` ve `AWAITING_PAYMENT`
 durumundaki **kendi** siparişini iptal edebilir (`USER_CANCELLABLE`). `PAID → CANCELLED` tabloda
 var ama sistemin telafi adımıdır (iade, B20c). Gerekçe bir anahtardır (`CHANGED_MIND`); yoksa
 `USER_CANCELLED` yazılır. Rezervasyonun serbest bırakılması T11.2'de saga'ya eklenir.
-
-Tutar hesabı `@getir/pricing` ile T7.2'de bağlanır.
 
 ## Neden `CreateDraftOrder` de bu görevde
 
@@ -95,8 +94,8 @@ olmadan zincir denenemezdi.
 "bu kimlikte bir sipariş var" bilgisi bile sızdırılmamalıdır. Yetki hatası dönmek, sipariş
 kimliklerini deneyerek varlık taraması yapmayı mümkün kılardı.
 
-**Idempotency anahtarı bugünden zorunlu (ADR-08).** Üç mutasyon da (`CreateDraftOrder`,
-`CreateOrder`, `CancelOrder`) anahtar ister; servis yalnızca varlığını ve uzunluğunu (8–128,
+**Idempotency anahtarı bugünden zorunlu (ADR-08).** Dört mutasyon da (`CreateDraftOrder`,
+`CreateOrder`, `ConfirmPayment`, `CancelOrder`) anahtar ister; servis yalnızca varlığını ve uzunluğunu (8–128,
 `@getir/contracts`) doğrular. Tekrar koruması (`idem:{key}`, aynı anahtara ilk cevabın
 dönmesi) ADR-08 gereği gateway'dedir ve T8.2'de gelir. Erken zorunlu tutmanın sebebi:
 istemciler göndermeye bugün alışsın, koruma açıldığında sözleşme değişmesin.
@@ -122,6 +121,63 @@ saga (T7.1) yeniden hesaplamaz, kullanıcı rezervasyon boyunca gördüğü fiya
 | `expected_total` sunucunun toplamı değil   | `PRICE_CHANGED` (ABORTED)                  | `expectedTotalMinor`, `totalMinor`         |
 | Catalog'a ulaşılamadı / süre doldu         | `SERVICE_UNAVAILABLE` (UNAVAILABLE)        | —                                          |
 
+## Sipariş saga'sı (T7.1)
+
+```text
+DRAFT → RISK_CHECK → RESERVED → AWAITING_PAYMENT → PAID
+                  ↘ REVIEW / REJECTED            ↘ PAYMENT_FAILED
+```
+
+**1. Risk adımı** (`application/risk-step.ts`, kurallar `domain/checkout-risk.ts`)
+
+Order, risk-svc'ye yalnızca **sunucuda bildiklerini** gönderir (B9, istemciden sinyal alınmaz):
+sepet toplamı, teslimat konumu, market, kullanıcının teslim edilen / iptal edilen sipariş sayısı
+ve teslim edilenlerin ortalama sepeti (`OrderHistoryReader.riskHistory`, tek aggregation) ve
+taslaktan siparişe geçen süre (checkout-dwell; T11.2'de başlangıç `reservedAt` olur). IP, cihaz,
+hesap yaşı ve oturum konumunu gateway bilir; T7.5/T8'de eklenir. Eksik alan kuralı tetiklemez.
+
+| Bant       | Sipariş                                        | Cevap                                                                       |
+| ---------- | ---------------------------------------------- | --------------------------------------------------------------------------- |
+| `LOW`      | devam; kapıda ödeme açık                       | —                                                                           |
+| `MEDIUM`   | devam; kart + 3DS zorunlu (`require_three_ds`) | kapıda ödeme seçildiyse `PAYMENT_METHOD_NOT_ALLOWED`, sipariş `DRAFT` kalır |
+| `HIGH`     | `REVIEW` (manuel inceleme)                     | `RISK_REVIEW` (REST 202)                                                    |
+| `CRITICAL` | `REJECTED`                                     | `RISK_BLOCKED` (REST 403)                                                   |
+
+Risk-svc'ye ulaşılamazsa **hiçbir şey yazılmaz**: riski atlayarak ödeme alınmaz. Bant siparişe
+yazılır (`riskBand`, proto'da yok — istemciye gösterilmez).
+
+**2. Ödeme adımı** (`application/payment-step.ts`, kurallar `domain/checkout-payment.ts`)
+
+Sipariş önce `AWAITING_PAYMENT` olarak **kaydedilir**, sonra `Charge` çağrılır. Tutar taslakta
+dondurulan toplamdır; idempotency anahtarı siparişten türetilir (`charge-<orderId>`): bir sipariş
+asla iki kez çekilmez.
+
+| Ödeme sonucu                | Sipariş                             | Cevap                             |
+| --------------------------- | ----------------------------------- | --------------------------------- |
+| Onay                        | `PAID`                              | —                                 |
+| Kapıda ödeme (`PENDING`)    | `PAID`, not `CASH_ON_DELIVERY`      | —                                 |
+| 3DS                         | `AWAITING_PAYMENT`                  | `challenge_id` → `ConfirmPayment` |
+| Red / sağlayıcı hatası      | `PAYMENT_FAILED`, not hata anahtarı | `PAYMENT_DECLINED` (ya da nedeni) |
+| Kartlı çekim hâlâ `PENDING` | değişmez (eş zamanlı istek sürüyor) | `REQUEST_IN_PROGRESS`             |
+
+**Tekrar deneme:** çekim cevabı kaybolursa (payment-svc'ye ulaşılamadı) sipariş `AWAITING_PAYMENT`
+kalır. Aynı `CreateOrder` tekrar gelince risk yeniden sorulmaz (kayıtlı bandın kuralı geçerli);
+çekim aynı anahtarla gider, payment-svc ikinci kez çekmez.
+
+**3. Telafi (P3):** çekim başarılı ama sipariş `PAID` yazılamadı (sürüm çakışması — örneğin
+kullanıcı tam o anda iptal etti) → tutar **iade edilir** (`Refund`, anahtar `refund-<orderId>`),
+istemci `CONFLICT` alır. Çakışmayı aynı ödemenin eş zamanlı tekrarı yazdıysa (sipariş zaten
+`PAID`) iade yapılmaz. İade de başarısız olursa `CONFLICT` yine döner ve durum **ERROR**
+günlüğüne sipariş kimliğiyle düşer; kalıcı tekrar deneme outbox ile gelir (T7.3).
+
+**3DS onayı (`ConfirmPayment`):** kod payment-svc'ye aynen iletilir. Yanlış kodda payment-svc'nin
+`THREEDS_FAILED`'ı (kalan hak, sebep) istemciye aynen döner, sipariş bekler. Hak biterse ya da
+süre dolarsa sipariş önce `PAYMENT_FAILED` yazılır, hata yine aynı. Sipariş zaten `PAID` ise
+(onay cevabı kaybolmuş) payment-svc'ye gidilmez, aynı sonuç döner.
+
+Adresler `RISK_GRPC_ADDR` (varsayılan `localhost:50055`) ve `PAYMENT_GRPC_ADDR`
+(`localhost:50054`); süre sınırları 1 sn ve 3 sn — toplamları gateway'in 5 sn'sinin altında.
+
 ## Katmanlar
 
 ```text
@@ -132,16 +188,23 @@ src/
 │   ├── price-draft.ts           # saf fiyat kuralı: priceDraft, assertExpectedTotal (T7.2)
 │   ├── order-state-machine.ts   # geçiş tablosu, USER_CANCELLABLE
 │   ├── order-repository.ts      # port: insert / update(sürümlü) / findById + hataları
-│   ├── order-history-reader.ts  # port: listByUser (sayfalı geçmiş), hasPaidOrder (ILK10)
+│   ├── order-history-reader.ts  # port: listByUser, hasPaidOrder (ILK10), riskHistory (T7.1)
+│   ├── checkout-risk.ts         # saga risk adımı: bant → karar/politika, risk bağlamı (T7.1)
+│   ├── checkout-payment.ts      # saga ödeme adımı: ödeme sonucu → sipariş, anahtarlar (T7.1)
 │   └── order-history-cursor.ts  # geçmiş sırası ve imleç
 ├── application/       # bir dosya = bir use-case
-│   ├── create-draft-order.ts, create-order.ts, cancel-order.ts
+│   ├── create-draft-order.ts, create-order.ts, confirm-payment.ts, cancel-order.ts
 │   ├── get-order.ts, list-my-orders.ts
+│   ├── risk-step.ts, payment-step.ts  # saga adımları (T7.1), use-case'ler paylaşır
+│   ├── own-order.ts             # "kendi siparişi değilse NOT_FOUND" tek yerde
 │   ├── catalog-pricing.ts       # port: marketRules, activeOffers (T7.2)
+│   ├── risk-assessment.ts       # port: evaluate (T7.1)
+│   ├── payments.ts              # port: charge, confirmThreeDs, refund (T7.1)
 │   └── request-scope.ts         # use-case'e taşınan requestId + çağrının logger'ı
 ├── infrastructure/
 │   ├── order-store.ts           # MOCK ya da Mongo: depoyu açar, kapanışı verir
 │   ├── catalog/                 # order -> catalog gRPC istemcisi (service-kit callUnary)
+│   ├── risk/, payment/          # order -> risk / payment gRPC istemcileri (T7.1)
 │   ├── memory/                  # MOCK: bellek deposu
 │   └── mongo/                   # belge şekli, çeviriciler, sorgular (orders-collection), portlar
 ├── interfaces/grpc/   # ince handler'lar: doğrula → çağır → çevir
@@ -183,19 +246,31 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/order/v1/order
 # Farklı toplam gönderirsen ABORTED + PRICE_CHANGED (ayrıntıda doğru toplam).
 # catalog-service (50051) ayakta olmalı: fiyatlar oradan okunur.
 
-# 2) Siparişe çevir → AWAITING_PAYMENT
+# 2) Siparişe çevir (saga): risk-service (50055) ve payment-service (50054) ayakta olmalı.
+#    Test kartları: tok_test_4242 onay, tok_test_0002 red, tok_test_3184 3DS.
+#    Taslaktan hemen sonra (3 sn içinde) gönderirsen yeni kullanıcı MEDIUM bant alır
+#    (teslimat yok 15 + bot hızı 15 = 30): 4242 bile 3DS ister, cevapta challenge_id döner.
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/order/v1/order.proto \
-  -d '{"order_id":"<1. adımdan>","user_id":"usr_1","idempotency_key":"4f1c3a2b-9d8e"}' \
+  -d '{"order_id":"<1. adımdan>","user_id":"usr_1","payment_method":"PAYMENT_METHOD_CARD",
+       "card_token":"tok_test_4242","idempotency_key":"4f1c3a2b-9d8e"}' \
   localhost:50053 getir.order.v1.OrderService/CreateOrder
+
+# 2b) 3DS istendiyse onayla → PAID (mock kod 123456; yanlış kod THREEDS_FAILED + kalan hak)
+grpcurl -plaintext -import-path packages/proto/proto -proto getir/order/v1/order.proto \
+  -d '{"order_id":"<1. adımdan>","user_id":"usr_1","challenge_id":"<2. adımdan>",
+       "code":"123456","idempotency_key":"7e6d5c4b-3a2f"}' \
+  localhost:50053 getir.order.v1.OrderService/ConfirmPayment
 
 # 3) Geçmiş → en yeni sipariş başta; Mongo modunda Compass'ta getir.orders altında da görünür
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/order/v1/order.proto \
   -d '{"user_id":"usr_1","page":{"page_size":10}}' \
   localhost:50053 getir.order.v1.OrderService/ListMyOrders
 
-# 4) İptal → CANCELLED (anahtarsız istek INVALID_ARGUMENT)
+# 4) İptal → CANCELLED: yalnızca DRAFT / RESERVED / AWAITING_PAYMENT (B29); 2. adımda PAID
+#    olan sipariş ORDER_STATE_INVALID alır, bu yüzden yeni bir taslakla dene.
+#    Anahtarsız istek INVALID_ARGUMENT.
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/order/v1/order.proto \
-  -d '{"order_id":"<1. adımdan>","user_id":"usr_1","reason":"CHANGED_MIND","idempotency_key":"9a8b7c6d-5e4f"}' \
+  -d '{"order_id":"<yeni taslak>","user_id":"usr_1","reason":"CHANGED_MIND","idempotency_key":"9a8b7c6d-5e4f"}' \
   localhost:50053 getir.order.v1.OrderService/CancelOrder
 ```
 

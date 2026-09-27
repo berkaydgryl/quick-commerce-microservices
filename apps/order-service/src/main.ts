@@ -22,10 +22,17 @@ import {
 } from '@getir/service-kit';
 
 import { buildOrderService } from './bootstrap.js';
-import { CATALOG_CALL_TIMEOUT_MS, SERVICE_NAME } from './config/constants.js';
+import {
+  CATALOG_CALL_TIMEOUT_MS,
+  PAYMENT_CALL_TIMEOUT_MS,
+  RISK_CALL_TIMEOUT_MS,
+  SERVICE_NAME,
+} from './config/constants.js';
 import { loadServiceEnv } from './config/env.js';
 import { GrpcCatalogPricing } from './infrastructure/catalog/grpc-catalog-pricing.js';
 import { openOrderStore } from './infrastructure/order-store.js';
+import { GrpcPayments } from './infrastructure/payment/grpc-payments.js';
+import { GrpcRiskAssessment } from './infrastructure/risk/grpc-risk-assessment.js';
 
 const env = loadServiceEnv();
 const logger = createLogger({ name: SERVICE_NAME, level: env.LOG_LEVEL });
@@ -38,17 +45,23 @@ const { handle, store } = await startOrExit(
     // Fiyatlar catalog'dan (T7.2). Istemci tembel baglanir: catalog henuz
     // ayakta degilse acilis durmaz, ilk taslak istegi SERVICE_UNAVAILABLE alir.
     const catalog = new GrpcCatalogPricing(env.CATALOG_GRPC_ADDR, CATALOG_CALL_TIMEOUT_MS);
+    // Saga (T7.1): istemciler catalog'unki gibi tembel baglanir; risk ya da
+    // payment kapaliysa CreateOrder SERVICE_UNAVAILABLE alir, acilis durmaz.
+    const risk = new GrpcRiskAssessment(env.RISK_GRPC_ADDR, RISK_CALL_TIMEOUT_MS);
+    const payments = new GrpcPayments(env.PAYMENT_GRPC_ADDR, PAYMENT_CALL_TIMEOUT_MS);
     const server = await startGrpcServer({
       serviceName: SERVICE_NAME,
       host: env.GRPC_HOST,
       port: env.ORDER_GRPC_PORT,
       shutdownTimeoutMs: env.GRPC_SHUTDOWN_TIMEOUT_MS,
       logger,
-      services: [buildOrderService({ logger, store: opened, catalog })],
+      services: [buildOrderService({ logger, store: opened, catalog, risk, payments })],
       // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti
       // kesilmesin. Once giden istemci, veritabani EN SON (proje kurali).
       onShutdown: async () => {
         catalog.close();
+        risk.close();
+        payments.close();
         await opened.close();
       },
     });
@@ -62,6 +75,13 @@ installProcessHandlers({ shutdown: (reason) => handle.shutdown(reason), logger }
 // Depo bilincli olarak gunluge yaziliyor: "siparisim neden kayboldu?" sorusunun
 // ilk cevabi hangi modda calisildigidir (bellek modu yeniden baslayinca unutur).
 logger.info(
-  { port: handle.port, mock: env.MOCK, storage: store.name, catalog: env.CATALOG_GRPC_ADDR },
+  {
+    port: handle.port,
+    mock: env.MOCK,
+    storage: store.name,
+    catalog: env.CATALOG_GRPC_ADDR,
+    risk: env.RISK_GRPC_ADDR,
+    payment: env.PAYMENT_GRPC_ADDR,
+  },
   'siparis servisi hazir',
 );

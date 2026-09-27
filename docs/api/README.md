@@ -62,7 +62,7 @@ Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci 
 | 404  | `NOT_FOUND`, `NO_STORE`                                                                                               |
 | 409  | `CONFLICT`, `STOCK_INSUFFICIENT`, `RESERVATION_ACTIVE`, `PRICE_CHANGED`, `REQUEST_IN_PROGRESS`, `ORDER_STATE_INVALID` |
 | 410  | `RESERVATION_EXPIRED`                                                                                                 |
-| 422  | `COUPON_INVALID`, `MIN_BASKET_NOT_MET`                                                                                |
+| 422  | `COUPON_INVALID`, `MIN_BASKET_NOT_MET`, `PAYMENT_METHOD_NOT_ALLOWED`                                                  |
 | 429  | `RATE_LIMITED`                                                                                                        |
 | 500  | `INTERNAL`                                                                                                            |
 | 503  | `SERVICE_UNAVAILABLE`                                                                                                 |

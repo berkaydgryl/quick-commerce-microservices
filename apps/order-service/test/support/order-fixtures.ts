@@ -2,6 +2,8 @@
  * gRPC kapi testlerinin ortak istek ornekleri.
  */
 
+import { MOCK_THREEDS_CODE } from '@getir/core';
+import { paymentV1 } from '@getir/proto';
 import type { orderV1 } from '@getir/proto';
 
 export const IDEMPOTENCY_KEY = '4f1c3a2b-9d8e-11ee';
@@ -25,12 +27,35 @@ export const draftRequest: orderV1.CreateDraftOrderRequest = {
   couponCode: '',
 };
 
-/** Kapida odemeyle CreateOrder istegi; kullanici verilmezse taslagin sahibi. */
+/** Kartla (onaylanan test karti) CreateOrder istegi; varsayilan: taslagin sahibi. */
 export function createOrderRequest(
   orderId: string,
-  userId = draftRequest.userId,
+  overrides: Partial<orderV1.CreateOrderRequest> = {},
 ): orderV1.CreateOrderRequest {
-  return { orderId, userId, paymentMethod: 0, cardToken: '', idempotencyKey: IDEMPOTENCY_KEY };
+  return {
+    orderId,
+    userId: draftRequest.userId,
+    paymentMethod: paymentV1.PaymentMethod.PAYMENT_METHOD_CARD,
+    cardToken: 'tok_test_4242',
+    idempotencyKey: IDEMPOTENCY_KEY,
+    ...overrides,
+  };
+}
+
+/** ConfirmPayment istegi; varsayilan: taslagin sahibi, dogru mock kodu. */
+export function confirmPaymentRequest(
+  orderId: string,
+  challengeId: string,
+  overrides: Partial<orderV1.ConfirmPaymentRequest> = {},
+): orderV1.ConfirmPaymentRequest {
+  return {
+    orderId,
+    userId: draftRequest.userId,
+    challengeId,
+    code: MOCK_THREEDS_CODE,
+    idempotencyKey: IDEMPOTENCY_KEY,
+    ...overrides,
+  };
 }
 
 /** CancelOrder istegi; varsayilan: taslagin sahibi, gerekcesiz, gecerli anahtarla. */

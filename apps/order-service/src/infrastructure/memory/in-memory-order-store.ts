@@ -8,12 +8,15 @@
  */
 
 import { comesBefore, cursorOf } from '../../domain/order-history-cursor.js';
+import { ORDER_STATUS } from '@getir/core';
+
 import type {
   OrderHistoryPage,
   OrderHistoryQuery,
   OrderHistoryReader,
+  RiskHistory,
 } from '../../domain/order-history-reader.js';
-import { PAID_ORDER_STATUSES } from '../../domain/order-history-reader.js';
+import { PAID_ORDER_STATUSES, toRiskHistory } from '../../domain/order-history-reader.js';
 import type { OrderRepository } from '../../domain/order-repository.js';
 import { orderAlreadyExists, orderVersionConflict } from '../../domain/order-repository.js';
 import type { Order } from '../../domain/order.js';
@@ -59,6 +62,14 @@ export class InMemoryOrderStore implements OrderRepository, OrderHistoryReader {
         (order) => order.userId === userId && PAID_ORDER_STATUSES.includes(order.status),
       ),
     );
+  }
+
+  riskHistory(userId: string): Promise<RiskHistory> {
+    const own = [...this.orders.values()].filter((order) => order.userId === userId);
+    const delivered = own.filter((order) => order.status === ORDER_STATUS.DELIVERED);
+    const cancelled = own.filter((order) => order.status === ORDER_STATUS.CANCELLED);
+    const deliveredTotal = delivered.reduce((sum, order) => sum + order.pricing.totalMinor, 0);
+    return Promise.resolve(toRiskHistory(delivered.length, cancelled.length, deliveredTotal));
   }
 
   /** Yalnizca test icin: kayitli siparis sayisi. */

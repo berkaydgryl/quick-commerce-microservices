@@ -11,7 +11,7 @@
  */
 
 import { ID_PREFIX, newId, ORDER_STATUS } from '@getir/core';
-import type { Clock, OrderStatus } from '@getir/core';
+import type { Clock, OrderStatus, RiskBand } from '@getir/core';
 
 import type { OrderItem, OrderPricing } from './order-item.js';
 import { assertTransition } from './order-state-machine.js';
@@ -31,14 +31,19 @@ export interface TimelineEntry {
 /**
  * Sistemin yazdigi not anahtarlari. Metin degil ANAHTAR: istemci kullanici
  * diline kendisi cevirir, sunucu cevrilmis metin gondermez.
+ *
+ * Saga'nin DURDURAN adimlari ayrica not sabiti tutmaz, hata sozlugunun
+ * anahtarini yazar (T7.1): REVIEW -> RISK_REVIEW, REJECTED -> RISK_BLOCKED,
+ * PAYMENT_FAILED -> PAYMENT_DECLINED / THREEDS_FAILED / SERVICE_UNAVAILABLE.
+ * Istemci ayni anahtari hata mesajina zaten ceviriyor; ikinci sozluk olmaz.
  */
 export const TIMELINE_NOTE = {
-  /** Risk servisi henuz bagli degil (T6.3): adim degerlendirmesiz gecti. */
-  PENDING_RISK_SERVICE: 'PENDING_RISK_SERVICE',
   /** Stok rezervasyonu henuz yok (T11.2): adim kilitsiz gecti. */
   PENDING_RESERVATION: 'PENDING_RESERVATION',
   /** Kullanici gerekce vermeden iptal etti. */
   USER_CANCELLED: 'USER_CANCELLED',
+  /** Kapida odeme (T7.1): cekim yok, tutar teslimatta alinacak; siparis yine PAID'e gecer. */
+  CASH_ON_DELIVERY: 'CASH_ON_DELIVERY',
 } as const;
 
 export interface DeliveryLocation {
@@ -65,6 +70,12 @@ export interface Order {
   readonly status: OrderStatus;
   /** Eskiden yeniye; ilk kayit her zaman DRAFT. Yalnizca EKLENIR, degistirilmez. */
   readonly timeline: readonly TimelineEntry[];
+  /**
+   * Risk degerlendirmesinin bandi (T7.1); risk adimindan once YOK. Odeme adimi
+   * kapida odeme ve 3DS kuralini bundan okur: cekim tekrar denendiginde risk
+   * yeniden sorulmaz. Istemciye gosterilmez (proto Order'da alani yok).
+   */
+  readonly riskBand?: RiskBand;
   readonly createdAt: Date;
   readonly updatedAt: Date;
   /**
