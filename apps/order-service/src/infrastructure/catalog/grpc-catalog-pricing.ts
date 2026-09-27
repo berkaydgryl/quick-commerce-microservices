@@ -6,8 +6,7 @@
  * baglantisi uzun omurludur ve kapanista close() ile birakilir.
  */
 
-import { moneySchema } from '@getir/contracts';
-import { AppError } from '@getir/core';
+import { AppError, CURRENCY } from '@getir/core';
 import type { PricingRules } from '@getir/pricing';
 import { catalogV1, commonV1 } from '@getir/proto';
 import { callUnary } from '@getir/service-kit';
@@ -18,12 +17,6 @@ import type { RequestScope } from '../../application/request-scope.js';
 import { ITEM_UNIT } from '../../domain/order-item.js';
 import type { ItemUnit } from '../../domain/order-item.js';
 import type { CatalogOffer } from '../../domain/price-draft.js';
-
-/**
- * proto Money sozlesmesi: bos para birimi "TRY" sayilir ve boslugu doldurmak
- * sunucunun isidir. Deger sozlesme paketinin tek kaynagindan okunur.
- */
-const DEFAULT_CURRENCY = moneySchema.shape.currency.value;
 
 const UNIT_FROM_PROTO: Readonly<Record<commonV1.Unit, ItemUnit>> = {
   [commonV1.Unit.UNIT_UNSPECIFIED]: ITEM_UNIT.UNSPECIFIED,
@@ -102,7 +95,8 @@ function toCatalogOffer(offer: catalogV1.Offer): CatalogOffer {
     name: offer.name,
     unit: UNIT_FROM_PROTO[offer.unit],
     unitPriceMinor: offer.price.amountMinor,
-    currency: offer.price.currency === '' ? DEFAULT_CURRENCY : offer.price.currency,
+    // proto Money: bos para birimi tek birim (CURRENCY) sayilir.
+    currency: offer.price.currency === '' ? CURRENCY : offer.price.currency,
   };
 }
 

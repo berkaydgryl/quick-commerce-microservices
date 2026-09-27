@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { EVENTS, ORDER_STATUS, RISK_BANDS } from '../../src/index.js';
+import { CURRENCY, EVENTS, ORDER_STATUS, RISK_BANDS } from '../../src/index.js';
 
 describe('ORDER_STATUS', () => {
   it('anahtar ve deger ayni yazilir', () => {
@@ -53,5 +53,11 @@ describe('EVENTS', () => {
 describe('RISK_BANDS', () => {
   it('dort bant tanimlidir', () => {
     expect(Object.values(RISK_BANDS)).toEqual(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']);
+  });
+});
+
+describe('CURRENCY', () => {
+  it('tek para birimi ISO-4217 TRY (ADR-12: yalnizca Turkiye)', () => {
+    expect(CURRENCY).toBe('TRY');
   });
 });

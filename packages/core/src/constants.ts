@@ -41,6 +41,17 @@ export function isSku(value: string): boolean {
   return SKU_PATTERN.test(value);
 }
 
+/**
+ * Sistemin tek para birimi (ISO-4217). Pazar yalnizca Turkiye (ADR-12).
+ *
+ * common.proto Money sozlesmesi: bos para birimi bu deger sayilir ve boslugu
+ * doldurmak SUNUCUNUN isidir. REST semasi (contracts moneySchema), catalog'un
+ * cevaplari, order'in catalog istemcisi ve payment'in dogrulamasi bu tek
+ * sabiti okur; 'TRY' baska yerde yazilmaz. (Go gateway'in kopyasi
+ * internal/catalog/market_mapper.go'dadir; Go bu paketi import edemez.)
+ */
+export const CURRENCY = 'TRY';
+
 /** Olay adlari (event bus konu adlari). */
 export const EVENTS = {
   ORDER_CREATED: 'order.created',

@@ -41,21 +41,21 @@ describe('mongo mappers', () => {
   it('teklif belgesi urun kopyasi ve arama alanlarini tasir ama domain e sizdirmaz', () => {
     if (chocolate === undefined) throw new Error('demo verisi eksik');
 
-    const document = toOfferDocument(
-      { marketId: 'mkt_a101-caferaga', productId: chocolate.id, priceMinor: 3030, isActive: true },
-      chocolate,
-    );
-
-    expect(document._id).toBe('ofr_a101-caferaga-cikolata-80');
-    expect(document.categoryId).toBe(chocolate.categoryId);
-    // Turkce kucuk harf: "Çikolata 80 g" -> "çikolata 80 g"
-    expect(document.searchTerms).toEqual(['çikolata 80 g', 'sütlü çikolata']);
-    expect(fromOfferDocument(document)).toEqual({
+    const offer = {
       id: 'ofr_a101-caferaga-cikolata-80',
       marketId: 'mkt_a101-caferaga',
       product: chocolate,
       priceMinor: 3030,
       isActive: true,
-    });
+    };
+
+    const document = toOfferDocument(offer);
+
+    expect(document._id).toBe('ofr_a101-caferaga-cikolata-80');
+    expect(document.categoryId).toBe(chocolate.categoryId);
+    // Turkce kucuk harf: "Çikolata 80 g" -> "çikolata 80 g"
+    expect(document.searchTerms).toEqual(['çikolata 80 g', 'sütlü çikolata']);
+    expect(document.productId).toBe(chocolate.id);
+    expect(fromOfferDocument(document)).toEqual(offer);
   });
 });

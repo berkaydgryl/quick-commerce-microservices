@@ -2,11 +2,11 @@
  * Use-case testi: bellek okuyuculariyla, Mongo/Docker/ag olmadan.
  */
 
+import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '@getir/contracts';
 import { AppError, ERROR_CODES } from '@getir/core';
 import { describe, expect, it } from 'vitest';
 
 import { createListProducts } from '../../src/application/list-products.js';
-import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../../src/domain/pagination.js';
 import { createInMemoryReaders } from '../../src/infrastructure/memory/in-memory-catalog.js';
 
 const { offers, markets } = createInMemoryReaders();
@@ -17,7 +17,7 @@ describe('listProducts (ADR-15: bir marketin teklifleri)', () => {
     const page = await listProducts({ filter: { marketId: 'mkt_migros-jet-moda' } });
 
     expect(page.totalSize).toBe(15);
-    expect(page.items).toHaveLength(Math.min(15, DEFAULT_PAGE_SIZE));
+    expect(page.items).toHaveLength(Math.min(15, PAGE_SIZE_DEFAULT));
   });
 
   it('bilinmeyen market NOT_FOUND verir (bos liste DEGIL)', async () => {
@@ -42,7 +42,7 @@ describe('listProducts (ADR-15: bir marketin teklifleri)', () => {
       pageSize: 5_000,
     });
 
-    expect(page.items.length).toBeLessThanOrEqual(MAX_PAGE_SIZE);
+    expect(page.items.length).toBeLessThanOrEqual(PAGE_SIZE_MAX);
     expect(page.items).toHaveLength(15);
   });
 

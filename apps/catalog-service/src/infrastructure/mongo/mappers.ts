@@ -3,8 +3,7 @@
  */
 
 import type { Category, Market, Offer, Product } from '../../domain/catalog.js';
-import { offerIdFor, searchTermsOf } from '../../domain/catalog.js';
-import type { OfferSeed } from '../../domain/catalog-snapshot.js';
+import { searchTermsOf } from '../../domain/catalog.js';
 import type {
   CategoryDocument,
   MarketDocument,
@@ -89,13 +88,14 @@ export function fromMarketDocument(document: MarketDocument): Market {
 }
 
 /** Seed teklifini, urun kopyasi ve arama alanlariyla belgeye cevirir. */
-export function toOfferDocument(seed: OfferSeed, product: Product): OfferDocument {
+export function toOfferDocument(offer: Offer): OfferDocument {
+  const { product } = offer;
   return {
-    _id: offerIdFor(seed.marketId, seed.productId),
-    marketId: seed.marketId,
-    productId: seed.productId,
-    priceMinor: seed.priceMinor,
-    isActive: seed.isActive,
+    _id: offer.id,
+    marketId: offer.marketId,
+    productId: product.id,
+    priceMinor: offer.priceMinor,
+    isActive: offer.isActive,
     product: toProductDocument(product),
     categoryId: product.categoryId,
     searchTerms: [...searchTermsOf(product)],

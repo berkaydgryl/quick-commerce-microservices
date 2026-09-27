@@ -6,12 +6,13 @@
  * yerde: alan adi ya da enum degeri degisirse tek dosya degisir.
  */
 
+import { CURRENCY } from '@getir/core';
 import { commonV1 } from '@getir/proto';
 import type { catalogV1 } from '@getir/proto';
 
-import { DEFAULT_CURRENCY } from '../../config/constants.js';
 import type { Category, Market, Offer, ProductUnit } from '../../domain/catalog.js';
 import { PRODUCT_UNIT } from '../../domain/catalog.js';
+import type { MarketDistance } from '../../domain/market-coverage.js';
 import type { OfferPage } from '../../domain/offer-reader.js';
 
 /** Domain birimi -> proto enum. Eksik esleme derlemede yakalanir (Record). */
@@ -22,9 +23,13 @@ const UNIT_TO_PROTO: Readonly<Record<ProductUnit, commonV1.Unit>> = {
   [PRODUCT_UNIT.PACK]: commonV1.Unit.UNIT_PACK,
 };
 
-/** Kurus cinsinden TAM SAYI; bolme yalnizca gosterim aninda istemcide yapilir. */
+/**
+ * Kurus cinsinden TAM SAYI; bolme yalnizca gosterim aninda istemcide yapilir.
+ * Para birimi bos birakilmaz: common.proto'ya gore bosluk doldurma sorumlulugu
+ * sunucudadir, istemci varsayim yapmak zorunda kalmasin.
+ */
 function money(amountMinor: number): commonV1.Money {
-  return { amountMinor, currency: DEFAULT_CURRENCY };
+  return { amountMinor, currency: CURRENCY };
 }
 
 export function toProtoCategory(category: Category): catalogV1.Category {
@@ -54,6 +59,18 @@ export function toProtoMarket(market: Market): catalogV1.Market {
       deliveryFee: money(market.pricingRules.deliveryFeeMinor),
       freeDeliveryThreshold: money(market.pricingRules.freeDeliveryThresholdMinor),
     },
+  };
+}
+
+/**
+ * Mesafe proto'da int32 METRE: burada tam sayiya yuvarlanir. Yuvarlama yaricap
+ * kuralini bozmaz - yaricap tam sayi oldugu icin mesafe <= yaricap ise
+ * yuvarlanmis mesafe de <= yaricap (istemci "yaricap disi" market gormez).
+ */
+export function toProtoNearbyMarket(nearby: MarketDistance): catalogV1.NearbyMarket {
+  return {
+    market: toProtoMarket(nearby.market),
+    distanceMeters: Math.round(nearby.distanceMeters),
   };
 }
 

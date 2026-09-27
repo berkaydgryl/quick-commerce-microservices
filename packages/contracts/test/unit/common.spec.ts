@@ -1,3 +1,4 @@
+import { CURRENCY } from '@getir/core';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -34,6 +35,10 @@ describe('moneySchema', () => {
 
   it('TRY disinda para birimi kabul etmez', () => {
     expect(moneySchema.safeParse({ amountMinor: 100, currency: 'USD' }).success).toBe(false);
+  });
+
+  it('para birimi core daki tek sabittir (D7: TRY baska yerde yazilmaz)', () => {
+    expect(moneySchema.shape.currency.value).toBe(CURRENCY);
   });
 });
 

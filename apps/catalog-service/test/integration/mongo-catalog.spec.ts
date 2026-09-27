@@ -152,6 +152,19 @@ describe('seed', () => {
     await expect(failing).rejects.toMatchObject({ code: ERROR_CODES.CONFLICT });
     await expectDemoCounts();
   });
+
+  it('olmayan urune isaret eden teklif: transaction baslamadan reddedilir, veri degismez (D7)', async () => {
+    const failing = seeder.replaceAll({
+      ...CATALOG_SNAPSHOT,
+      offers: [
+        ...CATALOG_SNAPSHOT.offers,
+        { marketId: 'mkt_migros-jet-moda', productId: 'prd_yok', priceMinor: 100, isActive: true },
+      ],
+    });
+
+    await expect(failing).rejects.toMatchObject({ code: ERROR_CODES.INTERNAL });
+    await expectDemoCounts();
+  });
 });
 
 describe('ListNearbyMarkets - gercek Mongo', () => {

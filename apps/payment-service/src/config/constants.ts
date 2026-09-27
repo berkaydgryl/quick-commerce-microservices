@@ -23,6 +23,3 @@ export const THREEDS_MAX_ATTEMPTS = 3;
  * deneme kesinlesir, hak sayisi kadar tur yeter.
  */
 export const CONFIRM_3DS_MAX_WRITE_RETRIES = THREEDS_MAX_ATTEMPTS;
-
-/** Tek desteklenen para birimi. Proto'da bos para birimi TRY demektir. */
-export const SUPPORTED_CURRENCY = 'TRY';
