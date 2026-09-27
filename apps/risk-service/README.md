@@ -5,14 +5,15 @@ Risk servisi: sipariş bağlamını puanlar ve bir **bant önerir**. Kararı uyg
 
 ## Bugünkü durum (T6.3 — Evaluate RPC ve risk_events)
 
-| Parça                           | Durum                                                                   |
-| ------------------------------- | ----------------------------------------------------------------------- |
-| Kural arayüzü + kayıt           | ✅ `domain/rule.ts`, `rules/registry.ts` (config ile iki yönlü eşleşme) |
-| Skor, bant, veto                | ✅ `domain/score.ts`, `domain/bands.ts`                                 |
-| Paralel koşu + hata izolasyonu  | ✅ `application/evaluate-risk.ts` (kural başına 200 ms sınır)           |
-| Config                          | ✅ `config/risk.rules.json` (Zod ile doğrulanır)                        |
-| Altı çekirdek kural             | ✅ `rules/*.rule.ts`, eşikler `config/constants.ts`                     |
-| `Evaluate`, `GetLastEvaluation` | ✅ gRPC :50055; kayıt `risk_events` (Mongo) ya da bellek (`MOCK`)       |
+| Parça                             | Durum                                                                                |
+| --------------------------------- | ------------------------------------------------------------------------------------ |
+| Kural arayüzü + kayıt             | ✅ `domain/rule.ts`, `rules/registry.ts` (config ile iki yönlü eşleşme)              |
+| Kural sonucu (puan, veto yetkisi) | ✅ `domain/rule-result.ts` (saf; D10)                                                |
+| Skor, bant, veto                  | ✅ `domain/score.ts`, `domain/bands.ts`                                              |
+| Paralel koşu + hata izolasyonu    | ✅ `application/evaluate-risk.ts` (yalnızca orkestrasyon; kural başına 200 ms sınır) |
+| Config                            | ✅ `config/risk.rules.json` (Zod ile doğrulanır)                                     |
+| Altı çekirdek kural               | ✅ `rules/*.rule.ts`, eşikler `config/constants.ts`                                  |
+| `Evaluate`, `GetLastEvaluation`   | ✅ gRPC :50055; kayıt `risk_events` (Mongo) ya da bellek (`MOCK`)                    |
 
 ## RPC'ler (T6.3)
 
