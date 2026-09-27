@@ -29,6 +29,9 @@ option go_package = "github.com/berkaydgryl/quick-commerce-microservices/package
 // (urun/kategori yonetimi) admin API'si uzerinden yapilir.
 service CatalogService {
   // Musteriye gosterilecek kategori agacinin duz listesi.
+  //
+  // SAYFASIZ, SINIRLI LISTE: en fazla 100 kategori (MAX_CATEGORY_COUNT).
+  // Taksonomiyi seed yazar, kullanici uretmez; seed fazlasini reddeder.
   rpc ListCategories(ListCategoriesRequest) returns (ListCategoriesResponse);
 
   // Filtreli + sayfali urun listesi.
@@ -53,7 +56,8 @@ service CatalogService {
   rpc GetMarket(GetMarketRequest) returns (GetMarketResponse);
 
   // Marketin en az bir aktif teklifi olan kategoriler, sort_order ile.
-  // Manav yalnizca meyve-sebze kategorisini gosterir.
+  // Manav yalnizca meyve-sebze kategorisini gosterir. ListCategories gibi
+  // sayfasiz ve en fazla 100 kategori.
   rpc ListMarketCategories(ListMarketCategoriesRequest) returns (ListMarketCategoriesResponse);
 
   // Bir marketin verilen urunler icin tekliflerini (fiyat) TOPLU okur.
@@ -63,17 +67,13 @@ service CatalogService {
   // urun sessizce atlanmaz, missing listesinde doner.
   rpc BatchGetOffers(BatchGetOffersRequest) returns (BatchGetOffersResponse);
 
-  // Toplu urun okuma.
-  //
-  // NEDEN VAR: sepet ve rezervasyon akisi 50 kaleme kadar cikabiliyor
-  // (POST /v1/cart/reserve). GetProduct'i dongude cagirmak, B27'de stok icin
-  // yasaklanan N+1'in aynisini katalog tarafinda uretirdi. Gateway sepeti
-  // dogrularken TEK cagri yapar.
-  //
-  // Bulunamayan kimlikler sessizce ATLANMAZ: cevaptaki missing listesinde
-  // dondurulur, boylece cagiran taraf "silinmis urun" ile "yanlis id" ayrimini
-  // yapabilir.
-  rpc BatchGetProducts(BatchGetProductsRequest) returns (BatchGetProductsResponse);
+  // DEPRECATED (ADR-15): fiyatsiz toplu urun okumasi. Pazaryerinde fiyat
+  // teklife aittir; sepet ve siparis dogrulamasi (T7.2) BatchGetOffers ile
+  // yapilir. Bu RPC'yi cagiran yok ve UYGULANMADI: sunucu UNIMPLEMENTED doner.
+  // Silinmez: tel ve JSON uyumu korunur (buf breaking).
+  rpc BatchGetProducts(BatchGetProductsRequest) returns (BatchGetProductsResponse) {
+    option deprecated = true;
+  }
 }
 
 // Urun kategorisi. Duz liste halinde doner; siralama sort_order ile yapilir.
@@ -151,22 +151,27 @@ message ListCategoriesResponse {
   repeated Category categories = 1;
 }
 
+// Alan kurallari @getir/contracts'taki REST semalariyla AYNIDIR ve
+// catalog-service'te uygulanir (gateway yalnizca bicimi dogrular). Kurala
+// uymayan istek VALIDATION_FAILED doner - bos liste ya da NOT_FOUND degil.
 message ListProductsRequest {
-  // Bos birakilirsa kategori filtresi uygulanmaz.
+  // Bos birakilirsa kategori filtresi uygulanmaz. Doluysa "cat_" onekli
+  // katalog kimligi (en fazla 64 karakter).
   string category_id = 1;
 
   // DEPRECATED (ADR-15): yerine market_id.
   string dark_store_id = 2 [deprecated = true];
 
-  // Serbest metin aramasi. Kural: EN AZ 2 KARAKTER olmalidir; bos query tum
-  // listeyi dondurur. Dogrulama gateway'de Zod ile yapilir, bu alan yalnizca
-  // dogrulanmis degeri TASIR. 1 karakterlik query gateway'de reddedilir.
+  // Serbest metin aramasi: 2-64 karakter (bas/son bosluk kirpildiktan sonra).
+  // Bos query arama yapmaz, tum listeyi dondurur.
   string query = 3;
 
   getir.common.v1.PageRequest page = 4;
 
   // ZORUNLU (ADR-15): urunler bu marketin teklifleri olarak, o marketin
   // fiyatiyla doner. Stok bilgisi burada DEGIL, inventory-svc'dedir (B27).
+  // "mkt_" onekli katalog kimligi; bicim bozuksa VALIDATION_FAILED, bicim
+  // dogru ama market yoksa NOT_FOUND.
   string market_id = 5;
 }
 
@@ -348,7 +353,7 @@ message NearbyMarket {
 
 message ListNearbyMarketsRequest {
   // Musterinin teslimat konumu. ZORUNLU: proto3'te eksik konum (0,0) gibi
-  // islenmemeli; dogrulama sunucudadir.
+  // islenmemeli; dogrulama sunucudadir (WGS84 araligi, Turkce mesaj).
   getir.common.v1.GeoPoint location = 1;
 }
 
@@ -358,6 +363,7 @@ message ListNearbyMarketsResponse {
 }
 
 message GetMarketRequest {
+  // "mkt_" onekli katalog kimligi; bicim bozuksa VALIDATION_FAILED.
   string market_id = 1;
 }
 
@@ -366,6 +372,7 @@ message GetMarketResponse {
 }
 
 message ListMarketCategoriesRequest {
+  // "mkt_" onekli katalog kimligi; bicim bozuksa VALIDATION_FAILED.
   string market_id = 1;
 }
 
@@ -374,9 +381,12 @@ message ListMarketCategoriesResponse {
 }
 
 message BatchGetOffersRequest {
+  // "mkt_" onekli katalog kimligi; bicim bozuksa VALIDATION_FAILED.
   string market_id = 1;
 
-  // En fazla 100 kimlik; daha fazlasi VALIDATION_FAILED.
+  // En fazla 100 kimlik; daha fazlasi VALIDATION_FAILED. Bos kimlik
+  // reddedilir; bicimi bozuk kimlik BILEREK reddedilmez, missing'de doner
+  // (tek hatali kalem butun sepeti dusurmemeli).
   repeated string product_ids = 2;
 }
 

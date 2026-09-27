@@ -6,6 +6,12 @@
  * yaziyla anlatilmis; burada calisir hale geliyor (ADR-10: dogrulama tek
  * kutuphane, Zod).
  *
+ * KURALLAR @getir/contracts'TAN GELIR (D6): gateway yalnizca bicimi dogrular
+ * ("sayi mi?"), kuralin kendisi buradadir. Onceki surum REST sozlesmesinden
+ * gevsekti: `categoryId=sut` 200 + bos liste, 65 karakterlik arama 200,
+ * `/v1/markets/BAD!ID` 404 donuyordu. Artik kimlik bicimi, arama uzunlugu ve
+ * konum araligi REST'in kullandigi AYNI semalardir; hepsi 400 doner.
+ *
  * PROTO3 VARSAYILANI TUZAGI: proto3'te set edilmemis string alan tel uzerinde
  * yoktur ve cozuldugunde BOS METIN olur; yani "gonderilmedi" ile "bos gonderildi"
  * ayirt edilemez. Katalog icin bos filtre = "filtreleme" demektir, bu yuzden
@@ -13,10 +19,17 @@
  * filtreleri gorur.
  */
 
+import {
+  categoryIdSchema,
+  geoPointSchema,
+  marketIdSchema,
+  SEARCH_QUERY_MAX_LENGTH,
+  SEARCH_QUERY_MIN_LENGTH,
+} from '@getir/contracts';
 import { z } from 'zod';
 
 import type { ListProductsInput } from '../../application/list-products.js';
-import { MAX_BATCH_OFFER_IDS, MIN_SEARCH_QUERY_LENGTH } from '../../config/constants.js';
+import { MAX_BATCH_OFFER_IDS } from '../../config/constants.js';
 
 /** Bos metni "yok" sayan istege bagli alan. */
 const optionalText = z
@@ -30,11 +43,27 @@ const optionalText = z
 /** ListCategories parametresizdir; sema yine de calisir (ileride alan eklenirse kapi hazir). */
 export const listCategoriesRequestSchema = z.object({});
 
-/** Bos olamayan kimlik metni (proto3'te eksik alan "" gelir). */
-const requiredId = z
-  .string()
-  .transform((value) => value.trim())
-  .refine((value) => value !== '', { message: 'zorunlu' });
+/** Bos olamayan metin (proto3'te eksik alan "" gelir). */
+const requiredText = z.string({ required_error: 'zorunlu' }).trim().min(1, 'zorunlu');
+
+/**
+ * Zorunlu katalog kimligi: bossa "zorunlu", doluysa sozlesmenin bicimi
+ * (onek + okunabilir govde, en fazla 64 karakter). Bos deger bicim hatasi
+ * gibi raporlanmasin diye ilk kontrol ayridir; pipe ilk hatada durur.
+ */
+const requiredCatalogId = (contract: z.ZodString) => requiredText.pipe(contract);
+
+/** Istege bagli katalog kimligi: bos = filtre yok, doluysa sozlesmenin bicimi. */
+const optionalCatalogId = (contract: z.ZodString) => optionalText.pipe(contract.optional());
+
+/** Serbest metin aramasi: bos = arama yok, doluysa REST'teki uzunluk siniri. */
+const searchQuery = optionalText.pipe(
+  z
+    .string()
+    .min(SEARCH_QUERY_MIN_LENGTH, `en az ${SEARCH_QUERY_MIN_LENGTH} karakter olmali`)
+    .max(SEARCH_QUERY_MAX_LENGTH, `en fazla ${SEARCH_QUERY_MAX_LENGTH} karakter olmali`)
+    .optional(),
+);
 
 /**
  * ListProducts: market ZORUNLU (ADR-15). dark_store_id deprecated alan olarak
@@ -48,12 +77,9 @@ const requiredId = z
  */
 export const listProductsRequestSchema = z
   .object({
-    marketId: requiredId,
-    categoryId: optionalText,
-    query: optionalText.refine(
-      (value) => value === undefined || value.length >= MIN_SEARCH_QUERY_LENGTH,
-      { message: `en az ${MIN_SEARCH_QUERY_LENGTH} karakter olmali` },
-    ),
+    marketId: requiredCatalogId(marketIdSchema),
+    categoryId: optionalCatalogId(categoryIdSchema),
+    query: searchQuery,
     page: z
       .object({
         // Sinirlari BURADA degil domain'de uyguluyoruz: sozlesme "reddetme,
@@ -76,31 +102,26 @@ export const listProductsRequestSchema = z
 /**
  * ListNearbyMarkets. Konum ZORUNLUDUR: proto3'te mesaj alani set edilmezse
  * undefined gelir ve "konum yok" sessizce (0, 0) - Gine Korfezi - gibi
- * islenmemeli. Alt alanlardaki sinirlar WGS84 araligidir.
+ * islenmemeli. WGS84 araligi ve Turkce mesajlari sozlesme paketindedir.
  */
-export const listNearbyMarketsRequestSchema = z.object({
-  location: z.object(
-    {
-      lat: z.number().finite().min(-90).max(90),
-      lng: z.number().finite().min(-180).max(180),
-    },
-    { required_error: 'zorunlu' },
-  ),
+export const listNearbyMarketsRequestSchema = z.object({ location: geoPointSchema });
+
+export const getMarketRequestSchema = z.object({ marketId: requiredCatalogId(marketIdSchema) });
+
+export const listMarketCategoriesRequestSchema = z.object({
+  marketId: requiredCatalogId(marketIdSchema),
 });
 
-export const getMarketRequestSchema = z.object({ marketId: requiredId });
-
-export const listMarketCategoriesRequestSchema = z.object({ marketId: requiredId });
-
 /**
- * BatchGetOffers (T9.3). En fazla MAX_BATCH_OFFER_IDS kimlik (sozlesme);
- * bos kimlik reddedilir. Bicimi bozuk ama dolu kimlik REDDEDILMEZ: o kimlikle
- * teklif yoktur ve `missing`'de doner - toplu okumada tek hatali kalem butun
- * sepeti dusurmemeli. Bos liste gecerlidir (bos cevap).
+ * BatchGetOffers (T9.3). Market kimligi sozlesme bicimindedir. En fazla
+ * MAX_BATCH_OFFER_IDS urun kimligi; bos kimlik reddedilir. URUN KIMLIGI
+ * BILEREK ESNEK: bicimi bozuk ama dolu kimlik REDDEDILMEZ, o kimlikle teklif
+ * yoktur ve `missing`'de doner - toplu okumada tek hatali kalem butun sepeti
+ * dusurmemeli. Bos liste gecerlidir (bos cevap).
  */
 export const batchGetOffersRequestSchema = z.object({
-  marketId: requiredId,
+  marketId: requiredCatalogId(marketIdSchema),
   productIds: z
-    .array(requiredId)
+    .array(requiredText)
     .max(MAX_BATCH_OFFER_IDS, `en fazla ${MAX_BATCH_OFFER_IDS} urun kimligi`),
 });

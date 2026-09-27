@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  firstCategories,
   matchesQuery,
   offerIdFor,
   PRODUCT_UNIT,
@@ -45,6 +46,23 @@ describe('sortCategories', () => {
     sortCategories(input);
 
     expect(input[0]?.id).toBe('c');
+  });
+});
+
+describe('firstCategories (D6: kategori okumasinin kesme kurali)', () => {
+  const categories = [
+    category('cat_c', 'C', 2),
+    category('cat_b', 'B', 1),
+    category('cat_a', 'A', 2),
+  ];
+
+  it('sortOrder, esitlikte kimlik (ikili) sirasinin ilk limit kadarini birakir', () => {
+    expect(firstCategories(categories, 2).map((item) => item.id)).toEqual(['cat_b', 'cat_a']);
+  });
+
+  it('limit liste boyundan buyukse hepsini doner, girdiyi degistirmez', () => {
+    expect(firstCategories(categories, 10)).toHaveLength(3);
+    expect(categories[0]?.id).toBe('cat_c');
   });
 });
 

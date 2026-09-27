@@ -19,19 +19,44 @@ teslimat süresi ve puan. Market paneli kapsam dışıdır; değerler seed'dendi
 
 | RPC                    | Durum                                                                                                                                             |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ListCategories`       | ✅ Platform kategorileri                                                                                                                          |
+| `ListCategories`       | ✅ Platform kategorileri; sayfasız, en fazla 100 (sınırlı liste, aşağıda)                                                                         |
 | `ListNearbyMarkets`    | ✅ Konumu kapsayan marketler, yakından uzağa; kapalılar dahil; boşsa boş                                                                          |
 | `GetMarket`            | ✅ Puan, süre, fiyat kuralları; yoksa `NOT_FOUND`                                                                                                 |
-| `ListMarketCategories` | ✅ Marketin aktif teklifi olan kategoriler (manav yalnızca meyve-sebze)                                                                           |
+| `ListMarketCategories` | ✅ Marketin aktif teklifi olan kategoriler (manav yalnızca meyve-sebze); sayfasız, en fazla 100                                                   |
 | `ListProducts`         | ✅ `market_id` zorunlu; teklifler o marketin fiyatıyla, kategori + arama + imleç                                                                  |
 | `ResolveDarkStore`     | ⛔ Deprecated (ADR-15): `UNIMPLEMENTED`, mesaj `ListNearbyMarkets`'i gösterir                                                                     |
 | `GetProduct`           | ⏳ `UNIMPLEMENTED` — T8.4                                                                                                                         |
 | `BatchGetOffers`       | ✅ Marketin satılabilir teklifleri, **tek sorguda** (en fazla 100 kimlik); pasif / başka marketin / olmayan → `missing`; market yoksa `NOT_FOUND` |
-| `BatchGetProducts`     | ⛔ `UNIMPLEMENTED` — kullanan yok; fiyat teklife ait olduğu için sepet doğrulaması `BatchGetOffers` ile                                           |
+| `BatchGetProducts`     | ⛔ Deprecated (proto'da işaretli): `UNIMPLEMENTED` — kullanan yok; fiyat teklife ait olduğu için sepet doğrulaması `BatchGetOffers` ile           |
 
 T4.2'nin "yarıçap içinde ama kapalı → `STORE_CLOSED`, yarıçap dışı → `OUT_OF_RANGE`" kuralı
 kaybolmadı: tek market için `domain/market-coverage.ts` → `evaluateCoverage`'da duruyor ve
 rezervasyon (T11.4) seçilen marketin hâlâ hizmet verip vermediğini buna soracak.
+
+## İstek doğrulaması (D6)
+
+Gateway yalnızca **biçimi** doğrular ("sayı mı?"); kuralın kendisi burada, `interfaces/grpc/schemas.ts`'te.
+Kurallar REST'in kullandığı **aynı** `@getir/contracts` şemalarıdır; burada tekrar yazılmaz.
+
+| Alan                           | Kural (kaynak)                                                   | İhlal                                            |
+| ------------------------------ | ---------------------------------------------------------------- | ------------------------------------------------ |
+| `market_id` (4 RPC)            | `mkt_` + okunabilir gövde, en fazla 64 (`marketIdSchema`)        | `VALIDATION_FAILED` → 400 (404 değil)            |
+| `category_id` (ListProducts)   | Boşsa filtre yok; doluysa `cat_` biçimi (`categoryIdSchema`)     | `VALIDATION_FAILED` → 400 (boş liste değil)      |
+| `query` (ListProducts)         | Kırpıldıktan sonra 2-64 karakter (`SEARCH_QUERY_MIN/MAX_LENGTH`) | `VALIDATION_FAILED` → 400                        |
+| `location` (ListNearbyMarkets) | Zorunlu; WGS84, sonlu sayı (`geoPointSchema`)                    | Türkçe sebep: `enlem -90 ile 90 arasinda olmali` |
+| `product_ids` (BatchGetOffers) | En fazla 100, boş olamaz; **biçimi bilerek esnek**               | Bozuk kimlik hata değil, `missing`               |
+
+Boş zorunlu alan biçim hatası gibi değil `zorunlu` diye raporlanır. Sebepler `details`'te alan adıyla
+döner; gateway proto adını REST adına çevirir (`query` → `q`, `location.lat` → `lat`).
+
+## Sınırlı listeler: kategoriler sayfalanmaz
+
+Kural "liste dönen her uç sayfalıdır" der; kategori listeleri bunun yazılı istisnasıdır
+(`proje-kurallari.mdc` → "Sinirli listeler istisnasi"). Taksonomiyi seed yazar, kullanıcı üretmez:
+
+- **Okuma sınırlı:** `CategoryReader.listCategories(limit)`; iki use-case de `MAX_CATEGORY_COUNT` (100)
+  geçirir. Mongo `sort({ sortOrder: 1, _id: 1 }).limit()`, bellek aynı sırayı `firstCategories` ile keser.
+- **Kesme sessiz veri kaybı olamaz:** seed 100'den fazla kategoriyi hiçbir şey yazmadan reddeder.
 
 ## BatchGetOffers (T9.3)
 
@@ -70,7 +95,7 @@ testinde gerçek Mongo. Veri kaynağını seçip açan tek yer `infrastructure/c
 
 | Port             | Metotlar                                                            | Kullanan use-case                                        |
 | ---------------- | ------------------------------------------------------------------- | -------------------------------------------------------- |
-| `CategoryReader` | `listCategories`                                                    | `ListCategories`, `ListMarketCategories`                 |
+| `CategoryReader` | `listCategories(limit)`                                             | `ListCategories`, `ListMarketCategories`                 |
 | `MarketReader`   | `getMarket`, `marketExists`, `listMarketsByDistance`                | `ListNearbyMarkets`, `GetMarket`, varlık kontrolleri     |
 | `OfferReader`    | `listOffers`, `listCategoryIdsWithOffers`, `findOffersByProductIds` | `ListProducts`, `ListMarketCategories`, `BatchGetOffers` |
 

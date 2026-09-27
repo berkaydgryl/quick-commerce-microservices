@@ -1,11 +1,20 @@
+import { SEARCH_QUERY_MAX_LENGTH } from '@getir/contracts';
 import { describe, expect, it } from 'vitest';
+import type { z } from 'zod';
 
 import {
   batchGetOffersRequestSchema,
   getMarketRequestSchema,
+  listMarketCategoriesRequestSchema,
   listNearbyMarketsRequestSchema,
   listProductsRequestSchema,
 } from '../../src/interfaces/grpc/schemas.js';
+
+/** Hatalari [alan, mesaj] ciftleri olarak okur: servis details'i bu bicimde doner. */
+function issuesOf(schema: z.ZodTypeAny, input: unknown): [string, string][] {
+  const result = schema.safeParse(input);
+  return (result.error?.issues ?? []).map((issue) => [issue.path.join('.'), issue.message]);
+}
 
 describe('listProductsRequestSchema', () => {
   it('market ZORUNLU (ADR-15): proto3 bos metni "yok" sayilir ve reddedilir', () => {
@@ -67,6 +76,44 @@ describe('listProductsRequestSchema', () => {
     expect(() => listProductsRequestSchema.parse({ marketId: 'mkt_a', query: 'a' })).toThrow();
   });
 
+  // D6: kurallar REST sozlesmesiyle AYNI (@getir/contracts). Onceki surumde bu
+  // isteklerin hepsi kabul ediliyordu.
+  it('arama en fazla 64 karakter; sinir dahil', () => {
+    const atLimit = 'a'.repeat(SEARCH_QUERY_MAX_LENGTH);
+
+    expect(listProductsRequestSchema.safeParse({ marketId: 'mkt_a', query: atLimit }).success).toBe(
+      true,
+    );
+    expect(
+      issuesOf(listProductsRequestSchema, { marketId: 'mkt_a', query: `${atLimit}a` }),
+    ).toEqual([['query', 'en fazla 64 karakter olmali']]);
+  });
+
+  it('bicimi bozuk kategori BOS LISTE degil, dogrulama hatasi', () => {
+    expect(issuesOf(listProductsRequestSchema, { marketId: 'mkt_a', categoryId: 'sut' })).toEqual([
+      ['categoryId', 'cat_ onekli kimlik bekleniyor'],
+    ]);
+  });
+
+  it('bicimi bozuk market NOT_FOUND degil, dogrulama hatasi', () => {
+    expect(issuesOf(listProductsRequestSchema, { marketId: 'BAD!ID' })).toEqual([
+      ['marketId', 'mkt_ onekli kimlik bekleniyor'],
+    ]);
+  });
+
+  it('bos market "zorunlu" der, bicim hatasi gibi raporlanmaz', () => {
+    expect(issuesOf(listProductsRequestSchema, { marketId: '' })).toEqual([
+      ['marketId', 'zorunlu'],
+    ]);
+    expect(issuesOf(listProductsRequestSchema, {})).toEqual([['marketId', 'zorunlu']]);
+  });
+
+  it('64 karakterden uzun kimlik reddedilir (sozlesmedeki CATALOG_ID_MAX_LENGTH)', () => {
+    const longId = `mkt_${'a'.repeat(61)}`;
+
+    expect(listProductsRequestSchema.safeParse({ marketId: longId }).success).toBe(false);
+  });
+
   it('sayfa boyutunu REDDETMEZ; kirpma kurali domain katmanindadir', () => {
     const parsed = listProductsRequestSchema.parse({
       marketId: 'mkt_a',
@@ -87,11 +134,43 @@ describe('listNearbyMarketsRequestSchema', () => {
       listNearbyMarketsRequestSchema.safeParse({ location: { lat: 91, lng: 29 } }).success,
     ).toBe(false);
   });
+
+  // D6: mesajlar REST zarfinin details alanina aynen gecer; Ingilizce olmamali.
+  it('hata mesajlari Turkce', () => {
+    expect(issuesOf(listNearbyMarketsRequestSchema, {})).toEqual([['location', 'zorunlu']]);
+    expect(issuesOf(listNearbyMarketsRequestSchema, { location: { lat: 95, lng: 200 } })).toEqual([
+      ['location.lat', 'enlem -90 ile 90 arasinda olmali'],
+      ['location.lng', 'boylam -180 ile 180 arasinda olmali'],
+    ]);
+  });
+
+  it('sonsuz deger reddedilir (gRPC double Infinity tasiyabilir)', () => {
+    expect(
+      listNearbyMarketsRequestSchema.safeParse({
+        location: { lat: Number.POSITIVE_INFINITY, lng: 29 },
+      }).success,
+    ).toBe(false);
+  });
 });
 
-describe('getMarketRequestSchema', () => {
+describe.each([
+  ['getMarketRequestSchema', getMarketRequestSchema],
+  ['listMarketCategoriesRequestSchema', listMarketCategoriesRequestSchema],
+])('%s', (_name, schema) => {
   it('bos market kimligini reddeder', () => {
-    expect(getMarketRequestSchema.safeParse({ marketId: '  ' }).success).toBe(false);
+    expect(issuesOf(schema, { marketId: '  ' })).toEqual([['marketId', 'zorunlu']]);
+  });
+
+  it('bicimi bozuk market kimligini reddeder (D6: 404 degil 400)', () => {
+    expect(issuesOf(schema, { marketId: 'BAD!ID' })).toEqual([
+      ['marketId', 'mkt_ onekli kimlik bekleniyor'],
+    ]);
+  });
+
+  it('bicimi dogru kimligi kirparak alir', () => {
+    expect(schema.parse({ marketId: ' mkt_migros-jet-moda ' })).toEqual({
+      marketId: 'mkt_migros-jet-moda',
+    });
   });
 });
 
@@ -123,5 +202,11 @@ describe('batchGetOffersRequestSchema (T9.3 siniri)', () => {
 
   it('bos kimlik reddedilir', () => {
     expect(parse(['prd_sut-1l', '   ']).success).toBe(false);
+  });
+
+  it('market kimligi ESNEK DEGIL: sozlesme bicimi (D6)', () => {
+    expect(
+      issuesOf(batchGetOffersRequestSchema, { marketId: 'migros', productIds: ['prd_sut-1l'] }),
+    ).toEqual([['marketId', 'mkt_ onekli kimlik bekleniyor']]);
   });
 });

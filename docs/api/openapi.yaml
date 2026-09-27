@@ -215,6 +215,9 @@ paths:
         Sorgu parametresi ALMAZ. Tanınmayan her parametre sessizce yok sayılmaz,
         `400 VALIDATION_FAILED` ile reddedilir ve `details` parametre adını taşır:
         yazım hatalı bir filtre filtrelenmemiş listeyi filtrelenmiş sandırmasın.
+
+        SAYFALANMAZ: kategori taksonomisi sınırlı bir listedir (en fazla 100,
+        seed fazlasını yazmaz). Bu yüzden cevapta `page` alanı yoktur.
       security: []
       responses:
         "200":
@@ -235,6 +238,7 @@ paths:
                         properties:
                           items:
                             type: array
+                            maxItems: 100
                             items:
                               $ref: "#/components/schemas/Category"
         "400":
@@ -298,7 +302,9 @@ paths:
                             items:
                               $ref: "#/components/schemas/NearbyMarket"
         "400":
-          description: Konum eksik ya da WGS84 aralığı dışında
+          description: |
+            Konum eksik, sayı değil ya da WGS84 aralığı dışında. Sebep
+            `details` alanında Türkçedir, örn. `{"lat": "enlem -90 ile 90 arasinda olmali"}`.
           content:
             application/json:
               schema:
@@ -328,6 +334,15 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/Market"
+        "400":
+          description: |
+            Market kimliği `mkt_` biçiminde değil ya da tanınmayan sorgu
+            parametresi (VALIDATION_FAILED; `details.marketId` sebebi taşır).
+            Biçimi doğru ama olmayan market 404'tür.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
         "404":
           description: Market yok (NOT_FOUND)
           content:
@@ -342,7 +357,9 @@ paths:
       tags: [catalog]
       operationId: listMarketCategories
       summary: Marketin teklifi olan kategoriler
-      description: Manav yalnızca meyve-sebze kategorisini döndürür.
+      description: |
+        Manav yalnızca meyve-sebze kategorisini döndürür. `/v1/categories` gibi
+        sayfalanmaz; en fazla 100 kategori.
       security: []
       parameters:
         - $ref: "#/components/parameters/MarketIdPath"
@@ -362,8 +379,17 @@ paths:
                         properties:
                           items:
                             type: array
+                            maxItems: 100
                             items:
                               $ref: "#/components/schemas/Category"
+        "400":
+          description: |
+            Market kimliği `mkt_` biçiminde değil ya da tanınmayan sorgu
+            parametresi (VALIDATION_FAILED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
         "404":
           description: Market yok (NOT_FOUND)
           content:
@@ -415,7 +441,11 @@ paths:
                           page:
                             $ref: "#/components/schemas/Page"
         "400":
-          description: Geçersiz filtre (örn. tek karakterlik arama)
+          description: |
+            Geçersiz istek (VALIDATION_FAILED): `mkt_` biçiminde olmayan market,
+            `cat_` biçiminde olmayan kategori ya da 2-64 karakter dışındaki arama.
+            Biçimi bozuk kategori BOŞ LİSTE değil 400'dür: yazım hatası "bu
+            kategoride ürün yok" sanılmasın.
           content:
             application/json:
               schema:

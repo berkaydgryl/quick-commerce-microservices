@@ -19,12 +19,15 @@ import { z } from 'zod';
 import {
   categoryIdSchema,
   geoPointSchema,
+  latitudeSchema,
+  longitudeSchema,
   marketIdSchema,
   moneySchema,
   offerIdSchema,
   pageQuerySchema,
   pageSchema,
   productIdSchema,
+  queryNumberSchema,
 } from './common.js';
 import {
   RATING_MAX,
@@ -117,12 +120,13 @@ export const nearbyMarketSchema = z.object({
 });
 
 /**
- * GET /v1/markets?lat&lng. Sorgu dizesinden geldigi icin coerce kullanilir.
+ * GET /v1/markets?lat&lng. Sorgu dizesinden geldigi icin coerce kullanilir;
+ * aralik kurali ve mesaji govdedeki konumla AYNI semadan gelir.
  * Konum ZORUNLUDUR: eksik konum (0,0) gibi islenmemeli.
  */
 export const nearbyMarketsQuerySchema = z.object({
-  lat: z.coerce.number().min(-90).max(90),
-  lng: z.coerce.number().min(-180).max(180),
+  lat: queryNumberSchema().pipe(latitudeSchema),
+  lng: queryNumberSchema().pipe(longitudeSchema),
 });
 
 /** Yakindan uzaga. Bos liste = "bolgende market yok" (hata degil). */

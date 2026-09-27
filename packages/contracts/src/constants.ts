@@ -31,6 +31,15 @@ export const FULL_NAME_MAX_LENGTH = 80;
 export const SEARCH_QUERY_MIN_LENGTH = 2;
 export const SEARCH_QUERY_MAX_LENGTH = 64;
 
+/**
+ * WGS84 koordinat sinirlari (derece). openapi.yaml GeoPoint ve nearby sorgusu
+ * ayni araligi yazar; mesajlar da bu sabitlerden uretilir, sayi iki kez yazilmaz.
+ */
+export const LATITUDE_MIN = -90;
+export const LATITUDE_MAX = 90;
+export const LONGITUDE_MIN = -180;
+export const LONGITUDE_MAX = 180;
+
 /** Sepet sinirlari. */
 export const CART_ITEM_MIN_QUANTITY = 1;
 export const CART_ITEM_MAX_QUANTITY = 99;

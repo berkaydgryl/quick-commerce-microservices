@@ -5,6 +5,7 @@
 
 import { AppError } from '@getir/core';
 
+import { MAX_CATEGORY_COUNT } from '../config/constants.js';
 import type { Category } from '../domain/catalog.js';
 import { sortCategories } from '../domain/catalog.js';
 import type { CategoryReader } from '../domain/category-reader.js';
@@ -27,7 +28,7 @@ export function createListMarketCategories(deps: ListMarketCategoriesDeps): List
     }
 
     const [categories, withOffers] = await Promise.all([
-      deps.categories.listCategories(),
+      deps.categories.listCategories(MAX_CATEGORY_COUNT),
       deps.offers.listCategoryIdsWithOffers(marketId),
     ]);
     const present = new Set(withOffers);

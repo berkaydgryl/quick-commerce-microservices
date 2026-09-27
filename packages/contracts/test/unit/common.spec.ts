@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import {
+  LATITUDE_MAX,
+  LATITUDE_MIN,
+  LONGITUDE_MAX,
+  LONGITUDE_MIN,
   PAGE_SIZE_DEFAULT,
   PAGE_SIZE_MAX,
   PAGE_SIZE_MIN,
@@ -47,6 +52,37 @@ describe('geoPointSchema', () => {
 
   it('alan adlari lat/lng olmak zorundadir', () => {
     expect(geoPointSchema.safeParse({ latitude: 41, longitude: 28 }).success).toBe(false);
+  });
+
+  it('sinirlar dahildir: kutup ve tarih degistirme cizgisi gecerli konumdur', () => {
+    expect(geoPointSchema.safeParse({ lat: LATITUDE_MAX, lng: LONGITUDE_MIN }).success).toBe(true);
+    expect(geoPointSchema.safeParse({ lat: LATITUDE_MIN, lng: LONGITUDE_MAX }).success).toBe(true);
+  });
+
+  it('sonsuz deger reddedilir (JSON tasiyamaz ama gRPC double tasir)', () => {
+    expect(geoPointSchema.safeParse({ lat: Number.POSITIVE_INFINITY, lng: 0 }).success).toBe(false);
+  });
+
+  // D6: bu mesajlar gateway'den REST zarfinin details alanina aynen gecer.
+  it.each([
+    [{ lat: 91, lng: 0 }, 'lat', 'enlem -90 ile 90 arasinda olmali'],
+    [{ lat: 0, lng: -181 }, 'lng', 'boylam -180 ile 180 arasinda olmali'],
+    [{ lat: '41', lng: 0 }, 'lat', 'sayi olmali'],
+    [{ lng: 0 }, 'lat', 'zorunlu'],
+  ])('hata mesaji Turkce: %o', (input, field, message) => {
+    const issues = geoPointSchema.safeParse(input).error?.issues ?? [];
+
+    expect(issues.map((issue) => [issue.path.join('.'), issue.message])).toEqual([
+      [field, message],
+    ]);
+  });
+
+  it('konumun kendisi eksikse "zorunlu" (ic ice alan olarak)', () => {
+    const issues = z.object({ location: geoPointSchema }).safeParse({}).error?.issues ?? [];
+
+    expect(issues.map((issue) => [issue.path.join('.'), issue.message])).toEqual([
+      ['location', 'zorunlu'],
+    ]);
   });
 });
 

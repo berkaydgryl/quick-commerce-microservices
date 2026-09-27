@@ -133,6 +133,12 @@ Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicid
   korumasi `idem:{key}` ile gelecek, uc degismeyecek.
 - Liste donen her uc sayfalidir. Imlec (cursor) tercih edilir: katalog siralamasi degistigi
   icin offset ile ayni kayit iki kez gorunebilir (`catalog-service/src/domain/pagination.ts`).
+  - Sinirli listeler istisnasi: ust siniri KODDA SABIT olan liste sayfalanmaz, sinir okumada
+    uygulanir ve sabitin yorumunda gerekcesi yazar. Bugun uc tane: kategori taksonomisi
+    (`MAX_CATEGORY_COUNT` = 100; seed fazlasini yazmaz), yakindaki marketler
+    (`MARKET_CANDIDATE_LIMIT` = 20) ve toplu teklif okumasi (`MAX_BATCH_OFFER_IDS` = 100
+    kimlik). Siniri olmayan ya da kullanicinin uretebildigi liste (urunler, siparisler) bu
+    istisnaya giremez.
 - Proto geriye donuk uyumlu kalir: alan numarasi degistirilmez, silinen alan `reserved`.
 - Hata cevabi tek bicimdedir: `code`, `message`, `details`, `requestId`. gRPC tarafinda
   `x-app-error` metadata'si ayni yuku tasir.

@@ -143,6 +143,16 @@ describe('ListNearbyMarkets', () => {
 
     expect(error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
     expect(errorCodeOf(error)).toBe(ERROR_CODES.VALIDATION_FAILED);
+    expect(detailsOf(error)).toEqual({ location: 'zorunlu' });
+  });
+
+  it('WGS84 disi konum: sebep Turkce (gateway details i aynen REST e gecirir, D6)', async () => {
+    const { error } = await call(catalogV1.CatalogServiceService.listNearbyMarkets, {
+      location: { lat: 95, lng: 29 },
+    });
+
+    expect(error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
+    expect(detailsOf(error)).toEqual({ 'location.lat': 'enlem -90 ile 90 arasinda olmali' });
   });
 });
 
@@ -162,6 +172,20 @@ describe('GetMarket / ListMarketCategories', () => {
 
     expect(error?.code).toBe(GRPC_STATUS.NOT_FOUND);
     expect(detailsOf(error)).toEqual({ marketId: 'mkt_yok' });
+  });
+
+  it('bicimi bozuk kimlik: NOT_FOUND degil INVALID_ARGUMENT, iki RPC de (D6)', async () => {
+    const request = { marketId: 'BAD!ID' };
+    const errors = [
+      (await call(catalogV1.CatalogServiceService.getMarket, request)).error,
+      (await call(catalogV1.CatalogServiceService.listMarketCategories, request)).error,
+    ];
+
+    for (const error of errors) {
+      expect(error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
+      expect(errorCodeOf(error)).toBe(ERROR_CODES.VALIDATION_FAILED);
+      expect(detailsOf(error)).toEqual({ marketId: 'mkt_ onekli kimlik bekleniyor' });
+    }
   });
 
   it('ListMarketCategories: manav yalnizca meyve-sebze', async () => {
@@ -242,6 +266,22 @@ describe('ListProducts (teklifler)', () => {
 
     expect(error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
   });
+
+  // D6: onceki surumde uc istek de REST sozlesmesinden gevsekti.
+  it.each([
+    ['bicimi bozuk kategori (bos liste degil)', { categoryId: 'sut' }, 'categoryId'],
+    ['65 karakterlik arama', { query: 'a'.repeat(65) }, 'query'],
+    ['bicimi bozuk market (NOT_FOUND degil)', { marketId: 'BAD!ID' }, 'marketId'],
+  ])('%s: INVALID_ARGUMENT, alan details te', async (_name, overrides, field) => {
+    const { error } = await call(
+      catalogV1.CatalogServiceService.listProducts,
+      listProductsRequest(overrides),
+    );
+
+    expect(error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
+    expect(errorCodeOf(error)).toBe(ERROR_CODES.VALIDATION_FAILED);
+    expect(Object.keys(detailsOf(error) ?? {})).toEqual([field]);
+  });
 });
 
 describe('BatchGetOffers (T9.3)', () => {
@@ -320,6 +360,16 @@ describe('deprecated ve henuz yazilmamis RPC ler', () => {
 
     expect(error?.code).toBe(GRPC_STATUS.UNIMPLEMENTED);
     expect(error?.details).toContain('ListNearbyMarkets');
+  });
+
+  it('BatchGetProducts UNIMPLEMENTED (deprecated) ve yerini soyler', async () => {
+    const { error } = await call(catalogV1.CatalogServiceService.batchGetProducts, {
+      ids: ['prd_sut-1l'],
+      skus: [],
+    });
+
+    expect(error?.code).toBe(GRPC_STATUS.UNIMPLEMENTED);
+    expect(error?.details).toContain('BatchGetOffers');
   });
 
   it('GetProduct UNIMPLEMENTED ve hangi gorevde gelecegini soyler', async () => {

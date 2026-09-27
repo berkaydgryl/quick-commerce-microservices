@@ -14,6 +14,10 @@ import {
   CATALOG_ID_BODY_PATTERN,
   CATALOG_ID_MAX_LENGTH,
   CATALOG_ID_PREFIX,
+  LATITUDE_MAX,
+  LATITUDE_MIN,
+  LONGITUDE_MAX,
+  LONGITUDE_MIN,
   PAGE_SIZE_DEFAULT,
   PAGE_SIZE_MAX,
   PAGE_SIZE_MIN,
@@ -71,11 +75,52 @@ export const moneySchema = z.object({
   currency: z.literal('TRY'),
 });
 
-/** WGS84 koordinat cifti. Alan adlari proto ve socket ile ayni: lat/lng. */
-export const geoPointSchema = z.object({
-  lat: z.number().min(-90).max(90),
-  lng: z.number().min(-180).max(180),
-});
+/** Eksik alan ve tip hatasi mesajlari; gateway'in bicim hatalariyla ayni sozcukler (params.go). */
+const REQUIRED_MESSAGE = 'zorunlu';
+const NOT_A_NUMBER_MESSAGE = 'sayi olmali';
+
+/**
+ * Sorgu dizesinden gelen sayi. Gateway'in bicim kuraliyla ayni: eksik ya da
+ * bos parametre "zorunlu" (coerce bos metni sessizce 0 yapardi - konum icin
+ * Gine Korfezi), sayi olmayan metin "sayi olmali". Aralik kurali pipe ile
+ * arkasina eklenir.
+ */
+export function queryNumberSchema() {
+  return z
+    .string({ required_error: REQUIRED_MESSAGE })
+    .trim()
+    .min(1, REQUIRED_MESSAGE)
+    .pipe(z.coerce.number({ invalid_type_error: NOT_A_NUMBER_MESSAGE }));
+}
+
+/**
+ * Tek koordinat: sonlu sayi, WGS84 araliginda.
+ *
+ * MESAJLAR TURKCE (D6): servisin dogrulama hatasi gateway'den REST zarfinin
+ * `details` alanina AYNEN gecer. Zod'un varsayilan Ingilizce mesaji ("Number
+ * must be less than or equal to 90") boylece istemciye kadar siziyordu.
+ */
+function coordinateSchema(label: string, min: number, max: number) {
+  const outOfRange = `${label} ${min} ile ${max} arasinda olmali`;
+  return z
+    .number({ required_error: REQUIRED_MESSAGE, invalid_type_error: NOT_A_NUMBER_MESSAGE })
+    .finite(outOfRange)
+    .min(min, outOfRange)
+    .max(max, outOfRange);
+}
+
+export const latitudeSchema = coordinateSchema('enlem', LATITUDE_MIN, LATITUDE_MAX);
+export const longitudeSchema = coordinateSchema('boylam', LONGITUDE_MIN, LONGITUDE_MAX);
+
+/**
+ * WGS84 koordinat cifti. Alan adlari proto ve socket ile ayni: lat/lng.
+ * Konumun kendisi eksikse de mesaj Turkcedir: proto3'te set edilmemis mesaj
+ * alani undefined gelir ve (0, 0) - Gine Korfezi - gibi islenmemelidir.
+ */
+export const geoPointSchema = z.object(
+  { lat: latitudeSchema, lng: longitudeSchema },
+  { required_error: REQUIRED_MESSAGE },
+);
 
 /**
  * Sayfalama ust verisi (liste cevaplarinda items ile birlikte doner).

@@ -4,6 +4,7 @@
 
 import { AppError } from '@getir/core';
 
+import { MAX_CATEGORY_COUNT } from '../config/constants.js';
 import type { CatalogSeedWriter, CatalogSnapshot, SeedCounts } from '../domain/catalog-snapshot.js';
 
 export interface SeedCatalogDeps {
@@ -21,6 +22,14 @@ export function createSeedCatalog(deps: SeedCatalogDeps): SeedCatalog {
     // kosulursa tum katalogu demo verisiyle ezer; bu kapi o hatayi acilista durdurur.
     if (deps.isProduction) {
       throw AppError.forbidden('Seed production ortaminda calistirilamaz (NODE_ENV=production)');
+    }
+
+    // Kategori okumasi MAX_CATEGORY_COUNT'ta kesilir (D6). Kesme sessizce
+    // kategori kaybettirmesin diye sinir YAZARKEN uygulanir: fazlasi hic yazilmaz.
+    if (deps.snapshot.categories.length > MAX_CATEGORY_COUNT) {
+      throw AppError.validation('Kategori sayisi ust siniri asiyor', {
+        details: { categories: deps.snapshot.categories.length, max: MAX_CATEGORY_COUNT },
+      });
     }
 
     await deps.writer.replaceAll(deps.snapshot);
