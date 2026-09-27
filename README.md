@@ -381,6 +381,12 @@ Yerine iki gerçek kapı var:
 | --------------------------- | ---------------------------------------- | -------------- |
 | Commit'ten önce (elle)      | `pnpm verify`                            | Geliştirici    |
 | Her push ve pull request'te | `.github/workflows/ci.yml` → quality işi | GitHub Actions |
+| Her pull request'te         | `ci.yml` → "Git kurallari" işi (D13)     | GitHub Actions |
+
+"Git kurallari" işi PR'ın **kendi** commit başlıklarını ve dal adını kontrol eder
+(`scripts/git-conventions.mjs`; kural `.cursor/rules/proje-kurallari.mdc` "Git"). Yerelde
+aynısı: `node scripts/git-conventions.mjs commits origin/main HEAD` ve
+`node scripts/git-conventions.mjs branch "$(git branch --show-current)"`.
 
 `pnpm verify`, CI'daki `quality` işiyle **birebir aynı** zinciri koşar; yerelde yeşilse
 CI'da da yeşildir. Biçimlendirme için `pnpm format` yeterlidir.
