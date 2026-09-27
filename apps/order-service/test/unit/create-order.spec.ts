@@ -5,42 +5,21 @@
 import { AppError, ERROR_CODES, ORDER_STATUS, systemClock } from '@getir/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { createCreateDraftOrder } from '../../src/application/create-draft-order.js';
 import { createCreateOrder } from '../../src/application/create-order.js';
 import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-order-store.js';
+import { insertDraft } from '../support/order-builders.js';
 
 let repository: InMemoryOrderStore;
-let draft: ReturnType<typeof createCreateDraftOrder>;
 let create: ReturnType<typeof createCreateOrder>;
-
-const input = {
-  userId: 'usr_1',
-  marketId: 'mkt_migros-jet-moda',
-  lines: [{ productId: 'prd_01', sku: 'SUT-1L', quantity: 1 }],
-  deliveryLocation: { lat: 40.99, lng: 29.02 },
-  deliveryAddress: 'Kadıköy',
-};
 
 beforeEach(() => {
   repository = new InMemoryOrderStore();
-  draft = createCreateDraftOrder({ repository, clock: systemClock });
   create = createCreateOrder({ repository, clock: systemClock });
-});
-
-describe('createDraftOrder use-case', () => {
-  it('siparisi kaydeder ve kimligini doner', async () => {
-    const order = await draft(input);
-
-    expect(repository.size).toBe(1);
-    await expect(repository.findById(order.id)).resolves.toMatchObject({
-      status: ORDER_STATUS.DRAFT,
-    });
-  });
 });
 
 describe('createOrder use-case', () => {
   it('taslagi AWAITING_PAYMENT durumuna gecirir', async () => {
-    const { id } = await draft(input);
+    const { id } = await insertDraft(repository, systemClock);
 
     const order = await create({ orderId: id, userId: 'usr_1' });
 
@@ -50,7 +29,7 @@ describe('createOrder use-case', () => {
   });
 
   it('tablodaki yolu ADIM ADIM yurur; gecici adimlar nedeniyle zaman cizelgesinde (T4.4)', async () => {
-    const { id } = await draft(input);
+    const { id } = await insertDraft(repository, systemClock);
 
     const order = await create({ orderId: id, userId: 'usr_1' });
 
@@ -72,7 +51,7 @@ describe('createOrder use-case', () => {
   });
 
   it('baskasinin siparisinde de NOT_FOUND verir (varlik bilgisi sizmasin)', async () => {
-    const { id } = await draft(input);
+    const { id } = await insertDraft(repository, systemClock);
 
     // PERMISSION_DENIED donseydi "bu kimlikte siparis var" bilgisi sizardi.
     await expect(create({ orderId: id, userId: 'usr_2' })).rejects.toMatchObject({
@@ -81,7 +60,7 @@ describe('createOrder use-case', () => {
   });
 
   it('ayni siparis iki kez olusturulamaz', async () => {
-    const { id } = await draft(input);
+    const { id } = await insertDraft(repository, systemClock);
     await create({ orderId: id, userId: 'usr_1' });
 
     await expect(create({ orderId: id, userId: 'usr_1' })).rejects.toMatchObject({
@@ -94,7 +73,7 @@ describe('createOrder use-case', () => {
   });
 
   it('ayni taslaga ES ZAMANLI iki CreateOrder: biri gecer, digeri CONFLICT (surum kontrolu)', async () => {
-    const { id } = await draft(input);
+    const { id } = await insertDraft(repository, systemClock);
 
     // Ikisi de taslagi DRAFT olarak okur; surum kontrolu olmasa ikisi de yazardi.
     const results = await Promise.allSettled([

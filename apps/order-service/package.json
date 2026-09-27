@@ -17,6 +17,7 @@
     "@getir/contracts": "workspace:*",
     "@getir/core": "workspace:*",
     "@getir/mongo-kit": "workspace:*",
+    "@getir/pricing": "workspace:*",
     "@getir/proto": "workspace:*",
     "@getir/service-kit": "workspace:*",
     "@grpc/grpc-js": "^1.14.5",

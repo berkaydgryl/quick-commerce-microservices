@@ -13,14 +13,8 @@
 import { ID_PREFIX, newId, ORDER_STATUS } from '@getir/core';
 import type { Clock, OrderStatus } from '@getir/core';
 
+import type { OrderItem, OrderPricing } from './order-item.js';
 import { assertTransition } from './order-state-machine.js';
-
-/** Sepetten gelen ham satir. FIYAT TASIMAZ (istemciden gelen fiyata guvenilmez). */
-export interface CartLine {
-  readonly productId: string;
-  readonly sku: string;
-  readonly quantity: number;
-}
 
 /**
  * Zaman cizelgesi kaydi: siparisin gectigi her durum, ne zaman ve (varsa)
@@ -53,19 +47,19 @@ export interface DeliveryLocation {
 }
 
 /**
- * Siparis kaydi (iskelet hali).
+ * Siparis kaydi.
  *
- * Kalemler bugun HAM SEPET satiri olarak duruyor; fiyati dondurulmus OrderItem
- * ve toplamlar, fiyatlandirma paketi (T4.3) ile katalog fiyatlarinin okunmasi
- * geldiginde olusacak. Bugun tutar hesaplamak, sonradan atilacak bir kod
- * yazmak olurdu.
+ * Kalemler ve tutar taslak acilirken catalog fiyatlarindan hesaplanip
+ * DONDURULUR (T7.2): odeme adimi (CreateOrder, saga) yeniden hesaplamaz,
+ * kullanici rezervasyon boyunca gordugu fiyattan oder.
  */
 export interface Order {
   readonly id: string;
   readonly userId: string;
   /** Siparisin verildigi market (ADR-15): kullanicinin SECTIGI satici, mkt_ onekli. */
   readonly marketId: string;
-  readonly lines: readonly CartLine[];
+  readonly items: readonly OrderItem[];
+  readonly pricing: OrderPricing;
   readonly deliveryLocation: DeliveryLocation;
   readonly deliveryAddress: string;
   readonly status: OrderStatus;
@@ -87,7 +81,9 @@ export const INITIAL_ORDER_VERSION = 1;
 export interface DraftOrderInput {
   readonly userId: string;
   readonly marketId: string;
-  readonly lines: readonly CartLine[];
+  /** Fiyati dondurulmus kalemler ve tutar: price-draft.ts'in ciktisi. */
+  readonly items: readonly OrderItem[];
+  readonly pricing: OrderPricing;
   readonly deliveryLocation: DeliveryLocation;
   readonly deliveryAddress: string;
 }
@@ -107,7 +103,8 @@ export function createDraftOrder(input: DraftOrderInput, clock: Clock): Order {
     id: newId(ID_PREFIX.ORDER),
     userId: input.userId,
     marketId: input.marketId,
-    lines: input.lines,
+    items: input.items,
+    pricing: input.pricing,
     deliveryLocation: input.deliveryLocation,
     deliveryAddress: input.deliveryAddress,
     status: ORDER_STATUS.DRAFT,

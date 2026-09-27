@@ -13,7 +13,9 @@ import { Client, credentials, Metadata } from '@grpc/grpc-js';
 import type { MethodDefinition, ServiceError } from '@grpc/grpc-js';
 import { afterAll, beforeAll } from 'vitest';
 
+import type { CatalogPricing } from '../../src/application/catalog-pricing.js';
 import { buildOrderService } from '../../src/bootstrap.js';
+import { FakeCatalogPricing } from './fake-catalog-pricing.js';
 import { draftRequest } from './order-fixtures.js';
 
 const EPHEMERAL_PORT = 0;
@@ -28,8 +30,11 @@ export type UnaryCall = <TRequest, TResponse>(
   request: TRequest,
 ) => Promise<CallResult<TResponse>>;
 
-/** Sunucuyu dosyanin omru boyunca ayakta tutar; tipli unary cagri fonksiyonu doner. */
-export function useOrderGrpcServer(): UnaryCall {
+/**
+ * Sunucuyu dosyanin omru boyunca ayakta tutar; tipli unary cagri fonksiyonu doner.
+ * Fiyat kaynagi verilmezse sahte catalog (sabit kurallar ve teklifler).
+ */
+export function useOrderGrpcServer(catalog: CatalogPricing = new FakeCatalogPricing()): UnaryCall {
   let handle: GrpcServerHandle | undefined;
   let client: Client | undefined;
 
@@ -38,7 +43,7 @@ export function useOrderGrpcServer(): UnaryCall {
       serviceName: 'order-test',
       host: '127.0.0.1',
       port: EPHEMERAL_PORT,
-      services: [buildOrderService()],
+      services: [buildOrderService({ catalog })],
     });
     client = new Client(`127.0.0.1:${handle.port}`, credentials.createInsecure());
   });

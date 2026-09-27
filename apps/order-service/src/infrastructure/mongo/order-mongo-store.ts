@@ -14,6 +14,7 @@ import type {
   OrderHistoryQuery,
   OrderHistoryReader,
 } from '../../domain/order-history-reader.js';
+import { PAID_ORDER_STATUSES } from '../../domain/order-history-reader.js';
 import type { OrderRepository } from '../../domain/order-repository.js';
 import { orderAlreadyExists, orderVersionConflict } from '../../domain/order-repository.js';
 import type { Order } from '../../domain/order.js';
@@ -55,5 +56,9 @@ export class OrderMongoStore implements OrderRepository, OrderHistoryReader {
     const last = orders.at(-1);
     const next = documents.length > pageSize && last !== undefined ? cursorOf(last) : undefined;
     return { orders, next };
+  }
+
+  hasPaidOrder(userId: string): Promise<boolean> {
+    return this.orders.existsWithStatus(userId, PAID_ORDER_STATUSES);
   }
 }

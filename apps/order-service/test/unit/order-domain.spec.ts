@@ -3,17 +3,12 @@ import { describe, expect, it } from 'vitest';
 
 import { createDraftOrder, TIMELINE_NOTE, transitionOrder } from '../../src/domain/order.js';
 import type { DraftOrderInput } from '../../src/domain/order.js';
+import { sampleDraftInput } from '../support/order-builders.js';
 
 const CLOCK_EPOCH_MS = 1_760_000_000_000;
 const clock = fixedClock(CLOCK_EPOCH_MS);
 
-const input: DraftOrderInput = {
-  userId: 'usr_1',
-  marketId: 'mkt_migros-jet-moda',
-  lines: [{ productId: 'prd_01', sku: 'SUT-1L', quantity: 2 }],
-  deliveryLocation: { lat: 40.99, lng: 29.02 },
-  deliveryAddress: 'Kadıköy, İstanbul',
-};
+const input: DraftOrderInput = sampleDraftInput();
 
 describe('createDraftOrder', () => {
   it('onekli kimlik uretir ve DRAFT durumunda acar', () => {

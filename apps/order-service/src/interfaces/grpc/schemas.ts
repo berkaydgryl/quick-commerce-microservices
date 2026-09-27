@@ -13,6 +13,7 @@ import {
   IDEMPOTENCY_KEY_MAX_LENGTH,
   IDEMPOTENCY_KEY_MIN_LENGTH,
   marketIdSchema,
+  moneySchema,
   PAGE_SIZE_DEFAULT,
   PAGE_SIZE_MAX,
 } from '@getir/contracts';
@@ -21,7 +22,7 @@ import { z } from 'zod';
 
 import type { OrderHistoryCursor } from '../../domain/order-history-cursor.js';
 
-import { MAX_CANCEL_REASON_LENGTH } from '../../config/constants.js';
+import { MAX_CANCEL_REASON_LENGTH, MAX_COUPON_CODE_LENGTH } from '../../config/constants.js';
 import { decodePageToken } from './page-token.js';
 
 const requiredText = (field: string) => z.string().trim().min(1, `${field} zorunlu`);
@@ -48,6 +49,39 @@ const cartLine = z.object({
   quantity: z.number().int().positive().max(CART_ITEM_MAX_QUANTITY),
 });
 
+/** Ayni urun iki satirda gelirse hangisinin adedi gecerli belirsizdir: reddedilir. */
+const cartLines = z
+  .array(cartLine)
+  .min(1, 'sepet bos olamaz')
+  .max(CART_MAX_ITEMS)
+  .refine(
+    (lines) => new Set(lines.map((line) => line.productId)).size === lines.length,
+    'ayni urun birden fazla satirda olamaz',
+  );
+
+/**
+ * proto Money, ZORUNLU. Tutar sozlesmedeki kuralla (kurus, tam sayi, >= 0).
+ * proto sozlesmesi: bos para birimi TRY sayilir; dolu gelirse sozlesmedeki
+ * tek birimle ayni olmali. Mesaj gonderilmezse proto3'te undefined gelir.
+ */
+const requiredMoney = z.object(
+  {
+    amountMinor: moneySchema.shape.amountMinor,
+    currency: z
+      .string()
+      .transform((currency) => (currency === '' ? moneySchema.shape.currency.value : currency))
+      .pipe(moneySchema.shape.currency),
+  },
+  { required_error: 'zorunlu' },
+);
+
+/** Kupon kodu: bos = kupon yok. Buyuk/kucuk harf ve bosluk pricing'de normallesir. */
+const couponCode = z
+  .string()
+  .trim()
+  .max(MAX_COUPON_CODE_LENGTH)
+  .transform((value) => (value === '' ? undefined : value));
+
 export const createDraftOrderRequestSchema = z.object({
   userId: requiredText('userId'),
   // ADR-15: siparis kullanicinin SECTIGI markete verilir. Bicim kurali
@@ -55,13 +89,16 @@ export const createDraftOrderRequestSchema = z.object({
   // Kullanimdan kalkan dark_store_id OKUNMAZ: onu dolduran istemci yok
   // (gateway henuz order'a baglanmadi) ve eski "ds_" kimligi bir market degildir.
   marketId: marketIdSchema,
-  lines: z.array(cartLine).min(1, 'sepet bos olamaz').max(CART_MAX_ITEMS),
+  lines: cartLines,
   // Konum ZORUNLU: teslimat noktasi olmadan hangi depodan cikilacagi ve
   // kurye rotasi hesaplanamaz. proto3'te ic ice mesaj gonderilmezse undefined
   // gelir; sema bunu acikca reddeder. WGS84 sinirlari sozlesme paketindedir.
   deliveryLocation: geoPointSchema,
   deliveryAddress: requiredText('deliveryAddress'),
   idempotencyKey,
+  // T7.2: istemcinin gordugu toplam ZORUNLU; sunucu kendi hesabiyla karsilastirir.
+  expectedTotal: requiredMoney,
+  couponCode,
 });
 
 export const createOrderRequestSchema = z.object({

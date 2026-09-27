@@ -4,9 +4,13 @@
  * bu yuzden ikisini birlikte ister.
  */
 
+import { fixedClock, ORDER_STATUS } from '@getir/core';
+import type { OrderStatus } from '@getir/core';
 import { describe, expect, it } from 'vitest';
 
 import type { OrderHistoryCursor } from '../../src/domain/order-history-cursor.js';
+import type { Order } from '../../src/domain/order.js';
+import { transitionOrder } from '../../src/domain/order.js';
 import type { OrderStoreFixtures, OrderStoreUnderTest } from './order-store-fixtures.js';
 import { MINUTE_MS, START_MS } from './order-store-fixtures.js';
 
@@ -93,6 +97,35 @@ export function describeOrderHistoryReaderContract(
       const page = await getStore().listByUser({ userId: newUserId(), pageSize: 10 });
 
       expect(page).toEqual({ orders: [], next: undefined });
+    });
+
+    it('hasPaidOrder: yalnizca odemesi ALINMIS siparis sayilir (ILK10)', async () => {
+      const store = getStore();
+      const userId = newUserId();
+      const walk = (order: Order, steps: readonly OrderStatus[]): Order =>
+        steps.reduce(
+          (current, status) => transitionOrder(current, status, fixedClock(START_MS)),
+          order,
+        );
+
+      await expect(store.hasPaidOrder(userId)).resolves.toBe(false);
+
+      // Taslak ve iptal edilmis siparis "verilmis siparis" degildir.
+      await store.insert(draftAt(userId, START_MS));
+      await store.insert(walk(draftAt(userId, START_MS + 1), [ORDER_STATUS.CANCELLED]));
+      await expect(store.hasPaidOrder(userId)).resolves.toBe(false);
+
+      await store.insert(
+        walk(draftAt(userId, START_MS + 2), [
+          ORDER_STATUS.RISK_CHECK,
+          ORDER_STATUS.RESERVED,
+          ORDER_STATUS.AWAITING_PAYMENT,
+          ORDER_STATUS.PAID,
+        ]),
+      );
+      await expect(store.hasPaidOrder(userId)).resolves.toBe(true);
+      // Baska kullanicinin odemesi bu kullaniciyi etkilemez.
+      await expect(store.hasPaidOrder(newUserId())).resolves.toBe(false);
     });
   });
 }

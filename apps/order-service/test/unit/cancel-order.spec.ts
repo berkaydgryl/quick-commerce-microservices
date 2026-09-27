@@ -6,35 +6,26 @@ import { AppError, ERROR_CODES, fixedClock, ORDER_STATUS } from '@getir/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createCancelOrder } from '../../src/application/cancel-order.js';
-import { createCreateDraftOrder } from '../../src/application/create-draft-order.js';
 import { createCreateOrder } from '../../src/application/create-order.js';
 import { transitionOrder } from '../../src/domain/order.js';
 import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-order-store.js';
+import { insertDraft } from '../support/order-builders.js';
 
 const clock = fixedClock(1_760_000_000_000);
-const input = {
-  userId: 'usr_1',
-  marketId: 'mkt_migros-jet-moda',
-  lines: [{ productId: 'prd_01', sku: 'SUT-1L', quantity: 1 }],
-  deliveryLocation: { lat: 40.99, lng: 29.02 },
-  deliveryAddress: 'Kadıköy',
-};
 
 let repository: InMemoryOrderStore;
-let draft: ReturnType<typeof createCreateDraftOrder>;
 let create: ReturnType<typeof createCreateOrder>;
 let cancel: ReturnType<typeof createCancelOrder>;
 
 beforeEach(() => {
   repository = new InMemoryOrderStore();
-  draft = createCreateDraftOrder({ repository, clock });
   create = createCreateOrder({ repository, clock });
   cancel = createCancelOrder({ repository, clock });
 });
 
 describe('cancelOrder use-case', () => {
   it('DRAFT siparisi iptal eder; gerekce yoksa USER_CANCELLED yazar', async () => {
-    const { id } = await draft(input);
+    const { id } = await insertDraft(repository, clock);
 
     const order = await cancel({ orderId: id, userId: 'usr_1' });
 
@@ -50,7 +41,7 @@ describe('cancelOrder use-case', () => {
   });
 
   it('odeme bekleyen siparisi verilen gerekceyle iptal eder', async () => {
-    const { id } = await draft(input);
+    const { id } = await insertDraft(repository, clock);
     await create({ orderId: id, userId: 'usr_1' });
 
     const order = await cancel({ orderId: id, userId: 'usr_1', reason: 'CHANGED_MIND' });
@@ -59,7 +50,7 @@ describe('cancelOrder use-case', () => {
   });
 
   it('odenmis siparisi kullanici iptal EDEMEZ (iade sistemin telafi adimi, B20c)', async () => {
-    const { id } = await draft(input);
+    const { id } = await insertDraft(repository, clock);
     const awaiting = await create({ orderId: id, userId: 'usr_1' });
     await repository.update(transitionOrder(awaiting, ORDER_STATUS.PAID, clock), awaiting.version);
 
@@ -74,7 +65,7 @@ describe('cancelOrder use-case', () => {
   });
 
   it('iptal edilmis siparis ikinci kez iptal edilemez', async () => {
-    const { id } = await draft(input);
+    const { id } = await insertDraft(repository, clock);
     await cancel({ orderId: id, userId: 'usr_1' });
 
     await expect(cancel({ orderId: id, userId: 'usr_1' })).rejects.toMatchObject({
@@ -83,7 +74,7 @@ describe('cancelOrder use-case', () => {
   });
 
   it('baskasinin siparisi NOT_FOUND (varlik bilgisi sizmasin)', async () => {
-    const { id } = await draft(input);
+    const { id } = await insertDraft(repository, clock);
 
     await expect(cancel({ orderId: id, userId: 'usr_2' })).rejects.toMatchObject({
       code: ERROR_CODES.NOT_FOUND,

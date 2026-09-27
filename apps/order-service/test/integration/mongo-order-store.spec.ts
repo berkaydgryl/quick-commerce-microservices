@@ -22,6 +22,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { buildOrderService } from '../../src/bootstrap.js';
+import { FakeCatalogPricing } from '../support/fake-catalog-pricing.js';
+import { DRAFT_TOTAL_MINOR, draftRequest } from '../support/order-fixtures.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
 import { OrderMongoStore } from '../../src/infrastructure/mongo/order-mongo-store.js';
 import { OrdersCollection } from '../../src/infrastructure/mongo/orders-collection.js';
@@ -99,7 +101,12 @@ describe('gRPC -> Mongo (T4.5 bitti sayilir: siparis Mongo da gorulur)', () => {
       serviceName: 'order-int-test',
       host: '127.0.0.1',
       port: EPHEMERAL_PORT,
-      services: [buildOrderService({ store: { repository: store, history: store } })],
+      services: [
+        buildOrderService({
+          store: { repository: store, history: store },
+          catalog: new FakeCatalogPricing(),
+        }),
+      ],
     });
     client = new Client(`127.0.0.1:${handle.port}`, credentials.createInsecure());
   });
@@ -111,13 +118,8 @@ describe('gRPC -> Mongo (T4.5 bitti sayilir: siparis Mongo da gorulur)', () => {
 
   it('taslak -> siparis: belge orders koleksiyonunda, zaman cizelgesi ve surumuyle', async () => {
     const draft = await call(orderV1.OrderServiceService.createDraftOrder, {
+      ...draftRequest,
       userId: 'usr_grpc',
-      darkStoreId: '',
-      marketId: 'mkt_a101-caferaga',
-      lines: [{ productId: 'prd_sut-1l', sku: 'SUT-1L', quantity: 2 }],
-      deliveryLocation: { lat: 40.9885, lng: 29.0262 },
-      deliveryAddress: 'Caferağa, Kadıköy',
-      idempotencyKey: '4f1c3a2b-9d8e-11ee',
     });
     const orderId = draft.response?.orderId ?? '';
     await call(orderV1.OrderServiceService.createOrder, {
@@ -132,13 +134,32 @@ describe('gRPC -> Mongo (T4.5 bitti sayilir: siparis Mongo da gorulur)', () => {
       .collection(COLLECTIONS.ORDERS)
       .findOne({ _id: orderId } as Document);
 
+    // Fiyat taslakta dondurulur (T7.2); CreateOrder tutari degistirmez.
     expect(document).toMatchObject({
       userId: 'usr_grpc',
-      marketId: 'mkt_a101-caferaga',
+      marketId: 'mkt_migros-jet-moda',
       status: 'AWAITING_PAYMENT',
       version: 4,
-      lines: [{ productId: 'prd_sut-1l', sku: 'SUT-1L', quantity: 2 }],
+      items: [
+        {
+          productId: 'prd_01',
+          sku: 'SUT-1L',
+          name: 'Süt 1 L',
+          unit: 'LITER',
+          quantity: 2,
+          unitPriceMinor: 3_250,
+          lineTotalMinor: 6_500,
+        },
+      ],
+      pricing: {
+        currency: 'TRY',
+        subtotalMinor: 6_500,
+        deliveryFeeMinor: 1_490,
+        discountMinor: 0,
+        totalMinor: DRAFT_TOTAL_MINOR,
+      },
     });
+    expect(document?.['pricing']).not.toHaveProperty('couponCode');
     expect(document?.['timeline']).toMatchObject([
       { status: 'DRAFT' },
       { status: 'RISK_CHECK', note: 'PENDING_RISK_SERVICE' },

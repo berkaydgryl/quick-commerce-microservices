@@ -90,6 +90,9 @@ importers:
       '@getir/mongo-kit':
         specifier: workspace:*
         version: link:../../packages/mongo-kit
+      '@getir/pricing':
+        specifier: workspace:*
+        version: link:../../packages/pricing
       '@getir/proto':
         specifier: workspace:*
         version: link:../../packages/proto

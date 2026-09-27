@@ -3,9 +3,10 @@
  */
 
 import { GRPC_STATUS } from '@getir/core';
-import { orderV1 } from '@getir/proto';
+import { commonV1, orderV1 } from '@getir/proto';
 import { describe, expect, it } from 'vitest';
 
+import { DRAFT_TOTAL_MINOR } from '../../support/order-fixtures.js';
 import { newDraftId, useOrderGrpcServer } from '../../support/order-grpc-harness.js';
 
 const call = useOrderGrpcServer();
@@ -31,8 +32,23 @@ describe('GetOrder', () => {
       orderV1.OrderStatus.ORDER_STATUS_DRAFT,
     ]);
     expect(response?.order?.createdAt).toBeInstanceOf(Date);
-    // Fiyatlar henuz hesaplanmiyor (T7.2): uydurma "0 TL" yerine alan yok.
-    expect(response?.order?.total).toBeUndefined();
+    // Kalemler ve tutar taslakta catalog fiyatiyla dondurulur (T7.2).
+    expect(response?.order?.items).toEqual([
+      {
+        productId: 'prd_01',
+        sku: 'SUT-1L',
+        name: 'Süt 1 L',
+        quantity: { value: 2, unit: commonV1.Unit.UNIT_LITER },
+        unitPrice: { amountMinor: 3_250, currency: 'TRY' },
+        lineTotal: { amountMinor: 6_500, currency: 'TRY' },
+      },
+    ]);
+    expect(response?.order).toMatchObject({
+      subtotal: { amountMinor: 6_500, currency: 'TRY' },
+      deliveryFee: { amountMinor: 1_490, currency: 'TRY' },
+      discount: { amountMinor: 0, currency: 'TRY' },
+      total: { amountMinor: DRAFT_TOTAL_MINOR, currency: 'TRY' },
+    });
   });
 
   it('baskasinin siparisi NOT_FOUND (PERMISSION_DENIED degil)', async () => {

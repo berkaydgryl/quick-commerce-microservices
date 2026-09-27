@@ -13,6 +13,7 @@ import type {
   OrderHistoryQuery,
   OrderHistoryReader,
 } from '../../domain/order-history-reader.js';
+import { PAID_ORDER_STATUSES } from '../../domain/order-history-reader.js';
 import type { OrderRepository } from '../../domain/order-repository.js';
 import { orderAlreadyExists, orderVersionConflict } from '../../domain/order-repository.js';
 import type { Order } from '../../domain/order.js';
@@ -50,6 +51,14 @@ export class InMemoryOrderStore implements OrderRepository, OrderHistoryReader {
     const last = orders.at(-1);
     const next = matching.length > pageSize && last !== undefined ? cursorOf(last) : undefined;
     return Promise.resolve({ orders, next });
+  }
+
+  hasPaidOrder(userId: string): Promise<boolean> {
+    return Promise.resolve(
+      [...this.orders.values()].some(
+        (order) => order.userId === userId && PAID_ORDER_STATUSES.includes(order.status),
+      ),
+    );
   }
 
   /** Yalnizca test icin: kayitli siparis sayisi. */
