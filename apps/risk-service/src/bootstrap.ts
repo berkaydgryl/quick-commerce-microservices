@@ -34,22 +34,15 @@ export function buildRiskService(options: BootstrapOptions = {}): GrpcServiceReg
   // Kayit, kurallar ile config'i ACILISTA iki yonlu dogrular; uyusmazlik
   // servisi baslatmaz (sessizce puansiz kural kosmasindan iyidir).
   const rules = createRuleRegistry(createCoreRules(clock), riskRulesConfig);
-  const evaluateRisk = createEvaluateRisk({
-    rules,
-    clock,
-    ruleTimeoutMs: RULE_TIMEOUT_MS,
-    ...(logger === undefined ? {} : { logger }),
-  });
+  // Use-case'ler gunlukcuyu bagimlilik olarak ALMAZ: her cagrida handler'in
+  // requestId bagli gunlukcusu gecer (ctx.logger).
+  const evaluateRisk = createEvaluateRisk({ rules, clock, ruleTimeoutMs: RULE_TIMEOUT_MS });
 
   return {
     name: RISK_SERVICE_FULL_NAME,
     definition: riskV1.RiskServiceService,
     implementation: createRiskImplementation({
-      evaluate: createEvaluateAndRecord({
-        evaluateRisk,
-        events,
-        ...(logger === undefined ? {} : { logger }),
-      }),
+      evaluate: createEvaluateAndRecord({ evaluateRisk, events }),
       getLastEvaluation: createGetLastEvaluation(events),
       ...(logger === undefined ? {} : { logger }),
     }),

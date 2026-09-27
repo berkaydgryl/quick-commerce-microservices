@@ -41,7 +41,8 @@ packages/service-kit/
 │   │   └── registry.ts            # HealthRegistry (durum + abonelik)
 │   ├── example/                   # örnek servis (üründe kullanılmaz)
 │   ├── logger.ts                  # pino tabanlı Logger
-│   └── shutdown.ts                # sinyaller, yakalanmamış hata
+│   ├── shutdown.ts                # sinyaller, yakalanmamış hata
+│   └── startup.ts                 # startOrExit: açılış hatası → tek satır fatal JSON
 └── test/unit/
 ```
 
@@ -72,18 +73,28 @@ export const listProducts = unaryHandler({
 });
 ```
 
-`src/main.ts` — süreç yaşam döngüsü:
+Use-case günlük yazıyorsa handler ona `ctx.logger`'ı geçirir (`deps.charge(input, ctx.logger)`):
+bu günlükçüye `rpc` ve `requestId` bağlıdır. Servis geneli günlükçüyle yazılan satırda
+requestId olmaz ve hata hangi isteğe ait bulunamaz.
+
+`src/main.ts` — süreç yaşam döngüsü. Açılış adımları `startOrExit` ile sarılır: veri
+kaynağına ulaşılamaz ya da port doluysa hata düz metin yığın izi yerine tek satır
+`fatal` JSON olarak yazılır ve süreç 1 koduyla kapanır:
 
 ```ts
-const handle = await startGrpcServer({
-  serviceName: 'catalog',
-  host: env.GRPC_HOST,
-  port: env.CATALOG_GRPC_PORT,
-  shutdownTimeoutMs: env.GRPC_SHUTDOWN_TIMEOUT_MS,
-  logger,
-  services: [{ name: CATALOG_SERVICE_NAME, definition, implementation }],
-  onShutdown: () => Promise.all([mongo.close(), redis.quit()]),
-});
+const handle = await startOrExit(
+  () =>
+    startGrpcServer({
+      serviceName: 'catalog',
+      host: env.GRPC_HOST,
+      port: env.CATALOG_GRPC_PORT,
+      shutdownTimeoutMs: env.GRPC_SHUTDOWN_TIMEOUT_MS,
+      logger,
+      services: [{ name: CATALOG_SERVICE_NAME, definition, implementation }],
+      onShutdown: () => Promise.all([mongo.close(), redis.quit()]),
+    }),
+  { logger },
+);
 
 installProcessHandlers({ shutdown: (reason) => handle.shutdown(reason), logger });
 ```

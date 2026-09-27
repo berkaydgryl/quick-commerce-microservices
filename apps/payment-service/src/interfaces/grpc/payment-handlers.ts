@@ -34,8 +34,8 @@ export function createPaymentImplementation(
       name: 'Charge',
       schema: chargeRequestSchema,
       ...(logger === undefined ? {} : { logger }),
-      handle: async (input): Promise<paymentV1.ChargeResponse> =>
-        toProtoChargeResponse(await deps.charge(input)),
+      handle: async (input, ctx): Promise<paymentV1.ChargeResponse> =>
+        toProtoChargeResponse(await deps.charge(input, ctx.logger)),
     }),
 
     confirm3Ds: unaryHandler({

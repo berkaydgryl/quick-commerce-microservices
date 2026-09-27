@@ -15,6 +15,8 @@
 
 import { z } from 'zod';
 
+import type { Clock } from '../clock.js';
+import { systemClock } from '../clock.js';
 import { AppError } from '../errors.js';
 import { envBoolean } from './env-values.js';
 
@@ -54,37 +56,83 @@ function describeIssue(issue: z.ZodIssue): string {
   return `${field}: ${issue.message}`;
 }
 
+type EnvParseResult<TEnv> =
+  | { readonly ok: true; readonly env: TEnv }
+  | { readonly ok: false; readonly problems: readonly string[] };
+
+/** Semayi uygular; basarisizlikta sorunlu TUM alanlari "ALAN: sebep" olarak listeler. */
+function parseEnv<TEnv>(schema: EnvSchema<TEnv>, source: EnvSource): EnvParseResult<TEnv> {
+  const result = schema.safeParse(source);
+  return result.success
+    ? { ok: true, env: result.data }
+    : { ok: false, problems: result.error.issues.map(describeIssue) };
+}
+
 /**
  * Ortam degiskenlerini dogrular ve tipli nesne olarak dondurur.
  * Basarisizlikta eksik/gecersiz TUM alanlari tek tek listeleyen bir AppError
  * firlatir; cagiran taraf bu hatayi yakalayip process'i sonlandirir.
  */
 export function loadEnv<TEnv>(schema: EnvSchema<TEnv>, source: EnvSource = process.env): TEnv {
-  const result = schema.safeParse(source);
-  if (result.success) {
-    return result.data;
+  const parsed = parseEnv(schema, source);
+  if (parsed.ok) {
+    return parsed.env;
   }
-
-  const problems = result.error.issues.map(describeIssue);
-  const message = ['Ortam degiskenleri gecersiz:', ...problems.map((p) => `  - ${p}`)].join('\n');
-  throw AppError.validation(message, { details: { issues: problems } });
+  const message = ['Ortam degiskenleri gecersiz:', ...parsed.problems.map((p) => `  - ${p}`)].join(
+    '\n',
+  );
+  throw AppError.validation(message, { details: { issues: parsed.problems } });
 }
 
+/** Env hatasi gunluk satirinin mesaji (gunlukte aranacak sabit metin). */
+export const ENV_FAILURE_MESSAGE = 'ortam degiskenleri gecersiz';
+
+/** loadEnvOrExit'in dis dunyasi; testte sahtesi verilir. */
+export interface EnvExitIo {
+  /** Tek satiri (sonunda \n ile) yazar. */
+  readonly write: (line: string) => void;
+  readonly exit: (code: number) => void;
+  readonly clock: Clock;
+}
+
+const processIo: EnvExitIo = {
+  write: (line) => {
+    process.stderr.write(line);
+  },
+  exit: (code) => process.exit(code),
+  clock: systemClock,
+};
+
 /**
- * loadEnv'in acilis (bootstrap) sarmalayicisi: hata varsa mesaji stderr'e yazar
- * ve process'i oldurur. Servis giris noktalari disinda kullanilmaz.
+ * loadEnv'in acilis (bootstrap) sarmalayicisi: hata varsa TEK SATIR JSON
+ * gunluk yazar ve process'i oldurur. Servis giris noktalari disinda kullanilmaz.
+ *
+ * NEDEN ELLE JSON: gunlukcu henuz kurulmadi - seviyesi (LOG_LEVEL) tam da
+ * dogrulanamayan yapilandirmadan gelir. Bicim servislerin pino ciktisiyla
+ * aynidir (level etiket olarak, time ISO-8601, msg), boylece log toplayici bu
+ * satiri da okur. core bagimsiz kalir: pino'ya ya da node:fs'e dayanmaz (web
+ * paketi de core'u iceri alir).
  */
 export function loadEnvOrExit<TEnv>(
   schema: EnvSchema<TEnv>,
   source: EnvSource = process.env,
+  io: EnvExitIo = processIo,
 ): TEnv {
-  try {
-    return loadEnv(schema, source);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(`${message}\n`);
-    return process.exit(ENV_FAILURE_EXIT_CODE);
+  const parsed = parseEnv(schema, source);
+  if (parsed.ok) {
+    return parsed.env;
   }
+  const record = {
+    level: 'fatal',
+    time: io.clock.date().toISOString(),
+    msg: ENV_FAILURE_MESSAGE,
+    issues: parsed.problems,
+  };
+  io.write(`${JSON.stringify(record)}\n`);
+  io.exit(ENV_FAILURE_EXIT_CODE);
+  // Gercek process.exit geri donmez; enjekte edilen exit dondugunde (test)
+  // yarim yapilandirmayla akis devam etmesin.
+  throw AppError.validation(ENV_FAILURE_MESSAGE, { details: { issues: parsed.problems } });
 }
 
 /**

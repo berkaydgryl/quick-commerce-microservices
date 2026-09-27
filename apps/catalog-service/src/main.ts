@@ -14,7 +14,12 @@
  *     localhost:50051 getir.catalog.v1.CatalogService/ListCategories
  */
 
-import { createLogger, installProcessHandlers, startGrpcServer } from '@getir/service-kit';
+import {
+  createLogger,
+  installProcessHandlers,
+  startGrpcServer,
+  startOrExit,
+} from '@getir/service-kit';
 
 import { buildCatalogService } from './bootstrap.js';
 import { SERVICE_NAME } from './config/constants.js';
@@ -24,18 +29,25 @@ import { openCatalogSource } from './infrastructure/catalog-source.js';
 const env = loadServiceEnv();
 const logger = createLogger({ name: SERVICE_NAME, level: env.LOG_LEVEL });
 
-const source = await openCatalogSource(env.mongo, logger);
-
-const handle = await startGrpcServer({
-  serviceName: SERVICE_NAME,
-  host: env.GRPC_HOST,
-  port: env.CATALOG_GRPC_PORT,
-  shutdownTimeoutMs: env.GRPC_SHUTDOWN_TIMEOUT_MS,
-  logger,
-  services: [buildCatalogService({ logger, readers: source.readers })],
-  // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti kesilmesin.
-  onShutdown: () => source.close(),
-});
+// Acilis adimlari (veri kaynagi, indeksler, port) sarilir: biri basarisizsa hata
+// duz metin yigin izi yerine tek satir fatal JSON olarak yazilir ve process kapanir.
+const { handle, source } = await startOrExit(
+  async () => {
+    const opened = await openCatalogSource(env.mongo, logger);
+    const server = await startGrpcServer({
+      serviceName: SERVICE_NAME,
+      host: env.GRPC_HOST,
+      port: env.CATALOG_GRPC_PORT,
+      shutdownTimeoutMs: env.GRPC_SHUTDOWN_TIMEOUT_MS,
+      logger,
+      services: [buildCatalogService({ logger, readers: opened.readers })],
+      // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti kesilmesin.
+      onShutdown: () => opened.close(),
+    });
+    return { handle: server, source: opened };
+  },
+  { logger },
+);
 
 installProcessHandlers({ shutdown: (reason) => handle.shutdown(reason), logger });
 

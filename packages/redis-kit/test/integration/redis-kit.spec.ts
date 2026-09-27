@@ -9,7 +9,8 @@
 
 import { fileURLToPath } from 'node:url';
 
-import { AppError } from '@getir/core';
+import { AppError, silentLogger } from '@getir/core';
+import type { Logger } from '@getir/core';
 import { RedisContainer } from '@testcontainers/redis';
 import type { StartedRedisContainer } from '@testcontainers/redis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -65,6 +66,29 @@ describe('connectRedis', () => {
     await expect(
       connectRedis({ url: 'redis://127.0.0.1:1', connectTimeoutMs: 500 }),
     ).rejects.toBeInstanceOf(AppError);
+  });
+
+  it('ilk baglanti denemelerindeki hatalar warn yazilir, error DEGIL', async () => {
+    // Redis servisle ayni anda ayaga kalkiyor olabilir: butce icindeki hata
+    // beklenen durumdur. Kalici basarisizligi cagiran (startOrExit) fatal yazar.
+    const levels: string[] = [];
+    const logger: Logger = {
+      ...silentLogger,
+      warn: () => {
+        levels.push('warn');
+      },
+      error: () => {
+        levels.push('error');
+      },
+      child: () => logger,
+    };
+
+    await connectRedis({ url: 'redis://127.0.0.1:1', connectTimeoutMs: 500, logger }).catch(
+      () => undefined,
+    );
+
+    expect(levels).toContain('warn');
+    expect(levels).not.toContain('error');
   });
 });
 

@@ -31,7 +31,6 @@ export interface ChargeDeps {
   readonly provider: Pick<PaymentProvider, 'authorize'>;
   readonly clock: Clock;
   readonly challengeTtlMs: number;
-  readonly logger?: Logger;
 }
 
 export interface ChargeInput extends ChargeCommand {
@@ -39,10 +38,15 @@ export interface ChargeInput extends ChargeCommand {
   readonly cardToken: string | undefined;
 }
 
-export type Charge = (input: ChargeInput) => Promise<Payment>;
+/**
+ * `logger` CAGRININ gunlukcusudur (handler'in ctx.logger'i: rpc + requestId
+ * bagli). Servis geneli gunlukcu bilerek bagimlilik degil: onunla yazilan
+ * satirda requestId olmaz ve hata hangi istege ait bulunamaz.
+ */
+export type Charge = (input: ChargeInput, logger: Logger) => Promise<Payment>;
 
 export function createCharge(deps: ChargeDeps): Charge {
-  return async ({ cardToken, ...command }) => {
+  return async ({ cardToken, ...command }, logger) => {
     const replay = await findReplay(deps.repository, command);
     if (replay !== null) {
       return replay;
@@ -68,7 +72,7 @@ export function createCharge(deps: ChargeDeps): Charge {
     if (command.method === PAYMENT_METHOD.CASH_ON_DELIVERY || cardToken === undefined) {
       return pending;
     }
-    const settled = await authorizeAndSettle(deps, pending, cardToken);
+    const settled = await authorizeAndSettle(deps, pending, cardToken, logger);
     await deps.repository.update(settled, pending.version);
     return settled;
   };
@@ -95,13 +99,14 @@ async function authorizeAndSettle(
   deps: ChargeDeps,
   pending: Payment,
   cardToken: string,
+  logger: Logger,
 ): Promise<Payment> {
   try {
     const decision = await deps.provider.authorize({ cardToken, amount: pending.amount });
     return settlePayment(pending, decision, deps.clock, deps.challengeTtlMs);
   } catch (error) {
     // Hata istemciye degil gunluge: tutar cekilmedi, kayit FAILED olur.
-    deps.logger?.error({ err: error, orderId: pending.orderId }, 'odeme saglayicisina ulasilamadi');
+    logger.error({ err: error, orderId: pending.orderId }, 'odeme saglayicisina ulasilamadi');
     return failUnreachableProvider(pending, deps.clock);
   }
 }

@@ -27,8 +27,8 @@ export function createRiskImplementation(deps: RiskHandlerDeps): UntypedServiceI
       name: 'Evaluate',
       schema: evaluateRequestSchema,
       ...(logger === undefined ? {} : { logger }),
-      handle: async (context): Promise<riskV1.EvaluateResponse> => ({
-        evaluation: toProtoEvaluation(await deps.evaluate(context)),
+      handle: async (context, ctx): Promise<riskV1.EvaluateResponse> => ({
+        evaluation: toProtoEvaluation(await deps.evaluate(context, ctx.logger)),
       }),
     }),
 

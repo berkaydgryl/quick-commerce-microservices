@@ -4,7 +4,7 @@
  * kayarsa bu test kirmizi olur (roadmap "Test personalari").
  */
 
-import { fixedClock } from '@getir/core';
+import { fixedClock, silentLogger } from '@getir/core';
 import { describe, expect, it } from 'vitest';
 
 import { createEvaluateRisk } from '../../src/application/evaluate-risk.js';
@@ -16,7 +16,8 @@ import { PERSONA_NOW, PERSONAS } from '../support/personas.js';
 
 const clock = fixedClock(PERSONA_NOW);
 const registry = createRuleRegistry(createCoreRules(clock), riskRulesConfig);
-const evaluate = createEvaluateRisk({ rules: registry, clock, ruleTimeoutMs: RULE_TIMEOUT_MS });
+const engine = createEvaluateRisk({ rules: registry, clock, ruleTimeoutMs: RULE_TIMEOUT_MS });
+const evaluate = (context: Parameters<typeof engine>[0]) => engine(context, silentLogger);
 
 describe('gercek kural kaydi', () => {
   it('alti cekirdek kural config ile iki yonlu eslesir ve hepsi acik', () => {

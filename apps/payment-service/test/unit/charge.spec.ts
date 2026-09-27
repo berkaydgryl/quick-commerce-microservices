@@ -2,13 +2,15 @@
  * Charge use-case: test kartlari, kapida odeme, idempotency ve cift cekim korumasi.
  */
 
-import { AppError, ERROR_CODES, fixedClock, ID_PREFIX, isId } from '@getir/core';
+import { AppError, ERROR_CODES, fixedClock, ID_PREFIX, isId, silentLogger } from '@getir/core';
+import type { Logger } from '@getir/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createCharge } from '../../src/application/charge.js';
-import type { Charge, ChargeInput } from '../../src/application/charge.js';
+import type { ChargeInput } from '../../src/application/charge.js';
 import { THREEDS_CHALLENGE_TTL_MS } from '../../src/config/constants.js';
 import { PAYMENT_METHOD, PAYMENT_STATUS } from '../../src/domain/payment.js';
+import type { Payment } from '../../src/domain/payment.js';
 import type { PaymentProvider } from '../../src/domain/payment-provider.js';
 import { InMemoryPaymentStore } from '../../src/infrastructure/memory/in-memory-payment-store.js';
 import { MockPaymentProvider } from '../../src/infrastructure/mock-provider/mock-payment-provider.js';
@@ -25,16 +27,37 @@ const cardCharge = (overrides: Partial<ChargeInput> = {}): ChargeInput => ({
   ...overrides,
 });
 
-let repository: InMemoryPaymentStore;
-let charge: Charge;
+/** Cagrinin gunlukcusu bagli use-case: testler yalnizca girdiyle cagirir. */
+type ChargeCall = (input: ChargeInput) => Promise<Payment>;
 
-function build(provider: Pick<PaymentProvider, 'authorize'> = new MockPaymentProvider()): Charge {
-  return createCharge({
+let repository: InMemoryPaymentStore;
+let charge: ChargeCall;
+
+function build(
+  provider: Pick<PaymentProvider, 'authorize'> = new MockPaymentProvider(),
+  logger: Logger = silentLogger,
+): ChargeCall {
+  const useCase = createCharge({
     repository,
     provider,
     clock: fixedClock(NOW),
     challengeTtlMs: THREEDS_CHALLENGE_TTL_MS,
   });
+  return (input) => useCase(input, logger);
+}
+
+/** Yalnizca error cagrilarini kaydeden gunlukcu. */
+function recordingLogger(): { logger: Logger; error: ReturnType<typeof vi.fn> } {
+  const error = vi.fn();
+  const logger: Logger = {
+    debug: () => undefined,
+    info: () => undefined,
+    warn: () => undefined,
+    error,
+    fatal: () => undefined,
+    child: () => logger,
+  };
+  return { logger, error };
 }
 
 beforeEach(() => {
@@ -163,5 +186,21 @@ describe('Charge - saglayici hatasi', () => {
     expect(payment.failureCode).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
     expect(payment.attempts.map((a) => a.outcome)).toEqual(['PROVIDER_ERROR']);
     expect((await repository.findByOrderId('ord_1'))?.status).toBe(PAYMENT_STATUS.FAILED);
+  });
+
+  it('hata, CAGRININ gunlukcusune (requestId bagli) siparis kimligiyle yazilir', async () => {
+    // Handler ctx.logger'i gecer; use-case servis geneli bir gunlukcu tutmaz,
+    // yoksa bu satirda requestId olmaz ve hata hangi istege ait bulunamaz.
+    const { logger, error } = recordingLogger();
+    const cause = new Error('baglanti koptu');
+    charge = build({ authorize: () => Promise.reject(cause) }, logger);
+
+    await charge(cardCharge());
+
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledWith(
+      { err: cause, orderId: 'ord_1' },
+      'odeme saglayicisina ulasilamadi',
+    );
   });
 });

@@ -74,8 +74,18 @@ export async function connectRedis(options: RedisConnectionOptions): Promise<Red
 
   // Dinleyici SART: ioredis'te 'error' olayinin dinleyicisi yoksa Node
   // yakalanmamis hata olarak processi devirir - Redis kisa bir an duserse bile.
+  //
+  // SEVIYE: ilk baglanti butcesi icindeki hatalar BEKLENEN durumdur (Redis
+  // servisle ayni anda ayaga kalkiyor olabilir) -> warn. Kurulu baglanti
+  // koparsa -> error. Butce dolup baglanti hic kurulamazsa hata cagirana
+  // AppError olarak doner; acilista fatal olarak yazilir (startOrExit).
+  let established = false;
   const onError = (error: Error): void => {
-    logger.error({ err: error }, 'redis baglanti hatasi');
+    if (established) {
+      logger.error({ err: error }, 'redis baglanti hatasi');
+    } else {
+      logger.warn({ err: error }, 'redis baglanti hatasi');
+    }
   };
   const onReconnecting = (): void => {
     logger.warn({}, 'redis yeniden baglaniyor');
@@ -95,6 +105,7 @@ export async function connectRedis(options: RedisConnectionOptions): Promise<Red
     );
   }
 
+  established = true;
   logger.info({ url: redactConnectionString(options.url) }, 'redis baglantisi hazir');
 
   return {

@@ -14,7 +14,12 @@
  *     -d '{"context":{...}}' localhost:50055 getir.risk.v1.RiskService/Evaluate
  */
 
-import { createLogger, installProcessHandlers, startGrpcServer } from '@getir/service-kit';
+import {
+  createLogger,
+  installProcessHandlers,
+  startGrpcServer,
+  startOrExit,
+} from '@getir/service-kit';
 
 import { buildRiskService } from './bootstrap.js';
 import { SERVICE_NAME } from './config/constants.js';
@@ -24,18 +29,25 @@ import { openRiskEventStore } from './infrastructure/risk-event-store.js';
 const env = loadServiceEnv();
 const logger = createLogger({ name: SERVICE_NAME, level: env.LOG_LEVEL });
 
-const store = await openRiskEventStore(env.mongo, logger);
-
-const handle = await startGrpcServer({
-  serviceName: SERVICE_NAME,
-  host: env.GRPC_HOST,
-  port: env.RISK_GRPC_PORT,
-  shutdownTimeoutMs: env.GRPC_SHUTDOWN_TIMEOUT_MS,
-  logger,
-  services: [buildRiskService({ logger, events: store.repository })],
-  // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti kesilmesin.
-  onShutdown: () => store.close(),
-});
+// Acilis adimlari (veri kaynagi, indeksler, port) sarilir: biri basarisizsa hata
+// duz metin yigin izi yerine tek satir fatal JSON olarak yazilir ve process kapanir.
+const { handle, store } = await startOrExit(
+  async () => {
+    const opened = await openRiskEventStore(env.mongo, logger);
+    const server = await startGrpcServer({
+      serviceName: SERVICE_NAME,
+      host: env.GRPC_HOST,
+      port: env.RISK_GRPC_PORT,
+      shutdownTimeoutMs: env.GRPC_SHUTDOWN_TIMEOUT_MS,
+      logger,
+      services: [buildRiskService({ logger, events: opened.repository })],
+      // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti kesilmesin.
+      onShutdown: () => opened.close(),
+    });
+    return { handle: server, store: opened };
+  },
+  { logger },
+);
 
 installProcessHandlers({ shutdown: (reason) => handle.shutdown(reason), logger });
 
