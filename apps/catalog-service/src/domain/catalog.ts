@@ -113,6 +113,22 @@ export function sortCategories(categories: readonly Category[]): readonly Catego
 }
 
 /**
+ * Kategori okumasinin KESME kurali (D6): sortOrder, sonra kimlik (ikili)
+ * sirasinin ilk `limit` kategorisi. Mongo ayni sirayi
+ * sort({ sortOrder: 1, _id: 1 }).limit() ile uygular; bellek uygulamasi bu
+ * fonksiyonu kullanir ki iki uygulama ayni kategorileri birakir. Gosterim
+ * sirasi bu DEGIL, sortCategories'tir.
+ */
+export function firstCategories(
+  categories: readonly Category[],
+  limit: number,
+): readonly Category[] {
+  return [...categories]
+    .sort((left, right) => left.sortOrder - right.sortOrder || compareIds(left.id, right.id))
+    .slice(0, limit);
+}
+
+/**
  * Teklifleri kararli (stable) sirada dizer: kimlige gore, IKILI karsilastirma.
  *
  * NEDEN IKILI: imlec "_id > token" ile ilerler (pagination.ts) ve Mongo da

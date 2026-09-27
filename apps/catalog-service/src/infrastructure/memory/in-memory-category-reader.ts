@@ -1,4 +1,5 @@
 import type { Category } from '../../domain/catalog.js';
+import { firstCategories } from '../../domain/catalog.js';
 import type { CategoryReader } from '../../domain/category-reader.js';
 
 export class InMemoryCategoryReader implements CategoryReader {
@@ -8,7 +9,7 @@ export class InMemoryCategoryReader implements CategoryReader {
     this.categories = categories;
   }
 
-  listCategories(): Promise<readonly Category[]> {
-    return Promise.resolve(this.categories);
+  listCategories(limit: number): Promise<readonly Category[]> {
+    return Promise.resolve(firstCategories(this.categories, limit));
   }
 }

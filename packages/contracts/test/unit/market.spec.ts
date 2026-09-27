@@ -89,6 +89,21 @@ describe('nearbyMarketsQuerySchema', () => {
   it('WGS84 disini reddeder', () => {
     expect(nearbyMarketsQuerySchema.safeParse({ lat: '91', lng: '29' }).success).toBe(false);
   });
+
+  // Mesajlar govdedeki konumla ve gateway'in bicim kuraliyla (params.go) ayni.
+  it.each([
+    [{ lat: '91', lng: '29' }, 'lat', 'enlem -90 ile 90 arasinda olmali'],
+    [{ lat: '41', lng: 'abc' }, 'lng', 'sayi olmali'],
+    [{ lng: '29' }, 'lat', 'zorunlu'],
+    // coerce bos metni 0 yapardi: "lat=" Gine Korfezi olarak islenirdi.
+    [{ lat: '', lng: '29' }, 'lat', 'zorunlu'],
+  ])('Turkce sebep: %o', (query, field, message) => {
+    const issues = nearbyMarketsQuerySchema.safeParse(query).error?.issues ?? [];
+
+    expect(issues.map((issue) => [issue.path.join('.'), issue.message])).toEqual([
+      [field, message],
+    ]);
+  });
 });
 
 describe('nearbyMarketListSchema', () => {

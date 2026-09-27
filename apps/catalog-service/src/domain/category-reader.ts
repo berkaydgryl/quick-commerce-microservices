@@ -10,5 +10,10 @@
 import type { Category } from './catalog.js';
 
 export interface CategoryReader {
-  listCategories(): Promise<readonly Category[]>;
+  /**
+   * En fazla `limit` kategori; kesilirse vitrin sirasinin (sortOrder, sonra
+   * kimlik) BASINDAKILER kalir. Sinir cagirandadir (MAX_CATEGORY_COUNT):
+   * liste sinirsiz okunmaz (D6).
+   */
+  listCategories(limit: number): Promise<readonly Category[]>;
 }

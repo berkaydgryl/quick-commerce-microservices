@@ -22,12 +22,16 @@ export class CategoryRepository
   }
 
   /**
-   * Tum kategoriler. Siralama use-case'tedir (domain/sortCategories): ayni
-   * sortOrder'da ada gore Turkce siralama Mongo'nun varsayilan karsilastirmasiyla
-   * yapilamaz. Liste kucuk (vitrin kategorileri), bellekte siralamak ucuzdur.
+   * En fazla `limit` kategori. Buradaki siralama yalnizca KESME icindir (hangi
+   * kategoriler kalir; bellekteki karsiligi domain/firstCategories). Gosterim
+   * sirasi use-case'tedir (domain/sortCategories): ayni sortOrder'da ada gore
+   * Turkce siralama Mongo'nun varsayilan karsilastirmasiyla yapilamaz. Liste
+   * kucuk (seed en fazla MAX_CATEGORY_COUNT yazar); indeks gerekmez.
    */
-  async listCategories(): Promise<readonly Category[]> {
-    const documents = await this.run('listCategories', () => this.collection.find({}).toArray());
+  async listCategories(limit: number): Promise<readonly Category[]> {
+    const documents = await this.run('listCategories', () =>
+      this.collection.find({}).sort({ sortOrder: 1, _id: 1 }).limit(limit).toArray(),
+    );
     return documents.map(fromCategoryDocument);
   }
 }
