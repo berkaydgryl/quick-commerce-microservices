@@ -88,6 +88,9 @@ export const cancelOrderRequestSchema = z.object({
   orderId: requiredText('orderId'),
   userId: requiredText('userId'),
   reason: cancelReason,
+  // Iptal de bir mutasyondur (ADR-08): anahtar zorunlu. Use-case onu okumaz;
+  // tekrar korumasi gateway'dedir, burada yalnizca varligi ve bicimi dogrulanir.
+  idempotencyKey,
 });
 
 export const getOrderRequestSchema = z.object({

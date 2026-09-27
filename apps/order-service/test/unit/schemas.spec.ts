@@ -7,6 +7,7 @@ import {
 import { describe, expect, it } from 'vitest';
 
 import {
+  cancelOrderRequestSchema,
   createDraftOrderRequestSchema,
   createOrderRequestSchema,
   listMyOrdersRequestSchema,
@@ -100,6 +101,39 @@ describe('createDraftOrderRequestSchema', () => {
     ).toBe(true);
     expect(
       createDraftOrderRequestSchema.safeParse(withLines(1, CART_ITEM_MAX_QUANTITY + 1)).success,
+    ).toBe(false);
+  });
+});
+
+describe('cancelOrderRequestSchema', () => {
+  const cancel = {
+    orderId: 'ord_1',
+    userId: 'usr_1',
+    reason: '',
+    idempotencyKey: valid.idempotencyKey,
+  };
+
+  it('gecerli istegi kabul eder; bos gerekce "gerekce yok" demektir', () => {
+    expect(cancelOrderRequestSchema.parse(cancel).reason).toBeUndefined();
+  });
+
+  it('idempotency anahtari zorunludur ve sozlesmenin sinirlarini uygular (ADR-08)', () => {
+    const withKey = (idempotencyKey: string) => ({ ...cancel, idempotencyKey });
+
+    expect(cancelOrderRequestSchema.safeParse(withKey('')).success).toBe(false);
+    expect(
+      cancelOrderRequestSchema.safeParse(withKey('a'.repeat(IDEMPOTENCY_KEY_MIN_LENGTH - 1)))
+        .success,
+    ).toBe(false);
+    expect(
+      cancelOrderRequestSchema.safeParse(withKey('a'.repeat(IDEMPOTENCY_KEY_MIN_LENGTH))).success,
+    ).toBe(true);
+    expect(
+      cancelOrderRequestSchema.safeParse(withKey('a'.repeat(IDEMPOTENCY_KEY_MAX_LENGTH))).success,
+    ).toBe(true);
+    expect(
+      cancelOrderRequestSchema.safeParse(withKey('a'.repeat(IDEMPOTENCY_KEY_MAX_LENGTH + 1)))
+        .success,
     ).toBe(false);
   });
 });
