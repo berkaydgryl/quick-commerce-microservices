@@ -39,12 +39,13 @@ export function buildPaymentService(options: BootstrapOptions = {}): GrpcService
   const provider = options.provider ?? new MockPaymentProvider();
   const clock = options.clock ?? systemClock;
 
+  // Use-case'ler gunlukcuyu bagimlilik olarak ALMAZ: her cagrida handler'in
+  // requestId bagli gunlukcusu gecer (ctx.logger).
   const charge = createCharge({
     repository,
     provider,
     clock,
     challengeTtlMs: THREEDS_CHALLENGE_TTL_MS,
-    ...(logger === undefined ? {} : { logger }),
   });
   const confirm3Ds = createConfirm3Ds({
     repository,

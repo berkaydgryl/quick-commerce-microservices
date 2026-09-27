@@ -3,7 +3,7 @@
  * Saat sabit; zaman asimi sahte zamanlayicilarla (belirlenebilir).
  */
 
-import { fixedClock, RISK_BANDS } from '@getir/core';
+import { fixedClock, RISK_BANDS, silentLogger } from '@getir/core';
 import type { Logger } from '@getir/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -41,13 +41,10 @@ function fakeLogger(): { logger: Logger; warn: ReturnType<typeof vi.fn> } {
   return { logger, warn };
 }
 
-function build(rules: RegisteredRule[], logger?: Logger) {
-  return createEvaluateRisk({
-    rules,
-    clock: fixedClock(NOW),
-    ruleTimeoutMs: TIMEOUT_MS,
-    ...(logger === undefined ? {} : { logger }),
-  });
+/** Cagrinin gunlukcusu bagli motor: testler yalnizca baglamla cagirir. */
+function build(rules: RegisteredRule[], logger: Logger = silentLogger) {
+  const evaluate = createEvaluateRisk({ rules, clock: fixedClock(NOW), ruleTimeoutMs: TIMEOUT_MS });
+  return (riskContext: typeof context) => evaluate(riskContext, logger);
 }
 
 afterEach(() => {

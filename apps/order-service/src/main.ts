@@ -14,7 +14,12 @@
  *     -d '{...}' localhost:50053 getir.order.v1.OrderService/CreateDraftOrder
  */
 
-import { createLogger, installProcessHandlers, startGrpcServer } from '@getir/service-kit';
+import {
+  createLogger,
+  installProcessHandlers,
+  startGrpcServer,
+  startOrExit,
+} from '@getir/service-kit';
 
 import { buildOrderService } from './bootstrap.js';
 import { SERVICE_NAME } from './config/constants.js';
@@ -24,18 +29,25 @@ import { openOrderStore } from './infrastructure/order-store.js';
 const env = loadServiceEnv();
 const logger = createLogger({ name: SERVICE_NAME, level: env.LOG_LEVEL });
 
-const store = await openOrderStore(env.mongo, logger);
-
-const handle = await startGrpcServer({
-  serviceName: SERVICE_NAME,
-  host: env.GRPC_HOST,
-  port: env.ORDER_GRPC_PORT,
-  shutdownTimeoutMs: env.GRPC_SHUTDOWN_TIMEOUT_MS,
-  logger,
-  services: [buildOrderService({ logger, store })],
-  // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti kesilmesin.
-  onShutdown: () => store.close(),
-});
+// Acilis adimlari (veri kaynagi, indeksler, port) sarilir: biri basarisizsa hata
+// duz metin yigin izi yerine tek satir fatal JSON olarak yazilir ve process kapanir.
+const { handle, store } = await startOrExit(
+  async () => {
+    const opened = await openOrderStore(env.mongo, logger);
+    const server = await startGrpcServer({
+      serviceName: SERVICE_NAME,
+      host: env.GRPC_HOST,
+      port: env.ORDER_GRPC_PORT,
+      shutdownTimeoutMs: env.GRPC_SHUTDOWN_TIMEOUT_MS,
+      logger,
+      services: [buildOrderService({ logger, store: opened })],
+      // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti kesilmesin.
+      onShutdown: () => opened.close(),
+    });
+    return { handle: server, store: opened };
+  },
+  { logger },
+);
 
 installProcessHandlers({ shutdown: (reason) => handle.shutdown(reason), logger });
 

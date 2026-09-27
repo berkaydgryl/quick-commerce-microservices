@@ -3,7 +3,7 @@
  * ve es zamanli deneme (iyimser kilit). Saat sabit, saglayici mock.
  */
 
-import { AppError, ERROR_CODES, fixedClock, MOCK_THREEDS_CODE } from '@getir/core';
+import { AppError, ERROR_CODES, fixedClock, MOCK_THREEDS_CODE, silentLogger } from '@getir/core';
 import type { MutableClock } from '@getir/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -49,14 +49,17 @@ async function chargeWith3Ds(orderId = 'ord_1'): Promise<Payment> {
     clock,
     challengeTtlMs: THREEDS_CHALLENGE_TTL_MS,
   });
-  return charge({
-    orderId,
-    userId: 'usr_1',
-    amount: { amountMinor: 12_990, currency: 'TRY' },
-    method: PAYMENT_METHOD.CARD,
-    cardToken: 'tok_test_3184',
-    idempotencyKey: `anahtar-${orderId}`,
-  });
+  return charge(
+    {
+      orderId,
+      userId: 'usr_1',
+      amount: { amountMinor: 12_990, currency: 'TRY' },
+      method: PAYMENT_METHOD.CARD,
+      cardToken: 'tok_test_3184',
+      idempotencyKey: `anahtar-${orderId}`,
+    },
+    silentLogger,
+  );
 }
 
 async function rejection(promise: Promise<unknown>): Promise<AppError> {

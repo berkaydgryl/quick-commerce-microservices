@@ -20,21 +20,26 @@ export interface EvaluateRiskDeps {
   readonly rules: readonly RegisteredRule[];
   readonly clock: Clock;
   readonly ruleTimeoutMs: number;
-  readonly logger?: Logger;
 }
 
 export interface RiskEvaluation extends RiskAssessment {
   readonly evaluatedAt: Date;
 }
 
-export type EvaluateRisk = (context: RiskContext) => Promise<RiskEvaluation>;
+/**
+ * `logger` CAGRININ gunlukcusudur (rpc + requestId bagli): hata veren kuralin
+ * uyarisi hangi degerlendirmeye ait oldugunu tasimali.
+ */
+export type EvaluateRisk = (context: RiskContext, logger: Logger) => Promise<RiskEvaluation>;
 
 /** Kosmayan kuralin gerekcesi: risk_events'te "tetiklenmedi" ile karismasin. */
 const FAILED_RULE_REASON = 'kural hatasi';
 
 export function createEvaluateRisk(deps: EvaluateRiskDeps): EvaluateRisk {
-  return async (context) => {
-    const results = await Promise.all(deps.rules.map((entry) => runRule(deps, entry, context)));
+  return async (context, logger) => {
+    const results = await Promise.all(
+      deps.rules.map((entry) => runRule(deps, entry, context, logger)),
+    );
     return { ...assessRisk(results), evaluatedAt: deps.clock.date() };
   };
 }
@@ -43,6 +48,7 @@ async function runRule(
   deps: EvaluateRiskDeps,
   { rule, weight, severity }: RegisteredRule,
   context: RiskContext,
+  logger: Logger,
 ): Promise<RuleResult> {
   try {
     // Promise.resolve().then: kural senkron firlatsa da ayni yoldan yakalanir.
@@ -54,7 +60,7 @@ async function runRule(
     const vetoRequested = outcome.hit && outcome.veto === true;
     if (vetoRequested && severity !== 'block') {
       // Yetkisiz veto: kural kendine engelleme yetkisi veremez; puan sayilir.
-      deps.logger?.warn({ ruleId: rule.id }, 'veto yetkisi olmayan kural veto istedi, yok sayildi');
+      logger.warn({ ruleId: rule.id }, 'veto yetkisi olmayan kural veto istedi, yok sayildi');
     }
     return {
       ruleId: rule.id,
@@ -65,7 +71,7 @@ async function runRule(
       veto: vetoRequested && severity === 'block',
     };
   } catch (error) {
-    deps.logger?.warn({ ruleId: rule.id, err: error }, 'risk kurali hata verdi, 0 puan sayildi');
+    logger.warn({ ruleId: rule.id, err: error }, 'risk kurali hata verdi, 0 puan sayildi');
     return {
       ruleId: rule.id,
       hit: false,

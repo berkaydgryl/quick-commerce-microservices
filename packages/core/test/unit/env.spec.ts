@@ -1,15 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import {
   AppError,
+  ENV_FAILURE_EXIT_CODE,
+  ENV_FAILURE_MESSAGE,
   ERROR_CODES,
   commonEnvSchema,
   envBoolean,
   envInt,
   envString,
+  fixedClock,
   isAppError,
   loadEnv,
+  loadEnvOrExit,
   requireEnv,
 } from '../../src/index.js';
 
@@ -94,6 +98,58 @@ describe('loadEnv', () => {
   it('bilinmeyen NODE_ENV degerini reddeder', () => {
     const error = captureEnvError({ ...validSource, NODE_ENV: 'staging' });
     expect(error.message).toContain('NODE_ENV');
+  });
+});
+
+describe('loadEnvOrExit', () => {
+  const NOW = Date.UTC(2026, 8, 27, 9, 30, 0);
+  const lineSchema = z.object({
+    level: z.literal('fatal'),
+    time: z.string(),
+    msg: z.string(),
+    issues: z.array(z.string()),
+  });
+
+  function fakeIo() {
+    const lines: string[] = [];
+    const exit = vi.fn();
+    return {
+      lines,
+      exit,
+      io: { write: (line: string) => lines.push(line), exit, clock: fixedClock(NOW) },
+    };
+  }
+
+  it('gecerli kaynakta tipli nesne doner; yazmaz, cikmaz', () => {
+    const { lines, exit, io } = fakeIo();
+
+    expect(loadEnvOrExit(serviceEnvSchema, validSource, io).GRPC_PORT).toBe(CATALOG_PORT);
+    expect(lines).toEqual([]);
+    expect(exit).not.toHaveBeenCalled();
+  });
+
+  it('hata TEK SATIR JSON olarak yazilir: seviye, zaman, mesaj ve TUM sorunlar', () => {
+    const { lines, exit, io } = fakeIo();
+
+    expect(() =>
+      loadEnvOrExit(serviceEnvSchema, { ...validSource, GRPC_PORT: '0', MONGO_URI: undefined }, io),
+    ).toThrow(AppError);
+
+    expect(lines).toHaveLength(1);
+    const [line = ''] = lines;
+    // Tek satir: log toplayici her satiri bir kayit sayar.
+    expect(line.endsWith('\n')).toBe(true);
+    expect(line.slice(0, -1)).not.toContain('\n');
+    const record = lineSchema.parse(JSON.parse(line));
+    expect(record).toMatchObject({
+      level: 'fatal',
+      time: new Date(NOW).toISOString(),
+      msg: ENV_FAILURE_MESSAGE,
+    });
+    expect(record.issues).toHaveLength(2);
+    expect(record.issues.join(' ')).toContain('GRPC_PORT');
+    expect(record.issues.join(' ')).toContain('MONGO_URI');
+    expect(exit).toHaveBeenCalledWith(ENV_FAILURE_EXIT_CODE);
   });
 });
 

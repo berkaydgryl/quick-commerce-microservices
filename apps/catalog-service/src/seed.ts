@@ -9,7 +9,7 @@
  */
 
 import { connectMongo } from '@getir/mongo-kit';
-import { createLogger } from '@getir/service-kit';
+import { createLogger, startOrExit } from '@getir/service-kit';
 
 import { createSeedCatalog } from './application/seed-catalog.js';
 import { SERVICE_NAME } from './config/constants.js';
@@ -27,13 +27,19 @@ const SEED_FAILURE_EXIT_CODE = 1;
 const env = loadSeedEnv();
 const logger = createLogger({ name: `${SERVICE_NAME}-seed`, level: env.LOG_LEVEL });
 
-const connection = await connectMongo({
-  uri: env.MONGO_URI,
-  dbName: env.MONGO_DB,
-  serverSelectionTimeoutMs: env.MONGO_SERVER_SELECTION_TIMEOUT_MS,
-  appName: `${SERVICE_NAME}-seed`,
-  logger,
-});
+// Baglanti try'in DISINDA: ulasilamazsa kapatilacak baglanti yoktur. Yine de
+// hata duz metin yigin izi olarak degil, tek satir fatal JSON olarak yazilir.
+const connection = await startOrExit(
+  () =>
+    connectMongo({
+      uri: env.MONGO_URI,
+      dbName: env.MONGO_DB,
+      serverSelectionTimeoutMs: env.MONGO_SERVER_SELECTION_TIMEOUT_MS,
+      appName: `${SERVICE_NAME}-seed`,
+      logger,
+    }),
+  { logger, message: 'seed icin mongo baglantisi kurulamadi' },
+);
 
 try {
   const repositories = createMongoCatalogRepositories(connection.db);

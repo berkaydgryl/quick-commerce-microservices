@@ -3,7 +3,7 @@
  * error gunlugu yazilir (T6.3 karari); kayitta ham baglam (kisisel veri) yok.
  */
 
-import { fixedClock, RISK_BANDS } from '@getir/core';
+import { fixedClock, RISK_BANDS, silentLogger } from '@getir/core';
 import type { Logger } from '@getir/core';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -44,7 +44,7 @@ describe('EvaluateAndRecord', () => {
     const events = new InMemoryRiskEventStore();
     const evaluate = createEvaluateAndRecord({ evaluateRisk, events });
 
-    const evaluation = await evaluate({ ...ali.context, orderId: 'ord_ali' });
+    const evaluation = await evaluate({ ...ali.context, orderId: 'ord_ali' }, silentLogger);
 
     const recorded = await events.findLatest({ userId: ali.context.userId, orderId: 'ord_ali' });
     expect(recorded).toMatchObject({
@@ -59,11 +59,10 @@ describe('EvaluateAndRecord', () => {
 
   it('kayitta ham baglam YOK: IP, cihaz kimligi, koordinat', async () => {
     const events = new InMemoryRiskEventStore();
-    await createEvaluateAndRecord({ evaluateRisk, events })({
-      ...ali.context,
-      deviceId: 'dev_gizli',
-      ipAddress: '85.105.1.2',
-    });
+    await createEvaluateAndRecord({ evaluateRisk, events })(
+      { ...ali.context, deviceId: 'dev_gizli', ipAddress: '85.105.1.2' },
+      silentLogger,
+    );
 
     const serialized = JSON.stringify(await events.findLatest({ userId: ali.context.userId }));
     expect(serialized).not.toMatch(/85\.105|dev_gizli|38\.42|27\.14|40\.98/);
@@ -76,8 +75,10 @@ describe('EvaluateAndRecord', () => {
       findLatest: () => Promise.resolve(null),
     };
 
-    const evaluation = await createEvaluateAndRecord({ evaluateRisk, events: broken, logger })(
+    // Gunlukcu CAGRININ gunlukcusudur (handler'da ctx.logger: requestId bagli).
+    const evaluation = await createEvaluateAndRecord({ evaluateRisk, events: broken })(
       ali.context,
+      logger,
     );
 
     expect(evaluation.band).toBe(RISK_BANDS.CRITICAL);

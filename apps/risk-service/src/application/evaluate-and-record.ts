@@ -18,18 +18,18 @@ import type { EvaluateRisk, RiskEvaluation } from './evaluate-risk.js';
 export interface EvaluateAndRecordDeps {
   readonly evaluateRisk: EvaluateRisk;
   readonly events: RiskEventRepository;
-  readonly logger?: Logger;
 }
 
-export type EvaluateAndRecord = (context: RiskContext) => Promise<RiskEvaluation>;
+/** `logger` CAGRININ gunlukcusudur (rpc + requestId bagli); motora da o gecer. */
+export type EvaluateAndRecord = (context: RiskContext, logger: Logger) => Promise<RiskEvaluation>;
 
 export function createEvaluateAndRecord(deps: EvaluateAndRecordDeps): EvaluateAndRecord {
-  return async (context) => {
-    const evaluation = await deps.evaluateRisk(context);
+  return async (context, logger) => {
+    const evaluation = await deps.evaluateRisk(context, logger);
     try {
       await deps.events.insert(toRiskEvent(context, evaluation, evaluation.evaluatedAt));
     } catch (error) {
-      deps.logger?.error(
+      logger.error(
         { err: error, userId: context.userId, orderId: context.orderId, band: evaluation.band },
         'risk degerlendirmesi kaydedilemedi, karar yine donuldu',
       );
