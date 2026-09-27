@@ -11,6 +11,7 @@ import type { Clock, Logger } from '@getir/core';
 
 import type { RiskContext } from '../domain/risk-context.js';
 import type { RuleResult } from '../domain/rule.js';
+import { failedRuleResult, isUnauthorizedVeto, toRuleResult } from '../domain/rule-result.js';
 import { assessRisk } from '../domain/score.js';
 import type { RiskAssessment } from '../domain/score.js';
 import type { RegisteredRule } from '../rules/registry.js';
@@ -32,9 +33,6 @@ export interface RiskEvaluation extends RiskAssessment {
  */
 export type EvaluateRisk = (context: RiskContext, logger: Logger) => Promise<RiskEvaluation>;
 
-/** Kosmayan kuralin gerekcesi: risk_events'te "tetiklenmedi" ile karismasin. */
-const FAILED_RULE_REASON = 'kural hatasi';
-
 export function createEvaluateRisk(deps: EvaluateRiskDeps): EvaluateRisk {
   return async (context, logger) => {
     const results = await Promise.all(
@@ -44,6 +42,11 @@ export function createEvaluateRisk(deps: EvaluateRiskDeps): EvaluateRisk {
   };
 }
 
+/**
+ * Tek kuralin ORKESTRASYONU: sure siniriyla kostur, sonucu domain kuralina
+ * cevir (rule-result.ts), gerekirse uyari yaz. Puan ve veto karari burada
+ * VERILMEZ.
+ */
 async function runRule(
   deps: EvaluateRiskDeps,
   { rule, weight, severity }: RegisteredRule,
@@ -57,28 +60,12 @@ async function runRule(
       deps.ruleTimeoutMs,
       `risk kurali ${rule.id}`,
     );
-    const vetoRequested = outcome.hit && outcome.veto === true;
-    if (vetoRequested && severity !== 'block') {
-      // Yetkisiz veto: kural kendine engelleme yetkisi veremez; puan sayilir.
+    if (isUnauthorizedVeto(outcome, severity)) {
       logger.warn({ ruleId: rule.id }, 'veto yetkisi olmayan kural veto istedi, yok sayildi');
     }
-    return {
-      ruleId: rule.id,
-      hit: outcome.hit,
-      weight,
-      score: outcome.hit ? weight : 0,
-      reason: outcome.reason,
-      veto: vetoRequested && severity === 'block',
-    };
+    return toRuleResult(rule.id, outcome, weight, severity);
   } catch (error) {
     logger.warn({ ruleId: rule.id, err: error }, 'risk kurali hata verdi, 0 puan sayildi');
-    return {
-      ruleId: rule.id,
-      hit: false,
-      weight,
-      score: 0,
-      reason: FAILED_RULE_REASON,
-      veto: false,
-    };
+    return failedRuleResult(rule.id, weight);
   }
 }
