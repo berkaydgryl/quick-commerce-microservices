@@ -12,6 +12,7 @@
 import { AppError, ERROR_CODES, ORDER_STATUS } from '@getir/core';
 import type { Clock } from '@getir/core';
 
+import { statusChangedEvents } from '../domain/order-events.js';
 import type { OrderRepository } from '../domain/order-repository.js';
 import type { Order } from '../domain/order.js';
 import { TIMELINE_NOTE, transitionOrder } from '../domain/order.js';
@@ -54,7 +55,7 @@ export function createCancelOrder(deps: CancelOrderDeps): CancelOrder {
       deps.clock,
       reason ?? TIMELINE_NOTE.USER_CANCELLED,
     );
-    await deps.repository.update(cancelled, order.version);
+    await deps.repository.update(cancelled, order.version, statusChangedEvents(order, cancelled));
     return cancelled;
   };
 }

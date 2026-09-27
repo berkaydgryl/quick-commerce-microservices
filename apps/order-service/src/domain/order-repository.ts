@@ -9,21 +9,28 @@
 
 import { AppError } from '@getir/core';
 
+import type { OrderEvent } from './order-events.js';
 import type { Order } from './order.js';
 
+/**
+ * OLAYLAR ZORUNLU PARAMETRE (T7.3, ADR-04): siparis ve urettigi olaylar TEK
+ * atomik yazimdir - biri yazilmazsa digeri de yazilmaz. Olay uretmeyen yazim
+ * `[]` gecer; parametreyi unutan kod derlenmez.
+ */
 export interface OrderRepository {
   /**
-   * YENI siparisi yazar.
-   * @throws AppError CONFLICT - ayni kimlikte kayit zaten var.
+   * YENI siparisi ve olaylarini yazar.
+   * @throws AppError CONFLICT - ayni kimlikte kayit zaten var (olaylar da yazilmaz).
    */
-  insert(order: Order): Promise<void>;
+  insert(order: Order, events: readonly OrderEvent[]): Promise<void>;
 
   /**
-   * Var olan siparisin yerine `order`'i yazar; YALNIZCA kayittaki surum
-   * `expectedVersion` ise. Arada baska bir yazma olduysa hicbir sey yazmaz.
+   * Var olan siparisin yerine `order`'i yazar ve olaylari ekler; YALNIZCA
+   * kayittaki surum `expectedVersion` ise. Arada baska bir yazma olduysa
+   * hicbir sey yazmaz - olaylar dahil.
    * @throws AppError CONFLICT - kayit yok ya da surum degismis.
    */
-  update(order: Order, expectedVersion: number): Promise<void>;
+  update(order: Order, expectedVersion: number, events: readonly OrderEvent[]): Promise<void>;
 
   /** Kimlige gore okur; yoksa null. */
   findById(orderId: string): Promise<Order | null>;

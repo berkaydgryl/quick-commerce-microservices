@@ -42,6 +42,7 @@ beforeEach(() => {
     history: repository,
     risk,
     payments,
+    outbox: repository,
     clock: fixedClock(DRAFT_AT_MS + DWELL_MS),
   });
 });
@@ -66,6 +67,24 @@ describe('CreateOrder - mutlu yol (LOW, kart)', () => {
     ]);
     await expect(repository.findById(id)).resolves.toEqual(order);
     expect(order.riskBand).toBe(RISK_BANDS.LOW);
+  });
+
+  it('her gecis bir order.status_changed olayi; olaylar siparisle ayni yazimda (T7.3)', async () => {
+    const { id } = await draft();
+
+    await create({ orderId: id, userId: 'usr_1', ...byCard }, scope);
+
+    expect(
+      repository.recordedEvents
+        .filter((event) => event.orderId === id)
+        .map((event) => [event.topic, event.payload['to'], event.version]),
+    ).toEqual([
+      ['order.created', undefined, 1],
+      ['order.status_changed', 'RISK_CHECK', 2],
+      ['order.status_changed', 'RESERVED', 3],
+      ['order.status_changed', 'AWAITING_PAYMENT', 4],
+      ['order.status_changed', 'PAID', 5],
+    ]);
   });
 
   it('cekim dondurulmus toplamla, siparisten turetilen anahtarla, 3DS zorunlu olmadan', async () => {
@@ -147,6 +166,8 @@ describe('CreateOrder - bantlar', () => {
     });
     await expect(repository.findById(original.id)).resolves.toEqual(original);
     expect(payments.charges).toEqual([]);
+    // Siparis degismedi: yalnizca taslagin order.created'i var, gecis olayi yok.
+    expect(repository.recordedEvents.map((event) => event.topic)).toEqual(['order.created']);
   });
 
   it.each([
@@ -208,7 +229,7 @@ describe('CreateOrder - on kosullar', () => {
   it('iptal edilmis taslak: ORDER_STATE_INVALID', async () => {
     const original = await draft();
     const cancelled = transitionOrder(original, ORDER_STATUS.CANCELLED, fixedClock(DRAFT_AT_MS));
-    await repository.update(cancelled, original.version);
+    await repository.update(cancelled, original.version, []);
 
     await expect(
       create({ orderId: original.id, userId: 'usr_1', ...byCard }, scope),

@@ -7,9 +7,10 @@
  * isteyen frontend ve birim testleri icindir.
  */
 
-import { comesBefore, cursorOf } from '../../domain/order-history-cursor.js';
-import { ORDER_STATUS } from '@getir/core';
+import { AppError, ORDER_STATUS } from '@getir/core';
 
+import type { OrderEvent } from '../../domain/order-events.js';
+import { comesBefore, cursorOf } from '../../domain/order-history-cursor.js';
 import type {
   OrderHistoryPage,
   OrderHistoryQuery,
@@ -17,27 +18,98 @@ import type {
   RiskHistory,
 } from '../../domain/order-history-reader.js';
 import { PAID_ORDER_STATUSES, toRiskHistory } from '../../domain/order-history-reader.js';
+import type { OrderOutbox } from '../../domain/order-outbox.js';
 import type { OrderRepository } from '../../domain/order-repository.js';
 import { orderAlreadyExists, orderVersionConflict } from '../../domain/order-repository.js';
 import type { Order } from '../../domain/order.js';
 
-export class InMemoryOrderStore implements OrderRepository, OrderHistoryReader {
-  private readonly orders = new Map<string, Order>();
+interface StoredEvent {
+  readonly event: OrderEvent;
+  publishedAt?: Date;
+}
 
-  insert(order: Order): Promise<void> {
+export class InMemoryOrderStore implements OrderRepository, OrderHistoryReader, OrderOutbox {
+  private readonly orders = new Map<string, Order>();
+  private readonly events: StoredEvent[] = [];
+
+  // Siparis ve olaylari ayni senkron adimda yazilir: arada baska kod kosamaz,
+  // bellekte "transaction" budur. Hata halinde ikisi de yazilmaz.
+  insert(order: Order, events: readonly OrderEvent[]): Promise<void> {
     if (this.orders.has(order.id)) {
       return Promise.reject(orderAlreadyExists(order.id));
     }
+    const duplicate = this.duplicateEvent(events);
+    if (duplicate !== undefined) {
+      return Promise.reject(duplicate);
+    }
     this.orders.set(order.id, order);
+    this.record(events);
     return Promise.resolve();
   }
 
-  update(order: Order, expectedVersion: number): Promise<void> {
+  update(order: Order, expectedVersion: number, events: readonly OrderEvent[]): Promise<void> {
     if (this.orders.get(order.id)?.version !== expectedVersion) {
       return Promise.reject(orderVersionConflict(order.id, expectedVersion));
     }
+    const duplicate = this.duplicateEvent(events);
+    if (duplicate !== undefined) {
+      return Promise.reject(duplicate);
+    }
     this.orders.set(order.id, order);
+    this.record(events);
     return Promise.resolve();
+  }
+
+  append(events: readonly OrderEvent[]): Promise<void> {
+    const duplicate = this.duplicateEvent(events);
+    if (duplicate !== undefined) {
+      return Promise.reject(duplicate);
+    }
+    this.record(events);
+    return Promise.resolve();
+  }
+
+  pending(limit: number): Promise<readonly OrderEvent[]> {
+    const unpublished = this.events
+      .filter((stored) => stored.publishedAt === undefined)
+      .map((stored) => stored.event)
+      .sort(
+        (left, right) =>
+          left.occurredAt.getTime() - right.occurredAt.getTime() || left.version - right.version,
+      );
+    return Promise.resolve(unpublished.slice(0, limit));
+  }
+
+  markPublished(eventIds: readonly string[], at: Date): Promise<void> {
+    const ids = new Set(eventIds);
+    for (const stored of this.events) {
+      if (ids.has(stored.event.eventId) && stored.publishedAt === undefined) {
+        stored.publishedAt = at;
+      }
+    }
+    return Promise.resolve();
+  }
+
+  /** Yalnizca test icin: yazilan TUM olaylar (yayinlanmis olanlar dahil), yazim sirasiyla. */
+  get recordedEvents(): readonly OrderEvent[] {
+    return this.events.map((stored) => stored.event);
+  }
+
+  /**
+   * Mongo'daki outbox _id tekilligiyle ayni kural: ayni olay kimligi ikinci
+   * kez yazilamaz. Kontrol siparise DOKUNMADAN once yapilir; boylece bellekte
+   * de "biri yazilmazsa digeri de yazilmaz" gecerlidir.
+   */
+  private duplicateEvent(events: readonly OrderEvent[]): AppError | undefined {
+    const known = new Set(this.events.map((stored) => stored.event.eventId));
+    const clash = events.find((event) => known.has(event.eventId));
+    return clash === undefined
+      ? undefined
+      : AppError.conflict('Olay zaten yazilmis', { details: { eventId: clash.eventId } });
+  }
+
+  private record(events: readonly OrderEvent[]): void {
+    this.events.push(...events.map((event) => ({ event })));
   }
 
   findById(orderId: string): Promise<Order | null> {

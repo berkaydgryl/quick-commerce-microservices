@@ -1,8 +1,19 @@
 import { AppError, ERROR_CODES } from '@getir/core';
-import { MongoNetworkError, MongoServerError } from 'mongodb';
+import { MongoErrorLabel, MongoNetworkError, MongoServerError } from 'mongodb';
 import { describe, expect, it } from 'vitest';
 
-import { isDuplicateKeyError, toMongoAppError } from '../../src/errors.js';
+import {
+  isDuplicateKeyError,
+  retryableTransactionCause,
+  toMongoAppError,
+} from '../../src/errors.js';
+
+/** Transaction icindeki es zamanli yazim hatasi: surucunun verdigi bicimde. */
+function writeConflictError(): MongoServerError {
+  const error = new MongoServerError({ message: 'WriteConflict', code: 112 });
+  error.addErrorLabel(MongoErrorLabel.TransientTransactionError);
+  return error;
+}
 
 /** Surucunun benzersiz indeks ihlalinde firlattigi hatanin aynisi. */
 function duplicateKeyError(): MongoServerError {
@@ -71,5 +82,27 @@ describe('isDuplicateKeyError', () => {
     expect(isDuplicateKeyError(duplicateKeyError())).toBe(true);
     expect(isDuplicateKeyError(new MongoServerError({ message: 'baska', code: 50 }))).toBe(false);
     expect(isDuplicateKeyError(new Error('duplicate'))).toBe(false);
+  });
+});
+
+describe('transaction yazim cakismasi (T7.3)', () => {
+  it('WriteConflict (112) INTERNAL degil CONFLICT: es zamanli degisiklik', () => {
+    expect(toMongoAppError(writeConflictError(), { operation: 'withTransaction' })).toMatchObject({
+      code: ERROR_CODES.CONFLICT,
+    });
+  });
+
+  it('etiketli asil hatayi bulur: dogrudan ya da run() in sardigi AppError in cause undan', () => {
+    const conflict = writeConflictError();
+
+    expect(retryableTransactionCause(conflict)).toBe(conflict);
+    expect(retryableTransactionCause(toMongoAppError(conflict))).toBe(conflict);
+  });
+
+  it('etiketsiz ya da Mongo disi hata yeniden denenmez', () => {
+    expect(retryableTransactionCause(duplicateKeyError())).toBeUndefined();
+    expect(retryableTransactionCause(toMongoAppError(duplicateKeyError()))).toBeUndefined();
+    expect(retryableTransactionCause(AppError.internal('outbox yazilamadi'))).toBeUndefined();
+    expect(retryableTransactionCause(new Error('baska'))).toBeUndefined();
   });
 });

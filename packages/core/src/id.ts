@@ -19,6 +19,11 @@ export const ID_PREFIX = {
   THREEDS_CHALLENGE: 'tds',
   /** Risk degerlendirme kaydi (risk_events, risk-svc). */
   RISK_EVENT: 'rev',
+  /**
+   * Servisler arasi olay (outbox satiri ve stream:events kaydi, ADR-04).
+   * Tuketiciler olayi bu kimlikle tekillestirir: teslimat en az bir kezdir.
+   */
+  EVENT: 'evt',
   /** Istek korelasyon kimligi: gunluk kaydi, gRPC metadata'si ve REST hata
    *  zarfindaki `error.requestId` ayni degeri tasir. */
   REQUEST: 'req',

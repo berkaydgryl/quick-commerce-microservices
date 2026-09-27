@@ -87,6 +87,9 @@ importers:
       '@getir/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@getir/event-bus':
+        specifier: workspace:*
+        version: link:../../packages/event-bus
       '@getir/mongo-kit':
         specifier: workspace:*
         version: link:../../packages/mongo-kit
@@ -96,6 +99,9 @@ importers:
       '@getir/proto':
         specifier: workspace:*
         version: link:../../packages/proto
+      '@getir/redis-kit':
+        specifier: workspace:*
+        version: link:../../packages/redis-kit
       '@getir/service-kit':
         specifier: workspace:*
         version: link:../../packages/service-kit
@@ -110,6 +116,9 @@ importers:
         version: 3.25.76
     devDependencies:
       '@testcontainers/mongodb':
+        specifier: ^12.1.0
+        version: 12.1.0
+      '@testcontainers/redis':
         specifier: ^12.1.0
         version: 12.1.0
 
@@ -235,6 +244,22 @@ importers:
       zod:
         specifier: ^3.23.8
         version: 3.25.76
+
+  packages/event-bus:
+    dependencies:
+      '@getir/core':
+        specifier: workspace:*
+        version: link:../core
+      '@getir/redis-kit':
+        specifier: workspace:*
+        version: link:../redis-kit
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
+    devDependencies:
+      '@testcontainers/redis':
+        specifier: ^12.1.0
+        version: 12.1.0
 
   packages/mongo-kit:
     dependencies:

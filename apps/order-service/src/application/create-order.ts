@@ -18,6 +18,7 @@ import { ORDER_STATUS } from '@getir/core';
 import type { Clock } from '@getir/core';
 
 import type { OrderHistoryReader } from '../domain/order-history-reader.js';
+import type { OrderOutbox } from '../domain/order-outbox.js';
 import type { OrderRepository } from '../domain/order-repository.js';
 import { findOwnOrder } from './own-order.js';
 import { chargeOrder } from './payment-step.js';
@@ -32,6 +33,8 @@ export interface CreateOrderDeps {
   readonly history: Pick<OrderHistoryReader, 'riskHistory'>;
   readonly risk: RiskAssessment;
   readonly payments: Payments;
+  /** Telafi komutu icin (payment-step.ts). */
+  readonly outbox: Pick<OrderOutbox, 'append'>;
   readonly clock: Clock;
 }
 

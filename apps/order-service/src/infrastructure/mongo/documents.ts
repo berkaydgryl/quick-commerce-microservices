@@ -5,7 +5,7 @@
  * domain ve use-case'ler etkilenmez. Ceviri tek yerdedir: mappers.ts.
  */
 
-import type { OrderStatus, RiskBand } from '@getir/core';
+import type { EventName, OrderStatus, RiskBand } from '@getir/core';
 import type { BaseDocument } from '@getir/mongo-kit';
 
 import type { ItemUnit } from '../../domain/order-item.js';
@@ -13,6 +13,8 @@ import type { ItemUnit } from '../../domain/order-item.js';
 /** Koleksiyon adlari - roadmap "MongoDB Veri Modeli" tablosuyla ayni. */
 export const COLLECTIONS = {
   ORDERS: 'orders',
+  /** Siparisin olaylari (ADR-04): siparisle AYNI transaction'da yazilir. */
+  OUTBOX: 'outbox',
 } as const;
 
 /** Fiyati dondurulmus kalem; tutarlar kurus, tam sayi. */
@@ -63,4 +65,20 @@ export interface OrderDocument extends BaseDocument {
   updatedAt: Date;
   /** Iyimser kilit surumu; guncelleme filtresi bunu kosul olarak kullanir. */
   version: number;
+}
+
+/**
+ * Outbox satiri (T7.3). _id olay kimligidir (evt_...): ayni olay iki kez
+ * yazilamaz. `publishedAt` yayinlanana kadar null; yayinci null olanlari okur.
+ * Roadmap veri modelindeki `type` alani burada `topic`tir (ADR-07 zarfiyla ayni ad).
+ */
+export interface OutboxDocument extends BaseDocument {
+  topic: EventName;
+  /** Siparis kimligi (bolum anahtari). */
+  aggregateId: string;
+  /** Olayin siparise getirdigi surum; ayni siparisin olaylari bu siraya gore yayinlanir. */
+  version: number;
+  occurredAt: Date;
+  payload: Record<string, unknown>;
+  publishedAt: Date | null;
 }

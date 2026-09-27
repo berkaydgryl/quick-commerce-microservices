@@ -19,6 +19,15 @@ Mongo tek düğümlü **replica set** (rs0) olarak çalışır; çok belgeli tra
 budur. Transaction ayarları tek yerde sabitlenmiştir: `readConcern: snapshot`,
 `writeConcern: majority`, `readPreference: primary`.
 
+**Eş zamanlı yazım yeniden denenir (T7.3'te bulundu).** İki transaction aynı belgeye yazınca
+kaybeden `WriteConflict` (112, `TransientTransactionError` etiketli) alır ve sürücü transaction'ı
+baştan tekrar dener. `MongoRepository.run()` her sürücü hatasını `AppError`'a çevirdiği için bu
+etiket kayboluyordu: sürücü tekrar denemiyor, çağıran `INTERNAL` alıyordu. `withTransaction`
+artık etiketli asıl hatayı (`AppError.cause`) sürücüye geri verir (`retryableTransactionCause`);
+tekrar denemede geri çağrı güncel veriyi görür (örneğin sürüm koşulu tutmaz → `CONFLICT`).
+Deneme süresi dolarsa `WriteConflict` yine `CONFLICT` olarak döner. Geri çağrı bu yüzden
+**tekrar çalıştırılabilir** yazılmalıdır (transaction'ın içinde yan etkisiz).
+
 ## Repository tabanı
 
 ```ts

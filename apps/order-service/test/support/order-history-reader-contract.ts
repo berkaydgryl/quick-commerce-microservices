@@ -28,7 +28,7 @@ export function describeOrderHistoryReaderContract(
       const newest = draftAt(userId, START_MS + 2 * MINUTE_MS);
       // Ekleme sirasi kasten karisik: sira yazma sirasindan degil createdAt'ten gelir.
       for (const order of [middle, oldest, newest, draftAt(newUserId(), START_MS)]) {
-        await store.insert(order);
+        await store.insert(order, []);
       }
 
       const page = await store.listByUser({ userId, pageSize: 10 });
@@ -42,7 +42,7 @@ export function describeOrderHistoryReaderContract(
       const userId = newUserId();
       const twins = [draftAt(userId, START_MS), draftAt(userId, START_MS)];
       for (const order of twins) {
-        await store.insert(order);
+        await store.insert(order, []);
       }
 
       const page = await store.listByUser({ userId, pageSize: 10 });
@@ -62,7 +62,7 @@ export function describeOrderHistoryReaderContract(
         draftAt(userId, START_MS + minute * MINUTE_MS),
       );
       for (const order of orders) {
-        await store.insert(order);
+        await store.insert(order, []);
       }
 
       const seen: string[] = [];
@@ -84,7 +84,7 @@ export function describeOrderHistoryReaderContract(
       const store = getStore();
       const userId = newUserId();
       for (const minute of [0, 1]) {
-        await store.insert(draftAt(userId, START_MS + minute * MINUTE_MS));
+        await store.insert(draftAt(userId, START_MS + minute * MINUTE_MS), []);
       }
 
       const page = await store.listByUser({ userId, pageSize: 2 });
@@ -106,11 +106,11 @@ export function describeOrderHistoryReaderContract(
       await expect(store.hasPaidOrder(userId)).resolves.toBe(false);
 
       // Taslak ve iptal edilmis siparis "verilmis siparis" degildir.
-      await store.insert(draftAt(userId, START_MS));
-      await store.insert(walk(draftAt(userId, START_MS + 1), [ORDER_STATUS.CANCELLED]));
+      await store.insert(draftAt(userId, START_MS), []);
+      await store.insert(walk(draftAt(userId, START_MS + 1), [ORDER_STATUS.CANCELLED]), []);
       await expect(store.hasPaidOrder(userId)).resolves.toBe(false);
 
-      await store.insert(walk(draftAt(userId, START_MS + 2), TO_PAID));
+      await store.insert(walk(draftAt(userId, START_MS + 2), TO_PAID), []);
       await expect(store.hasPaidOrder(userId)).resolves.toBe(true);
       // Baska kullanicinin odemesi bu kullaniciyi etkilemez.
       await expect(store.hasPaidOrder(newUserId())).resolves.toBe(false);
@@ -124,14 +124,14 @@ export function describeOrderHistoryReaderContract(
         pricing: { ...order.pricing, totalMinor },
       });
 
-      await store.insert(walk(withTotal(draftAt(userId, START_MS), 7_990), TO_DELIVERED));
-      await store.insert(walk(withTotal(draftAt(userId, START_MS + 1), 10_001), TO_DELIVERED));
-      await store.insert(walk(draftAt(userId, START_MS + 2), [ORDER_STATUS.CANCELLED]));
+      await store.insert(walk(withTotal(draftAt(userId, START_MS), 7_990), TO_DELIVERED), []);
+      await store.insert(walk(withTotal(draftAt(userId, START_MS + 1), 10_001), TO_DELIVERED), []);
+      await store.insert(walk(draftAt(userId, START_MS + 2), [ORDER_STATUS.CANCELLED]), []);
       // Taslak ve odenmis ama teslim edilmemis siparis sayilmaz, ortalamaya girmez.
-      await store.insert(draftAt(userId, START_MS + 3));
-      await store.insert(walk(withTotal(draftAt(userId, START_MS + 4), 99_999), TO_PAID));
+      await store.insert(draftAt(userId, START_MS + 3), []);
+      await store.insert(walk(withTotal(draftAt(userId, START_MS + 4), 99_999), TO_PAID), []);
       // Baska kullanicinin teslimati bu kullaniciyi etkilemez.
-      await store.insert(walk(draftAt(newUserId(), START_MS), TO_DELIVERED));
+      await store.insert(walk(draftAt(newUserId(), START_MS), TO_DELIVERED), []);
 
       // (7_990 + 10_001) / 2 = 8_995,5 -> tam sayi kurus: 8_996.
       await expect(store.riskHistory(userId)).resolves.toEqual({
