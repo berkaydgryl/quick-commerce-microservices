@@ -10,15 +10,16 @@
 import { ERROR_CODES, fixedClock } from '@getir/core';
 import { describe, expect, it } from 'vitest';
 
+import { startPayment } from '../../src/domain/charge.js';
+import type { ChargeCommand } from '../../src/domain/charge.js';
 import {
   ATTEMPT_KIND,
   ATTEMPT_OUTCOME,
   PAYMENT_METHOD,
   PAYMENT_STATUS,
-  startPayment,
   THREEDS_CLOSE_REASON,
 } from '../../src/domain/payment.js';
-import type { ChargeCommand, Payment } from '../../src/domain/payment.js';
+import type { Payment } from '../../src/domain/payment.js';
 import type { PaymentRepository } from '../../src/domain/payment-repository.js';
 
 const START_MS = 1_760_000_000_000;

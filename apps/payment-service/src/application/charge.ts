@@ -16,12 +16,13 @@ import type { Clock, Logger } from '@getir/core';
 import {
   failUnreachableProvider,
   isSameCharge,
-  PAYMENT_METHOD,
   settlePayment,
   startPayment,
   withRequiredThreeDs,
-} from '../domain/payment.js';
-import type { ChargeCommand, Payment } from '../domain/payment.js';
+} from '../domain/charge.js';
+import type { ChargeCommand } from '../domain/charge.js';
+import { PAYMENT_METHOD } from '../domain/payment.js';
+import type { Payment } from '../domain/payment.js';
 import type { PaymentProvider } from '../domain/payment-provider.js';
 import type { PaymentRepository } from '../domain/payment-repository.js';
 import { paymentAlreadyExists } from '../domain/payment-repository.js';
