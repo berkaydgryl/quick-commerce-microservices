@@ -54,7 +54,7 @@ async function givenPaidOrder(userId: string): Promise<void> {
     (order, status) => transitionOrder(order, status, clock),
     createDraftOrder(sampleDraftInput({ userId }), clock),
   );
-  await repository.insert(paid);
+  await repository.insert(paid, []);
 }
 
 beforeEach(() => {
@@ -72,6 +72,15 @@ describe('CreateDraftOrder: sunucu tarafi fiyat', () => {
     );
     expect(order.pricing.totalMinor).toBe(DRAFT_TOTAL_MINOR);
     await expect(repository.findById(order.id)).resolves.toEqual(order);
+  });
+
+  it('taslakla birlikte order.created yazilir (T7.3); taslak acilmazsa olay da yok', async () => {
+    const order = await useCase()(input, scope);
+    await rejectionOf(useCase()({ ...input, expectedTotalMinor: 100 }, scope));
+
+    expect(repository.recordedEvents.map((event) => [event.topic, event.orderId])).toEqual([
+      ['order.created', order.id],
+    ]);
   });
 
   it('requestId catalog cagrilarina AYNEN iletilir (yeniden uretilmez)', async () => {

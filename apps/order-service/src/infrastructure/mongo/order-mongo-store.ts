@@ -7,7 +7,10 @@
  */
 
 import { ERROR_CODES, isAppError, ORDER_STATUS } from '@getir/core';
+import type { MongoConnection } from '@getir/mongo-kit';
+import type { ClientSession } from 'mongodb';
 
+import type { OrderEvent } from '../../domain/order-events.js';
 import { cursorOf } from '../../domain/order-history-cursor.js';
 import type {
   OrderHistoryPage,
@@ -21,27 +24,60 @@ import { orderAlreadyExists, orderVersionConflict } from '../../domain/order-rep
 import type { Order } from '../../domain/order.js';
 import { fromOrderDocument, toOrderDocument } from './mappers.js';
 import type { OrdersCollection } from './orders-collection.js';
+import type { OutboxCollection } from './outbox-collection.js';
+import { toOutboxDocument } from './outbox-mappers.js';
 
+/**
+ * YAZIM = TEK TRANSACTION (T7.3, ADR-04): siparis belgesi ve outbox satirlari
+ * ayni oturumda yazilir. Surum cakismasi transaction icinde firlatilir;
+ * transaction geri alinir ve olay da yazilmaz. (Mongo tek dugumlu replica set
+ * olarak calisir - transaction'in on kosulu.)
+ */
 export class OrderMongoStore implements OrderRepository, OrderHistoryReader {
-  constructor(private readonly orders: OrdersCollection) {}
+  constructor(
+    private readonly orders: OrdersCollection,
+    private readonly outbox: OutboxCollection,
+    private readonly transactions: Pick<MongoConnection, 'withTransaction'>,
+  ) {}
 
-  async insert(order: Order): Promise<void> {
+  async insert(order: Order, events: readonly OrderEvent[]): Promise<void> {
+    await this.transactions.withTransaction(async (session) => {
+      await this.insertOrder(order, session);
+      await this.outbox.insertMany(events.map(toOutboxDocument), { session });
+    });
+  }
+
+  /**
+   * mongo-kit tekil ihlali CONFLICT'e cevirir; siparis _id tekrarinda depo
+   * sozlesmesinin hatasini veriyoruz (bellek uygulamasiyla ayni ayrinti).
+   * Esleme YALNIZCA siparis yazimindadir: ayni transaction'daki olay tekrari
+   * "siparis zaten var" diye raporlanmasin.
+   */
+  private async insertOrder(order: Order, session: ClientSession): Promise<void> {
     try {
-      await this.orders.insertOne(toOrderDocument(order));
+      await this.orders.insertOne(toOrderDocument(order), { session });
     } catch (error: unknown) {
-      // mongo-kit tekil ihlali CONFLICT'e cevirir; _id tekrarinda depo
-      // sozlesmesinin hatasini veriyoruz (bellek uygulamasiyla ayni ayrinti).
       throw isAppError(error) && error.code === ERROR_CODES.CONFLICT
         ? orderAlreadyExists(order.id)
         : error;
     }
   }
 
-  async update(order: Order, expectedVersion: number): Promise<void> {
-    const replaced = await this.orders.replaceIfVersion(toOrderDocument(order), expectedVersion);
-    if (!replaced) {
-      throw orderVersionConflict(order.id, expectedVersion);
-    }
+  async update(
+    order: Order,
+    expectedVersion: number,
+    events: readonly OrderEvent[],
+  ): Promise<void> {
+    await this.transactions.withTransaction(async (session) => {
+      const replaced = await this.orders.replaceIfVersion(toOrderDocument(order), expectedVersion, {
+        session,
+      });
+      if (!replaced) {
+        // Transaction icinde firlatilir: geri alinir, outbox'a da yazilmaz.
+        throw orderVersionConflict(order.id, expectedVersion);
+      }
+      await this.outbox.insertMany(events.map(toOutboxDocument), { session });
+    });
   }
 
   async findById(orderId: string): Promise<Order | null> {

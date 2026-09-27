@@ -15,7 +15,7 @@ import type { Logger } from '@getir/core';
 import { MongoClient } from 'mongodb';
 import type { ClientSession, Db, TransactionOptions } from 'mongodb';
 
-import { toMongoAppError } from './errors.js';
+import { retryableTransactionCause, toMongoAppError } from './errors.js';
 
 /** Sunucu secimi icin varsayilan bekleme (ms). */
 const DEFAULT_SERVER_SELECTION_TIMEOUT_MS = 5_000;
@@ -101,7 +101,16 @@ export async function connectMongo(options: MongoConnectionOptions): Promise<Mon
     withTransaction: async <T>(work: (session: ClientSession) => Promise<T>): Promise<T> => {
       const session = client.startSession();
       try {
-        return await session.withTransaction(() => work(session), TRANSACTION_OPTIONS);
+        return await session.withTransaction(async () => {
+          try {
+            return await work(session);
+          } catch (error: unknown) {
+            // Etiketli asil hata surucuye GERI verilir: surucu transaction'i
+            // bastan tekrar dener (es zamanli yazimda kaybeden, yeniden
+            // denemede guncel surumu gorur ve kendi CONFLICT'ini uretir).
+            throw retryableTransactionCause(error) ?? error;
+          }
+        }, TRANSACTION_OPTIONS);
       } catch (error: unknown) {
         throw toMongoAppError(error, { operation: 'withTransaction' });
       } finally {

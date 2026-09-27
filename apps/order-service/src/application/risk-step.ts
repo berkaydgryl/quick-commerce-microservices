@@ -21,6 +21,7 @@ import {
   decideRisk,
   riskContextOf,
 } from '../domain/checkout-risk.js';
+import { statusChangedEvents } from '../domain/order-events.js';
 import type { OrderHistoryReader } from '../domain/order-history-reader.js';
 import type { OrderRepository } from '../domain/order-repository.js';
 import { assertTransition } from '../domain/order-state-machine.js';
@@ -55,7 +56,7 @@ export async function passRiskStep(
   }
 
   const next = applyRiskDecision(order, evaluation.band, decision, deps.clock);
-  await deps.repository.update(next, order.version);
+  await deps.repository.update(next, order.version, statusChangedEvents(order, next));
   scope.logger.info(
     { orderId: order.id, band: evaluation.band, score: evaluation.score, status: next.status },
     'risk adimi',

@@ -6,6 +6,7 @@
  */
 
 import { MongoRepository } from '@getir/mongo-kit';
+import type { SessionOption } from '@getir/mongo-kit';
 import type { Db, Filter, IndexDescription } from 'mongodb';
 
 import type { OrderStatus } from '@getir/core';
@@ -34,9 +35,17 @@ export class OrdersCollection extends MongoRepository<OrderDocument> {
    * Belgeyi YALNIZCA kayittaki surum `expectedVersion` ise degistirir.
    * @returns Degisti mi? (false = kayit yok ya da surum degismis)
    */
-  async replaceIfVersion(document: OrderDocument, expectedVersion: number): Promise<boolean> {
+  async replaceIfVersion(
+    document: OrderDocument,
+    expectedVersion: number,
+    options: SessionOption = {},
+  ): Promise<boolean> {
     const result = await this.run('replaceIfVersion', () =>
-      this.collection.replaceOne({ _id: document._id, version: expectedVersion }, document),
+      this.collection.replaceOne(
+        { _id: document._id, version: expectedVersion },
+        document,
+        options.session === undefined ? {} : { session: options.session },
+      ),
     );
     return result.matchedCount > 0;
   }

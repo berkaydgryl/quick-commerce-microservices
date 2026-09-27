@@ -30,7 +30,7 @@ let confirm: ReturnType<typeof createConfirmPayment>;
 beforeEach(() => {
   repository = new InMemoryOrderStore();
   payments = new FakePayments();
-  confirm = createConfirmPayment({ repository, payments, clock });
+  confirm = createConfirmPayment({ repository, payments, outbox: repository, clock });
 });
 
 /** 3DS bekleyen (MEDIUM bant) siparis. */
@@ -125,6 +125,7 @@ describe('ConfirmPayment', () => {
       await repository.update(
         transitionOrder(awaiting, ORDER_STATUS.CANCELLED, clock, 'USER_CANCELLED'),
         awaiting.version,
+        [],
       );
       return original(request);
     };

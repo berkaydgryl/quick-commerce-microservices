@@ -13,6 +13,7 @@
 import { AppError, ERROR_CODES } from '@getir/core';
 import { MongoDBContainer } from '@testcontainers/mongodb';
 import type { StartedMongoDBContainer } from '@testcontainers/mongodb';
+import { MongoClient } from 'mongodb';
 import type { Db, IndexDescription } from 'mongodb';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
@@ -167,6 +168,36 @@ describe('withTransaction', () => {
 
     await expect(failing).rejects.toMatchObject({ code: ERROR_CODES.CONFLICT });
     await expect(products.count()).resolves.toBe(0);
+  });
+
+  it('es zamanli yazim: surucu kaybedeni YENIDEN DENER, INTERNAL donmez (T7.3)', async () => {
+    await products.insertOne(product('prd_4', 'SU-500'));
+    // Ikinci istemci: ayni belgeye yazip COMMIT ETMEDEN bekleyen baska bir transaction.
+    const other = await MongoClient.connect(
+      `${container.getConnectionString()}/?directConnection=true`,
+    );
+    const holder = other.startSession();
+    try {
+      holder.startTransaction();
+      await other
+        .db(DB_NAME)
+        .collection<ProductDoc>('test_products')
+        .updateOne({ _id: 'prd_4' }, { $set: { priceMinor: 1_000 } }, { session: holder });
+
+      // Bu yazim once WriteConflict alir; duzeltmeden once INTERNAL ile dusuyordu.
+      const contender = connection.withTransaction((session) =>
+        products.updateById('prd_4', { $inc: { priceMinor: 1 } }, { session }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await holder.commitTransaction();
+
+      await expect(contender).resolves.toBe(true);
+      // Yeniden deneme, digerinin commit'ini GORDU: 1_000 + 1.
+      await expect(products.findById('prd_4')).resolves.toMatchObject({ priceMinor: 1_001 });
+    } finally {
+      await holder.endSession();
+      await other.close();
+    }
   });
 
   it('transaction sonucunu geri dondurur', async () => {

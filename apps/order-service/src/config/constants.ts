@@ -46,3 +46,11 @@ export const MAX_COUPON_CODE_LENGTH = 32;
 
 /** Iptal gerekcesi anahtarinin en uzun hali (ornek: "CHANGED_MIND"). */
 export const MAX_CANCEL_REASON_LENGTH = 64;
+
+/**
+ * Outbox yayincisi (T7.3, roadmap "Outbox akisi"): 500 ms'de bir tur, turda en
+ * fazla 100 olay. Tam dolu parti cikarsa beklemeden devam edilir; aralik
+ * yalnizca kuyruk bosken beklenir (yayin gecikmesinin ust siniri ~500 ms).
+ */
+export const OUTBOX_POLL_INTERVAL_MS = 500;
+export const OUTBOX_BATCH_SIZE = 100;

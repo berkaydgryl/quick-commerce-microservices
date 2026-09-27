@@ -27,8 +27,10 @@ import { FakePayments, TEST_CARD } from '../support/fake-payments.js';
 import { FakeRiskAssessment } from '../support/fake-risk-assessment.js';
 import { DRAFT_TOTAL_MINOR, draftRequest } from '../support/order-fixtures.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
+import { MongoOrderOutbox } from '../../src/infrastructure/mongo/mongo-order-outbox.js';
 import { OrderMongoStore } from '../../src/infrastructure/mongo/order-mongo-store.js';
 import { OrdersCollection } from '../../src/infrastructure/mongo/orders-collection.js';
+import { OutboxCollection } from '../../src/infrastructure/mongo/outbox-collection.js';
 import { describeOrderStoreContract } from '../support/order-store-contract.js';
 
 /** infra/docker/docker-compose.dev.yml ile ayni surum. */
@@ -41,6 +43,7 @@ const explainSchema = z.object({ queryPlanner: z.object({ winningPlan: z.unknown
 let container: StartedMongoDBContainer;
 let connection: MongoConnection;
 let store: OrderMongoStore;
+let outbox: MongoOrderOutbox;
 
 beforeAll(async () => {
   container = await new MongoDBContainer(MONGO_IMAGE).start();
@@ -49,8 +52,11 @@ beforeAll(async () => {
     dbName: DB_NAME,
   });
   const orders = new OrdersCollection(connection.db);
+  const outboxCollection = new OutboxCollection(connection.db);
   await orders.ensureIndexes();
-  store = new OrderMongoStore(orders);
+  await outboxCollection.ensureIndexes();
+  store = new OrderMongoStore(orders, outboxCollection, connection);
+  outbox = new MongoOrderOutbox(outboxCollection);
 });
 
 afterAll(async () => {
@@ -59,6 +65,7 @@ afterAll(async () => {
 });
 
 describeOrderStoreContract('mongo', () => store);
+// Outbox'in Mongo sozlesmesi, es zamanlilik ve indeks plani: test/integration/outbox.spec.ts.
 
 describe('indeks', () => {
   it('gecmis sorgusu indeksten sirali okunur, bellekte SORT asamasi yok', async () => {
@@ -105,7 +112,7 @@ describe('gRPC -> Mongo (T4.5 bitti sayilir: siparis Mongo da gorulur)', () => {
       port: EPHEMERAL_PORT,
       services: [
         buildOrderService({
-          store: { repository: store, history: store },
+          store: { repository: store, history: store, outbox },
           catalog: new FakeCatalogPricing(),
           risk: new FakeRiskAssessment(),
           payments: new FakePayments(),

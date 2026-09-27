@@ -20,6 +20,8 @@ import {
 } from '../domain/checkout-payment.js';
 import type { PaymentMethod, PaymentResult } from '../domain/checkout-payment.js';
 import { assertPaymentMethodAllowed, paymentPolicyOf } from '../domain/checkout-risk.js';
+import { refundRequestedEvent, statusChangedEvents } from '../domain/order-events.js';
+import type { OrderOutbox } from '../domain/order-outbox.js';
 import type { OrderRepository } from '../domain/order-repository.js';
 import type { Order } from '../domain/order.js';
 import { transitionOrder } from '../domain/order.js';
@@ -29,6 +31,8 @@ import type { RequestScope } from './request-scope.js';
 export interface PaymentStepDeps {
   readonly repository: Pick<OrderRepository, 'update' | 'findById'>;
   readonly payments: Payments;
+  /** Telafi komutu (T7.3): dogrudan iade basarisizsa kalici olarak yazilir. */
+  readonly outbox: Pick<OrderOutbox, 'append'>;
   readonly clock: Clock;
 }
 
@@ -118,7 +122,7 @@ async function markPaid(
     return await writeTransition(deps.repository, order, paid);
   } catch (error) {
     if (isConflict(error) && result.status === PAYMENT_STATUS.SUCCEEDED) {
-      await refundCharge(deps, order.id, scope);
+      await refundCharge(deps, order, scope);
     }
     throw error;
   }
@@ -134,7 +138,7 @@ async function writeTransition(
   next: Order,
 ): Promise<Order> {
   try {
-    await repository.update(next, current.version);
+    await repository.update(next, current.version, statusChangedEvents(current, next));
     return next;
   } catch (error) {
     if (!isConflict(error)) {
@@ -149,30 +153,50 @@ async function writeTransition(
 }
 
 /**
- * Telafi: alinan tutari geri verir. Iade de basarisiz olursa istemciye yine
- * siparisin CONFLICT'i doner (siparis olusmadi); para ise alinmis durumdadir -
- * bu satir ERROR seviyesinde gunluge dusar ve elle mudahale gerektirir. Kalici
- * tekrar deneme outbox ile gelir (T7.3).
+ * Telafi: alinan tutari geri verir. Once dogrudan iade denenir (hizli yol).
+ * O da basarisiz olursa iade KOMUTU outbox'a yazilir (T7.3):
+ * payment.refund_requested, payment-svc dinler ve ayni anahtarla iade eder
+ * (T7.4) - komut kalicidir, servis yeniden baslasa da kaybolmaz. Istemciye her
+ * durumda siparisin CONFLICT'i doner (siparis olusmadi).
  */
 async function refundCharge(
   deps: PaymentStepDeps,
-  orderId: string,
+  order: Order,
+  scope: RequestScope,
+): Promise<void> {
+  const request = {
+    reason: REFUND_REASON.ORDER_CHANGED_DURING_PAYMENT,
+    idempotencyKey: refundIdempotencyKey(order.id),
+  };
+  try {
+    await deps.payments.refund({ orderId: order.id, ...request }, scope);
+    scope.logger.warn(
+      { orderId: order.id },
+      'odeme alindi ama siparis PAID yazilamadi; tutar iade edildi',
+    );
+  } catch (refundError: unknown) {
+    await requestRefundLater(deps, order, request, refundError, scope);
+  }
+}
+
+/** Dogrudan iade olmadi: komut outbox'a. O da yazilamazsa son care ERROR gunlugu. */
+async function requestRefundLater(
+  deps: PaymentStepDeps,
+  order: Order,
+  request: { readonly reason: string; readonly idempotencyKey: string },
+  refundError: unknown,
   scope: RequestScope,
 ): Promise<void> {
   try {
-    await deps.payments.refund(
-      {
-        orderId,
-        reason: REFUND_REASON.ORDER_CHANGED_DURING_PAYMENT,
-        idempotencyKey: refundIdempotencyKey(orderId),
-      },
-      scope,
+    await deps.outbox.append([refundRequestedEvent(order, request, deps.clock.date())]);
+    scope.logger.warn(
+      { err: refundError, orderId: order.id },
+      'dogrudan iade basarisiz; iade komutu outbox a yazildi (payment.refund_requested)',
     );
-    scope.logger.warn({ orderId }, 'odeme alindi ama siparis PAID yazilamadi; tutar iade edildi');
-  } catch (refundError: unknown) {
+  } catch (outboxError: unknown) {
     scope.logger.error(
-      { err: refundError, orderId },
-      'TELAFI BASARISIZ: odeme alindi, siparis yazilamadi ve iade edilemedi',
+      { err: outboxError, refundError, orderId: order.id },
+      'TELAFI BASARISIZ: odeme alindi, siparis yazilamadi, iade ve iade komutu yazilamadi',
     );
   }
 }

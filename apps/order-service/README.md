@@ -9,7 +9,7 @@ Bu serviste **olmayanlar**, bilinçli: stok sayacı `inventory-service`'in, kart
 (kapıda ödeme kapalı, rezervasyon süresi, reddet) burada verilir — risk servisi yalnızca
 skor önerir.
 
-## Bugünkü durum (T7.1 — sipariş saga'sı: risk + ödeme)
+## Bugünkü durum (T7.3 — outbox ile olay yayını)
 
 | RPC                | Durum                                                                                                                          |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
@@ -22,18 +22,19 @@ skor önerir.
 
 ## Veri kaynağı: Mongo ya da MOCK
 
-| `MOCK` | Kaynak                                        | Mongo gerekir mi                 |
-| ------ | --------------------------------------------- | -------------------------------- |
-| `true` | Bellek (`infrastructure/memory`)              | Hayır; yeniden başlayınca unutur |
-| değil  | `orders` koleksiyonu (`infrastructure/mongo`) | Evet, `MONGO_URI` zorunlu        |
+| `MOCK` | Kaynak                                                      | Gerekenler                                                   |
+| ------ | ----------------------------------------------------------- | ------------------------------------------------------------ |
+| `true` | Bellek (`infrastructure/memory`); olaylar bellekte          | Yok; yeniden başlayınca unutur, **olay yayını kapalı**       |
+| değil  | `orders` + `outbox` koleksiyonları (`infrastructure/mongo`) | `MONGO_URI` ve `REDIS_URL` zorunlu (yayın `stream:events`'e) |
 
 İki uygulama **aynı sözleşme testinden** geçer (`test/support/order-store-contract.ts`): birim
 testinde bellek, entegrasyon testinde gerçek Mongo. Depoyu seçip açan tek yer
 `infrastructure/order-store.ts`'tir; indeksler açılışta kurulur.
 
-**İki port, her use-case yalnızca ihtiyacını alır:** `OrderRepository` (`insert`, `update`,
+**Üç port, her use-case yalnızca ihtiyacını alır:** `OrderRepository` (`insert`, `update`,
 `findById`) taslak açan, ilerleten ve iptal eden use-case'lerin; `OrderHistoryReader`
-(`listByUser`) yalnızca `ListMyOrders`'ın.
+(`listByUser`, `hasPaidOrder`, `riskHistory`) okuyanların; `OrderOutbox` (`append`, `pending`,
+`markPublished`) olay yayıncısının ve saga'nın telafi komutunun (T7.3).
 
 **İyimser kilit (`version`).** Yeni taslak 1'dir, her geçiş bir artırır. `update(order,
 expectedVersion)` yalnızca kayıttaki sürüm okunanla aynıysa yazar (Mongo'da
@@ -167,8 +168,10 @@ kalır. Aynı `CreateOrder` tekrar gelince risk yeniden sorulmaz (kayıtlı band
 **3. Telafi (P3):** çekim başarılı ama sipariş `PAID` yazılamadı (sürüm çakışması — örneğin
 kullanıcı tam o anda iptal etti) → tutar **iade edilir** (`Refund`, anahtar `refund-<orderId>`),
 istemci `CONFLICT` alır. Çakışmayı aynı ödemenin eş zamanlı tekrarı yazdıysa (sipariş zaten
-`PAID`) iade yapılmaz. İade de başarısız olursa `CONFLICT` yine döner ve durum **ERROR**
-günlüğüne sipariş kimliğiyle düşer; kalıcı tekrar deneme outbox ile gelir (T7.3).
+`PAID`) iade yapılmaz. Doğrudan iade de başarısız olursa `payment.refund_requested` komutu
+outbox'a yazılır (WARN; payment-svc T7.4'te dinleyip iade eder); komut da yazılamazsa son çare
+ERROR günlüğü. İstemci her durumda `CONFLICT` alır. Eş zamanlı yazımda kaybedenin gerçekten
+`CONFLICT` alması mongo-kit'in transaction yeniden denemesine dayanır (aşağıda, T7.3).
 
 **3DS onayı (`ConfirmPayment`):** kod payment-svc'ye aynen iletilir. Yanlış kodda payment-svc'nin
 `THREEDS_FAILED`'ı (kalan hak, sebep) istemciye aynen döner, sipariş bekler. Hak biterse ya da
@@ -177,6 +180,48 @@ süre dolarsa sipariş önce `PAYMENT_FAILED` yazılır, hata yine aynı. Sipari
 
 Adresler `RISK_GRPC_ADDR` (varsayılan `localhost:50055`) ve `PAYMENT_GRPC_ADDR`
 (`localhost:50054`); süre sınırları 1 sn ve 3 sn — toplamları gateway'in 5 sn'sinin altında.
+
+## Outbox ile olay yayını (T7.3, ADR-04)
+
+"Önce yaz, sonra yayınla" iki adımı arasında çökülürse sipariş vardır ama kimse duymamıştır.
+Bu yüzden sipariş ve olayları **tek Mongo transaction'ında** yazılır; ayrı bir işçi
+yayınlanmamış olayları sonra `stream:events`'e basar.
+
+| Olay                       | Ne zaman                                     | Payload                                                            |
+| -------------------------- | -------------------------------------------- | ------------------------------------------------------------------ |
+| `order.created`            | Taslak açılınca (B8: kimlik burada doğar)    | `orderId, userId, marketId, status, totalMinor, currency, version` |
+| `order.status_changed`     | Her geçişte, **geçiş başına bir olay**       | `orderId, userId, marketId, from, to, note?, version`              |
+| `payment.refund_requested` | Telafi: doğrudan iade başarısız (T7.1 borcu) | `orderId, reason, idempotencyKey`                                  |
+
+- **Olay unutulamaz:** `OrderRepository.insert/update` olayları **zorunlu** parametre olarak
+  alır (`domain/order-events.ts` türetir). Sipariş yazıldıktan sonra olay yazımı patlarsa
+  transaction geri alınır, sipariş de eski halinde kalır (sözleşme testi
+  `test/support/order-outbox-contract.ts`, gerçek Mongo'da `test/integration/outbox.spec.ts`).
+- **Eş zamanlı yazım (inceleme bulgusu):** başka bir transaction aynı siparişi tutarken yazan
+  kaybeden Mongo'dan `WriteConflict` alır. mongo-kit bu "geçici" hatayı sürücüye geri verir,
+  sürücü transaction'ı yeniden dener ve kaybeden güncel sürümü görüp `CONFLICT` üretir. Bu
+  olmadan `INTERNAL` dönüyor ve saga'nın iade telafisi hiç çalışmıyordu.
+- **Zarf (ADR-07):** yayında `@getir/event-bus` zarfına çevrilir: `eventId` (`evt_…`),
+  `topic`, `partitionKey` = `orderId`, `occurredAt`, `payload`. `version` realtime'ın soket
+  `seq`'i olarak kullanılabilir.
+- **Yayıncı** (`interfaces/workers/outbox-publisher.ts` → `application/relay-outbox.ts`): 500 ms'de
+  bir tur, turda en fazla 100 olay, yayın sırası `occurredAt`, eşitlikte `version`. İlk hatada tur
+  durur (sonraki olay öncekini geçmesin); yalnızca yayınlananlar işaretlenir. Dolu parti çıkarsa
+  beklemeden devam eder. Zincirli `setTimeout`: turlar üst üste binmez; kapanışta süren tur
+  beklenir, sonra Redis, en son Mongo kapanır.
+- **En az bir kez teslim:** yayınla–işaretle arasında çökülürse olay tekrar gider; tüketici
+  `eventId` ile tekilleştirir.
+- **Telafi komutu:** çekim başarılı ama sipariş `PAID` yazılamadıysa önce doğrudan iade denenir;
+  o da olmazsa `payment.refund_requested` outbox'a yazılır, payment-svc T7.4'te dinleyip aynı
+  anahtarla (`refund-<orderId>`) iade eder. Komut da yazılamazsa son çare ERROR günlüğü.
+- **İndeks:** `outbox` üzerinde `{ publishedAt, occurredAt, version, _id }`; yayıncının
+  `{ publishedAt: null }` + sıralı okuması indeksten, bellekte sıralamasız (explain testli).
+  Roadmap veri modelindeki "sparse" bilerek yok: `{ publishedAt: null }` sorgusu alanı hiç
+  olmayan belgeleri de eşler, planlayıcı sparse indeksi bu sorgu için kullanmaz.
+- **Bilinen sınır:** tek order örneği varsayılır. İki örnek aynı olayı aynı anda yayınlayabilir;
+  en az bir kez teslim ve `eventId` tekilleştirmesi bunu zararsız kılar (kiralama/lider seçimi
+  gerekirse T10.3'ün `lock:reconcile` kalıbı). Yayınlanmış satırların budanması ADR-04'teki
+  kabul edilen borçtur.
 
 ## Katmanlar
 
@@ -187,7 +232,9 @@ src/
 │   ├── order-item.ts            # dondurulmuş kalem (OrderItem) ve tutar (OrderPricing)
 │   ├── price-draft.ts           # saf fiyat kuralı: priceDraft, assertExpectedTotal (T7.2)
 │   ├── order-state-machine.ts   # geçiş tablosu, USER_CANCELLABLE
-│   ├── order-repository.ts      # port: insert / update(sürümlü) / findById + hataları
+│   ├── order-repository.ts      # port: insert / update(sürümlü, olaylarla) / findById + hataları
+│   ├── order-events.ts          # olay türetme: created, status_changed, refund_requested (T7.3)
+│   ├── order-outbox.ts          # port: append / pending / markPublished (T7.3)
 │   ├── order-history-reader.ts  # port: listByUser, hasPaidOrder (ILK10), riskHistory (T7.1)
 │   ├── checkout-risk.ts         # saga risk adımı: bant → karar/politika, risk bağlamı (T7.1)
 │   ├── checkout-payment.ts      # saga ödeme adımı: ödeme sonucu → sipariş, anahtarlar (T7.1)
@@ -196,6 +243,7 @@ src/
 │   ├── create-draft-order.ts, create-order.ts, confirm-payment.ts, cancel-order.ts
 │   ├── get-order.ts, list-my-orders.ts
 │   ├── risk-step.ts, payment-step.ts  # saga adımları (T7.1), use-case'ler paylaşır
+│   ├── relay-outbox.ts          # tek yayın turu: bekleyenler → hat → işaret (T7.3)
 │   ├── own-order.ts             # "kendi siparişi değilse NOT_FOUND" tek yerde
 │   ├── catalog-pricing.ts       # port: marketRules, activeOffers (T7.2)
 │   ├── risk-assessment.ts       # port: evaluate (T7.1)
@@ -206,12 +254,13 @@ src/
 │   ├── catalog/                 # order -> catalog gRPC istemcisi (service-kit callUnary)
 │   ├── risk/, payment/          # order -> risk / payment gRPC istemcileri (T7.1)
 │   ├── memory/                  # MOCK: bellek deposu
-│   └── mongo/                   # belge şekli, çeviriciler, sorgular (orders-collection), portlar
+│   └── mongo/                   # belge şekli, çeviriciler, sorgular (orders, outbox), portlar
 ├── interfaces/grpc/   # ince handler'lar: doğrula → çağır → çevir
 │   ├── schemas.ts     # Zod istek şemaları (sayfa boyutu kırpma, jeton çözme)
 │   ├── page-token.ts  # imleç ↔ opak sayfa jetonu
 │   ├── mappers.ts     # domain → proto (durum, Order)
 │   └── order-handlers.ts
+├── interfaces/workers/outbox-publisher.ts  # zamanlayıcı: turu aralıkla çalıştırır, kapanışta bekler
 ├── config/            # env.ts (process.env yalnızca burada) + constants.ts
 ├── bootstrap.ts
 ├── main.ts
@@ -227,9 +276,13 @@ testte saat sabitlenebilir.
 pnpm --filter @getir/order-service build
 MOCK=true pnpm --filter @getir/order-service start    # 50053, Mongo'suz (bellek)
 
-pnpm infra:up                                         # ya da Mongo ile:
+pnpm infra:up                                         # ya da Mongo + Redis ile:
 MONGO_URI="mongodb://localhost:27017/getir?directConnection=true" \
+REDIS_URL="redis://localhost:6379" \
   pnpm --filter @getir/order-service start
+
+# Yayınlanan olaylar (T7.3): taslak aç / sipariş ver, sonra
+docker exec getir-redis redis-cli XRANGE stream:events - +
 ```
 
 ```bash

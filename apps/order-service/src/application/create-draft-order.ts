@@ -12,6 +12,7 @@
 
 import type { Clock } from '@getir/core';
 
+import { orderCreatedEvents } from '../domain/order-events.js';
 import type { OrderHistoryReader } from '../domain/order-history-reader.js';
 import type { OrderRepository } from '../domain/order-repository.js';
 import type { DeliveryLocation, Order } from '../domain/order.js';
@@ -78,7 +79,8 @@ export function createCreateDraftOrder(deps: CreateDraftOrderDeps): CreateDraftO
       },
       deps.clock,
     );
-    await deps.repository.insert(order);
+    // Taslak ve order.created ayni atomik yazimda (ADR-04).
+    await deps.repository.insert(order, orderCreatedEvents(order));
     return order;
   };
 }

@@ -32,7 +32,7 @@ export function describeOrderRepositoryContract(
         TIMELINE_NOTE.PENDING_RESERVATION,
       );
 
-      await store.insert(reserved);
+      await store.insert(reserved, []);
 
       const read = await store.findById(reserved.id);
       expect(read).toEqual(reserved);
@@ -46,9 +46,9 @@ export function describeOrderRepositoryContract(
     it('ayni kimlikle ikinci insert CONFLICT', async () => {
       const store = getStore();
       const draft = draftAt(newUserId(), START_MS);
-      await store.insert(draft);
+      await store.insert(draft, []);
 
-      const failing = store.insert(draft);
+      const failing = store.insert(draft, []);
 
       await expect(failing).rejects.toBeInstanceOf(AppError);
       await expect(failing).rejects.toMatchObject({
@@ -60,10 +60,10 @@ export function describeOrderRepositoryContract(
     it('dogru surumle update yazar', async () => {
       const store = getStore();
       const draft = draftAt(newUserId(), START_MS);
-      await store.insert(draft);
+      await store.insert(draft, []);
 
       const cancelled = transitionOrder(draft, ORDER_STATUS.CANCELLED, fixedClock(START_MS + 5));
-      await store.update(cancelled, draft.version);
+      await store.update(cancelled, draft.version, []);
 
       await expect(store.findById(draft.id)).resolves.toMatchObject({
         status: ORDER_STATUS.CANCELLED,
@@ -74,14 +74,14 @@ export function describeOrderRepositoryContract(
     it('eski surumle update CONFLICT ve kayit DEGISMEZ (es zamanli iki yazma)', async () => {
       const store = getStore();
       const draft = draftAt(newUserId(), START_MS);
-      await store.insert(draft);
+      await store.insert(draft, []);
       // Iki istek ayni taslagi okudu; ilki iptal etti...
       const first = transitionOrder(draft, ORDER_STATUS.CANCELLED, fixedClock(START_MS + 5));
-      await store.update(first, draft.version);
+      await store.update(first, draft.version, []);
 
       // ...ikincisi hala eski surumu biliyor.
       const second = transitionOrder(draft, ORDER_STATUS.RISK_CHECK, fixedClock(START_MS + 6));
-      const failing = store.update(second, draft.version);
+      const failing = store.update(second, draft.version, []);
 
       await expect(failing).rejects.toMatchObject({
         code: ERROR_CODES.CONFLICT,
@@ -96,7 +96,7 @@ export function describeOrderRepositoryContract(
       const store = getStore();
       const ghost = draftAt(newUserId(), START_MS);
 
-      await expect(store.update(ghost, ghost.version)).rejects.toMatchObject({
+      await expect(store.update(ghost, ghost.version, [])).rejects.toMatchObject({
         code: ERROR_CODES.CONFLICT,
       });
       await expect(store.findById(ghost.id)).resolves.toBeNull();

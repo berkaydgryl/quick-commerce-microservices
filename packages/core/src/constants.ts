@@ -62,6 +62,13 @@ export const EVENTS = {
   STOCK_CHANGED: 'stock.changed',
   PAYMENT_SUCCEEDED: 'payment.succeeded',
   PAYMENT_FAILED: 'payment.failed',
+  /**
+   * Telafi komutu (T7.3): siparis saga'si tutari aldi ama siparisi PAID
+   * yazamadi ve dogrudan iade de basarisiz oldu. payment-svc dinler ve iade
+   * eder (T7.4); iade anahtari siparisten turetildigi icin tekrar gelen olay
+   * ikinci kez iade yapmaz.
+   */
+  PAYMENT_REFUND_REQUESTED: 'payment.refund_requested',
   COURIER_ASSIGNED: 'courier.assigned',
   COURIER_LOCATION: 'courier.location',
   ORDER_DELIVERED: 'order.delivered',

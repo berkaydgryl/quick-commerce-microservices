@@ -15,6 +15,7 @@ import { z } from 'zod';
 
 import { PAYMENT_METHOD } from '../domain/checkout-payment.js';
 import type { PaymentResult } from '../domain/checkout-payment.js';
+import type { OrderOutbox } from '../domain/order-outbox.js';
 import type { OrderRepository } from '../domain/order-repository.js';
 import { assertTransition } from '../domain/order-state-machine.js';
 import type { Order } from '../domain/order.js';
@@ -26,6 +27,8 @@ import type { RequestScope } from './request-scope.js';
 export interface ConfirmPaymentDeps {
   readonly repository: Pick<OrderRepository, 'findById' | 'update'>;
   readonly payments: Payments;
+  /** Telafi komutu icin (payment-step.ts). */
+  readonly outbox: Pick<OrderOutbox, 'append'>;
   readonly clock: Clock;
 }
 

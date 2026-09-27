@@ -8,6 +8,7 @@ import { RISK_BANDS } from '@getir/core';
 import type { Clock, RiskBand } from '@getir/core';
 
 import { applyRiskDecision, decideRisk } from '../../src/domain/checkout-risk.js';
+import { orderCreatedEvents, statusChangedEvents } from '../../src/domain/order-events.js';
 
 import { ITEM_UNIT } from '../../src/domain/order-item.js';
 import type { OrderItem, OrderPricing } from '../../src/domain/order-item.js';
@@ -54,7 +55,7 @@ export async function insertDraft(
   overrides: Partial<DraftOrderInput> = {},
 ): Promise<Order> {
   const order = createDraftOrder(sampleDraftInput(overrides), clock);
-  await repository.insert(order);
+  await repository.insert(order, orderCreatedEvents(order));
   return order;
 }
 
@@ -69,6 +70,6 @@ export async function insertAwaitingPayment(
 ): Promise<Order> {
   const draft = await insertDraft(repository, clock);
   const awaiting = applyRiskDecision(draft, band, decideRisk(band), clock);
-  await repository.update(awaiting, draft.version);
+  await repository.update(awaiting, draft.version, statusChangedEvents(draft, awaiting));
   return awaiting;
 }
