@@ -6,18 +6,22 @@
  * anlatilmis; burada calisir hale geliyor (ADR-10).
  */
 
-import { marketIdSchema, PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '@getir/contracts';
+import {
+  CART_ITEM_MAX_QUANTITY,
+  CART_MAX_ITEMS,
+  geoPointSchema,
+  IDEMPOTENCY_KEY_MAX_LENGTH,
+  IDEMPOTENCY_KEY_MIN_LENGTH,
+  marketIdSchema,
+  PAGE_SIZE_DEFAULT,
+  PAGE_SIZE_MAX,
+} from '@getir/contracts';
 import { isSku } from '@getir/core';
 import { z } from 'zod';
 
 import type { OrderHistoryCursor } from '../../domain/order-history-cursor.js';
 
-import {
-  MAX_CANCEL_REASON_LENGTH,
-  MAX_CART_LINES,
-  MAX_LINE_QUANTITY,
-  MIN_IDEMPOTENCY_KEY_LENGTH,
-} from '../../config/constants.js';
+import { MAX_CANCEL_REASON_LENGTH } from '../../config/constants.js';
 import { decodePageToken } from './page-token.js';
 
 const requiredText = (field: string) => z.string().trim().min(1, `${field} zorunlu`);
@@ -25,25 +29,23 @@ const requiredText = (field: string) => z.string().trim().min(1, `${field} zorun
 /**
  * Idempotency anahtari (ADR-08): tum mutasyon uclari ister.
  *
- * BUGUN YALNIZCA VARLIGI dogrulaniyor; ayni anahtarla gelen ikinci istegin
+ * BUGUN VARLIGI ve UZUNLUGU dogrulaniyor; ayni anahtarla gelen ikinci istegin
  * ilkinin cevabini dondurmesi (tekrar korumasi) idem:{key} kaydi ile gateway
  * tarafinda kurulacak. Anahtari simdiden ZORUNLU tutmak onemli: istemciler
- * gondermeye bugun alissin, koruma acildiginda sozlesme degismesin.
+ * gondermeye bugun alissin, koruma acildiginda sozlesme degismesin. Sinirlar
+ * REST basligi ve Redis anahtariyla ayni kaynaktan gelir: REST'in kabul ettigi
+ * anahtari order reddetmemeli, reddettigini de kabul etmemeli.
  */
 const idempotencyKey = z
   .string()
   .trim()
-  .min(MIN_IDEMPOTENCY_KEY_LENGTH, `en az ${MIN_IDEMPOTENCY_KEY_LENGTH} karakter olmali`);
+  .min(IDEMPOTENCY_KEY_MIN_LENGTH, `en az ${IDEMPOTENCY_KEY_MIN_LENGTH} karakter olmali`)
+  .max(IDEMPOTENCY_KEY_MAX_LENGTH, `en fazla ${IDEMPOTENCY_KEY_MAX_LENGTH} karakter olmali`);
 
 const cartLine = z.object({
   productId: requiredText('productId'),
   sku: requiredText('sku').refine(isSku, 'gecersiz sku bicimi'),
-  quantity: z.number().int().positive().max(MAX_LINE_QUANTITY),
-});
-
-const geoPoint = z.object({
-  lat: z.number().min(-90).max(90),
-  lng: z.number().min(-180).max(180),
+  quantity: z.number().int().positive().max(CART_ITEM_MAX_QUANTITY),
 });
 
 export const createDraftOrderRequestSchema = z.object({
@@ -53,11 +55,11 @@ export const createDraftOrderRequestSchema = z.object({
   // Kullanimdan kalkan dark_store_id OKUNMAZ: onu dolduran istemci yok
   // (gateway henuz order'a baglanmadi) ve eski "ds_" kimligi bir market degildir.
   marketId: marketIdSchema,
-  lines: z.array(cartLine).min(1, 'sepet bos olamaz').max(MAX_CART_LINES),
+  lines: z.array(cartLine).min(1, 'sepet bos olamaz').max(CART_MAX_ITEMS),
   // Konum ZORUNLU: teslimat noktasi olmadan hangi depodan cikilacagi ve
   // kurye rotasi hesaplanamaz. proto3'te ic ice mesaj gonderilmezse undefined
-  // gelir; sema bunu acikca reddeder.
-  deliveryLocation: geoPoint,
+  // gelir; sema bunu acikca reddeder. WGS84 sinirlari sozlesme paketindedir.
+  deliveryLocation: geoPointSchema,
   deliveryAddress: requiredText('deliveryAddress'),
   idempotencyKey,
 });
