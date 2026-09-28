@@ -1,7 +1,6 @@
-import { CART_ITEM_MAX_QUANTITY } from '@getir/contracts';
 import type { Product } from '@getir/contracts';
 
-import { quantityOf } from '../services/cart-state';
+import { canAdd, quantityOf } from '../services/cart-state';
 import { useCartStore } from '../stores/useCartStore';
 
 import styles from './Cart.module.css';
@@ -13,12 +12,20 @@ interface ProductCartActionProps {
 
 /**
  * Urunun sepet dugmesi - TASARIMSIZ KABUK (T6.4). Sepette yoksa "Ekle", varsa
- * "- adet +". Karar store'da; bu bilesen yalnizca cizer ve cagirir, tasarim
- * degisince tamamen yeniden yazilabilir.
+ * "- adet +"; satista olmayan teklifte basilamayan "Satista degil" (T7.6).
+ * "Eklenebilir mi" kararini bilesen VERMEZ, canAdd'e sorar (D11): stok ve
+ * satis kurallari tek yerde. Tasarim degisince bilesen yeniden yazilabilir.
  */
 export function ProductCartAction({ product, onAdd }: ProductCartActionProps) {
   const quantity = useCartStore((cart) => quantityOf(cart, product.offerId));
+  const addable = useCartStore((cart) => canAdd(cart, product));
   const decrement = useCartStore((cart) => cart.decrement);
+
+  // Sepette zaten varsa (satistan sonra kaldirildiysa) adet dugmeleri kalir:
+  // kullanici azaltip cikarabilsin; "+" canAdd geregi kapali.
+  if (quantity === 0 && !product.isActive) {
+    return <span className={styles['c-cart-action__unavailable']}>Satışta değil</span>;
+  }
 
   if (quantity === 0) {
     return (
@@ -26,6 +33,7 @@ export function ProductCartAction({ product, onAdd }: ProductCartActionProps) {
         type="button"
         className={styles['c-cart-action__add']}
         aria-label={`${product.name} sepete ekle`}
+        disabled={!addable}
         onClick={() => onAdd(product)}
       >
         Ekle
@@ -50,7 +58,7 @@ export function ProductCartAction({ product, onAdd }: ProductCartActionProps) {
         type="button"
         className={styles['c-cart-action__step']}
         aria-label={`${product.name} bir artir`}
-        disabled={quantity >= CART_ITEM_MAX_QUANTITY}
+        disabled={!addable}
         onClick={() => onAdd(product)}
       >
         +

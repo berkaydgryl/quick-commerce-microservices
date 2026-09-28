@@ -20,6 +20,7 @@ const sut = (marketId: string, priceMinor: number): Product => ({
   name: 'Süt 1 L',
   categoryId: 'cat_sut-kahvaltilik',
   price: { amountMinor: priceMinor, currency: 'TRY' },
+  isActive: true,
 });
 
 beforeEach(() => {

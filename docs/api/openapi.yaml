@@ -1474,7 +1474,7 @@ components:
         Bir marketin TEKLİFİ olarak ürün (ADR-15): fiyat o markete özeldir.
         Fiyat catalog-svc'den (Offer), `availableQuantity` inventory-svc'den
         gelir; gateway iki cevabı BİRLEŞTİRİR (B27).
-      required: [id, offerId, marketId, sku, name, categoryId, price]
+      required: [id, offerId, marketId, sku, name, categoryId, price, isActive]
       properties:
         id:
           $ref: "#/components/schemas/ProductId"
@@ -1512,6 +1512,14 @@ components:
           description: |
             `getir.common.v1.Unit` ile birebir aynı sözlük. Türkçe etiket
             istemcide üretilir.
+        isActive:
+          type: boolean
+          description: |
+            Teklif satışta mı (`getir.catalog.v1.Offer.is_active`). `false`:
+            market ürünü satıştan kaldırmıştır; kayıt silinmez. Liste pasif
+            teklifi de döndürür; istemci onu "Satışta değil" gösterir ve sepete
+            eklemez (T7.6). Bağlayıcı kontrol rezervasyondadır: pasif teklif
+            orada bulunamamış sayılır.
         availableQuantity:
           type: integer
           minimum: 0

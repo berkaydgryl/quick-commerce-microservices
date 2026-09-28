@@ -17,9 +17,17 @@
   border-radius: var(--radius-pill);
 }
 
+.c-cart-action__add:disabled,
 .c-cart-action__step:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+/* Satista olmayan teklif (T7.6): basilamayan metin, dugme degil. */
+.c-cart-action__unavailable {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-muted);
 }
 
 .c-cart-action__quantity {

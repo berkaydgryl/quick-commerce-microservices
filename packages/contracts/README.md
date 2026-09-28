@@ -74,9 +74,13 @@ const schema = apiResponseSchema(productSchema.array());
 ## İki farklı `Product` var, bilerek
 
 `getir.catalog.v1.Product` mesajında **stok alanı yoktur** (B27); buradaki
-`productSchema` ise `availableQuantity` alanını **zorunlu** tutar. Sebep: katalog verisi
+`productSchema` ise `availableQuantity` alanını **taşıyabilir**. Sebep: katalog verisi
 catalog-svc'den, adet inventory-svc'den gelir ve gateway ikisini birleştirerek istemciye
 tek görünüm sunar. İstemcinin iki ayrı çağrı yapıp elde birleştirmesi istenmiyor.
+
+Alan **isteğe bağlıdır**: yokluğu "stok bilgisi yok" demektir, "0" değil (inventory bağlanana
+kadar hep yok). `isActive` ise **zorunludur** (T7.6): liste pasif teklifi de döndürür ve
+istemci "satışta değil"i "bilinmiyor"dan ayırabilmelidir.
 
 ## Gateway neden bu paketi import etmiyor
 

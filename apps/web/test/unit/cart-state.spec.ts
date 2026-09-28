@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   addItem,
+  canAdd,
   decrementItem,
   EMPTY_CART,
   itemCount,
@@ -29,6 +30,7 @@ const product = (slug: string, priceMinor = 3490, marketId = MIGROS.id): Product
   name: slug,
   categoryId: 'cat_sut-kahvaltilik',
   price: { amountMinor: priceMinor, currency: 'TRY' },
+  isActive: true,
 });
 
 const SUT = product('sut-1l');
@@ -146,5 +148,88 @@ describe('sinirlar (rezervasyon semasiyla ayni)', () => {
 
     expect(outcome).toEqual({ status: 'limit-reached', limit: 'items' });
     expect(state.items).toHaveLength(CART_MAX_ITEMS);
+  });
+});
+
+describe('satista olmayan teklif (T7.6)', () => {
+  const PASIF = { ...product('camasir-suyu'), isActive: false };
+
+  it('eklenmez; sepet degismez ve canAdd hayir der', () => {
+    const { state, outcome } = addItem(EMPTY_CART, PASIF, MIGROS);
+
+    expect(outcome).toEqual({ status: 'unavailable' });
+    expect(state).toBe(EMPTY_CART);
+    expect(canAdd(EMPTY_CART, PASIF)).toBe(false);
+  });
+
+  it('baska marketin pasif teklifi icin market degisimi HIC sorulmaz', () => {
+    const migrosSepeti = addItem(EMPTY_CART, SUT, MIGROS).state;
+    const pasifA101 = { ...product('camasir-suyu', 1990, A101.id), isActive: false };
+
+    const { state, outcome } = addItem(migrosSepeti, pasifA101, A101);
+
+    expect(outcome).toEqual({ status: 'unavailable' });
+    expect(state).toBe(migrosSepeti);
+  });
+});
+
+describe('stok siniri on kontrolu (T7.6)', () => {
+  it('stok bilgisi varsa sinir stoktur: son adetten sonra eklenmez', () => {
+    const azStok = { ...SUT, availableQuantity: 3 };
+    const ucAdet = addMany(EMPTY_CART, azStok, 3);
+
+    const { state, outcome } = addItem(ucAdet, azStok, MIGROS);
+
+    expect(quantityOf(ucAdet, azStok.offerId)).toBe(3);
+    expect(outcome).toEqual({ status: 'limit-reached', limit: 'stock' });
+    expect(state).toBe(ucAdet);
+    expect(canAdd(ucAdet, azStok)).toBe(false);
+    expect(canAdd(addMany(EMPTY_CART, azStok, 2), azStok)).toBe(true);
+  });
+
+  it('stok 0: ilk adet de eklenmez', () => {
+    const tukendi = { ...SUT, availableQuantity: 0 };
+
+    expect(addItem(EMPTY_CART, tukendi, MIGROS).outcome).toEqual({
+      status: 'limit-reached',
+      limit: 'stock',
+    });
+    expect(canAdd(EMPTY_CART, tukendi)).toBe(false);
+  });
+
+  it(`stok ${CART_ITEM_MAX_QUANTITY} ve ustuyse platform siniri gecerli`, () => {
+    const bolStok = { ...SUT, availableQuantity: 500 };
+    const tamSinir = addMany(EMPTY_CART, bolStok, CART_ITEM_MAX_QUANTITY);
+
+    expect(addItem(tamSinir, bolStok, MIGROS).outcome).toEqual({
+      status: 'limit-reached',
+      limit: 'quantity',
+    });
+  });
+
+  it('stok bilgisi YOKSA (bugun) yalnizca platform siniri: stok 0 sanilmaz', () => {
+    expect(SUT.availableQuantity).toBeUndefined();
+    expect(canAdd(addMany(EMPTY_CART, SUT, CART_ITEM_MAX_QUANTITY - 1), SUT)).toBe(true);
+    expect(canAdd(addMany(EMPTY_CART, SUT, CART_ITEM_MAX_QUANTITY), SUT)).toBe(false);
+  });
+});
+
+describe('canAdd: arayuzun tek sorusu (D11)', () => {
+  const dolu = (): CartState => {
+    let state: CartState = EMPTY_CART;
+    for (let i = 0; i < CART_MAX_ITEMS; i += 1)
+      state = addItem(state, product(`urun-${i}`), MIGROS).state;
+    return state;
+  };
+
+  it(`${CART_MAX_ITEMS} kalemlik sepete ayni marketten YENI urun eklenemez, var olan artirilabilir`, () => {
+    const state = dolu();
+
+    expect(canAdd(state, product('yeni-urun'))).toBe(false);
+    expect(canAdd(state, product('urun-0'))).toBe(true);
+  });
+
+  it('baska marketin urunu bos sepete gore sorulur: onayla yeni sepette eklenecek', () => {
+    expect(canAdd(dolu(), product('sut-1l', 3210, A101.id))).toBe(true);
   });
 });

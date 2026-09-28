@@ -156,6 +156,14 @@ export const productSchema = z.object({
   price: moneySchema,
   unit: unitSchema.optional(),
   /**
+   * Teklif SATISTA MI (proto Offer.is_active). false: market urunu satistan
+   * kaldirmistir; kayit silinmez ki gecmis siparisler bozulmasin. Liste pasif
+   * teklifi de dondurur (catalog tasarimi): istemci onu "Satista degil" diye
+   * gosterir ve sepete EKLEMEZ (T7.6). Baglayici kontrol yine rezervasyondadir:
+   * pasif teklif orada bulunamamis sayilir (T7.2).
+   */
+  isActive: z.boolean(),
+  /**
    * marketId kapsaminda satilabilir adet. Kaynagi inventory-svc'dir ve
    * TOPLU sorgulanir (CheckAvailability(marketId, sku[]), B27).
    *

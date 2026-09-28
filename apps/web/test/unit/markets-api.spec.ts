@@ -37,6 +37,7 @@ const product = {
   name: 'Süt 1 L',
   categoryId: 'cat_sut-kahvaltilik',
   price: money(3490),
+  isActive: true,
 };
 
 function clientReturning(data: unknown) {

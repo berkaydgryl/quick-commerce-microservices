@@ -29,6 +29,10 @@ type Product struct {
 	ImageURL    string `json:"imageUrl,omitempty"`
 	Price       Money  `json:"price"`
 	Unit        string `json:"unit,omitempty"`
+	// IsActive, teklif satista mi (proto Offer.is_active). omitempty YOK: false
+	// "satista degil" demektir, yazilmamasi "bilinmiyor" sanilirdi. Liste pasif
+	// teklifi de dondurur; istemci onu sepete eklemez (T7.6).
+	IsActive bool `json:"isActive"`
 	// Stok bilgisi yoksa nil: alan hic yazilmaz ("stok bilgisi yok", 0 DEGIL).
 	// Bugun hep nil; inventory-svc baglaninca gateway doldurur (B27).
 	AvailableQuantity *int32 `json:"availableQuantity,omitempty"`
@@ -75,5 +79,6 @@ func toProduct(offer *catalogv1.Offer, images ImageResolver) Product {
 		ImageURL:    images.Resolve(offer.GetImageUrl()),
 		Price:       rest.MoneyFromProto(offer.GetPrice()),
 		Unit:        unitNames[offer.GetUnit()],
+		IsActive:    offer.GetIsActive(),
 	}
 }
