@@ -7,6 +7,7 @@ import (
 	commonv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/common/v1"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rpc"
 )
 
 // Pazaryeri uclari (ADR-15): konuma hizmet veren marketler, market sayfasi
@@ -24,9 +25,9 @@ var locationFieldNames = map[string]string{
 // market yoksa BOS liste doner, hata degil ("bolgende market yok").
 func (s *Service) NearbyMarkets(ctx context.Context, lat, lng float64) (NearbyMarketList, error) {
 	request := &catalogv1.ListNearbyMarketsRequest{Location: &commonv1.GeoPoint{Lat: lat, Lng: lng}}
-	response, err := invoke(ctx, s.timeout, "ListNearbyMarkets", s.rpc.ListNearbyMarkets, request)
+	response, err := rpc.Invoke(ctx, s.timeout, service, "ListNearbyMarkets", s.rpc.ListNearbyMarkets, request)
 	if err != nil {
-		return NearbyMarketList{}, restFieldNames(err, locationFieldNames)
+		return NearbyMarketList{}, rpc.RenameFields(err, rpc.Names(locationFieldNames))
 	}
 	return toNearbyMarketList(response.GetMarkets(), s.images), nil
 }
@@ -34,7 +35,7 @@ func (s *Service) NearbyMarkets(ctx context.Context, lat, lng float64) (NearbyMa
 // Market, market sayfasinin basligi (puan, sure, fiyat kurallari).
 func (s *Service) Market(ctx context.Context, marketID string) (Market, error) {
 	request := &catalogv1.GetMarketRequest{MarketId: marketID}
-	response, err := invoke(ctx, s.timeout, "GetMarket", s.rpc.GetMarket, request)
+	response, err := rpc.Invoke(ctx, s.timeout, service, "GetMarket", s.rpc.GetMarket, request)
 	if err != nil {
 		return Market{}, err
 	}
@@ -49,7 +50,7 @@ func (s *Service) Market(ctx context.Context, marketID string) (Market, error) {
 // MarketCategories, marketin teklifi olan kategoriler (manav yalnizca meyve-sebze).
 func (s *Service) MarketCategories(ctx context.Context, marketID string) (CategoryList, error) {
 	request := &catalogv1.ListMarketCategoriesRequest{MarketId: marketID}
-	response, err := invoke(ctx, s.timeout, "ListMarketCategories", s.rpc.ListMarketCategories, request)
+	response, err := rpc.Invoke(ctx, s.timeout, service, "ListMarketCategories", s.rpc.ListMarketCategories, request)
 	if err != nil {
 		return CategoryList{}, err
 	}

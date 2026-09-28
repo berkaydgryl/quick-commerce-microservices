@@ -79,11 +79,27 @@ Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci 
   kullanılmaz, 100'e bölme yalnızca gösterim anında istemcide yapılır.
 - **Zarf**: her cevap `{ success: true, data }` veya `{ success: false, error }`
   biçimindedir. `error` alanı `code`, `message`, `details` ve `requestId` taşır.
+- **Ayrıntı (`details`)** bir JSON nesnesidir ve değerleri servisin gönderdiği
+  gibi geçer (T7.5): `PRICE_CHANGED`'de güncel toplam **sayıdır**
+  (`totalMinor: 19360`), satışta olmayan ürünler **dizidir**
+  (`unavailableProductIds`), doğrulama hataları alan → sebep metnidir ve alan adı
+  istemcinin gönderdiği addır (`items.0.quantity`, `address.location.lat`,
+  `Idempotency-Key`).
+- **Kimlik**: sipariş uçları (`/v1/cart/reserve`, `/v1/orders...`) kimlik ister.
+  JWT T8.1 ile gelir; o zamana kadar **yalnızca production dışında** kullanıcı
+  `X-User-Id` başlığından okunur (`usr_` + harf/rakam/`_`/`-`, ör. `usr_ali`).
+  Production'da bu başlık okunmaz ve uçlar 401 döner. Katalog uçları herkese
+  açıktır.
+- **Risk sinyalleri istemciden alınmaz** (B9): gateway bağlantının IP'sini
+  order'a iletir; istemcinin yazabildiği `X-Forwarded-For` okunmaz.
 - **Idempotency-Key**, kalıcı durum değiştiren uçlarda zorunludur:
   `POST /v1/auth/register`, `POST /v1/cart/reserve`,
   `DELETE /v1/cart/reserve/{orderId}`, `POST /v1/orders`,
   `POST /v1/orders/{id}/3ds`. `POST /v1/auth/login` ve
   `POST /v1/darkstores/resolve` kalıcı durum değiştirmediği için istemez.
+  Bugün gateway yalnızca **varlığını** doğrular (yoksa 400), uzunluk kuralı
+  (8-128) servistedir; aynı anahtarla gelen ikinci isteğin ilk cevabı alması
+  (tekrar koruması) T8.2 ile gelir.
 - **İzleme**: her cevap `X-Request-Id` başlığı taşır; hata gövdesindeki
   `error.requestId` ile aynı değerdir.
 

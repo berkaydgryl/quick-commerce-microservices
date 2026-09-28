@@ -13,7 +13,7 @@ import { credentials } from '@grpc/grpc-js';
 
 import type { RequestScope } from '../../application/request-scope.js';
 import type { RiskAssessment, RiskAssessmentResult } from '../../application/risk-assessment.js';
-import type { OrderRiskContext } from '../../domain/checkout-risk.js';
+import type { CheckoutSignals, OrderRiskContext } from '../../domain/checkout-risk.js';
 
 /**
  * Proto bandi -> core sozlugu. Record TUM enum degerlerini ister: proto'ya
@@ -65,8 +65,8 @@ export class GrpcRiskAssessment implements RiskAssessment {
 }
 
 /**
- * Order'in bilmedigi alanlar (IP, cihaz, hesap yasi, oturum konumu) BOS gider:
- * risk sozlesmesinde bos alan "sinyal yok" demektir ve kurali tetiklemez.
+ * Order'in bildigi alanlar + gateway'in sinyalleri (T7.5). Gelmeyen sinyal BOS
+ * gider: risk sozlesmesinde bos alan "sinyal yok" demektir ve kurali tetiklemez.
  */
 function toProtoContext(context: OrderRiskContext): riskV1.RiskContext {
   const money = (amountMinor: number) => ({ amountMinor, currency: context.currency });
@@ -82,5 +82,29 @@ function toProtoContext(context: OrderRiskContext): riskV1.RiskContext {
       : { userAverageBasket: money(context.userAverageBasketMinor) }),
     checkoutDwellMs: context.checkoutDwellMs,
     deliveryLocation: { lat: context.deliveryLocation.lat, lng: context.deliveryLocation.lng },
+    ...toProtoSignals(context.signals),
   });
+}
+
+/**
+ * Sinyaller RiskContext'teki ayni adli alanlara gider. Mesaj alanlari (konum,
+ * zaman) yalnizca varsa yazilir: gonderilmeyen mesaj "yok" demektir, bos bir
+ * konum (0,0) ise gecerli bir nokta sayilirdi.
+ */
+function toProtoSignals(signals: CheckoutSignals): Partial<riskV1.RiskContext> {
+  return {
+    ipAddress: signals.ipAddress ?? '',
+    ipCity: signals.ipCity ?? '',
+    deviceId: signals.deviceId ?? '',
+    accountsOnDevice: signals.accountsOnDevice ?? 0,
+    previousIpAddress: signals.previousIpAddress ?? '',
+    ...(signals.sessionLocation === undefined
+      ? {}
+      : {
+          sessionLocation: { lat: signals.sessionLocation.lat, lng: signals.sessionLocation.lng },
+        }),
+    ...(signals.accountCreatedAt === undefined
+      ? {}
+      : { accountCreatedAt: signals.accountCreatedAt }),
+  };
 }

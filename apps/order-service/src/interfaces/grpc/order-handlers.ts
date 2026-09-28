@@ -81,6 +81,7 @@ export function createOrderImplementation(deps: OrderHandlerDeps): UntypedServic
             userId: input.userId,
             method: input.paymentMethod,
             ...(input.cardToken === undefined ? {} : { cardToken: input.cardToken }),
+            signals: input.signals,
           },
           // risk ve payment cagrilari bu requestId'yi AYNEN tasir.
           { requestId: ctx.requestId, logger: ctx.logger },

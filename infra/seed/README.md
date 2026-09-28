@@ -22,7 +22,8 @@ henüz sahibi ayakta olmayan veri ve bu düzenin açıklaması var.
 
 ## Adresler
 
-`data/addresses.json`, `@getir/contracts` içindeki `deliveryAddressSchema` biçimindedir ve
+`data/addresses.json`, `@getir/contracts` içindeki `savedAddressSchema` (kayıtlı adres: teslimat
+adresi + etiket + not) biçimindedir; siparişe giderken yalnızca `line` ve `location` taşınır (T7.5) ve
 roadmap'in adres tablosunu izler:
 
 | Başlık | Konum          | Beklenen                                                                         |

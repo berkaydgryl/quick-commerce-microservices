@@ -3,6 +3,8 @@ package catalog
 import (
 	catalogv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/catalog/v1"
 	commonv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/common/v1"
+
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rest"
 )
 
 // unitNames, proto birimi -> sozlesmedeki metin (@getir/contracts unitSchema).
@@ -71,7 +73,7 @@ func toProduct(offer *catalogv1.Offer, images ImageResolver) Product {
 		Description: offer.GetDescription(),
 		CategoryID:  offer.GetCategoryId(),
 		ImageURL:    images.Resolve(offer.GetImageUrl()),
-		Price:       toMoney(offer.GetPrice()),
+		Price:       rest.MoneyFromProto(offer.GetPrice()),
 		Unit:        unitNames[offer.GetUnit()],
 	}
 }

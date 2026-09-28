@@ -102,6 +102,13 @@ describe('priceDraft: satista olmayan urun', () => {
     expect(error.code).toBe(ERROR_CODES.VALIDATION_FAILED);
     expect(error.details).toEqual({ skuMismatchProductIds: ['prd_01'] });
   });
+
+  it('sku verilmediyse (REST sepeti, T7.5) kaleme catalog teklifinin sku su yazilir', () => {
+    // 2 sut (65 TL): minimum sepetin (50 TL) ustunde kalsin.
+    const { items } = price({ lines: [{ productId: 'prd_01', quantity: 2 }] });
+
+    expect(items.map((item) => item.sku)).toEqual(['SUT-1L']);
+  });
 });
 
 describe('priceDraft: minimum sepet', () => {

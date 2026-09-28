@@ -73,8 +73,12 @@ export const isoDateTimeSchema = z.string().datetime();
  * 100'e bolme yalnizca gosterim aninda, istemcide yapilir.
  */
 export const moneySchema = z.object({
-  amountMinor: z.number().int().min(0),
-  currency: z.literal(CURRENCY),
+  // Turkce mesaj (T7.5): gecersiz tutar REST cevabinin details'inde kullaniciya gorunur.
+  amountMinor: z
+    .number()
+    .int('kurus cinsinden tam sayi olmali')
+    .min(0, '0 ya da daha buyuk olmali'),
+  currency: z.literal(CURRENCY, { errorMap: () => ({ message: `${CURRENCY} olmali` }) }),
 });
 
 /** Eksik alan ve tip hatasi mesajlari; gateway'in bicim hatalariyla ayni sozcukler (params.go). */

@@ -3,14 +3,14 @@
  *
  * Onceki surumde koordinatlar dort yerde elle yaziliydi (JSON, sozlesme testi,
  * use-case testi, gRPC testi); biri degisince digerleri sessizce eskirdi.
- * Dosya sozlesmedeki deliveryAddressSchema ile dogrulanarak okunur (ADR-10).
+ * Dosya sozlesmedeki savedAddressSchema (kayitli adres) ile dogrulanarak okunur (ADR-10).
  */
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { deliveryAddressSchema } from '@getir/contracts';
-import type { DeliveryAddress } from '@getir/contracts';
+import { savedAddressSchema } from '@getir/contracts';
+import type { SavedAddress } from '@getir/contracts';
 import { z } from 'zod';
 
 import type { GeoPoint } from '../../src/domain/geo.js';
@@ -19,8 +19,8 @@ const ADDRESSES_PATH = fileURLToPath(
   new URL('../../../../infra/seed/data/addresses.json', import.meta.url),
 );
 
-export const DEMO_ADDRESSES: readonly DeliveryAddress[] = z
-  .array(deliveryAddressSchema)
+export const DEMO_ADDRESSES: readonly SavedAddress[] = z
+  .array(savedAddressSchema)
   .parse(JSON.parse(readFileSync(ADDRESSES_PATH, 'utf8')));
 
 export type DemoAddressTitle = 'Ev' | 'İş' | 'Yazlık';

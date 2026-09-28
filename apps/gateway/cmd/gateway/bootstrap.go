@@ -8,6 +8,7 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 
 	catalogv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/catalog/v1"
+	orderv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/order/v1"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/assets"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/catalog"
@@ -15,6 +16,7 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/config"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/httpapi"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
 )
 
 // bootstrap, parcalari BAGLAR: baglanti havuzu, servis adaptorleri, yonlendirici.
@@ -53,6 +55,11 @@ func bootstrap(cfg config.Config, logger *slog.Logger) (*fiber.App, func(), erro
 		cleanup()
 		return nil, nil, fmt.Errorf("%s baglantisi havuzda yok", config.CatalogService)
 	}
+	orderConn, ok := pool.Conn(config.OrderService)
+	if !ok {
+		cleanup()
+		return nil, nil, fmt.Errorf("%s baglantisi havuzda yok", config.OrderService)
+	}
 
 	// Tek katalog adaptoru butun katalog uclarini karsilar; yonlendirici her
 	// ucu ayri, dar bir arayuzle gorur (bkz. httpapi.Deps).
@@ -62,6 +69,9 @@ func bootstrap(cfg config.Config, logger *slog.Logger) (*fiber.App, func(), erro
 		assets.NewResolver(cfg.AssetBaseURL),
 	)
 
+	// Tek siparis adaptoru dort siparis ucunu karsilar (T7.5).
+	orderService := order.New(orderv1.NewOrderServiceClient(orderConn), cfg.RequestTimeout)
+
 	app := httpapi.New(httpapi.Deps{
 		Health:           health.New(healthClients, cfg.RequestTimeout, cfg.Mock),
 		Categories:       catalogService,
@@ -69,7 +79,13 @@ func bootstrap(cfg config.Config, logger *slog.Logger) (*fiber.App, func(), erro
 		Market:           catalogService,
 		MarketCategories: catalogService,
 		MarketProducts:   catalogService,
-		Logger:           logger,
+		CartReserver:     orderService,
+		OrderPlacer:      orderService,
+		ThreeDSConfirmer: orderService,
+		OrderGetter:      orderService,
+		// X-User-Id gelistirme kimligi production'da ASLA kabul edilmez (identity.go).
+		AllowDemoUser: cfg.NodeEnv != config.EnvProduction,
+		Logger:        logger,
 	})
 
 	return app, cleanup, nil

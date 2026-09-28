@@ -14,10 +14,15 @@ import { calculateCart, normalizeCouponCode } from '@getir/pricing';
 
 import type { ItemUnit, OrderItem, OrderPricing } from './order-item.js';
 
-/** Sepetten gelen ham satir. FIYAT TASIMAZ (istemcinin fiyatina guvenilmez). */
+/**
+ * Sepetten gelen ham satir. FIYAT TASIMAZ (istemcinin fiyatina guvenilmez).
+ *
+ * sku ISTEGE BAGLI (T7.5): REST sepeti sku tasimaz; kaleme catalog teklifinin
+ * sku'su yazilir. Verildiyse teklifle eslesmeli (eski istemci, grpcurl).
+ */
 export interface CartLine {
   readonly productId: string;
-  readonly sku: string;
+  readonly sku?: string | undefined;
   readonly quantity: number;
 }
 
@@ -120,10 +125,11 @@ function toOrderItems(
   const unavailable = lines
     .filter((line) => !byProduct.has(line.productId))
     .map((line) => line.productId);
+  // sku verilmediyse eslesme sorulmaz: kalem sku'yu tekliften alir.
   const skuMismatch = lines
     .filter((line) => {
       const offer = byProduct.get(line.productId);
-      return offer !== undefined && offer.sku !== line.sku;
+      return offer !== undefined && line.sku !== undefined && offer.sku !== line.sku;
     })
     .map((line) => line.productId);
 

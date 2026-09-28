@@ -1,6 +1,7 @@
 package apperror
 
 import (
+	"bytes"
 	"encoding/json"
 
 	"google.golang.org/grpc/codes"
@@ -50,21 +51,45 @@ func decodePayload(trailer metadata.MD) (wirePayload, bool) {
 	return payload, true
 }
 
-// decodeDetails, ayrintiyi alan -> metin haritasina indirir.
+// decodeDetails, ayrintiyi alan -> deger haritasina cevirir.
 //
-// Sozlesme ayrintiyi string->string tutar (getir.common.v1.ErrorDetail.metadata)
-// ve REST zarfi bir NESNE bekler. Nesne olmayan (dizi, sayi) ya da metin
-// olmayan degerler tasiyan ayrinti DUSURULUR: zarfi bozmaktansa baglamsiz hata
-// daha iyidir, asil yuk zaten gunluktedir.
-func decodeDetails(raw json.RawMessage) map[string]string {
+// Ayrinti bir JSON NESNESI olmali (REST zarfi, contracts apiErrorSchema:
+// details bir kayittir). Nesne olmayan yuk (dizi, sayi) DUSURULUR: zarfi
+// bozmaktansa baglamsiz hata daha iyidir, asil yuk zaten gunluktedir.
+//
+// Degerler OLDUGU GIBI gecer (T7.5): metin Go metni olur, sayi, dizi ve nesne
+// ham JSON olarak kalir ve kodlanirken birebir yazilir. Onceki surum yalnizca
+// metin kabul ediyordu (proto ErrorDetail yorumuna dayanarak); oysa x-app-error
+// o mesaji kullanmaz ve PRICE_CHANGED'in guncel toplami, THREEDS_FAILED'in
+// kalan hakki gibi sayilar istemciye hic ulasmiyordu.
+func decodeDetails(raw json.RawMessage) map[string]any {
 	if len(raw) == 0 {
 		return nil
 	}
-	var details map[string]string
-	if err := json.Unmarshal(raw, &details); err != nil || len(details) == 0 {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil || len(fields) == 0 {
 		return nil
 	}
+	details := make(map[string]any, len(fields))
+	for field, value := range fields {
+		details[field] = detailValue(value)
+	}
 	return details
+}
+
+// detailValue, metni Go metnine cevirir (alan adi esleme ve testler metinle
+// karsilastirir); diger her deger ham JSON kalir. null da null olarak gecer:
+// metne cevrilseydi "" olurdu.
+func detailValue(raw json.RawMessage) any {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || trimmed[0] != '"' {
+		return json.RawMessage(trimmed)
+	}
+	var text string
+	if err := json.Unmarshal(trimmed, &text); err != nil {
+		return json.RawMessage(trimmed)
+	}
+	return text
 }
 
 // codeForStatus, x-app-error yokken durum kodundan hata kodu turetir.

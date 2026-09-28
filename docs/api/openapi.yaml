@@ -463,12 +463,19 @@ paths:
     post:
       tags: [cart]
       operationId: reserveCart
-      summary: Sepeti rezerve et (atomik stok düşümü + TTL)
+      summary: Sepeti fiyatlandır ve taslak sipariş aç
       description: |
-        Redis üzerinde Lua ile atomik rezervasyon açar ve bir `orderId` üretir.
-        Varsayılan ömür RESERVATION_TTL_SECONDS (600 sn); risk skoru orta
-        çıkarsa RESERVATION_TTL_MEDIUM_RISK_SECONDS (120 sn) uygulanır.
-        Süre dolduğunda sweeper stoğu geri verir.
+        Sepeti sunucuda fiyatlandırıp taslak sipariş açar ve `orderId` üretir
+        (T7.5, order-service `CreateDraftOrder`). Tutar istemciye güvenilmeden
+        catalog fiyatlarıyla hesaplanır; `expectedTotal` tutmazsa taslak açılmaz,
+        `409 PRICE_CHANGED` güncel toplamla döner. Kalem `sku` taşımaz; sunucu
+        onu catalog teklifinden alır.
+
+        Stok rezervasyonu (Redis + Lua, süre sınırı) T11.2/T11.4 ile gelir; bugün
+        stok kilitlenmez ve cevapta `expiresAt` yoktur.
+      security:
+        - bearerAuth: []
+        - demoUser: []
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -479,7 +486,7 @@ paths:
               $ref: "#/components/schemas/ReserveCartRequest"
       responses:
         "201":
-          description: Rezervasyon açıldı
+          description: Taslak sipariş açıldı
           headers:
             X-Request-Id:
               $ref: "#/components/headers/XRequestId"
@@ -493,80 +500,108 @@ paths:
                       data:
                         $ref: "#/components/schemas/Reservation"
         "400":
-          description: Gövde geçersiz, sepet boş ya da idempotency başlığı yok
+          description: |
+            Biçim hatası (bilinmeyen alan, yanlış tip, eksik başlık) ya da kural
+            ihlali (boş sepet, markette satışta olmayan ürün). `details` alanı
+            istemcinin gönderdiği adla gösterir.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
               examples:
-                cartEmpty:
-                  summary: VALIDATION_FAILED
-                  value:
-                    success: false
-                    error:
-                      code: VALIDATION_FAILED
-                      message: "Sepette ürün yok."
-                      details: null
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
                 idempotencyKeyRequired:
-                  summary: VALIDATION_FAILED
+                  summary: VALIDATION_FAILED (başlık yok)
                   value:
                     success: false
                     error:
                       code: VALIDATION_FAILED
-                      message: "Idempotency-Key başlığı zorunludur."
-                      details: null
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        Idempotency-Key: zorunlu
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                unknownField:
+                  summary: VALIDATION_FAILED (sözleşmede olmayan alan)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        title: bu uc bu alani kabul etmiyor
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                unavailableProducts:
+                  summary: VALIDATION_FAILED (markette satışta değil)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        unavailableProductIds: ["prd_yok"]
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
-          description: Mağaza veya ürün bulunamadı
+          description: Market bulunamadı
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
-              examples:
-                productNotFound:
-                  summary: NOT_FOUND
-                  value:
-                    success: false
-                    error:
-                      code: NOT_FOUND
-                      message: "Ürün bulunamadı."
-                      details:
-                        productId: "prd_sut-1l"
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "409":
-          description: Stok yetmiyor ya da anahtar farklı gövdeyle kullanıldı
+          description: |
+            Fiyat değişti (`PRICE_CHANGED`, ayrıntıda güncel toplam). Stok
+            yetersizliği (`STOCK_INSUFFICIENT`) T11.2, anahtar tekrarı
+            (`REQUEST_IN_PROGRESS`) T8.2 ile gelir.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
               examples:
-                insufficientStock:
-                  summary: STOCK_INSUFFICIENT
+                priceChanged:
+                  summary: PRICE_CHANGED
                   value:
                     success: false
                     error:
-                      code: STOCK_INSUFFICIENT
-                      message: "Yeterli stok yok."
+                      code: PRICE_CHANGED
+                      message: "Sepetindeki fiyatlar güncellendi. Yeni tutarı onaylar mısın?"
                       details:
-                        productId: "prd_sut-1l"
-                        requested: 5
-                        available: 2
+                        expectedTotalMinor: 19000
+                        totalMinor: 19360
+                        currency: TRY
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
-                idempotencyKeyReused:
-                  summary: REQUEST_IN_PROGRESS
+        "422":
+          description: Kupon uygulanamadı ya da minimum sepet tutarına ulaşılmadı
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                couponInvalid:
+                  summary: COUPON_INVALID
                   value:
                     success: false
                     error:
-                      code: REQUEST_IN_PROGRESS
-                      message: "Aynı Idempotency-Key farklı bir gövde ile kullanıldı."
+                      code: COUPON_INVALID
+                      message: "Bu kupon kullanılamıyor."
                       details:
-                        idempotencyKey: "4f1c3a2b-9d8e-4b7a-8c6d-5e4f3a2b1c0d"
+                        couponCode: ILK10
+                        reason: NOT_FIRST_ORDER
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                minBasketNotMet:
+                  summary: MIN_BASKET_NOT_MET
+                  value:
+                    success: false
+                    error:
+                      code: MIN_BASKET_NOT_MET
+                      message: "Minimum sepet tutarına ulaşmadın."
+                      details:
+                        amountToMinBasketMinor: 4000
+                        minBasketMinor: 5000
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /v1/cart/reserve/{orderId}:
     delete:
@@ -684,14 +719,23 @@ paths:
     post:
       tags: [orders]
       operationId: createOrder
-      summary: Rezervasyonu siparişe çevir (saga başlangıcı)
+      summary: Taslağı siparişe çevir (saga)
       description: |
-        Rezervasyon kimliği (`orderId`) ile risk skorlama ve ödeme saga'sını
-        başlatır (T7.1). Risk orta seviyede ise kart + 3DS zorunludur: ödeme
-        3DS ister, sipariş `AWAITING_PAYMENT` durumunda `challengeId` ile döner
-        ve `/v1/orders/{id}/3ds` ile tamamlanır. Kapıda ödeme yalnızca düşük
-        risk bandında açıktır. Yüksek bant siparişi manuel incelemeye alır
-        (`202 RISK_REVIEW`), kritik bant reddeder (`403 RISK_BLOCKED`).
+        Taslak kimliği (`orderId`) ile risk değerlendirmesi ve ödeme saga'sını
+        çalıştırır (T7.1, order-service `CreateOrder`). Sepet ve adres TEKRAR
+        GÖNDERİLMEZ: tutar ve konum taslakta dondurulmuştur.
+
+        * LOW bant: kart çekilir, sipariş `PAID`.
+        * MEDIUM bant: kart + 3DS zorunlu; sipariş `AWAITING_PAYMENT` ve
+          `threeDs.challengeId` ile döner, `/v1/orders/{id}/3ds` ile tamamlanır.
+        * HIGH bant: manuel inceleme (`202 RISK_REVIEW`), ödeme alınmaz.
+        * CRITICAL bant: ret (`403 RISK_BLOCKED`), ödeme alınmaz.
+
+        Risk sinyalleri istemciden alınmaz (B9): gateway bağlantının IP'sini
+        order'a iletir; cihaz, oturum konumu ve hesap yaşı T8.1'de oturumdan gelir.
+      security:
+        - bearerAuth: []
+        - demoUser: []
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -702,7 +746,7 @@ paths:
               $ref: "#/components/schemas/CreateOrderRequest"
       responses:
         "201":
-          description: Sipariş oluşturuldu (3DS gerekebilir)
+          description: Sipariş oluşturuldu; 3DS gerekiyorsa `threeDs` doludur
           headers:
             X-Request-Id:
               $ref: "#/components/headers/XRequestId"
@@ -714,36 +758,24 @@ paths:
                   - type: object
                     properties:
                       data:
-                        $ref: "#/components/schemas/Order"
-        "400":
-          description: Gövde geçersiz ya da idempotency başlığı yok
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorResponse"
+                        $ref: "#/components/schemas/OrderPlacement"
               examples:
-                validationError:
-                  summary: VALIDATION_FAILED
+                paid:
+                  summary: LOW bant, ödeme alındı
                   value:
-                    success: false
-                    error:
-                      code: VALIDATION_FAILED
-                      message: "Teslimat adresi zorunludur."
-                      details:
-                        fieldErrors:
-                          address: "required"
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
-                idempotencyKeyRequired:
-                  summary: VALIDATION_FAILED
+                    success: true
+                    data:
+                      orderId: "ord_db77f4c0e24f49919cc1d78a649c9c94"
+                      status: PAID
+                awaitingThreeDs:
+                  summary: MEDIUM bant, 3DS bekleniyor
                   value:
-                    success: false
-                    error:
-                      code: VALIDATION_FAILED
-                      message: "Idempotency-Key başlığı zorunludur."
-                      details: null
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
-        "401":
-          $ref: "#/components/responses/Unauthenticated"
+                    success: true
+                    data:
+                      orderId: "ord_db77f4c0e24f49919cc1d78a649c9c94"
+                      status: AWAITING_PAYMENT
+                      threeDs:
+                        challengeId: "tds_0009d7cd0e904b689aabcacf4458d520"
         "202":
           description: |
             Risk yüksek (HIGH): sipariş `REVIEW` durumunda, manuel inceleme
@@ -752,6 +784,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+        "400":
+          description: Biçim hatası ya da başlık yok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                notCard:
+                  summary: VALIDATION_FAILED (REST'te tek yöntem kart)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        payment.method: CARD olmali
+                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
         "402":
           description: |
             Ödeme reddedildi: sipariş `PAYMENT_FAILED` durumuna geçti (tutar
@@ -781,93 +832,47 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
         "404":
-          description: Rezervasyon bulunamadı
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorResponse"
-              examples:
-                reservationNotFound:
-                  summary: NOT_FOUND
-                  value:
-                    success: false
-                    error:
-                      code: NOT_FOUND
-                      message: "Rezervasyon bulunamadı."
-                      details:
-                        orderId: "ord_db77f4c0e24f49919cc1d78a649c9c94"
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+          $ref: "#/components/responses/OrderNotFound"
         "409":
-          description: Rezervasyon süresi dolmuş veya durum uygun değil
+          description: |
+            Sipariş bu adıma uygun değil (`ORDER_STATE_INVALID`, ayrıntıda denenen
+            geçiş) ya da önceki ödeme denemesi hâlâ sonuçlanmadı
+            (`REQUEST_IN_PROGRESS`).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
               examples:
-                reservationExpired:
-                  summary: RESERVATION_EXPIRED
-                  value:
-                    success: false
-                    error:
-                      code: RESERVATION_EXPIRED
-                      message: "Rezervasyon süresi doldu, sepeti yenileyin."
-                      details:
-                        expiredAt: "2026-09-20T18:30:00.000Z"
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
                 orderStateInvalid:
                   summary: ORDER_STATE_INVALID
                   value:
                     success: false
                     error:
                       code: ORDER_STATE_INVALID
-                      message: "Bu rezervasyon için sipariş zaten oluşturuldu."
-                      details:
-                        status: PAID
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
-        "422":
-          description: |
-            İş kuralı engeli: kapıda ödeme bu risk bandında kapalı
-            (`PAYMENT_METHOD_NOT_ALLOWED`; sipariş taslakta kalır, kartla tekrar
-            denenir) ya da minimum sepet sağlanmadı.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorResponse"
-              examples:
-                paymentMethodNotAllowed:
-                  summary: PAYMENT_METHOD_NOT_ALLOWED
-                  value:
-                    success: false
-                    error:
-                      code: PAYMENT_METHOD_NOT_ALLOWED
-                      message: "Bu sipariş için kapıda ödeme kullanılamıyor. Kartla ödemeyi dener misin?"
+                      message: "Siparişin bu adımda bu işlemi yapmaya uygun değil."
                       details:
                         orderId: "ord_db77f4c0e24f49919cc1d78a649c9c94"
-                        paymentMethod: CASH_ON_DELIVERY
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
-                minBasketNotMet:
-                  summary: MIN_BASKET_NOT_MET
-                  value:
-                    success: false
-                    error:
-                      code: MIN_BASKET_NOT_MET
-                      message: "Minimum sepet tutarının altındasınız."
-                      details:
-                        minBasket:
-                          amountMinor: 15000
-                          currency: TRY
-                        subtotal:
-                          amountMinor: 9250
-                          currency: TRY
+                        from: CANCELLED
+                        to: RISK_CHECK
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /v1/orders/{id}/3ds:
     post:
       tags: [orders]
       operationId: submitThreeDsChallenge
       summary: 3DS doğrulamasını tamamla
+      description: |
+        Kod doğruysa sipariş `PAID` olur (order-service `ConfirmPayment`). Yanlış
+        kod `402 THREEDS_FAILED` döner ve kalan hak ayrıntıdadır; hak biter ya da
+        süre dolarsa sipariş `PAYMENT_FAILED` olur (`attemptsLeft: 0`). Biçimi
+        bozuk kod deneme sayılmaz (`400`).
+      security:
+        - bearerAuth: []
+        - demoUser: []
       parameters:
         - $ref: "#/components/parameters/OrderIdPathId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -879,7 +884,7 @@ paths:
               $ref: "#/components/schemas/ThreeDsRequest"
       responses:
         "200":
-          description: 3DS doğrulandı, saga devam ediyor
+          description: 3DS doğrulandı, sipariş ödendi
           headers:
             X-Request-Id:
               $ref: "#/components/headers/XRequestId"
@@ -891,59 +896,54 @@ paths:
                   - type: object
                     properties:
                       data:
-                        $ref: "#/components/schemas/Order"
+                        $ref: "#/components/schemas/OrderPlacement"
         "400":
-          description: Gövde geçersiz ya da idempotency başlığı yok
+          description: Kod 6 hane değil ya da başlık yok
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
               examples:
-                validationError:
+                badOtp:
                   summary: VALIDATION_FAILED
                   value:
                     success: false
                     error:
                       code: VALIDATION_FAILED
-                      message: "Doğrulama kodu 6 haneli olmalı."
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
                       details:
-                        fieldErrors:
-                          otp: "length: 6"
+                        otp: 6 haneli kod olmali
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "402":
-          description: 3DS doğrulaması başarısız, ödeme alınamadı
+          description: 3DS doğrulaması başarısız
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
               examples:
-                threeDsFailed:
-                  summary: THREEDS_FAILED
+                wrongCode:
+                  summary: THREEDS_FAILED (hak kaldı)
                   value:
                     success: false
                     error:
                       code: THREEDS_FAILED
-                      message: "3DS doğrulaması başarısız."
+                      message: "Doğrulama kodu geçersiz. Tekrar dener misin?"
                       details:
                         attemptsLeft: 1
+                        reason: wrong_code
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
-        "403":
-          description: Sipariş başka kullanıcıya ait
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorResponse"
-              examples:
-                forbidden:
-                  summary: FORBIDDEN
+                exhausted:
+                  summary: THREEDS_FAILED (hak bitti, sipariş PAYMENT_FAILED)
                   value:
                     success: false
                     error:
-                      code: FORBIDDEN
-                      message: "Bu sipariş size ait değil."
-                      details: null
+                      code: THREEDS_FAILED
+                      message: "Doğrulama kodu geçersiz. Tekrar dener misin?"
+                      details:
+                        attemptsLeft: 0
+                        reason: attempts_exhausted
                       requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "404":
           $ref: "#/components/responses/OrderNotFound"
@@ -953,26 +953,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
-              examples:
-                orderStateInvalid:
-                  summary: ORDER_STATE_INVALID
-                  value:
-                    success: false
-                    error:
-                      code: ORDER_STATE_INVALID
-                      message: "Sipariş 3DS aşamasında değil."
-                      details:
-                        status: PAID
-                        expected: AWAITING_PAYMENT
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /v1/orders/{id}:
     get:
       tags: [orders]
       operationId: getOrder
       summary: Sipariş ayrıntısı
+      description: |
+        Kullanıcının kendi siparişi: fiyatı dondurulmuş kalemler, tutarlar,
+        teslimat adresi ve durum geçmişi. Başkasının siparişi `404` döner
+        (403 değil): "bu kimlikte bir sipariş var" bilgisi bile sızmamalı.
+      security:
+        - bearerAuth: []
+        - demoUser: []
       parameters:
         - $ref: "#/components/parameters/OrderIdPathId"
       responses:
@@ -992,24 +989,10 @@ paths:
                         $ref: "#/components/schemas/Order"
         "401":
           $ref: "#/components/responses/Unauthenticated"
-        "403":
-          description: Sipariş başka kullanıcıya ait
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorResponse"
-              examples:
-                forbidden:
-                  summary: FORBIDDEN
-                  value:
-                    success: false
-                    error:
-                      code: FORBIDDEN
-                      message: "Bu sipariş size ait değil."
-                      details: null
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
         "404":
           $ref: "#/components/responses/OrderNotFound"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /v1/orders/{id}/token:
     get:
@@ -1064,7 +1047,16 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: "`POST /v1/auth/login` ile alınan erişim jetonu (JWT_TTL = 3600 sn)."
+      description: "`POST /v1/auth/login` ile alınan erişim jetonu (JWT_TTL = 3600 sn). T8.1 ile gelir."
+    demoUser:
+      type: apiKey
+      in: header
+      name: X-User-Id
+      description: |
+        GEÇİCİ geliştirme kimliği (T7.5): JWT (T8.1) gelene kadar sipariş uçları
+        kullanıcıyı bu başlıktan okur (`usr_` + harf, rakam, `_`, `-`; ör.
+        `usr_ali`). YALNIZCA production DIŞINDA kabul edilir; production'da
+        okunmaz ve korumalı uçlar 401 döner.
 
   headers:
     XRequestId:
@@ -1136,7 +1128,9 @@ components:
 
   responses:
     Unauthenticated:
-      description: Erişim jetonu yok, geçersiz ya da süresi dolmuş
+      description: |
+        Kimlik yok ya da geçersiz. JWT (T8.1) gelene kadar geliştirmede
+        `X-User-Id` başlığı eksik/biçimsizse; production'da her zaman.
       content:
         application/json:
           schema:
@@ -1148,18 +1142,18 @@ components:
                 success: false
                 error:
                   code: UNAUTHORIZED
-                  message: "Bu işlem için giriş yapmalısınız."
+                  message: "Oturumun sona ermiş. Tekrar giriş yapman gerekiyor."
                   details: null
                   requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
-            tokenExpired:
-              summary: UNAUTHORIZED
+            demoUserInvalid:
+              summary: UNAUTHORIZED (geliştirme kimliği biçimsiz)
               value:
                 success: false
                 error:
                   code: UNAUTHORIZED
-                  message: "Oturum süresi doldu, tekrar giriş yapın."
+                  message: "Oturumun sona ermiş. Tekrar giriş yapman gerekiyor."
                   details:
-                    expiredAt: "2026-09-20T17:30:00.000Z"
+                    X-User-Id: gecerli bir kullanici kimligi olmali (usr_...)
                   requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
 
     OrderNotFound:
@@ -1642,7 +1636,7 @@ components:
 
     ReserveCartRequest:
       type: object
-      required: [marketId, items]
+      required: [marketId, items, address, expectedTotal]
       properties:
         marketId:
           $ref: "#/components/schemas/MarketId"
@@ -1652,6 +1646,20 @@ components:
           maxItems: 50
           items:
             $ref: "#/components/schemas/CartItemInput"
+        address:
+          $ref: "#/components/schemas/DeliveryAddress"
+        expectedTotal:
+          allOf:
+            - $ref: "#/components/schemas/Money"
+          description: |
+            Kullanıcının ekranda gördüğü toplam. Sunucu tutarı kendisi hesaplar;
+            tutmazsa 409 PRICE_CHANGED. Zorunlu: isteğe bağlı olsaydı istemci
+            göndermeyerek kontrolü atlayabilirdi.
+        couponCode:
+          type: string
+          minLength: 1
+          maxLength: 32
+          description: Kupon kodu (ör. ILK10). Uygulanamazsa 422 COUPON_INVALID.
 
     ReservationLine:
       type: object
@@ -1671,33 +1679,21 @@ components:
 
     Reservation:
       type: object
-      required: [orderId, marketId, lines, subtotal, expiresAt, ttlSeconds]
+      description: |
+        Açılan taslak sipariş. Kalemler ve tutar dönmez: taslak ancak sunucunun
+        toplamı `expectedTotal` ile tuttuysa açılır; döküm için GET /v1/orders/{id}.
+      required: [orderId, status]
       properties:
         orderId:
           allOf:
             - $ref: "#/components/schemas/RuntimeId"
           description: Rezervasyonun ve ondan doğacak siparişin ortak kimliği.
-        marketId:
-          $ref: "#/components/schemas/MarketId"
-        lines:
-          type: array
-          items:
-            $ref: "#/components/schemas/ReservationLine"
-        subtotal:
-          $ref: "#/components/schemas/Money"
-        deliveryFee:
-          $ref: "#/components/schemas/Money"
-        total:
-          $ref: "#/components/schemas/Money"
+        status:
+          $ref: "#/components/schemas/OrderStatus"
         expiresAt:
           type: string
           format: date-time
-        ttlSeconds:
-          type: integer
-          description: |
-            Varsayılan RESERVATION_TTL_SECONDS = 600. Risk orta seviyede ise
-            RESERVATION_TTL_MEDIUM_RISK_SECONDS = 120 uygulanır.
-          examples: [600]
+          description: Geri sayımın biteceği an. Stok rezervasyonu (T11.2) gelene kadar yoktur.
 
     ReservationRelease:
       type: object
@@ -1733,38 +1729,38 @@ components:
         - DELIVERED
     DeliveryAddress:
       type: object
-      required: [title, line, location]
+      description: |
+        Teslimat adresi: rezervasyonda verilir, siparişte gösterilir. Adres
+        etiketi ("Ev") ve kurye notu sipariş sözleşmesinde olmadığı için yoktur;
+        gönderilirse bilinmeyen alan olarak reddedilir.
+      required: [line, location]
       properties:
-        title:
-          type: string
         line:
           type: string
+          minLength: 1
           maxLength: 240
+          description: Serbest metin adres; yalnızca gösterim içindir.
         location:
           $ref: "#/components/schemas/GeoPoint"
-        note:
-          type: string
-          maxLength: 240
 
     CreateOrderRequest:
       type: object
-      required: [orderId, address, payment]
+      required: [orderId, payment]
       properties:
         orderId:
           allOf:
             - $ref: "#/components/schemas/RuntimeId"
-          description: Rezervasyondan dönen kimlik.
-        address:
-          $ref: "#/components/schemas/DeliveryAddress"
+          description: Rezervasyondan dönen kimlik. Sepet ve adres tekrar gönderilmez.
         payment:
           type: object
-          required: [method]
+          required: [method, cardToken]
           properties:
             method:
               type: string
               enum: [CARD]
             cardToken:
               type: string
+              minLength: 1
               description: Demo ödeme sağlayıcısının ürettiği jeton; kart numarası taşınmaz.
 
     ThreeDsRequest:
@@ -1781,14 +1777,38 @@ components:
 
     ThreeDsChallenge:
       type: object
-      description: Sipariş AWAITING_PAYMENT durumundayken doldurulur.
-      required: [challengeId, expiresAt]
+      description: 3DS bekleyen siparişin doğrulama jetonu.
+      required: [challengeId]
       properties:
         challengeId:
           type: string
-        expiresAt:
+
+    OrderPlacement:
+      type: object
+      description: |
+        Sipariş ve 3DS cevabı. `threeDs` yalnızca doğrulama bekleniyorsa
+        (`AWAITING_PAYMENT`) vardır; ayrı bir bayrak tutulmaz.
+      required: [orderId, status]
+      properties:
+        orderId:
+          $ref: "#/components/schemas/RuntimeId"
+        status:
+          $ref: "#/components/schemas/OrderStatus"
+        threeDs:
+          $ref: "#/components/schemas/ThreeDsChallenge"
+
+    OrderTimelineEntry:
+      type: object
+      required: [status, at]
+      properties:
+        status:
+          $ref: "#/components/schemas/OrderStatus"
+        at:
           type: string
           format: date-time
+        note:
+          type: string
+          description: İsteğe bağlı kısa açıklama anahtarı (ör. iptal gerekçesi).
 
     CourierSummary:
       type: object
@@ -1806,7 +1826,21 @@ components:
 
     Order:
       type: object
-      required: [id, status, marketId, lines, total, createdAt]
+      description: Tutarlar taslakta dondurulmuştur; total = subtotal + deliveryFee - discount.
+      required:
+        [
+          id,
+          status,
+          marketId,
+          lines,
+          subtotal,
+          deliveryFee,
+          discount,
+          total,
+          address,
+          timeline,
+          createdAt,
+        ]
       properties:
         id:
           $ref: "#/components/schemas/RuntimeId"
@@ -1822,12 +1856,19 @@ components:
           $ref: "#/components/schemas/Money"
         deliveryFee:
           $ref: "#/components/schemas/Money"
+        discount:
+          allOf:
+            - $ref: "#/components/schemas/Money"
+          description: Kupon indirimi; pozitif tutardır ve toplamdan düşülür.
         total:
           $ref: "#/components/schemas/Money"
         address:
           $ref: "#/components/schemas/DeliveryAddress"
-        threeDs:
-          $ref: "#/components/schemas/ThreeDsChallenge"
+        timeline:
+          type: array
+          description: Durum geçmişi, eskiden yeniye.
+          items:
+            $ref: "#/components/schemas/OrderTimelineEntry"
         courier:
           $ref: "#/components/schemas/CourierSummary"
         createdAt:

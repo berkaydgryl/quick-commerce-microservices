@@ -5,6 +5,8 @@ import (
 
 	catalogv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/catalog/v1"
 	commonv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/common/v1"
+
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rpc"
 )
 
 // productFieldNames, ListProducts dogrulama hatasinda proto -> REST alan adi.
@@ -40,9 +42,9 @@ func (s *Service) MarketProducts(ctx context.Context, query ProductQuery) (Produ
 		Query:      query.Query,
 		Page:       &commonv1.PageRequest{PageSize: query.PageSize, PageToken: query.PageToken},
 	}
-	response, err := invoke(ctx, s.timeout, "ListProducts", s.rpc.ListProducts, request)
+	response, err := rpc.Invoke(ctx, s.timeout, service, "ListProducts", s.rpc.ListProducts, request)
 	if err != nil {
-		return ProductPage{}, restFieldNames(err, productFieldNames)
+		return ProductPage{}, rpc.RenameFields(err, rpc.Names(productFieldNames))
 	}
 	return toProductPage(response, s.images), nil
 }

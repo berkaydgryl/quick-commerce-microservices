@@ -17,6 +17,7 @@
 import { ORDER_STATUS } from '@getir/core';
 import type { Clock } from '@getir/core';
 
+import type { CheckoutSignals } from '../domain/checkout-risk.js';
 import type { OrderHistoryReader } from '../domain/order-history-reader.js';
 import type { OrderOutbox } from '../domain/order-outbox.js';
 import type { OrderRepository } from '../domain/order-repository.js';
@@ -41,18 +42,24 @@ export interface CreateOrderDeps {
 export interface CreateOrderInput extends PaymentChoice {
   readonly orderId: string;
   readonly userId: string;
+  /**
+   * Gateway'in bildigi risk sinyalleri (T7.5). Verilmezse sinyal yoktur (risk
+   * sozlesmesi: eksik sinyal kurali tetiklemez). Yalnizca risk adiminda okunur;
+   * tekrar denemede (AWAITING_PAYMENT) risk yeniden sorulmadigi icin kullanilmaz.
+   */
+  readonly signals?: CheckoutSignals | undefined;
 }
 
 export type CreateOrder = (input: CreateOrderInput, scope: RequestScope) => Promise<CheckoutResult>;
 
 export function createCreateOrder(deps: CreateOrderDeps): CreateOrder {
-  return async ({ orderId, userId, ...choice }, scope) => {
+  return async ({ orderId, userId, signals = {}, ...choice }, scope) => {
     const order = await findOwnOrder(deps.repository, orderId, userId);
 
     const awaitingPayment =
       order.status === ORDER_STATUS.AWAITING_PAYMENT
         ? order
-        : await passRiskStep(deps, order, choice.method, scope);
+        : await passRiskStep(deps, order, choice.method, signals, scope);
 
     return chargeOrder(deps, awaitingPayment, choice, scope);
   };

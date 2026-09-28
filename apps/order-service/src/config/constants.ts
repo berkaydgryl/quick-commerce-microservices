@@ -39,10 +39,12 @@ export const RISK_CALL_TIMEOUT_MS = 1_000;
 export const PAYMENT_CALL_TIMEOUT_MS = 3_000;
 
 /**
- * Kupon kodunun en uzun hali. Bilinmeyen kod zaten COUPON_INVALID alir; sinir
- * sinirsiz metnin kapidan gecmemesi icindir. REST karsiligi T7.5'te ayni degeri alir.
+ * Gateway'in doldurdugu risk sinyali metinlerinin (IP, sehir, cihaz kimligi)
+ * en uzun hali (T7.5). Deger yorumlanmaz, risk-svc'ye tasinir; sinir yalnizca
+ * sinirsiz metnin kapidan gecmemesi icindir (IPv6 45 karakterdir).
+ * Kupon kodu siniri REST ile ortak oldugu icin contracts'tadir (COUPON_CODE_MAX_LENGTH).
  */
-export const MAX_COUPON_CODE_LENGTH = 32;
+export const MAX_SIGNAL_TEXT_LENGTH = 128;
 
 /** Iptal gerekcesi anahtarinin en uzun hali (ornek: "CHANGED_MIND"). */
 export const MAX_CANCEL_REASON_LENGTH = 64;

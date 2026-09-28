@@ -171,7 +171,7 @@ describe('ListNearbyMarkets - gercek Mongo', () => {
   const listNearby = (): ReturnType<typeof createListNearbyMarkets> =>
     createListNearbyMarkets({ markets: repositories.markets });
 
-  it('adres dosyasi sozlesmedeki deliveryAddressSchema ya uyar ve 3 tanedir', () => {
+  it('adres dosyasi sozlesmedeki savedAddressSchema ya (kayitli adres) uyar ve 3 tanedir', () => {
     expect(DEMO_ADDRESSES.map((address) => address.title)).toEqual(['Ev', 'İş', 'Yazlık']);
   });
 

@@ -61,8 +61,10 @@ service OrderService {
 // guncellenmesini gerektirir.
 //
 // REVIEW, RISK_CHECK -> CANCELLED ve PAID -> CANCELLED gecisleri B20 ile
-// eklendi: ilki 66-85 bandinin kuyrugu, ikincisi stok yetersizligi, ucuncusu
+// eklendi: ilki HIGH bandinin kuyrugu, ikincisi stok yetersizligi, ucuncusu
 // commit sirasinda rezervasyonun dusmus olmasi (mock iade sonrasi) icindir.
+// Bant esikleri risk-svc'dedir (T6.1: LOW 0-29, MEDIUM 30-54, HIGH 55-79,
+// CRITICAL 80+); bu dosya bantlari ADIYLA anar.
 enum OrderStatus {
   ORDER_STATUS_UNSPECIFIED = 0;
 
@@ -72,10 +74,10 @@ enum OrderStatus {
   // Risk degerlendirmesi suruyor.
   ORDER_STATUS_RISK_CHECK = 2;
 
-  // 66-85 bandi: manuel inceleme kuyrugu (Shadow Capture).
+  // HIGH bant: manuel inceleme kuyrugu (Shadow Capture).
   ORDER_STATUS_REVIEW = 3;
 
-  // 86+ bandi ya da inceleme reddi.
+  // CRITICAL bant ya da inceleme reddi.
   ORDER_STATUS_REJECTED = 4;
 
   // Stok kilitlendi, geri sayim basladi.
@@ -102,6 +104,10 @@ message CartLine {
   string product_id = 1;
 
   // Stok anahtari. inventory-svc ile ortak olan tek alandir.
+  //
+  // ISTEGE BAGLI (T7.5): REST sepeti sku tasimaz; bos gelirse order-svc onu
+  // catalog teklifinden alir. Doluysa catalog'daki sku ile ESLESMELI, yoksa
+  // VALIDATION_FAILED (ayrintida skuMismatchProductIds).
   string sku = 2;
 
   int32 quantity = 3;
@@ -210,15 +216,19 @@ message CreateDraftOrderRequest {
 
 // Taslak siparis cevabi.
 //
-// Risk bandi 86+ ise bu RPC hicbir sey yaratmadan PERMISSION_DENIED +
+// Risk bandi CRITICAL ise bu RPC hicbir sey yaratmadan PERMISSION_DENIED +
 // ErrorDetail.code = "RISK_BLOCKED" doner; rezervasyon hic acilmaz ve stok
 // dokunulmamis kalir. Stok yetmezse siparis CANCELLED'a cekilir ve
-// FAILED_PRECONDITION + "STOCK_INSUFFICIENT" doner.
+// FAILED_PRECONDITION + "STOCK_INSUFFICIENT" doner. (Taslak anindaki risk
+// degerlendirmesi ve stok kilidi T11.2 ile gelir; bugun taslak yalnizca
+// fiyatlanir, risk CreateOrder'da sorulur.)
 message CreateDraftOrderResponse {
   string order_id = 1;
   OrderStatus status = 2;
 
-  // Geri sayimin bitecegi an (UTC). Sure risk bandindan turer.
+  // Geri sayimin bitecegi an (UTC). Sure risk bandindan turer. Stok
+  // rezervasyonu (T11.2) gelene kadar BOS doner: kilitlenmemis stok icin
+  // geri sayim yoktur.
   google.protobuf.Timestamp reservation_expires_at = 3;
 }
 
@@ -241,11 +251,51 @@ message CreateOrderRequest {
   string card_token = 4;
 
   string idempotency_key = 5;
+
+  // Gateway'in bildigi risk sinyalleri (T7.5). Istemciden ALINMAZ (B9):
+  // gateway bunlari baglantidan ve oturumdan doldurur. Gonderilmezse ya da
+  // alanlari bossa ilgili risk kurali tetiklenmez.
+  CheckoutSignals signals = 6;
+}
+
+// Gateway'in bildigi, istemcinin GONDEREMEDIGI risk sinyalleri (T7.5).
+//
+// Alanlar getir.risk.v1.RiskContext'te gateway'e ait olan alanlarin birebir
+// karsiligidir; order-svc onlari degistirmeden RiskContext'e tasir. "Bos = yok"
+// sozlesmesi de oradakiyle aynidir (bos metin, 0 sayi, gonderilmeyen mesaj):
+// eksik sinyal kurali TETIKLEMEZ.
+//
+// T7.5'te gateway yalnizca ip_address'i doldurur (kimlik dogrulamasi henuz
+// yok); digerleri T8.1'de oturum ve kullanici kaydindan gelir. Butun alanlar
+// simdiden tanimli: T8.1 sozlesmeye dokunmadan yalnizca doldurur.
+message CheckoutSignals {
+  // Istegin geldigi IP. Gateway TCP baglantisindan okur; istemcinin
+  // yazabildigi bir basliga (X-Forwarded-For) guvenilir vekil yoksa bakmaz.
+  string ip_address = 1;
+
+  // IP'nin sehri (ip-device kurali).
+  string ip_city = 2;
+
+  // Oturumun cihaz kimligi (ip-device kurali).
+  string device_id = 3;
+
+  // Ayni cihazda gorulmus hesap sayisi; 3 ve ustu kesin kuraldir (veto).
+  // 0 = olculmedi (RiskContext sozlesmesiyle ayni).
+  int32 accounts_on_device = 4;
+
+  // Kullanicinin bir onceki oturumundaki IP ("IP degisimi" sinyali).
+  string previous_ip_address = 5;
+
+  // Oturumun acildigi konum (geofence kurali).
+  getir.common.v1.GeoPoint session_location = 6;
+
+  // Hesabin acilis ani (account-age kurali).
+  google.protobuf.Timestamp account_created_at = 7;
 }
 
 // Siparis olusturma cevabi.
 //
-// Orta bantta (31-65) kart + 3DS zorunludur. Boyle bir durumda siparis
+// MEDIUM bantta kart + 3DS zorunludur. Boyle bir durumda siparis
 // AWAITING_PAYMENT'ta kalir ve challenge_id dolu doner; istemci
 // POST /v1/orders/{id}/3ds ile dogrulamayi tamamlar.
 message CreateOrderResponse {
