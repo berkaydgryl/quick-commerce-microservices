@@ -1,0 +1,9 @@
+/* Tasarimsiz kabuk (D11): degerler market listesi rozetinden aynen tasindi. Tasarim T16.1'de. */
+.c-badge {
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-on-brand);
+  background: var(--text-muted);
+  border-radius: var(--radius-pill);
+}

@@ -4,15 +4,34 @@
  */
 
 import { categoryListSchema, productPageSchema } from '@getir/contracts';
-import type { CategoryList, Page, ProductPage } from '@getir/contracts';
+import type {
+  CategoryList,
+  MarketId,
+  marketProductsQuerySchema,
+  Page,
+  ProductPage,
+} from '@getir/contracts';
+import type { z } from 'zod';
 
 import type { HttpClient } from '../../../shared/api/http-client';
 
-export interface MarketProductsQuery {
-  readonly marketId: string;
-  readonly categoryId?: string | undefined;
-  readonly pageToken?: string | undefined;
-  readonly pageSize: number;
+/** Sozlesmedeki urun sorgusunun GIRDI bicimi (sunucu cozmeden onceki hali). */
+type MarketProductsQueryInput = z.input<typeof marketProductsQuerySchema>;
+
+/**
+ * Urun listesi istegi. Alan tipleri SOZLESMEDEN turetilir: sozlesmede bir
+ * alanin tipi degisirse burasi derlenmez, elle yazilmis kopya gibi sessizce
+ * ayrismaz (D11). marketId yol parametresidir, sorguda degil.
+ *
+ * Adi sozlesmedeki `MarketProductsQuery`'den BILEREK farkli: o, sunucunun
+ * cozdugu sorgudur (pageSize varsayilanli ve kirpilmis); bu, istemcinin
+ * gonderdigi. Istemci pageSize'i her istekte gonderir.
+ */
+export interface MarketProductsRequest {
+  readonly marketId: MarketId;
+  readonly categoryId?: MarketProductsQueryInput['categoryId'];
+  readonly pageToken?: MarketProductsQueryInput['pageToken'];
+  readonly pageSize: NonNullable<MarketProductsQueryInput['pageSize']>;
 }
 
 const marketPath = (marketId: string): string => `/v1/markets/${encodeURIComponent(marketId)}`;
@@ -30,7 +49,7 @@ export function fetchMarketCategories(
 
 export function fetchMarketProducts(
   client: HttpClient,
-  { marketId, categoryId, pageToken, pageSize }: MarketProductsQuery,
+  { marketId, categoryId, pageToken, pageSize }: MarketProductsRequest,
   signal?: AbortSignal,
 ): Promise<ProductPage> {
   // Yalnizca DOLU filtreler gonderilir: bos deger sunucuda zaten "filtre yok"

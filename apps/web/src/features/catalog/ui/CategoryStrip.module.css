@@ -49,7 +49,7 @@
 
 .c-category-strip__name.is-loading {
   width: 80%;
-  height: 1em;
+  height: var(--size-skeleton-line);
   border-radius: var(--radius-sm);
 }
 

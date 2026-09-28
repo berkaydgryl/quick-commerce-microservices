@@ -42,6 +42,9 @@
   --line-height-tight: 1.2;
   --line-height-base: 1.5;
 
+  /* Logo yazisinin harf araligi: yazi boyutuna gore (em). */
+  --letter-spacing-logo: -0.02em;
+
   /* Akiskan yazi olcegi: dar ekranda alt sinir, genis ekranda ust sinir, arada
      ekran genisligiyle orantili (roadmap P6). */
   --font-size-xs: clamp(0.75rem, 0.72rem + 0.15vw, 0.8125rem);
@@ -70,6 +73,16 @@
   /* Kategori kutucugu: ikon kutusunun kenari. */
   --size-category-icon: clamp(3.5rem, 3rem + 2vw, 4.5rem);
   --size-logo-badge: 1.75em;
+
+  /* Logo rozetinin ic boslugu: rozet boyutu gibi yazi boyutuna gore (em). */
+  --space-logo-badge-inset: 0.3em;
+
+  /* Sepet dugmeleri ("Ekle", +, -) ve adet kutusunun en az genisligi. */
+  --size-cart-button-min: 2rem;
+  --size-cart-quantity-min: 1.5rem;
+
+  /* Yuklenirken gorunen iskelet satiri: bir metin satiri yuksekliginde (em). */
+  --size-skeleton-line: 1em;
 
   /* --- Kenar, yaricap, golge --- */
   --border-width-thin: 0.0625rem;

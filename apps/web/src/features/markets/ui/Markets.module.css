@@ -45,13 +45,13 @@
   color: var(--text-muted);
 }
 
-.c-market-list__badge {
-  padding-inline: var(--space-2);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-on-brand);
-  background: var(--text-muted);
-  border-radius: var(--radius-pill);
+/* Market sayfasi basligi: bugun liste basligiyla ayni gorunum, ayri blok (D11). */
+.c-market-summary__title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: var(--font-size-lg);
 }
 
 .c-market-summary__facts {

@@ -1,3 +1,5 @@
+import { CURRENCY } from '@getir/core';
+
 import { formatMoney } from '../../../shared/services/format';
 import { useCartTotals } from '../hooks/useCartTotals';
 import { itemCount } from '../services/cart-state';
@@ -5,8 +7,7 @@ import { useCartStore } from '../stores/useCartStore';
 
 import styles from './Cart.module.css';
 
-const TRY = 'TRY';
-const money = (amountMinor: number) => formatMoney({ amountMinor, currency: TRY });
+const money = (amountMinor: number) => formatMoney({ amountMinor, currency: CURRENCY });
 
 /**
  * Sepet ozeti - TASARIMSIZ KABUK (T6.4). Hesap @getir/pricing'tedir; bilesen

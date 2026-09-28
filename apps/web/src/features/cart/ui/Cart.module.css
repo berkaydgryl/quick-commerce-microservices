@@ -7,7 +7,7 @@
 
 .c-cart-action__add,
 .c-cart-action__step {
-  min-width: 2rem;
+  min-width: var(--size-cart-button-min);
   padding: var(--space-1) var(--space-3);
   font-weight: var(--font-weight-bold);
   color: var(--color-brand-primary);
@@ -31,7 +31,7 @@
 }
 
 .c-cart-action__quantity {
-  min-width: 1.5rem;
+  min-width: var(--size-cart-quantity-min);
   font-weight: var(--font-weight-bold);
   text-align: center;
 }

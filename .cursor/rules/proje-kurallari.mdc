@@ -249,6 +249,9 @@ baglayici degildir; bir ekrana gelindiginde kapsam kullaniciya sorulur.
   `--bg-surface`, `--text-muted`. Boylece marka rengi degisince ad yalan olmaz.
 - Renkler semantik degiskenlere bagli oldugu icin tema degisimi (dark mode) mimariden
   gelir; ayri bir stil dosyasi cikarmak gerekmez.
+- CSS modullerinde `px`, `rem`, `em` birimi hic yazilmaz: deger `tokens.css`'te islevsel
+  adla token olur (`--size-cart-button-min`), modul `var(--...)` kullanir. Kapi stylelint
+  `unit-disallowed-list` (D11); `tokens.css`, `global.css`, `breakpoints.css` haric.
 
 ### Akiskan duzen (fluid layout)
 
@@ -263,6 +266,10 @@ baglayici degildir; bir ekrana gelindiginde kapsam kullaniciya sorulur.
 - `c-` bilesen (`.c-card`, `.c-button`) · `u-` yardimci (`.u-container`) ·
   `is-` / `has-` durum (`.is-active`, `.is-disabled`).
 - Yapi: `block__element--modifier` (`.c-card__title--highlighted`).
+- Bilesen yalnizca KENDI blogunun sinifini kullanir; baska blogun sinifini odunc almaz.
+  Ortak gorunum ortak bilesendir (`shared/ui/badge`). Kullanilan her modul sinifi o
+  modulde tanimli olmalidir: tanimsiz sinif sessizce `undefined` olur ve eleman stilsiz
+  kalir (kapi: `apps/web/test/unit/css-module-classes.spec.ts`, D11).
 
 ### Erisilebilirlik ve performans
 
@@ -276,7 +283,7 @@ baglayici degildir; bir ekrana gelindiginde kapsam kullaniciya sorulur.
 
 Gorsel taraf esnektir ama veri tarafi sozlesmedir: sunucu verisi TanStack Query, istemci
 durumu Zustand (karistirilmaz) · tipler `@getir/contracts` icindeki Zod semalarindan
-`z.infer` ile turer, elle API tipi yazilmaz · hesap bilesende degil `services/` icinde ·
+`z.infer` ile turer (istemcinin gonderdigi istek `z.input` ile), elle API tipi yazilmaz · hesap bilesende degil `services/` icinde ·
 sepet yalnizca tarayicida (ADR-13) · para KURUS, 100'e bolme yalnizca gosterimde.
 
 ## Ortam
