@@ -101,7 +101,9 @@ Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci 
   (8-128) servistedir; aynı anahtarla gelen ikinci isteğin ilk cevabı alması
   (tekrar koruması) T8.2 ile gelir.
 - **İzleme**: her cevap `X-Request-Id` başlığı taşır; hata gövdesindeki
-  `error.requestId` ile aynı değerdir.
+  `error.requestId` ile aynı değerdir. Biçim `req_` + 32 küçük onaltılık karakter
+  (Node servisleriyle aynı). İstemci bu biçimde kendi kimliğini gönderirse korunur;
+  biçim dışı değer yok sayılır ve gateway yenisini üretir (D8).
 
 ## Dosyayı düzenlerken
 

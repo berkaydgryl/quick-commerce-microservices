@@ -4,10 +4,10 @@ Tarayıcının konuştuğu **tek dış kapı** (Go + Fiber v3). Tarayıcı hiçb
 doğrudan erişemez; REST isteği burada karşılanır, doğrulanır ve gRPC çağrısına çevrilir.
 
 Pnpm workspace'inin parçası değildir: kendi Go modülüdür (`go.mod`). `pnpm verify` bu klasörü
-kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, `go mod tidy -diff`, `-race`
-testleri, statik derleme).
+kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go mod tidy -diff`,
+`-race` testleri, statik derleme).
 
-## Bugünkü durum (T7.5 — sipariş uçları; pazaryeri uçları T8.4'ten öne alındı)
+## Bugünkü durum (D8 — Go kuralları CI'da; T7.5 — sipariş uçları; pazaryeri uçları T8.4'ten öne alındı)
 
 | Parça                | Durum                                                           |
 | -------------------- | --------------------------------------------------------------- |
@@ -15,6 +15,7 @@ testleri, statik derleme).
 | gRPC istemci havuzu  | ✅ catalog + order, tembel bağlantı, keepalive                  |
 | `GET /healthz`       | ✅ Servisleri paralel sorgular; hepsi ayaktaysa 200, değilse 503 |
 | Cevap zarfı          | ✅ `packages/contracts` ile aynı biçim, her cevapta `requestId` |
+| Korelasyon kimliği   | ✅ `req_` + 32 hex; gelen kimlik yalnızca bu biçimdeyse korunur (D8) |
 | Zarif kapanış        | ✅ SIGINT/SIGTERM → devam eden istekler beklenir                |
 | `GET /v1/categories` | ✅ catalog `ListCategories`; bilinmeyen sorgu parametresi 400   |
 | `GET /v1/markets?lat&lng` | ✅ Yakındaki marketler; boş bölge = boş liste, hata değil |
@@ -31,6 +32,7 @@ testleri, statik derleme).
 | Görsel adresleri     | ✅ Göreli yol → mutlak URL (`ASSET_BASE_URL`, `internal/assets`) |
 | Stok birleştirmesi (B27) | ⏳ inventory-svc ile (T8.4 / T9.x) |
 | JWT, rate limit      | ⏳ T8.1, T8.2                                                   |
+| Go kuralları         | ✅ CI'da golangci-lint: `errcheck`, `noctx`, `bodyclose` (D8)    |
 
 ## Çalıştırma
 
@@ -46,6 +48,13 @@ curl -s localhost:8080/healthz | jq
 go test -race ./...
 ```
 
+Go kuralları (CI'daki golangci-lint ile aynı sürüm; Docker yeter, kurulum gerekmez):
+
+```bash
+# depo kokunden
+docker run --rm -v "$PWD":/src:ro -w /src/apps/gateway golangci/golangci-lint:v2.14.0 golangci-lint run
+```
+
 Docker (build bağlamı **depo köküdür**):
 
 ```bash
@@ -58,7 +67,43 @@ docker run --rm -p 8080:8080 \
 ```
 
 İmaj `distroless/static:nonroot` üzerindedir (~28 MB). İçinde kabuk olmadığı için Docker
-`HEALTHCHECK`'i ikilinin kendi alt komutunu çağırır: `/gateway healthcheck`.
+`HEALTHCHECK`'i ikilinin kendi alt komutunu çağırır: `/gateway healthcheck`. Komut 2 sn son
+tarihli bir bağlamla `/healthz`'i sorar; sağlıksızsa sebebi stderr'e yazar, Docker onu sağlık
+kaydında saklar (`docker inspect`).
+
+## Korelasyon kimliği (`X-Request-ID`)
+
+Her isteğin bir kimliği vardır ve aynı değer dört yerde görünür: cevap başlığı
+(`X-Request-ID`), hata zarfı (`error.requestId`), gateway günlüğü (`requestId`) ve servise giden
+gRPC metadata'sı (`x-request-id`). Böylece tek istek gateway'den servise kadar günlükte izlenir.
+
+- **Biçim:** `req_` + 32 küçük onaltılık karakter; Node servisleriyle aynı
+  (`@getir/core` `id.ts`).
+- **Gelen kimlik** yalnızca bu biçimdeyse korunur; biçim dışı değer (serbest metin, çok uzun
+  dizi) yok sayılır ve yenisi üretilir (D8). Başlık istemcinin elindedir ve kabul edilen değer
+  her servisin günlüğüne yazılır.
+- `/healthz` de kimliği servislere taşır. Ara katmana ulaşmadan düşen istekte (64 KB gövde
+  sınırı gibi) kimlik hata işleyicide üretilir; hata cevabı yine kimliksiz kalmaz.
+
+## Go kuralları ve lint (D8)
+
+Kuralların kendisi `.cursor/rules/proje-kurallari.mdc` "Go" bölümündedir; CI onları
+golangci-lint ile denetler (`.golangci.yml`, yalnızca kuralı olan üç denetleyici):
+
+| Denetleyici | Kural |
+| ----------- | ----- |
+| `errcheck` (`check-blank`) | Hata yutulmaz; `_ = f()` ve `v, _ := f()` de bulgudur |
+| `noctx` | Ağ çağrısı `context` alır (testlerde `t.Context()`) |
+| `bodyclose` | HTTP cevap gövdesi kapatılır |
+
+Gerçekten gerekçeli bir istisna satırında yazılır: `//nolint:errcheck // <gerekçe>`;
+gerekçesiz `nolint` de bulgudur. Birden fazla paketin testinde gereken yardımcılar
+(`BufconnClient`, `AppErrorOf`, `JSON`) `internal/testkit`'tedir; üretim kodu bu paketi
+kullanmaz.
+
+`bodyclose`, gövdenin kapatıldığını yalnızca cevabın verildiği fonksiyonun **kendi**
+gövdesinde görür. Bu yüzden test yardımcısı `decode` gövdeyi doğrudan kapatır ve yardımcılar
+`*http.Response` döndürmez, durum kodu ve zarf döndürür.
 
 ## Sipariş uçları (T7.5)
 

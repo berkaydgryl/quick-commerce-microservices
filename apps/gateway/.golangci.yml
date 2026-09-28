@@ -1,0 +1,30 @@
+# Gateway Go kurallarinin CI denetimi (D8). Kurallarin kendisi:
+# .cursor/rules/proje-kurallari.mdc, "Go" bolumu.
+#
+# NEDEN YALNIZCA UC DENETLEYICI: her biri o bolumdeki bir kuralin karsiligidir;
+# kurali olmayan denetleyici gurultu uretir ve istisna yazdirmaya aliskanlik
+# kazandirir. Yeni kural eklenirse denetleyicisi de buraya eklenir.
+#
+#   errcheck  - "Hata yok sayilmaz; _ ile gecistirilmez." check-blank acik:
+#               `_ = f()` ve `v, _ := f()` ile yutulan hata da bulgudur.
+#   noctx     - "Ag cagrisinin ilk parametresi context.Context'tir."
+#   bodyclose - Kapatilmayan HTTP cevap govdesi baglantiyi sizdirir.
+#
+# Gercekten gerekceli bir istisna satirinda yazilir:
+#   //nolint:errcheck // <gerekce>
+# Gerekcesiz nolint bulgudur (nolintlint).
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - errcheck
+    - noctx
+    - nolintlint
+  settings:
+    errcheck:
+      check-blank: true
+    nolintlint:
+      require-explanation: true
+      require-specific: true

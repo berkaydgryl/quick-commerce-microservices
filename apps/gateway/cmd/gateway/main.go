@@ -38,7 +38,7 @@ func main() {
 
 	// Docker HEALTHCHECK bu ikiliyi "gateway healthcheck" diye cagirir.
 	if len(os.Args) > 1 && os.Args[1] == healthcheckArg {
-		os.Exit(runHealthcheck(cfg.Port))
+		os.Exit(runHealthcheck(context.Background(), cfg.Port))
 	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel})).

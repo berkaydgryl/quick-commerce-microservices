@@ -3,6 +3,13 @@
 // KURAL (Node tarafiyla ayni): ortam yalnizca BU paketten okunur ve eksik/gecersiz
 // deger uygulamayi ACILISTA oldurur. Hatalar tek tek degil TOPLU dondurulur:
 // uc degisken birden eksikse gelistirici uc kez yeniden baslatmak zorunda kalmasin.
+//
+// Dosyalar (D8'de bolundu; her biri tek bir sebeple degisir):
+//
+//	config.go   - Config tipi ve Load (ortamin tamami, tek toplu hata)
+//	defaults.go - varsayilanlar ve sabit adlar (port haritasi, NODE_ENV, servisler)
+//	env.go      - genel okuyucular: metin, tam sayi, bool, sure, secenek
+//	policy.go   - kendi kurali olan okuyucular: gorsel kok adresi, log seviyesi
 package config
 
 import (
@@ -10,39 +17,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
-	"strconv"
-	"strings"
 	"time"
-)
-
-// Varsayilanlar. Roadmap'teki port haritasi ile birebir ayni.
-const (
-	defaultPort            = 8080
-	defaultCatalogAddress  = "localhost:50051"
-	defaultOrderAddress    = "localhost:50053"
-	defaultShutdownTimeout = 10 * time.Second
-	defaultRequestTimeout  = 5 * time.Second
-	defaultLogLevel        = slog.LevelInfo
-)
-
-// NODE_ENV degerleri (Node servisleriyle ayni sozluk). Production, gelistirme
-// kolayliklarinin (X-User-Id kimligi, T7.5) KAPALI oldugu tek ortamdir.
-const (
-	EnvDevelopment = "development"
-	EnvTest        = "test"
-	EnvProduction  = "production"
-)
-
-// Servis adlari: havuzdaki anahtar, gunluk alani ve /healthz'deki "name".
-// Tek yerde tanimli; main ayni adla havuzdan baglanti ister.
-const (
-	CatalogService = "catalog"
-	OrderService   = "order"
-)
-
-const (
-	minPort = 1
-	maxPort = 65535
 )
 
 // ServiceTarget, gateway'in konustugu tek bir gRPC servisi.
@@ -141,121 +116,4 @@ func Load(getenv Getenv) (Config, error) {
 		Services:        services,
 		AssetBaseURL:    assetBaseURL,
 	}, nil
-}
-
-// readString, bos metni "verilmedi" sayar (docker-compose "VAR=" boyle gecirir).
-func readString(getenv Getenv, name, fallback string) string {
-	if value := strings.TrimSpace(getenv(name)); value != "" {
-		return value
-	}
-	return fallback
-}
-
-func readInt(getenv Getenv, name string, fallback, min, max int) (int, error) {
-	raw := strings.TrimSpace(getenv(name))
-	if raw == "" {
-		return fallback, nil
-	}
-
-	value, err := strconv.Atoi(raw)
-	if err != nil {
-		return 0, fmt.Errorf("%s: tam sayi bekleniyor, alinan %q: %w", name, raw, err)
-	}
-	if value < min || value > max {
-		return 0, fmt.Errorf("%s: %d-%d araliginda olmali, alinan %d", name, min, max, value)
-	}
-	return value, nil
-}
-
-func readBool(getenv Getenv, name string, fallback bool) (bool, error) {
-	raw := strings.ToLower(strings.TrimSpace(getenv(name)))
-	switch raw {
-	case "":
-		return fallback, nil
-	case "1", "true", "yes", "on":
-		return true, nil
-	case "0", "false", "no", "off":
-		return false, nil
-	default:
-		return false, fmt.Errorf("%s: boolean bekleniyor (1/0, true/false), alinan %q", name, raw)
-	}
-}
-
-// readDuration, milisaniye tasiyan degiskeni okur (*_MS sonekli degiskenler).
-func readDuration(getenv Getenv, name string, fallback time.Duration) (time.Duration, error) {
-	raw := strings.TrimSpace(getenv(name))
-	if raw == "" {
-		return fallback, nil
-	}
-
-	milliseconds, err := strconv.Atoi(raw)
-	if err != nil {
-		return 0, fmt.Errorf("%s: milisaniye cinsinden tam sayi bekleniyor, alinan %q: %w", name, raw, err)
-	}
-	if milliseconds <= 0 {
-		return 0, fmt.Errorf("%s: pozitif olmali, alinan %d", name, milliseconds)
-	}
-	return time.Duration(milliseconds) * time.Millisecond, nil
-}
-
-func readEnum(getenv Getenv, name, fallback string, allowed []string) (string, error) {
-	value := readString(getenv, name, fallback)
-	for _, candidate := range allowed {
-		if value == candidate {
-			return value, nil
-		}
-	}
-	return "", fmt.Errorf("%s: %s degerlerinden biri olmali, alinan %q", name, strings.Join(allowed, "|"), value)
-}
-
-// assetBaseURLExample, eksik ASSET_BASE_URL hatasinda gosterilen ornek.
-const assetBaseURLExample = "http://localhost:5173"
-
-// readBaseURL, ZORUNLU bir mutlak http(s) kok adresini okur.
-//
-// NEDEN VARSAYILAN YOK: gorsellerin nerede barinacagi (web'in public/ klasoru,
-// CDN, baska bir sunucu) henuz kararlastirilmadi. Bir varsayilan secmek o karari
-// koda gomerdi; daha kotusu, canli ortamda degisken unutulursa istemciye
-// "localhost" adresleri gider ve hata gurultu cikarmadan ekranda kirik gorsel
-// olarak gorunurdu. Zorunlu tutmak hatayi acilisa (deploy anina) ceker.
-//
-// Kok adres sorgu (?) ve parca (#) tasiyamaz: yol eklendiginde anlamsiz adres
-// uretirlerdi. Sondaki "/" atilir ki birlestirmede "//" olusmasin.
-func readBaseURL(getenv Getenv, name string) (*url.URL, error) {
-	raw := strings.TrimSpace(getenv(name))
-	if raw == "" {
-		return nil, fmt.Errorf("%s: zorunlu, ornek: %s", name, assetBaseURLExample)
-	}
-
-	parsed, err := url.Parse(raw)
-	if err != nil {
-		return nil, fmt.Errorf("%s: gecerli bir adres degil, alinan %q: %w", name, raw, err)
-	}
-	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-		return nil, fmt.Errorf("%s: http:// ya da https:// ile baslayan mutlak adres olmali, alinan %q", name, raw)
-	}
-	if parsed.RawQuery != "" || parsed.Fragment != "" {
-		return nil, fmt.Errorf("%s: sorgu (?) ya da parca (#) tasiyamaz, alinan %q", name, raw)
-	}
-
-	parsed.Path = strings.TrimRight(parsed.Path, "/")
-	return parsed, nil
-}
-
-// readLogLevel, LOG_LEVEL degiskenini slog seviyesine cevirir.
-// Node tarafi pino seviyeleri kullaniyor; "trace" ve "fatal" Go'da karsiligi
-// olmadigi icin en yakin seviyeye baglanir - iki taraf ayni degiskeni okusun diye.
-func readLogLevel(getenv Getenv) (slog.Level, error) {
-	switch strings.ToLower(readString(getenv, "LOG_LEVEL", "info")) {
-	case "trace", "debug":
-		return slog.LevelDebug, nil
-	case "info":
-		return slog.LevelInfo, nil
-	case "warn":
-		return slog.LevelWarn, nil
-	case "error", "fatal":
-		return slog.LevelError, nil
-	default:
-		return 0, fmt.Errorf("LOG_LEVEL: trace|debug|info|warn|error|fatal bekleniyor, alinan %q", getenv("LOG_LEVEL"))
-	}
 }

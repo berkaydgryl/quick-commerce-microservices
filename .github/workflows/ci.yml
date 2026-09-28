@@ -403,6 +403,18 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      # D8: projenin Go kurallari (hata yutulmaz, ag cagrisi context alir,
+      # cevap govdesi kapatilir) elle degil burada denetlenir; denetleyicilerin
+      # listesi ve gerekcesi apps/gateway/.golangci.yml'de. Surum SABIT: yeni
+      # surum yeni bulgu uretip ilgisiz bir PR'i dusurmesin, yukseltme bilincli
+      # bir degisiklik olsun. Yerelde ayni surum Docker ile kosar (gateway README).
+      # Is adi bilerek degismedi: zorunlu kontrol listesi bu adla kurulur.
+      - name: golangci-lint (errcheck, noctx, bodyclose)
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.14.0
+          working-directory: apps/gateway
+
       # go.mod/go.sum ile gercek bagimliliklar ayrisirsa burada yakalanir
       # (ayni gerekce: "codegen" isindeki tidy adimi). T3.3'te tum
       # bagimliliklarin "// indirect" isaretli kalmasi tam olarak boyle bir

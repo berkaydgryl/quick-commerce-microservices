@@ -3,7 +3,6 @@ package httpapi
 import (
 	"context"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
@@ -54,19 +53,21 @@ func marketApp(fake *fakeCatalog) Deps {
 	}
 }
 
-func get(t *testing.T, fake *fakeCatalog, target string) (*http.Response, Envelope) {
+// get, GET istegini uygular ve durum kodunu ve zarfi dondurur. Cevabin kendisi
+// DONMEZ: govde burada okunup kapatilir, testte acik govde kalamaz.
+func get(t *testing.T, fake *fakeCatalog, target string) (int, Envelope) {
 	t.Helper()
-	response, err := New(marketApp(fake)).Test(httptest.NewRequest(http.MethodGet, target, nil))
+	response, err := New(marketApp(fake)).Test(newRequest(t, http.MethodGet, target, nil))
 	if err != nil {
 		t.Fatalf("istek basarisiz: %v", err)
 	}
-	return response, decode(t, response)
+	return response.StatusCode, decode(t, response)
 }
 
-func expectValidation(t *testing.T, response *http.Response, envelope Envelope, field, reason string) {
+func expectValidation(t *testing.T, status int, envelope Envelope, field, reason string) {
 	t.Helper()
-	if response.StatusCode != http.StatusBadRequest {
-		t.Errorf("400 bekleniyordu, %d geldi", response.StatusCode)
+	if status != http.StatusBadRequest {
+		t.Errorf("400 bekleniyordu, %d geldi", status)
 	}
 	if envelope.Error == nil || envelope.Error.Code != apperror.CodeValidationFailed {
 		t.Fatalf("VALIDATION_FAILED bekleniyordu: %+v", envelope)
@@ -83,10 +84,10 @@ func expectValidation(t *testing.T, response *http.Response, envelope Envelope, 
 
 func TestNearbyMarketsParsesLocation(t *testing.T) {
 	fake := &fakeCatalog{}
-	response, envelope := get(t, fake, "/v1/markets?lat=40.9885&lng=29.0262")
+	status, envelope := get(t, fake, "/v1/markets?lat=40.9885&lng=29.0262")
 
-	if response.StatusCode != http.StatusOK || !envelope.Success {
-		t.Fatalf("200 + success bekleniyordu: %d %+v", response.StatusCode, envelope)
+	if status != http.StatusOK || !envelope.Success {
+		t.Fatalf("200 + success bekleniyordu: %d %+v", status, envelope)
 	}
 	if fake.lat != 40.9885 || fake.lng != 29.0262 {
 		t.Errorf("konum servise tasinmadi: %v %v", fake.lat, fake.lng)
@@ -96,10 +97,10 @@ func TestNearbyMarketsParsesLocation(t *testing.T) {
 func TestNearbyMarketsReportsAllMissingFields(t *testing.T) {
 	// Iki alan birden eksik: ikisi de details'te, servis HIC cagrilmaz.
 	fake := &fakeCatalog{}
-	response, envelope := get(t, fake, "/v1/markets")
+	status, envelope := get(t, fake, "/v1/markets")
 
-	expectValidation(t, response, envelope, "lat", requiredReason)
-	expectValidation(t, response, envelope, "lng", requiredReason)
+	expectValidation(t, status, envelope, "lat", requiredReason)
+	expectValidation(t, status, envelope, "lng", requiredReason)
 	if fake.calls != 0 {
 		t.Errorf("gecersiz istekte servis cagrilmamali, %d cagri", fake.calls)
 	}
@@ -111,55 +112,55 @@ func TestNearbyMarketsRejectsNonNumbers(t *testing.T) {
 		"/v1/markets?lat=NaN&lng=29",
 		"/v1/markets?lat=Inf&lng=29",
 	} {
-		response, envelope := get(t, &fakeCatalog{}, target)
-		expectValidation(t, response, envelope, "lat", numberReason)
+		status, envelope := get(t, &fakeCatalog{}, target)
+		expectValidation(t, status, envelope, "lat", numberReason)
 	}
 }
 
 func TestNearbyMarketsRejectsUnknownQuery(t *testing.T) {
 	// Yazim hatali parametre (latitude) sessizce yok sayilmaz.
-	response, envelope := get(t, &fakeCatalog{}, "/v1/markets?lat=40&lng=29&latitude=41")
-	expectValidation(t, response, envelope, "latitude", unknownQueryReason)
+	status, envelope := get(t, &fakeCatalog{}, "/v1/markets?lat=40&lng=29&latitude=41")
+	expectValidation(t, status, envelope, "latitude", unknownQueryReason)
 }
 
 func TestGetMarketForwardsPathParam(t *testing.T) {
 	fake := &fakeCatalog{}
-	response, _ := get(t, fake, "/v1/markets/mkt_migros-jet-moda")
+	status, _ := get(t, fake, "/v1/markets/mkt_migros-jet-moda")
 
-	if response.StatusCode != http.StatusOK || fake.marketID != "mkt_migros-jet-moda" {
-		t.Errorf("200 ve market kimligi bekleniyordu: %d %q", response.StatusCode, fake.marketID)
+	if status != http.StatusOK || fake.marketID != "mkt_migros-jet-moda" {
+		t.Errorf("200 ve market kimligi bekleniyordu: %d %q", status, fake.marketID)
 	}
 }
 
 func TestGetMarketPassesServiceError(t *testing.T) {
 	// Olmayan market: kural serviste, gateway yalnizca hatayi zarflar.
 	fake := &fakeCatalog{err: apperror.New(apperror.CodeNotFound, map[string]string{"marketId": "mkt_yok"})}
-	response, envelope := get(t, fake, "/v1/markets/mkt_yok")
+	status, envelope := get(t, fake, "/v1/markets/mkt_yok")
 
-	if response.StatusCode != http.StatusNotFound || envelope.Error == nil || envelope.Error.Code != apperror.CodeNotFound {
-		t.Errorf("404 NOT_FOUND bekleniyordu: %d %+v", response.StatusCode, envelope)
+	if status != http.StatusNotFound || envelope.Error == nil || envelope.Error.Code != apperror.CodeNotFound {
+		t.Errorf("404 NOT_FOUND bekleniyordu: %d %+v", status, envelope)
 	}
 }
 
 func TestMarketCategoriesForwardsPathParam(t *testing.T) {
 	fake := &fakeCatalog{}
-	response, _ := get(t, fake, "/v1/markets/mkt_kardesler-manavi/categories")
+	status, _ := get(t, fake, "/v1/markets/mkt_kardesler-manavi/categories")
 
-	if response.StatusCode != http.StatusOK || fake.marketID != "mkt_kardesler-manavi" {
-		t.Errorf("200 ve market kimligi bekleniyordu: %d %q", response.StatusCode, fake.marketID)
+	if status != http.StatusOK || fake.marketID != "mkt_kardesler-manavi" {
+		t.Errorf("200 ve market kimligi bekleniyordu: %d %q", status, fake.marketID)
 	}
 }
 
 func TestMarketProductsForwardsFilters(t *testing.T) {
 	fake := &fakeCatalog{}
-	response, _ := get(t, fake,
+	status, _ := get(t, fake,
 		"/v1/markets/mkt_migros-jet-moda/products?categoryId=cat_sut-kahvaltilik&q=s%C3%BCt&pageSize=20&pageToken=t1")
 
 	want := catalog.ProductQuery{
 		MarketID: "mkt_migros-jet-moda", CategoryID: "cat_sut-kahvaltilik", Query: "süt", PageSize: 20, PageToken: "t1",
 	}
-	if response.StatusCode != http.StatusOK || fake.query != want {
-		t.Errorf("200 ve filtreler bekleniyordu: %d %+v", response.StatusCode, fake.query)
+	if status != http.StatusOK || fake.query != want {
+		t.Errorf("200 ve filtreler bekleniyordu: %d %+v", status, fake.query)
 	}
 }
 
@@ -174,15 +175,15 @@ func TestMarketProductsWithoutFiltersUsesServiceDefaults(t *testing.T) {
 
 func TestMarketProductsRejectsNonIntegerPageSize(t *testing.T) {
 	fake := &fakeCatalog{}
-	response, envelope := get(t, fake, "/v1/markets/mkt_migros-jet-moda/products?pageSize=on")
+	status, envelope := get(t, fake, "/v1/markets/mkt_migros-jet-moda/products?pageSize=on")
 
-	expectValidation(t, response, envelope, "pageSize", integerReason)
+	expectValidation(t, status, envelope, "pageSize", integerReason)
 	if fake.calls != 0 {
 		t.Errorf("gecersiz istekte servis cagrilmamali")
 	}
 }
 
 func TestMarketProductsRejectsUnknownQuery(t *testing.T) {
-	response, envelope := get(t, &fakeCatalog{}, "/v1/markets/mkt_x/products?category=cat_x")
-	expectValidation(t, response, envelope, "category", unknownQueryReason)
+	status, envelope := get(t, &fakeCatalog{}, "/v1/markets/mkt_x/products?category=cat_x")
+	expectValidation(t, status, envelope, "category", unknownQueryReason)
 }
