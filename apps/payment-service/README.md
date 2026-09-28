@@ -167,5 +167,6 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/payment/v1/pay
 
 ```bash
 docker build -f apps/payment-service/Dockerfile -t getir/payment-service .   # baglam depo koku
-docker run --rm -p 50054:50054 getir/payment-service
+docker run --rm -p 50054:50054 -e MOCK=true getir/payment-service   # MOCK'suz: MONGO_URI + REDIS_URL zorunlu
+node scripts/check-node-image.mjs getir/payment-service   # imaj denetimi (D12), CI'da da kosar
 ```

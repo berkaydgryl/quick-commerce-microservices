@@ -56,6 +56,9 @@ importers:
 
   apps/catalog-service:
     dependencies:
+      '@getir/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@getir/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -78,9 +81,6 @@ importers:
         specifier: ^3.23.8
         version: 3.25.76
     devDependencies:
-      '@getir/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
       '@testcontainers/mongodb':
         specifier: ^12.1.0
         version: 12.1.0

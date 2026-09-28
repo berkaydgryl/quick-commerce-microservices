@@ -419,3 +419,51 @@ jobs:
       # Dockerfile ile ayni bayraklar: CI'da derlenen ikili imajdakiyle ayni olsun.
       - name: Derle (statik ikili)
         run: CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /tmp/gateway ./cmd/gateway
+
+  # D12'nin kapisi: Node servis imajlari derleniyor mu, icinde yalnizca calisma
+  # icin gerekenler mi var ve servis imajin icinden aciliyor mu?
+  #
+  # Neden gerekli: bu is eklenene kadar CI hicbir Dockerfile'i derlemiyordu.
+  # pnpm deploy servisin kendi dosyalarindan yalnizca package.json'daki "files"
+  # alanini kopyalar; alan silinirse imaja yine src/tsconfig/.turbo girer,
+  # calisma aninda okunan yeni bir dosya (orn. .lua) o alana yazilmazsa servis
+  # ancak deploy'da duser. Ikisi de "pnpm verify"da gorunmez. Neye bakildigi
+  # scripts/check-node-image.mjs'in basinda yazili.
+  #
+  # Neden matris: dort imaj birbirinden bagimsiz; ayri runner'larda paralel
+  # derlenir ve kirmizi olan servis is adindan okunur. fail-fast kapali: bir
+  # servisin hatasi digerlerinin sonucunu gizlemesin.
+  #
+  # "needs: quality" YOK: imaj kendi icinde derlenir, kalite isinin ciktisini
+  # kullanmaz; beklemek yalnizca toplam sureyi uzatirdi. pnpm de kurulmaz:
+  # denetim betigi bagimliliksiz duz Node.
+  #
+  # gateway burada degil: D12 Node imajlari icindir. Go ikilisi "gateway"
+  # isinde Dockerfile ile ayni bayraklarla derleniyor.
+  images:
+    name: Imaj (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    # Takilan bir indirme (npm, Docker Hub) runner'i saatlerce tutmasin.
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [catalog-service, order-service, payment-service, risk-service]
+    env:
+      SERVICE: ${{ matrix.service }}
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+
+      - name: Node kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Baglam depo kokudur: servis workspace paketlerine bagli (gerekcesi
+      # Dockerfile'in basinda).
+      - name: Imaji derle
+        run: docker build --file "apps/$SERVICE/Dockerfile" --tag "getir/$SERVICE:ci" .
+
+      - name: Imaji denetle
+        run: node scripts/check-node-image.mjs "getir/$SERVICE:ci"

@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "description": "Risk servisi: kural motoru, agirlikli skor, bant ve kesin kural (veto); risk_events koleksiyonu",
+  "main": "./dist/main.js",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",
@@ -21,7 +25,6 @@
     "mongodb": "^7.6.0",
     "zod": "^3.23.8"
   },
-  "main": "./dist/main.js",
   "devDependencies": {
     "@testcontainers/mongodb": "^12.1.0"
   }

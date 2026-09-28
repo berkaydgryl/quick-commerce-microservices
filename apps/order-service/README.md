@@ -338,6 +338,7 @@ Aynı akışın otomatik karşılığı `test/unit/grpc/*.spec.ts` (bellek, RPC 
 ```bash
 docker build -f apps/order-service/Dockerfile -t getir/order-service .
 docker run --rm -p 50053:50053 -e MOCK=true getir/order-service
+node scripts/check-node-image.mjs getir/order-service   # imaj denetimi (D12), CI'da da kosar
 ```
 
 Çok aşamalı imaj, `node` kullanıcısı, `grpc.health.v1` ile `HEALTHCHECK`. Ayrıntılı gerekçe

@@ -5,6 +5,11 @@
     "outDir": "dist",
     "rootDir": "src",
 
+    // Uygulamayi hicbir paket import etmez: tip bildirimi (.d.ts) uretilmez, boylece
+    // calisma imajina da girmez (D12). Kaynak haritasi (.js.map) kalir.
+    "declaration": false,
+    "declarationMap": false,
+
     // paths BILEREK BOSALTILDI: aksi halde @getir/core'un KAYNAGI bu paketin
     // derlemesine girer ve rootDir disinda dosya (TS6059) hatasi verir.
     // Gerekcenin tamami packages/contracts/tsconfig.build.json icinde.

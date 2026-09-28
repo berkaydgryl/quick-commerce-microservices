@@ -62,13 +62,20 @@ RUN pnpm exec turbo run build --filter=@getir/catalog-service...
 # workspace paketleri (@getir/core, @getir/proto, @getir/service-kit) gercek
 # dosya olarak kopyalanir, devDependencies disarida kalir.
 #
+# Servisin KENDI dosyalarindan yalnizca package.json'daki "files" alani ("dist")
+# kopyalanir (D12). Alan olmadan deploy klasordeki her seyi alir ve imaja src,
+# tsconfig ve .turbo da girerdi. Calisma aninda diskten okunan yeni bir dosya
+# (orn. .lua) o alana eklenmezse imajda olmaz; import edilen .json'u derleyici
+# zaten dist'e kopyalar. Icerik CI'da scripts/check-node-image.mjs ile denetlenir.
+#
 # node-linker=hoisted GEREKLI: pnpm deploy'un varsayilan sembolik-baglantili
 # store duzeniyle calismasi mumkun degil (baglantilar hedef klasorun disina
 # isaret eder ve son imajda kirik kalirdi). Ayar yalnizca bu komut icindir.
 RUN pnpm --config.node-linker=hoisted deploy --filter=@getir/catalog-service --prod /app
 
 # ---------------------------------------------------------------------------
-# 3) runner - calisma zamani; derleme araclari (buf, kaynak, devDeps) YOK
+# 3) runner - calisma zamani: yalnizca dist, node_modules ve package.json;
+#    derleme araclari (buf, kaynak, tsconfig, devDeps) YOK
 # ---------------------------------------------------------------------------
 FROM base AS runner
 ENV NODE_ENV=production
