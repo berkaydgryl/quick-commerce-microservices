@@ -2,7 +2,7 @@
 
 Müşteri arayüzü: React 18 + Vite + TypeScript. Tarayıcı yalnızca gateway ile konuşur (`/v1/*`).
 
-## Bugünkü durum (T6.4 — sepet, tasarımsız kabuk)
+## Bugünkü durum (T7.6 — kalıcı sepet, stok sınırı, satışta olmayan teklif; T6.4 — sepet kabuğu)
 
 | Parça                   | Durum                                                                                            |
 | ----------------------- | ------------------------------------------------------------------------------------------------ |
@@ -14,21 +14,22 @@ Müşteri arayüzü: React 18 + Vite + TypeScript. Tarayıcı yalnızca gateway 
 | Kırılımlar              | ✅ `@custom-media` (48rem / 64rem), JS karşılığı `shared/config/breakpoints.ts`                  |
 | Market veri hook'ları   | ✅ `useNearbyMarkets`, `useMarket`, `useMarketCategories`, `useMarketProducts` (imleçle sayfalı) |
 | Ortak durumlar          | ✅ `QueryStatus`: yükleniyor / hata / boş; \"Tekrar dene\" yalnızca geçici hatada                |
-| Zustand (sepet, oturum) | ✅ Sepet (`useCartStore`, T6.4); oturum T8.5                                                     |
+| Zustand (sepet, oturum) | ✅ Sepet (`useCartStore`, T6.4; T7.6'dan beri `getir.cart`'ta kalıcı); oturum T8.5               |
 
-## Sepet (T6.4) — tasarımsız kabuk
+## Sepet (T6.4, T7.6) — tasarımsız kabuk
 
 Karar ve hesap **veri katmanında**, arayüz yalnızca çizer. Tasarım baştan değişse (düğmelerin yeri,
 modal, çekmece, ayrı sepet sayfası) yalnızca `features/cart/ui/*` değişir; testlerin hepsi veri
 katmanındadır.
 
-| Katman       | Dosya                                                  | İş                                                                      |
-| ------------ | ------------------------------------------------------ | ----------------------------------------------------------------------- |
-| Saf kurallar | `features/cart/services/cart-state.ts`                 | Tek market + onay, adet (99) ve kalem (50) sınırı, azaltma              |
-| Toplam       | `features/cart/services/cart.service.ts`               | `@getir/pricing` `calculateCart`; kurallar **sepetin marketinden**      |
-| Depo         | `features/cart/stores/useCartStore.ts`                 | Zustand; saf fonksiyonları bağlar, kural yazmaz                         |
-| Hook'lar     | `useCartTotals`, `useAddToCart`                        | Toplam (sepetin marketinin kurallarıyla); onay bekleyen market değişimi |
-| Kabuk        | `ProductCartAction`, `CartSwitchPrompt`, `CartSummary` | Ekle / − adet +, onay satırı, özet                                      |
+| Katman       | Dosya                                                  | İş                                                                                   |
+| ------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| Saf kurallar | `features/cart/services/cart-state.ts`                 | Tek market + onay, adet (99 ya da stok) ve kalem (50) sınırı, satış durumu, `canAdd` |
+| Kalıcılık    | `features/cart/services/cart-persistence.ts`           | `getir.cart`: sürüm, 24 saat, okunan kaydın doğrulanması                             |
+| Toplam       | `features/cart/services/cart.service.ts`               | `@getir/pricing` `calculateCart`; kurallar **sepetin marketinden**                   |
+| Depo         | `features/cart/stores/useCartStore.ts`                 | Zustand; saf fonksiyonları bağlar, kural yazmaz                                      |
+| Hook'lar     | `useCartTotals`, `useAddToCart`, `useCartStorageSync`  | Toplam; onay bekleyen market değişimi; sekmeler arası eşitleme                       |
+| Kabuk        | `ProductCartAction`, `CartSwitchPrompt`, `CartSummary` | Ekle / − adet +, onay satırı, özet                                                   |
 
 - **Tek market:** sepette Migros ürünü varken A101'den eklemede ekleme **yapılmaz**, onay istenir:
   "Sepetinde Migros Jet – Moda ürünleri var. Sepeti boşaltıp A101 – Caferağa ile devam edilsin mi?"
@@ -40,8 +41,18 @@ katmanındadır.
   sepeti ve teslimat ücreti uygulanır.
 - **Katalog sepeti tanımaz:** ürün listesi yalnızca `renderAction` yuvası sunar; sepet düğmesini
   `MarketPage` yerleştirir.
-- **Henüz yok:** yenilemede kalıcılık ve stok sınırı (T7.6), kupon alanı (T17.3), oturuma göre ilk
-  sipariş koşulu (T8).
+- **Kalıcılık (T7.6):** sepet `localStorage`'da `getir.cart` anahtarında durur; yenilemede kalır.
+  Son değişiklikten 24 saat sonra, sürüm değişince ya da kayıt bozuk/elle değiştirilmişse sessizce boş
+  sepetle başlanır (okunan kayıt sözleşme şemalarıyla doğrulanır; localStorage güvenilmez girdidir).
+- **Sekmeler arası (T7.6):** bir sekme sepeti değiştirince diğerleri `storage` olayıyla kaydı yeniden
+  okur; iki sekme birbirinin eklediğini silmez.
+- **Stok sınırı (T7.6):** "eklenebilir mi" sorusunun tek cevabı `canAdd`: stok bilgisi varsa
+  `min(99, stok)`, yoksa 99. Stok bugün gelmiyor (inventory T8.4/T9.x); gelince kural kendiliğinden
+  devreye girer. "Son N adet" rozeti stokla birlikte, tasarımda (T16.3).
+- **Satışta değil (T7.6):** pasif teklif (`isActive: false`) listede kalır, "Ekle" yerine basılamayan
+  "Satışta değil" yazısı görünür ve sepete eklenemez. Sepette zaten varsa adet düğmeleri kalır, "+" kapalı.
+- **Henüz yok:** iyimser güncellemenin geri alınması (rezervasyon "stok yetersiz / satışta değil"
+  derse adet düzeltme + bildirim; T11.5), kupon alanı (T17.3), oturuma göre ilk sipariş koşulu (T8).
 
 ## Market ekranları (T5.4) — tasarımsız kabuk
 
@@ -51,7 +62,8 @@ yalnızca veri katmanını ve okunur bir kabuğu kurar; yeni görsel karar yoktu
 - **Konum:** adres seçimi (T9.5) gelene kadar sabit "Ev" adresi (`features/markets/constants.ts`).
 - **Ana sayfa değişmedi:** marketlere bağlantı bir tasarım kararı; şimdilik `/markets` adresiyle açılır.
 - **Seçili kategori adreste** (`?kategori=`): yenileme ve paylaşma seçimi korur.
-- **Stok gösterilmez:** `availableQuantity` bugün gelmiyor ("stok bilgisi yok"); sepet düğmeleri T6.4'te.
+- **Stok gösterilmez:** `availableQuantity` bugün gelmiyor ("stok bilgisi yok"); sepet düğmeleri T6.4'te,
+  "Satışta değil" durumu T7.6'da.
 - **Olmayan market:** hata yalnızca başlıkta görünür, katalog tekrar etmez; `NOT_FOUND`'da "Tekrar dene"
   sunulmaz (aynı cevap döner).
 - **Biçim** `shared/services/format.ts`'te: `4599` → `45,99 TL`, `1250` → `1,3 km`, `{15,25}` → `15-25 dk`.

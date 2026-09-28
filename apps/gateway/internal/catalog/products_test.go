@@ -29,7 +29,7 @@ func TestMarketProductsMapsOfferAndOmitsStock(t *testing.T) {
 		offers: []*catalogv1.Offer{{
 			Id: "ofr_migros-jet-moda-sut-1l", MarketId: "mkt_migros-jet-moda", ProductId: "prd_sut-1l",
 			Sku: "SUT-1L", Name: "Süt 1 L", CategoryId: "cat_sut-kahvaltilik",
-			Unit: commonv1.Unit_UNIT_LITER, Price: &commonv1.Money{AmountMinor: 4599},
+			Unit: commonv1.Unit_UNIT_LITER, Price: &commonv1.Money{AmountMinor: 4599}, IsActive: true,
 		}},
 		page: &commonv1.PageResponse{NextPageToken: "sonraki"},
 	}
@@ -47,7 +47,7 @@ func TestMarketProductsMapsOfferAndOmitsStock(t *testing.T) {
 	encoded := testkit.JSON(t, page)
 	want := `{"items":[{"id":"prd_sut-1l","offerId":"ofr_migros-jet-moda-sut-1l","marketId":"mkt_migros-jet-moda",` +
 		`"sku":"SUT-1L","name":"Süt 1 L","categoryId":"cat_sut-kahvaltilik","price":{"amountMinor":4599,"currency":"TRY"},` +
-		`"unit":"LITER"}],"page":{"nextPageToken":"sonraki","totalSize":0}}`
+		`"unit":"LITER","isActive":true}],"page":{"nextPageToken":"sonraki","totalSize":0}}`
 	if encoded != want {
 		t.Errorf("JSON:\n got %s\nwant %s", encoded, want)
 	}
@@ -89,5 +89,19 @@ func TestMarketProductsRenamesProtoFieldsInErrors(t *testing.T) {
 	}
 	if _, stale := details["query"]; stale {
 		t.Errorf("proto alan adi (query) kalmamali: %v", details)
+	}
+}
+
+func TestMarketProductsCarriesInactiveOffer(t *testing.T) {
+	// T7.6: pasif teklif listede kalir ama "isActive":false ACIKCA yazilir;
+	// alan hic yazilmasaydi istemci "satista degil" ile "bilinmiyor"u ayiramazdi.
+	service := startStub(t, &marketStub{offers: []*catalogv1.Offer{{Id: "ofr_x", ProductId: "prd_x", IsActive: false}}})
+
+	page, err := service.MarketProducts(context.Background(), ProductQuery{MarketID: "mkt_x"})
+	if err != nil {
+		t.Fatalf("hata beklenmiyordu: %v", err)
+	}
+	if encoded := testkit.JSON(t, page); !strings.Contains(encoded, `"isActive":false`) {
+		t.Errorf("pasif teklif isActive:false tasimali: %s", encoded)
 	}
 }

@@ -55,6 +55,7 @@ describe('productSchema', () => {
     name: 'Sut 1 L',
     categoryId: 'cat_sut-kahvaltilik',
     price: { amountMinor: 4599, currency: 'TRY' },
+    isActive: true,
     availableQuantity: 12,
   };
 
@@ -84,6 +85,13 @@ describe('productSchema', () => {
 
     expect(productSchema.safeParse(withoutMarket).success).toBe(false);
     expect(productSchema.safeParse(withoutOffer).success).toBe(false);
+  });
+
+  it('satis durumu ZORUNLU: pasif teklif de listelenir, istemci ayirt edebilmeli (T7.6)', () => {
+    const { isActive: _active, ...withoutActive } = base;
+
+    expect(productSchema.safeParse(withoutActive).success).toBe(false);
+    expect(productSchema.parse({ ...base, isActive: false }).isActive).toBe(false);
   });
 });
 

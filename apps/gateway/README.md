@@ -21,7 +21,7 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `GET /v1/markets?lat&lng` | ✅ Yakındaki marketler; boş bölge = boş liste, hata değil |
 | `GET /v1/markets/{id}` | ✅ Market sayfası başlığı; puan onda birden ondalığa (`47` → `4.7`) |
 | `GET /v1/markets/{id}/categories` | ✅ Marketin teklifi olan kategoriler |
-| `GET /v1/markets/{id}/products` | ✅ `categoryId`, `q`, `pageToken`, `pageSize`; **stok yok** (aşağıda) |
+| `GET /v1/markets/{id}/products` | ✅ `categoryId`, `q`, `pageToken`, `pageSize`; **stok yok** (aşağıda); `isActive` (T7.6) |
 | `POST /v1/cart/reserve` | ✅ order `CreateDraftOrder` (T7.5): taslak, fiyat sunucuda; **stok kilidi yok** (T11.2) |
 | `POST /v1/orders`    | ✅ order `CreateOrder` (saga): 201 `PAID` ya da `AWAITING_PAYMENT` + `threeDs` |
 | `POST /v1/orders/{id}/3ds` | ✅ order `ConfirmPayment`; yanlış kod 402 + kalan hak |
@@ -151,6 +151,8 @@ curl -s localhost:8080/v1/orders/<taslak> -H 'X-User-Id: usr_1' | jq
   durur; gateway'de tekrar yazılmaz, iki yerde duran kural bir gün ayrışır.
 - **Stok:** ürünlerde `availableQuantity` bugün **yazılmaz**. Sözleşmede alan isteğe bağlıdır ve yokluğu
   "stok bilgisi yok" demektir, "0" değil. inventory-svc bağlanınca gateway iki cevabı birleştirir (B27).
+- **Satış durumu (T7.6):** `isActive` her üründe yazılır (`omitempty` yok): liste pasif teklifi de
+  döndürür (catalog tasarımı), `false` "satışta değil" demektir; web onu sepete eklemez.
 
 ```bash
 curl -s "localhost:8080/v1/markets?lat=40.9885&lng=29.0262" | jq '.data.items[].market.name'   # Ev: 3 market
