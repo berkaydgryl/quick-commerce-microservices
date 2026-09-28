@@ -1,7 +1,7 @@
 /**
  * Zarf <-> Redis Streams alanlari. Stream kaydi duz alan/deger ciftleridir;
- * payload JSON metni olarak tasinir. Ceviri tek yerde: yayinci yazar, T7.4'un
- * tuketicisi ayni fonksiyonla okur.
+ * payload JSON metni olarak tasinir. Ceviri tek yerde: yayinci yazar, tuketici
+ * (T7.4) ayni fonksiyonla okur.
  */
 
 import { AppError } from '@getir/core';
@@ -33,15 +33,28 @@ export function toStreamFields(envelope: EventEnvelope): string[] {
   ];
 }
 
+/** Kaydin kimlik ve konu alanlari, DOGRULAMADAN (yonlendirme ve gunluk icin). */
+export interface EnvelopePeek {
+  readonly eventId: string | undefined;
+  readonly topic: string | undefined;
+}
+
+/**
+ * Tuketici once konuya bakar: grubun dinlemedigi konu dogrulanmadan gecilir.
+ * Boylece yeni bir konu (daha yeni bir ureticiden) eski tuketicide bozuk kayit
+ * sayilmaz.
+ */
+export function peekEnvelope(fields: readonly string[]): EnvelopePeek {
+  const values = fieldMap(fields);
+  return { eventId: values.get(FIELD.EVENT_ID), topic: values.get(FIELD.TOPIC) };
+}
+
 /**
  * XRANGE / XREADGROUP kaydindan zarf. Stream dis veridir: semadan gecer.
  * @throws AppError INTERNAL - kayit zarf bicimine uymuyor.
  */
 export function fromStreamFields(fields: readonly string[]): EventEnvelope {
-  const values = new Map<string, string>();
-  for (let index = 0; index + 1 < fields.length; index += 2) {
-    values.set(fields[index] ?? '', fields[index + 1] ?? '');
-  }
+  const values = fieldMap(fields);
   const payloadText = values.get(FIELD.PAYLOAD);
   const parsed = eventEnvelopeSchema.safeParse({
     eventId: values.get(FIELD.EVENT_ID),
@@ -56,6 +69,14 @@ export function fromStreamFields(fields: readonly string[]): EventEnvelope {
     });
   }
   return parsed.data;
+}
+
+function fieldMap(fields: readonly string[]): Map<string, string> {
+  const values = new Map<string, string>();
+  for (let index = 0; index + 1 < fields.length; index += 2) {
+    values.set(fields[index] ?? '', fields[index + 1] ?? '');
+  }
+  return values;
 }
 
 function parseJson(text: string): unknown {

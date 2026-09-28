@@ -1,9 +1,7 @@
 /**
  * Yayin arayuzu (ADR-07). Servis kodu yalnizca bunu gorur; tasima (bugun Redis
- * Streams, ileride Kafka) fabrikada secilir.
- *
- * Dinleme tarafi (subscribe, tuketici grubu, onay, yeniden teslim) T7.4'te bu
- * pakete eklenir; yayin T7.3'te outbox yayincisi icin gerekiyordu.
+ * Streams, ileride Kafka) fabrikada secilir. Dinleme tarafi subscriber.ts'tedir
+ * (T7.4).
  */
 
 import type { EventEnvelope } from './envelope.js';

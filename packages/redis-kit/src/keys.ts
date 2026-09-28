@@ -44,6 +44,14 @@ const ROUTE_PATTERN = /^[A-Za-z0-9_/.-]{1,128}$/;
 /** Olay akisi tek anahtardir; depoya gore bolunmez (outbox ciktisi). */
 export const EVENTS_STREAM_KEY = 'stream:events';
 
+/**
+ * Islenemeyen olaylar (T7.4): tuketici grubunun kalici olarak isleyemedigi ya
+ * da deneme hakki biten olay, gerekcesiyle buraya tasinir. Tum gruplar ayni
+ * akisa yazar; kaydin `dead.group` alani hangi grubun biraktigini soyler.
+ * TTL yerine uzunlukla sinirlidir (ADR-16).
+ */
+export const EVENTS_DEAD_LETTER_STREAM_KEY = 'stream:events:dead';
+
 /** Supurucu/reconcile liderligi (ADR-01: Redlock yalnizca burada). */
 export const RECONCILE_LOCK_KEY = 'lock:reconcile';
 

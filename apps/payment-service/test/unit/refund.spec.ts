@@ -3,16 +3,15 @@
  * mock saglayiciyla; ag ve veritabani yok.
  */
 
-import { ERROR_CODES, fixedClock, silentLogger } from '@getir/core';
+import { ERROR_CODES, fixedClock } from '@getir/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { createCharge } from '../../src/application/charge.js';
 import { createRefund } from '../../src/application/refund.js';
-import { THREEDS_CHALLENGE_TTL_MS } from '../../src/config/constants.js';
-import { PAYMENT_METHOD, PAYMENT_STATUS } from '../../src/domain/payment.js';
+import { PAYMENT_STATUS } from '../../src/domain/payment.js';
 import type { Payment } from '../../src/domain/payment.js';
+import { PaymentNotRefundableError } from '../../src/domain/refund.js';
 import { InMemoryPaymentStore } from '../../src/infrastructure/memory/in-memory-payment-store.js';
-import { MockPaymentProvider } from '../../src/infrastructure/mock-provider/mock-payment-provider.js';
+import { chargeOrder as chargeWith } from '../support/charge-order.js';
 
 const clock = fixedClock(Date.UTC(2026, 8, 27, 12, 0, 0));
 const REASON = 'order_cancelled';
@@ -20,26 +19,8 @@ const REASON = 'order_cancelled';
 let repository: InMemoryPaymentStore;
 let refund: ReturnType<typeof createRefund>;
 
-/** Onkosul: verilen kartla bir siparisin cekimi (kendisi test edilmez). */
 function chargeOrder(orderId: string, cardToken: string, cashOnDelivery = false): Promise<Payment> {
-  const charge = createCharge({
-    repository,
-    provider: new MockPaymentProvider(),
-    clock,
-    challengeTtlMs: THREEDS_CHALLENGE_TTL_MS,
-  });
-  return charge(
-    {
-      orderId,
-      userId: 'usr_1',
-      amount: { amountMinor: 12_990, currency: 'TRY' },
-      method: cashOnDelivery ? PAYMENT_METHOD.CASH_ON_DELIVERY : PAYMENT_METHOD.CARD,
-      cardToken: cashOnDelivery ? undefined : cardToken,
-      idempotencyKey: `anahtar-${orderId}`,
-      requireThreeDs: false,
-    },
-    silentLogger,
-  );
+  return chargeWith({ repository, clock, orderId, cardToken, cashOnDelivery });
 }
 
 beforeEach(() => {
@@ -91,10 +72,14 @@ describe('Refund', () => {
   ])('%s iade edilemez: CONFLICT, kayit degismez', async (_name, cardToken, cod, status) => {
     const charged = await chargeOrder('ord_1', cardToken, cod);
 
-    await expect(refund({ orderId: 'ord_1', reason: REASON })).rejects.toMatchObject({
+    const failure = refund({ orderId: 'ord_1', reason: REASON });
+
+    await expect(failure).rejects.toMatchObject({
       code: ERROR_CODES.CONFLICT,
       details: { orderId: 'ord_1', status },
     });
+    // Surum cakismasindan ayri tip: iade komutu tuketicisi bunu kalici hata sayar (T7.4).
+    await expect(failure).rejects.toBeInstanceOf(PaymentNotRefundableError);
     await expect(repository.findByOrderId('ord_1')).resolves.toEqual(charged);
   });
 

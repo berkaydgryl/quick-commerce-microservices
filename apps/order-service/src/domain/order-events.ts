@@ -11,6 +11,7 @@
  *   payment.refund_requested  telafi komutu: iade dogrudan yapilamadi (T7.1 borcu)
  */
 
+import type { RefundRequestedPayload } from '@getir/contracts';
 import { EVENTS, ID_PREFIX, newId } from '@getir/core';
 import type { EventName } from '@getir/core';
 
@@ -92,22 +93,25 @@ export interface RefundRequest {
 /**
  * Telafi komutu: tutar alindi, siparis PAID yazilamadi ve dogrudan iade de
  * basarisiz oldu. Siparis DEGISMEDEN outbox'a yazilir; payment-svc dinler (T7.4).
+ * Govde sozlesme tipindedir (@getir/contracts): payment ayni semayla dogrular,
+ * alan adi burada degisirse derleme kirilir.
  */
 export function refundRequestedEvent(
   order: Pick<Order, 'id' | 'version'>,
   request: RefundRequest,
   at: Date,
 ): OrderEvent {
+  const payload: RefundRequestedPayload = {
+    orderId: order.id,
+    reason: request.reason,
+    idempotencyKey: request.idempotencyKey,
+  };
   return {
     eventId: newId(ID_PREFIX.EVENT),
     topic: EVENTS.PAYMENT_REFUND_REQUESTED,
     orderId: order.id,
     version: order.version,
     occurredAt: at,
-    payload: {
-      orderId: order.id,
-      reason: request.reason,
-      idempotencyKey: request.idempotencyKey,
-    },
+    payload,
   };
 }

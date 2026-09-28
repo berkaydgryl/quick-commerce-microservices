@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { eventEnvelopeSchema } from '../../src/envelope.js';
 import type { EventEnvelope } from '../../src/envelope.js';
 import { InMemoryEventPublisher } from '../../src/in-memory-publisher.js';
-import { fromStreamFields, toStreamFields } from '../../src/stream-fields.js';
+import { fromStreamFields, peekEnvelope, toStreamFields } from '../../src/stream-fields.js';
 
 const envelope = (overrides: Partial<EventEnvelope> = {}): EventEnvelope => ({
   eventId: newId(ID_PREFIX.EVENT),
@@ -55,6 +55,15 @@ describe('toStreamFields / fromStreamFields', () => {
     fields[9] = '{bozuk json';
 
     expect(() => fromStreamFields(fields)).toThrow(AppError);
+  });
+
+  it('peekEnvelope kimlik ve konuya DOGRULAMADAN bakar (govdesi bozuk kayitta da)', () => {
+    const original = envelope();
+    const fields = toStreamFields(original);
+    fields[9] = '{bozuk json';
+
+    expect(peekEnvelope(fields)).toEqual({ eventId: original.eventId, topic: original.topic });
+    expect(peekEnvelope([])).toEqual({ eventId: undefined, topic: undefined });
   });
 });
 

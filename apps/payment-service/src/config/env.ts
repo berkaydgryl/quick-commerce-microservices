@@ -1,13 +1,17 @@
 /**
  * Ortam degiskenleri. process.env YALNIZCA bu dosya uzerinden okunur.
  *
- * Depo MOCK ile secilir: MOCK=true -> bellek (Mongo parcasi okunmaz), aksi
- * halde MONGO_URI zorunlu ve odemeler `payments` koleksiyonuna yazilir.
+ * Depo MOCK ile secilir: MOCK=true -> bellek (Mongo ve Redis parcasi okunmaz,
+ * olay dinleme kapali), aksi halde MONGO_URI ve REDIS_URL zorunlu: odemeler
+ * `payments` koleksiyonuna yazilir, iade komutlari stream:events'ten dinlenir
+ * (T7.4).
  */
 
 import { loadEnvOrExit } from '@getir/core';
 import type { MongoEnv } from '@getir/mongo-kit';
 import { mongoEnvSchema } from '@getir/mongo-kit';
+import type { RedisEnv } from '@getir/redis-kit';
+import { redisEnvSchema } from '@getir/redis-kit';
 import { grpcPort, serviceEnvSchema } from '@getir/service-kit';
 import { z } from 'zod';
 
@@ -20,12 +24,16 @@ const serviceSchema = serviceEnvSchema.extend({
 export type PaymentServiceEnv = z.infer<typeof serviceSchema> & {
   /** MOCK=true ise tanimsiz: odemeler bellekte. */
   readonly mongo: MongoEnv | undefined;
+  /** MOCK=true ise tanimsiz: olay dinleme kapali (T7.4). */
+  readonly redis: RedisEnv | undefined;
 };
 
-/** Servis ortami. Mongo parcasi yalnizca MOCK kapaliyken okunur ve zorunludur. */
+/** Servis ortami. Mongo ve Redis parcasi yalnizca MOCK kapaliyken okunur ve zorunludur. */
 export function loadServiceEnv(): PaymentServiceEnv {
   const base = loadEnvOrExit(serviceSchema);
-  return { ...base, mongo: base.MOCK ? undefined : loadEnvOrExit(mongoEnvSchema) };
+  return base.MOCK
+    ? { ...base, mongo: undefined, redis: undefined }
+    : { ...base, mongo: loadEnvOrExit(mongoEnvSchema), redis: loadEnvOrExit(redisEnvSchema) };
 }
 
 /** Saglik kontrolu yalnizca portu bilir; baska degisken istemez. */

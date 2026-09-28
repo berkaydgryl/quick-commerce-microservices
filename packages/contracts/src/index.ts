@@ -1,5 +1,6 @@
 /**
- * @getir/contracts - REST ve socket yuzeyinin tek kaynagi.
+ * @getir/contracts - REST ve socket yuzeyinin tek kaynagi; T7.4'ten beri
+ * servisler arasi olay govdeleri de burada (events.ts).
  *
  * Bu paket Zod semalari tutar; TypeScript tipleri semalardan z.infer ile
  * turer (ADR-10). Ayni sekli bir kez sema bir kez interface olarak yazmak
@@ -26,3 +27,4 @@ export * from './catalog.js';
 export * from './cart.js';
 export * from './order.js';
 export * from './socket.js';
+export * from './events.js';
