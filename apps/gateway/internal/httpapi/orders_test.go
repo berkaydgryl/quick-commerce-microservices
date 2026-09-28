@@ -1,13 +1,17 @@
 package httpapi
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"google.golang.org/grpc/metadata"
@@ -287,11 +291,14 @@ func TestReserveReportsWrongTypeWithFieldName(t *testing.T) {
 	}
 }
 
-func TestOversizedBodyIsRejected(t *testing.T) {
-	// app.Test sinir ustu govdeyi sunucuya ulastirmadan kendisi reddeder; asil
-	// davranis (Fiber'in sunucu hata yolu -> bizim zarfimiz) GERCEK dinleyicide gorulur.
-	orders := &fakeOrders{}
-	app := orderApp(orders, true)
+// ioDeadline, gercek dinleyicili testte baglantinin en uzun bekleyisi: sunucu
+// cevap vermezse test takilmak yerine zaman asimiyla duser.
+const ioDeadline = 5 * time.Second
+
+// serveOnLoopback, uygulamayi gercek bir TCP dinleyicide calistirir ve adresini
+// dondurur; test bitince sunucu kapatilir ve durmasi beklenir.
+func serveOnLoopback(t *testing.T, app *fiber.App) string {
+	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("dinleyici acilamadi: %v", err)
@@ -306,20 +313,42 @@ func TestOversizedBodyIsRejected(t *testing.T) {
 			t.Errorf("sunucu hatayla durdu: %v", serveErr)
 		}
 	})
+	return listener.Addr().String()
+}
 
-	body := `{"marketId":"` + strings.Repeat("a", maxBodyBytes) + `"}`
-	request, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
-		"http://"+listener.Addr().String()+"/v1/cart/reserve", strings.NewReader(body))
+func TestOversizedBodyIsRejected(t *testing.T) {
+	// app.Test sinir ustu govdeyi sunucuya ulastirmadan kendisi reddeder; asil
+	// davranis (fasthttp ErrBodyTooLarge -> Fiber 413 -> bizim zarfimiz) GERCEK
+	// dinleyicide gorulur.
+	//
+	// GOVDE BILEREK GONDERILMIYOR: sinir govde okunmadan Content-Length'ten
+	// uygulanir. Govde gitseydi sunucu cevabi yazip baglantiyi okunmamis veriyle
+	// kapatir, Linux RST yollar ve istemci cevabi okuyamadan "connection reset
+	// by peer" alabilirdi (T7.5'te CI boyle dustu; Linux'ta 300 kosuda 8-11 kez).
+	// Yalnizca baslik gidince sunucuda okunmamis bayt kalmaz, cevap her seferinde okunur.
+	orders := &fakeOrders{}
+	app := orderApp(orders, true)
+	conn, err := net.DialTimeout("tcp", serveOnLoopback(t, app), ioDeadline)
 	if err != nil {
-		t.Fatalf("istek kurulamadi: %v", err)
+		t.Fatalf("baglanilamadi: %v", err)
 	}
-	request.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
-	request.Header.Set(UserIDHeader, "usr_1")
-	request.Header.Set(IdempotencyKeyHeader, "anahtar-0001")
+	t.Cleanup(func() { _ = conn.Close() })
+	if err = conn.SetDeadline(time.Now().Add(ioDeadline)); err != nil {
+		t.Fatalf("son tarih konamadi: %v", err)
+	}
 
-	response, err := http.DefaultClient.Do(request)
+	head := "POST /v1/cart/reserve HTTP/1.1\r\n" +
+		"Host: gateway\r\n" +
+		fiber.HeaderContentType + ": " + fiber.MIMEApplicationJSON + "\r\n" +
+		UserIDHeader + ": usr_1\r\n" +
+		IdempotencyKeyHeader + ": anahtar-0001\r\n" +
+		fiber.HeaderContentLength + ": " + strconv.Itoa(maxBodyBytes+1) + "\r\n\r\n"
+	if _, err = io.WriteString(conn, head); err != nil {
+		t.Fatalf("istek yazilamadi: %v", err)
+	}
+	response, err := http.ReadResponse(bufio.NewReader(conn), nil)
 	if err != nil {
-		t.Fatalf("istek basarisiz: %v", err)
+		t.Fatalf("cevap okunamadi: %v", err)
 	}
 	status, envelope := response.StatusCode, decode(t, response)
 
