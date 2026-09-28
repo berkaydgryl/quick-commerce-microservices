@@ -2,24 +2,20 @@ package catalog
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"net"
 	"net/url"
 	"testing"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"google.golang.org/grpc/test/bufconn"
 
 	catalogv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/catalog/v1"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/assets"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/testkit"
 )
 
 // stubServer, gercek gRPC sunucusunda calisan sahte katalog. Sahte istemci
@@ -42,7 +38,9 @@ func (s *stubServer) ListCategories(ctx context.Context, _ *catalogv1.ListCatego
 		}
 	}
 	if s.trailer != nil {
-		_ = grpc.SetTrailer(ctx, s.trailer)
+		if err := grpc.SetTrailer(ctx, s.trailer); err != nil {
+			return nil, err
+		}
 	}
 	if s.err != nil {
 		return nil, s.err
@@ -55,28 +53,13 @@ const (
 	testAssetBase = "https://cdn.example"
 )
 
-// startStub, bellek ici baglantida sunucuyu kurar ve adaptoru dondurur.
-// Her sahte katalog sunucusunu kabul eder (kategori ve pazaryeri testleri).
+// startStub, sahte katalogu bellek ici gRPC sunucusunda kurar ve adaptoru
+// dondurur. Her sahte katalog sunucusunu kabul eder (kategori ve pazaryeri testleri).
 func startStub(t *testing.T, stub catalogv1.CatalogServiceServer) *Service {
 	t.Helper()
-
-	listener := bufconn.Listen(1 << 20)
-	server := grpc.NewServer()
-	catalogv1.RegisterCatalogServiceServer(server, stub)
-	go func() { _ = server.Serve(listener) }()
-	t.Cleanup(server.Stop)
-
-	conn, err := grpc.NewClient("passthrough:///bufnet",
-		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
-			return listener.DialContext(ctx)
-		}),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		t.Fatalf("istemci kurulamadi: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-
+	conn := testkit.BufconnClient(t, func(server *grpc.Server) {
+		catalogv1.RegisterCatalogServiceServer(server, stub)
+	})
 	return New(catalogv1.NewCatalogServiceClient(conn), testTimeout, testResolver(t))
 }
 
@@ -91,15 +74,6 @@ func testResolver(t *testing.T) assets.Resolver {
 	return assets.NewResolver(base)
 }
 
-func appErrorOf(t *testing.T, err error) *apperror.Error {
-	t.Helper()
-	var appErr *apperror.Error
-	if !errors.As(err, &appErr) {
-		t.Fatalf("*apperror.Error bekleniyordu, %T geldi: %v", err, err)
-	}
-	return appErr
-}
-
 func TestListCategoriesMapsFields(t *testing.T) {
 	service := startStub(t, &stubServer{categories: []*catalogv1.Category{
 		// Veri GORELI yol tasir (catalog seed'i boyle yazar); cevaba mutlak gider.
@@ -112,11 +86,11 @@ func TestListCategoriesMapsFields(t *testing.T) {
 		t.Fatalf("hata beklenmiyordu: %v", err)
 	}
 
-	encoded, _ := json.Marshal(list)
+	encoded := testkit.JSON(t, list)
 	// Bos imageUrl HIC yazilmamali (sozlesmede url() dogrulamasi var); alan
 	// adlari camelCase olmali.
 	want := `{"items":[{"id":"cat_1","name":"Süt","slug":"sut","imageUrl":"https://cdn.example/img/cat/sut.png","sortOrder":1},{"id":"cat_2","name":"Manav","slug":"manav","sortOrder":2}]}`
-	if string(encoded) != want {
+	if encoded != want {
 		t.Errorf("JSON:\n got %s\nwant %s", encoded, want)
 	}
 }
@@ -128,7 +102,7 @@ func TestListCategoriesEmptyIsArrayNotNull(t *testing.T) {
 	if err != nil {
 		t.Fatalf("hata beklenmiyordu: %v", err)
 	}
-	if encoded, _ := json.Marshal(list); string(encoded) != `{"items":[]}` {
+	if encoded := testkit.JSON(t, list); encoded != `{"items":[]}` {
 		t.Errorf("bos liste [] olmali, %s geldi", encoded)
 	}
 }
@@ -143,7 +117,7 @@ func TestListCategoriesReadsAppErrorTrailer(t *testing.T) {
 
 	_, err := service.ListCategories(context.Background())
 
-	appErr := appErrorOf(t, err)
+	appErr := testkit.AppErrorOf(t, err)
 	if appErr.Code != apperror.CodeNoStore {
 		t.Errorf("NO_STORE bekleniyordu, %s geldi", appErr.Code)
 	}
@@ -158,7 +132,7 @@ func TestListCategoriesFallsBackToStatusCode(t *testing.T) {
 
 	_, err := service.ListCategories(context.Background())
 
-	if code := appErrorOf(t, err).Code; code != apperror.CodeServiceUnavailable {
+	if code := testkit.AppErrorOf(t, err).Code; code != apperror.CodeServiceUnavailable {
 		t.Errorf("SERVICE_UNAVAILABLE bekleniyordu, %s geldi", code)
 	}
 }
@@ -173,7 +147,7 @@ func TestListCategoriesAppliesTimeout(t *testing.T) {
 	if elapsed := time.Since(startedAt); elapsed > 3*testTimeout {
 		t.Errorf("zaman asimi uygulanmadi, %v surdu", elapsed)
 	}
-	if code := appErrorOf(t, err).Code; code != apperror.CodeServiceUnavailable {
+	if code := testkit.AppErrorOf(t, err).Code; code != apperror.CodeServiceUnavailable {
 		t.Errorf("DeadlineExceeded SERVICE_UNAVAILABLE olmali, %s geldi", code)
 	}
 }

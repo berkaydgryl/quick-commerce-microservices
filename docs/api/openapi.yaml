@@ -26,6 +26,9 @@ info:
       için bu başlığı istemez.
     * **İzleme**: her cevapta `X-Request-Id` başlığı bulunur; hata gövdesindeki
       `error.requestId` ile aynı değerdir ve log/trace kayıtlarıyla eşleşir.
+      Biçim `req_` + 32 küçük onaltılık karakterdir. İstemci bu biçimde kendi
+      kimliğini gönderebilir, gönderdiği korunur; biçim dışı değer yok sayılır
+      ve gateway yenisini üretir.
   license:
     name: MIT
   contact:
@@ -99,7 +102,7 @@ paths:
                       details:
                         fieldErrors:
                           password: "En az 8 karakter olmalı."
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
                 idempotencyKeyRequired:
                   summary: VALIDATION_FAILED
                   value:
@@ -108,7 +111,7 @@ paths:
                       code: VALIDATION_FAILED
                       message: "Idempotency-Key başlığı zorunludur."
                       details: null
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "409":
           description: Telefon numarası kayıtlı ya da anahtar farklı gövdeyle tekrar kullanıldı
           content:
@@ -125,7 +128,7 @@ paths:
                       message: "Bu telefon numarasıyla kayıtlı bir hesap var."
                       details:
                         phone: "+905321234567"
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
                 idempotencyKeyReused:
                   summary: REQUEST_IN_PROGRESS
                   value:
@@ -135,7 +138,7 @@ paths:
                       message: "Aynı Idempotency-Key farklı bir gövde ile kullanıldı."
                       details:
                         idempotencyKey: "4f1c3a2b-9d8e-4b7a-8c6d-5e4f3a2b1c0d"
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "429":
           $ref: "#/components/responses/RateLimited"
 
@@ -186,7 +189,7 @@ paths:
                       details:
                         fieldErrors:
                           phone: "Telefon +90 ile başlayan 13 haneli olmalı."
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "401":
           description: Kimlik bilgileri hatalı
           content:
@@ -202,7 +205,7 @@ paths:
                       code: UNAUTHORIZED
                       message: "Telefon numarası veya parola hatalı."
                       details: null
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "429":
           $ref: "#/components/responses/RateLimited"
 
@@ -257,7 +260,7 @@ paths:
                       message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
                       details:
                         categoryID: "bu uc bu parametreyi kabul etmiyor"
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "429":
           $ref: "#/components/responses/RateLimited"
         "503":
@@ -518,7 +521,7 @@ paths:
                       message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
                       details:
                         Idempotency-Key: zorunlu
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
                 unknownField:
                   summary: VALIDATION_FAILED (sözleşmede olmayan alan)
                   value:
@@ -528,7 +531,7 @@ paths:
                       message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
                       details:
                         title: bu uc bu alani kabul etmiyor
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
                 unavailableProducts:
                   summary: VALIDATION_FAILED (markette satışta değil)
                   value:
@@ -538,7 +541,7 @@ paths:
                       message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
                       details:
                         unavailableProductIds: ["prd_yok"]
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
@@ -568,7 +571,7 @@ paths:
                         expectedTotalMinor: 19000
                         totalMinor: 19360
                         currency: TRY
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "422":
           description: Kupon uygulanamadı ya da minimum sepet tutarına ulaşılmadı
           content:
@@ -586,7 +589,7 @@ paths:
                       details:
                         couponCode: ILK10
                         reason: NOT_FIRST_ORDER
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
                 minBasketNotMet:
                   summary: MIN_BASKET_NOT_MET
                   value:
@@ -597,7 +600,7 @@ paths:
                       details:
                         amountToMinBasketMinor: 4000
                         minBasketMinor: 5000
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "429":
           $ref: "#/components/responses/RateLimited"
         "503":
@@ -641,7 +644,7 @@ paths:
                       code: VALIDATION_FAILED
                       message: "Idempotency-Key başlığı zorunludur."
                       details: null
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
@@ -659,7 +662,7 @@ paths:
                       code: FORBIDDEN
                       message: "Bu rezervasyon size ait değil."
                       details: null
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "404":
           description: Rezervasyon yok
           content:
@@ -676,7 +679,7 @@ paths:
                       message: "Rezervasyon bulunamadı."
                       details:
                         orderId: "ord_db77f4c0e24f49919cc1d78a649c9c94"
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "409":
           description: Rezervasyon zaten kapanmış
           content:
@@ -693,7 +696,7 @@ paths:
                       message: "Rezervasyon daha önce serbest bırakıldı."
                       details:
                         releasedAt: "2026-09-20T18:31:05.000Z"
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
                 expired:
                   summary: RESERVATION_EXPIRED
                   value:
@@ -703,7 +706,7 @@ paths:
                       message: "Rezervasyon süresi dolmuş, stok geri verildi."
                       details:
                         expiredAt: "2026-09-20T18:30:00.000Z"
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
                 orderStateInvalid:
                   summary: ORDER_STATE_INVALID
                   value:
@@ -713,7 +716,7 @@ paths:
                       message: "Ödemesi alınmış siparişin rezervasyonu iptal edilemez."
                       details:
                         status: PAID
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
 
   /v1/orders:
     post:
@@ -800,7 +803,7 @@ paths:
                       message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
                       details:
                         payment.method: CARD olmali
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "402":
@@ -822,7 +825,7 @@ paths:
                       details:
                         orderId: "ord_db77f4c0e24f49919cc1d78a649c9c94"
                         status: PAYMENT_FAILED
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "403":
           description: |
             Risk kritik (CRITICAL): sipariş `REJECTED` durumunda (`RISK_BLOCKED`).
@@ -854,7 +857,7 @@ paths:
                         orderId: "ord_db77f4c0e24f49919cc1d78a649c9c94"
                         from: CANCELLED
                         to: RISK_CHECK
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "429":
           $ref: "#/components/responses/RateLimited"
         "503":
@@ -913,7 +916,7 @@ paths:
                       message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
                       details:
                         otp: 6 haneli kod olmali
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "402":
@@ -933,7 +936,7 @@ paths:
                       details:
                         attemptsLeft: 1
                         reason: wrong_code
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
                 exhausted:
                   summary: THREEDS_FAILED (hak bitti, sipariş PAYMENT_FAILED)
                   value:
@@ -944,7 +947,7 @@ paths:
                       details:
                         attemptsLeft: 0
                         reason: attempts_exhausted
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "404":
           $ref: "#/components/responses/OrderNotFound"
         "409":
@@ -1037,7 +1040,7 @@ paths:
                       message: "Bu sipariş odası için jeton alamazsınız."
                       details:
                         room: "order:ord_db77f4c0e24f49919cc1d78a649c9c94"
-                      requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "404":
           $ref: "#/components/responses/OrderNotFound"
 
@@ -1060,9 +1063,13 @@ components:
 
   headers:
     XRequestId:
-      description: İsteği log ve trace kayıtlarıyla eşleyen kimlik.
+      description: |
+        İsteği log ve trace kayıtlarıyla eşleyen kimlik. İstemci aynı biçimde
+        gönderirse korunur; göndermezse ya da biçim dışıysa gateway üretir.
       schema:
         type: string
+        pattern: "^req_[0-9a-f]{32}$"
+        example: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
 
   parameters:
     IdempotencyKey:
@@ -1144,7 +1151,7 @@ components:
                   code: UNAUTHORIZED
                   message: "Oturumun sona ermiş. Tekrar giriş yapman gerekiyor."
                   details: null
-                  requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                  requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
             demoUserInvalid:
               summary: UNAUTHORIZED (geliştirme kimliği biçimsiz)
               value:
@@ -1154,7 +1161,7 @@ components:
                   message: "Oturumun sona ermiş. Tekrar giriş yapman gerekiyor."
                   details:
                     X-User-Id: gecerli bir kullanici kimligi olmali (usr_...)
-                  requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                  requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
 
     OrderNotFound:
       description: Sipariş bulunamadı
@@ -1172,7 +1179,7 @@ components:
                   message: "Sipariş bulunamadı."
                   details:
                     orderId: "ord_db77f4c0e24f49919cc1d78a649c9c94"
-                  requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                  requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
 
     RateLimited:
       description: İstek hızı sınırı aşıldı
@@ -1195,7 +1202,7 @@ components:
                   message: "Çok fazla istek gönderdiniz."
                   details:
                     retryAfterSeconds: 30
-                  requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                  requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
 
     ServiceUnavailable:
       description: |
@@ -1213,7 +1220,7 @@ components:
                 error:
                   code: SERVICE_UNAVAILABLE
                   message: "Servise şu an ulaşamıyoruz. Birazdan tekrar dene."
-                  requestId: "01J8Z3K9Q7F2M4N6P8R0S2T4V6"
+                  requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
 
   schemas:
     # --- Zarf ---------------------------------------------------------------
@@ -1262,7 +1269,8 @@ components:
           additionalProperties: true
         requestId:
           type: string
-          description: X-Request-Id başlığı ile aynı değer.
+          pattern: "^req_[0-9a-f]{32}$"
+          description: X-Request-Id başlığı ile aynı değer (`req_` + 32 küçük onaltılık karakter).
 
     ResponseMeta:
       type: object

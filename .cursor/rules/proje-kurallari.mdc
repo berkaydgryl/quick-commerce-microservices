@@ -122,6 +122,11 @@ Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicid
   sizintisini onlemek icin timeout/cancel kurulur.
 - Boyutu bilinen dilimler `make([]T, 0, kapasite)` ile acilir.
 - Arayuz KULLANAN tarafta tanimlanir ve kucuk tutulur (tek metotlu arayuz tercih edilir).
+- Bu kurallar CI'da golangci-lint ile denetlenir (`apps/gateway/.golangci.yml`: `errcheck`
+  `check-blank` ile, `noctx`, `bodyclose`; D8). Gercekten gerekceli istisna satirinda
+  `//nolint:<denetleyici> // <gerekce>` ile yazilir; gerekcesiz nolint de bulgudur.
+- Testler de ayni kurallara tabidir: ag cagrisi testin baglamiyla (`t.Context()`) yapilir.
+  Birden fazla paketin testinde gereken yardimci `internal/testkit`'te durur, kopyalanmaz.
 
 ## API ve gRPC
 
@@ -212,6 +217,9 @@ Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicid
 - Korelasyon kimligi (`x-request-id`) her cagrida tasinir; gelmezse uretilir ve gunluge
   yazilir (`service-kit/src/grpc/context.ts`). Servisler arasi cagrida ayni deger
   GECIRILIR, yenisi uretilmez.
+- Kimlik bicimi `req_` + 32 kucuk onaltilik karakterdir (`@getir/core` `id.ts`). Gateway
+  disaridan gelen kimligi YALNIZCA bu bicimdeyse kabul eder, degilse yenisini uretir (D8):
+  kabul edilen deger her servisin gunlugune yazilir.
 - Metrik ucu servis portu + 1000'dedir (roadmap port haritasi).
 
 ## Test
@@ -222,6 +230,9 @@ Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicid
   port olarak 0 verilip isletim sisteminin sectigi bos port kullanilir.
 - Yalnizca mutlu yol degil; sinir kosullari ve hata yollari da test edilir (bos liste, yetkisiz
   erisim, gecersiz gecis, sure asimi).
+- Gercek TCP kullanan test Mac'te gecip Linux'ta (CI) ara sira dusebilir (T7.5: okunmamis
+  veriyle kapanan baglanti RST alir). Boyle testte sunucunun okumayacagi veri gonderilmez ve
+  test CI'a gitmeden Linux'ta `-count` ile zorlanir (golang:1.25 container, 1-2 cekirdek).
 
 ## Frontend, tasarim sistemi ve CSS
 

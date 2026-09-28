@@ -13,7 +13,7 @@ package httpapi
 //   params.go     - sorgu parametresinin tipine cevrilmesi
 //   middleware.go - istek gunlugu
 //   errors.go     - hata -> zarf cevirisi
-//   requestid.go  - korelasyon kimligi (baslik, gRPC metadata'si)
+//   requestid.go  - korelasyon kimligi (bicim, baslik, gRPC metadata'si)
 //   query.go      - sorgu parametresi dogrulamasi
 //   response.go   - cevap zarfi
 //   json.go       - JSON kodlayici
@@ -23,7 +23,6 @@ import (
 	"log/slog"
 
 	"github.com/gofiber/fiber/v3"
-	"github.com/gofiber/fiber/v3/middleware/requestid"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/catalog"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
@@ -118,7 +117,7 @@ func New(deps Deps) *fiber.App {
 		BodyLimit: maxBodyBytes,
 	})
 
-	app.Use(requestid.New(requestid.Config{Header: RequestIDHeader}))
+	app.Use(requestIDMiddleware)
 	app.Use(requestLogger(deps.Logger))
 
 	app.Get("/healthz", healthzHandler(deps.Health))

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -27,7 +28,8 @@ func discardLogger() *slog.Logger {
 // aldigi icin port 0 dogrudan verilemez (hangi porta baglandigi bilinemez).
 func freeAddr(t *testing.T) string {
 	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	var config net.ListenConfig
+	listener, err := config.Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("bos port alinamadi: %v", err)
 	}
@@ -40,9 +42,10 @@ func freeAddr(t *testing.T) string {
 
 func waitUntilListening(t *testing.T, addr string) {
 	t.Helper()
+	var dialer net.Dialer
 	deadline := time.Now().Add(startupWait)
 	for time.Now().Before(deadline) {
-		conn, err := net.Dial("tcp", addr)
+		conn, err := dialer.DialContext(t.Context(), "tcp", addr)
 		if err == nil {
 			if closeErr := conn.Close(); closeErr != nil {
 				t.Fatalf("deneme baglantisi kapatilamadi: %v", closeErr)
@@ -52,6 +55,28 @@ func waitUntilListening(t *testing.T, addr string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("sunucu %s icinde dinlemeye baslamadi", startupWait)
+}
+
+// fetchResult, test goroutine'i disinda yapilan istegin sonucu.
+type fetchResult struct {
+	body string
+	err  error
+}
+
+// fetch, GET istegini yapar ve govdeyi okur. Test goroutine'i disinda calistigi
+// icin t.Fatal cagiramaz; hatayi (okuma ve kapatma dahil) sonuca yazar.
+func fetch(ctx context.Context, url string) fetchResult {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fetchResult{err: err}
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return fetchResult{err: err}
+	}
+	body, readErr := io.ReadAll(response.Body)
+	closeErr := response.Body.Close()
+	return fetchResult{body: string(body), err: errors.Join(readErr, closeErr)}
 }
 
 func TestServeWaitsForInFlightRequestOnShutdown(t *testing.T) {
@@ -67,21 +92,8 @@ func TestServeWaitsForInFlightRequestOnShutdown(t *testing.T) {
 	go func() { served <- serve(ctx, app, addr, testShutdownTimeout, discardLogger()) }()
 	waitUntilListening(t, addr)
 
-	type result struct {
-		body string
-		err  error
-	}
-	responses := make(chan result, 1)
-	go func() {
-		response, err := http.Get("http://" + addr + "/slow")
-		if err != nil {
-			responses <- result{err: err}
-			return
-		}
-		defer response.Body.Close()
-		body, err := io.ReadAll(response.Body)
-		responses <- result{body: string(body), err: err}
-	}()
+	responses := make(chan fetchResult, 1)
+	go func() { responses <- fetch(t.Context(), "http://"+addr+"/slow") }()
 
 	// Istek yoldayken kapanis sinyali: istek yarida kesilmemeli.
 	time.Sleep(slowHandlerDelay / 3)
@@ -101,11 +113,16 @@ func TestServeWaitsForInFlightRequestOnShutdown(t *testing.T) {
 
 func TestServeWrapsListenErrorWithAddress(t *testing.T) {
 	// Port dolu: dinleme hatasi hangi adreste oldugunu soylemeli.
-	occupied, err := net.Listen("tcp", "127.0.0.1:0")
+	var config net.ListenConfig
+	occupied, err := config.Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("port alinamadi: %v", err)
 	}
-	defer occupied.Close()
+	t.Cleanup(func() {
+		if closeErr := occupied.Close(); closeErr != nil {
+			t.Errorf("dolu port birakilamadi: %v", closeErr)
+		}
+	})
 	addr := occupied.Addr().String()
 
 	err = serve(context.Background(), fiber.New(), addr, testShutdownTimeout, discardLogger())

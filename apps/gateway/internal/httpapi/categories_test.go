@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -40,8 +39,8 @@ func TestListCategoriesReturnsItems(t *testing.T) {
 	}}}
 	app := New(appWith(lister))
 
-	request := httptest.NewRequest(http.MethodGet, "/v1/categories", nil)
-	request.Header.Set(RequestIDHeader, "req_kategori")
+	request := newRequest(t, http.MethodGet, "/v1/categories", nil)
+	request.Header.Set(RequestIDHeader, testRequestID)
 	response, err := app.Test(request)
 	if err != nil {
 		t.Fatalf("istek basarisiz: %v", err)
@@ -56,8 +55,11 @@ func TestListCategoriesReturnsItems(t *testing.T) {
 
 	// Korelasyon kimligi servise metadata olarak gitmeli; yoksa servis gunlugu
 	// gateway gunluguyle eslesmez.
-	outgoing, _ := metadata.FromOutgoingContext(lister.ctx)
-	if got := outgoing.Get(requestIDMetadataKey); len(got) != 1 || got[0] != "req_kategori" {
+	outgoing, found := metadata.FromOutgoingContext(lister.ctx)
+	if !found {
+		t.Fatal("servise giden baglamda metadata yok")
+	}
+	if got := outgoing.Get(requestIDMetadataKey); len(got) != 1 || got[0] != testRequestID {
 		t.Errorf("x-request-id servise tasinmadi: %v", got)
 	}
 }
@@ -67,7 +69,7 @@ func TestListCategoriesRejectsUnknownQuery(t *testing.T) {
 	lister := &fakeLister{}
 	app := New(appWith(lister))
 
-	response, err := app.Test(httptest.NewRequest(http.MethodGet, "/v1/categories?categoryID=cat_1", nil))
+	response, err := app.Test(newRequest(t, http.MethodGet, "/v1/categories?categoryID=cat_1", nil))
 	if err != nil {
 		t.Fatalf("istek basarisiz: %v", err)
 	}
@@ -96,7 +98,7 @@ func TestListCategoriesMapsServiceError(t *testing.T) {
 	lister := &fakeLister{err: &apperror.Error{Code: apperror.CodeServiceUnavailable, Cause: errors.New("katalog kapali")}}
 	app := New(appWith(lister))
 
-	response, err := app.Test(httptest.NewRequest(http.MethodGet, "/v1/categories", nil))
+	response, err := app.Test(newRequest(t, http.MethodGet, "/v1/categories", nil))
 	if err != nil {
 		t.Fatalf("istek basarisiz: %v", err)
 	}
@@ -118,7 +120,7 @@ func TestUnexpectedErrorBecomesInternal(t *testing.T) {
 	lister := &fakeLister{err: errors.New("beklenmeyen")}
 	app := New(appWith(lister))
 
-	response, err := app.Test(httptest.NewRequest(http.MethodGet, "/v1/categories", nil))
+	response, err := app.Test(newRequest(t, http.MethodGet, "/v1/categories", nil))
 	if err != nil {
 		t.Fatalf("istek basarisiz: %v", err)
 	}
@@ -135,13 +137,15 @@ func TestJSONDoesNotEscapeHTML(t *testing.T) {
 	lister := &fakeLister{list: catalog.CategoryList{Items: []catalog.Category{{ID: "cat_1", Name: "Süt & Kahvaltılık", Slug: "sut"}}}}
 	app := New(appWith(lister))
 
-	response, err := app.Test(httptest.NewRequest(http.MethodGet, "/v1/categories", nil))
+	response, err := app.Test(newRequest(t, http.MethodGet, "/v1/categories", nil))
 	if err != nil {
 		t.Fatalf("istek basarisiz: %v", err)
 	}
-	defer func() { _ = response.Body.Close() }()
-
-	body, _ := io.ReadAll(response.Body)
+	body, readErr := io.ReadAll(response.Body)
+	closeBody(t, response)
+	if readErr != nil {
+		t.Fatalf("cevap govdesi okunamadi: %v", readErr)
+	}
 	if !strings.Contains(string(body), "Süt & Kahvaltılık") {
 		t.Errorf("& kacislanmamali: %s", body)
 	}

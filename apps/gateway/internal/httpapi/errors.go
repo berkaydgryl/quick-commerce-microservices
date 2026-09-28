@@ -19,6 +19,7 @@ import (
 func errorHandler(logger *slog.Logger) fiber.ErrorHandler {
 	return func(c fiber.Ctx, err error) error {
 		appErr := toAppError(err)
+		requestID := ensureRequestID(c)
 
 		// 4xx istemcinin hatasidir, gateway'in degil: ERROR seviyesi alarm
 		// gurultusu uretirdi.
@@ -29,7 +30,7 @@ func errorHandler(logger *slog.Logger) fiber.ErrorHandler {
 		logger.Log(c.Context(), level, "istek hatayla dondu",
 			slog.String("path", c.Path()),
 			slog.String("code", string(appErr.Code)),
-			slog.String("requestId", requestIDOf(c)),
+			slog.String("requestId", requestID),
 			slog.Any("err", err),
 		)
 
