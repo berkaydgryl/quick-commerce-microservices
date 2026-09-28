@@ -1,27 +1,22 @@
 /**
- * Testler icin kucuk bir gRPC istemcisi.
+ * service-kit'in kendi testleri icin gRPC istemci yardimcilari.
  *
- * NEDEN loadPackageDefinition'in urettigi hazir istemci KULLANILMIYOR: o nesne
- * `[methodName: string]: Function` index imzasi tasir; tip bilgisi `any`
- * uzerinden akar ve projenin tip bilgili eslint kurallari (no-unsafe-call,
- * no-unsafe-assignment) hakli olarak kirilir. Burada sozlesmeden gelen
- * serialize/deserialize fonksiyonlari dogrudan kullanilarak tipli bir cagri
- * yuzeyi kuruluyor.
+ * Buradaki servis tanimlari (health, ornek echo) ts-proto ile uretilmez,
+ * proto dosyasindan yuklenir (loadServiceDefinition); bu yuzden metotlar ADLA
+ * bulunur. Tipli unary cagrinin kendisi ortak yardimcidan gelir
+ * (@getir/service-kit/testing, D5).
  */
 
-import { Metadata } from '@grpc/grpc-js';
 import type {
   Client,
   ClientReadableStream,
+  Metadata,
   MethodDefinition,
   ServiceDefinition,
 } from '@grpc/grpc-js';
 
-/** Cagri sonucu: hata da deger de tipli olarak geri gelir. */
-export interface UnaryResult<TResponse> {
-  readonly error: Error | undefined;
-  readonly response: TResponse | undefined;
-}
+import { unaryCall } from '../../../src/testing/index.js';
+import type { CallResult } from '../../../src/testing/index.js';
 
 function methodOf<TRequest, TResponse>(
   definition: ServiceDefinition,
@@ -34,27 +29,15 @@ function methodOf<TRequest, TResponse>(
   return entry;
 }
 
-/** Tek seferlik (unary) cagri. Hata firlatmaz; hatayi sonucta dondurur. */
-export function unaryCall<TRequest, TResponse>(
+/** Adi verilen unary RPC'yi cagirir. Hata firlatmaz; hatayi sonucta dondurur. */
+export function callByName<TRequest, TResponse>(
   client: Client,
   definition: ServiceDefinition,
   method: string,
   request: TRequest,
-  metadata: Metadata = new Metadata(),
-): Promise<UnaryResult<TResponse>> {
-  const entry = methodOf<TRequest, TResponse>(definition, method);
-  return new Promise((resolve) => {
-    client.makeUnaryRequest(
-      entry.path,
-      entry.requestSerialize,
-      entry.responseDeserialize,
-      request,
-      metadata,
-      (error, response) => {
-        resolve({ error: error ?? undefined, response: response ?? undefined });
-      },
-    );
-  });
+  metadata?: Metadata,
+): Promise<CallResult<TResponse>> {
+  return unaryCall(client, methodOf<TRequest, TResponse>(definition, method), request, metadata);
 }
 
 /** Sunucu akisi (server streaming) cagrisi. */

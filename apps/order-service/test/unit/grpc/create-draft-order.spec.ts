@@ -8,7 +8,7 @@ import { orderV1 } from '@getir/proto';
 import { describe, expect, it } from 'vitest';
 
 import { FakeCatalogPricing } from '../../support/fake-catalog-pricing.js';
-import { appErrorOf } from '../../support/grpc-error.js';
+import { appErrorOf } from '@getir/service-kit/testing';
 import { DRAFT_TOTAL_MINOR, draftRequest } from '../../support/order-fixtures.js';
 import { useOrderGrpcServer } from '../../support/order-grpc-harness.js';
 

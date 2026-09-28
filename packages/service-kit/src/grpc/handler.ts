@@ -17,22 +17,22 @@
  * okunabilir kalmasi.
  */
 
-import { AppError, isAppError } from '@getir/core';
+import { isAppError } from '@getir/core';
 import { status as GrpcStatus } from '@grpc/grpc-js';
 import type { handleUnaryCall, sendUnaryData, ServerUnaryCall } from '@grpc/grpc-js';
-import type { z } from 'zod';
 
 import type { Logger } from '../logger.js';
 import { silentLogger } from '../logger.js';
 import type { HandlerContext } from './context.js';
 import { requestIdFrom } from './context.js';
+import { parseRequest } from './request.js';
+import type { RequestSchema } from './request.js';
 import { toServiceError } from './status.js';
+
+export type { RequestSchema } from './request.js';
 
 /** hrtime nanosaniye doner; gunluge milisaniye yaziyoruz. */
 const NANOSECONDS_PER_MS = 1_000_000;
-
-/** Ham gRPC mesajini alip tipli girdi ureten sema. */
-export type RequestSchema<TInput> = z.ZodType<TInput, z.ZodTypeDef, unknown>;
 
 export interface UnaryHandlerOptions<TInput, TResponse> {
   /** RPC adi; yalnizca gunluk alani olarak kullanilir (orn. "ListProducts"). */
@@ -98,27 +98,4 @@ export function unaryHandler<TInput, TResponse>(
 /** hrtime araligini milisaniyeye cevirir (gunluk alani: durationMs). */
 function elapsedMs(startedAt: bigint): number {
   return Number(process.hrtime.bigint() - startedAt) / NANOSECONDS_PER_MS;
-}
-
-/** Semayi uygular; basarisizsa alan listesini tasiyan bir AppError firlatir. */
-function parseRequest<TInput>(
-  schema: RequestSchema<TInput>,
-  request: unknown,
-  requestId: string,
-): TInput {
-  const result = schema.safeParse(request);
-  if (result.success) {
-    return result.data;
-  }
-
-  // Ayrintiyi string->string tutuyoruz: getir.common.v1.ErrorDetail.metadata
-  // ayni bicimde ve gateway bunu REST zarfindaki `error.details` alanina
-  // oldugu gibi gecirebiliyor.
-  const details: Record<string, string> = {};
-  for (const issue of result.error.issues) {
-    const field = issue.path.length > 0 ? issue.path.join('.') : '(kok)';
-    details[field] = issue.message;
-  }
-
-  throw AppError.validation('Gecersiz istek', { details, requestId });
 }

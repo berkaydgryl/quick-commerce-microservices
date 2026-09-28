@@ -31,6 +31,7 @@
     "baseUrl": ".",
     "paths": {
       "@getir/core": ["packages/core/src/index.ts"],
+      "@getir/core/testing": ["packages/core/src/testing/index.ts"],
       "@getir/contracts": ["packages/contracts/src/index.ts"],
       "@getir/proto": ["packages/proto/gen/ts/index.ts"],
       "@getir/pricing": ["packages/pricing/src/index.ts"],
@@ -39,6 +40,7 @@
       "@getir/event-bus": ["packages/event-bus/src/index.ts"],
       "@getir/observability": ["packages/observability/src/index.ts"],
       "@getir/service-kit": ["packages/service-kit/src/index.ts"],
+      "@getir/service-kit/testing": ["packages/service-kit/src/testing/index.ts"],
       "@getir/testing": ["packages/testing/src/index.ts"]
     }
   },

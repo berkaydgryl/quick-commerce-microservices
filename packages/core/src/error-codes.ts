@@ -57,6 +57,12 @@ export const ERROR_CODES = {
   THREEDS_REQUIRED: 'THREEDS_REQUIRED',
   /** Bagimli bir servis su an cevap veremiyor (gecici). */
   SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
+  /**
+   * Sozlesmede tanimli ama henuz yazilmamis (ya da kullanimdan kalkmis) uc
+   * (D5). Bir is hatasi degil, "bu uc bugun yok" gercegidir; mesaj hangi gorevde
+   * gelecegini ya da yerine neyin kullanilacagini soyler.
+   */
+  NOT_IMPLEMENTED: 'NOT_IMPLEMENTED',
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
@@ -75,6 +81,7 @@ export const HTTP_STATUS = {
   UNPROCESSABLE_ENTITY: 422,
   TOO_MANY_REQUESTS: 429,
   INTERNAL_SERVER_ERROR: 500,
+  NOT_IMPLEMENTED: 501,
   SERVICE_UNAVAILABLE: 503,
 } as const;
 
@@ -132,6 +139,7 @@ export const ERROR_CODE_HTTP_STATUS: Readonly<Record<ErrorCode, HttpStatus>> = {
   // 3DS gerekliligi bir "hata" degil, akisin devami: istemci /3ds adimina gider.
   [ERROR_CODES.THREEDS_REQUIRED]: HTTP_STATUS.PAYMENT_REQUIRED,
   [ERROR_CODES.SERVICE_UNAVAILABLE]: HTTP_STATUS.SERVICE_UNAVAILABLE,
+  [ERROR_CODES.NOT_IMPLEMENTED]: HTTP_STATUS.NOT_IMPLEMENTED,
 };
 
 /** Hata kodu -> gRPC durum kodu. */
@@ -159,6 +167,7 @@ export const ERROR_CODE_GRPC_STATUS: Readonly<Record<ErrorCode, GrpcStatus>> = {
   [ERROR_CODES.ORDER_STATE_INVALID]: GRPC_STATUS.FAILED_PRECONDITION,
   [ERROR_CODES.THREEDS_REQUIRED]: GRPC_STATUS.FAILED_PRECONDITION,
   [ERROR_CODES.SERVICE_UNAVAILABLE]: GRPC_STATUS.UNAVAILABLE,
+  [ERROR_CODES.NOT_IMPLEMENTED]: GRPC_STATUS.UNIMPLEMENTED,
 };
 
 /** Hata kodunun HTTP karsiligi. */

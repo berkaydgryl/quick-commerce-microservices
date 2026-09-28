@@ -4,6 +4,8 @@
 
 import { AppError, ERROR_CODES, fixedClock, ID_PREFIX, isId, silentLogger } from '@getir/core';
 import type { Logger } from '@getir/core';
+import { recordingLogger } from '@getir/core/testing';
+import type { LogLine } from '@getir/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createCharge } from '../../src/application/charge.js';
@@ -45,20 +47,6 @@ function build(
     challengeTtlMs: THREEDS_CHALLENGE_TTL_MS,
   });
   return (input) => useCase(input, logger);
-}
-
-/** Yalnizca error cagrilarini kaydeden gunlukcu. */
-function recordingLogger(): { logger: Logger; error: ReturnType<typeof vi.fn> } {
-  const error = vi.fn();
-  const logger: Logger = {
-    debug: () => undefined,
-    info: () => undefined,
-    warn: () => undefined,
-    error,
-    fatal: () => undefined,
-    child: () => logger,
-  };
-  return { logger, error };
 }
 
 beforeEach(() => {
@@ -216,16 +204,18 @@ describe('Charge - saglayici hatasi', () => {
   it('hata, CAGRININ gunlukcusune (requestId bagli) siparis kimligiyle yazilir', async () => {
     // Handler ctx.logger'i gecer; use-case servis geneli bir gunlukcu tutmaz,
     // yoksa bu satirda requestId olmaz ve hata hangi istege ait bulunamaz.
-    const { logger, error } = recordingLogger();
+    const lines: LogLine[] = [];
     const cause = new Error('baglanti koptu');
-    charge = build({ authorize: () => Promise.reject(cause) }, logger);
+    charge = build({ authorize: () => Promise.reject(cause) }, recordingLogger(lines));
 
     await charge(cardCharge());
 
-    expect(error).toHaveBeenCalledTimes(1);
-    expect(error).toHaveBeenCalledWith(
-      { err: cause, orderId: 'ord_1' },
-      'odeme saglayicisina ulasilamadi',
-    );
+    expect(lines.filter((line) => line.level === 'error')).toEqual([
+      {
+        level: 'error',
+        fields: { err: cause, orderId: 'ord_1' },
+        message: 'odeme saglayicisina ulasilamadi',
+      },
+    ]);
   });
 });

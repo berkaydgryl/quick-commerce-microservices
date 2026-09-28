@@ -6,7 +6,7 @@ import { ERROR_CODES, GRPC_STATUS } from '@getir/core';
 import { orderV1 } from '@getir/proto';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { appErrorOf } from '../../support/grpc-error.js';
+import { appErrorOf } from '@getir/service-kit/testing';
 import { draftRequest } from '../../support/order-fixtures.js';
 import { newDraftId, useOrderGrpcServer } from '../../support/order-grpc-harness.js';
 

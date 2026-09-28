@@ -11,10 +11,8 @@
 import { connectMongo } from '@getir/mongo-kit';
 import type { MongoConnection } from '@getir/mongo-kit';
 import { orderV1, paymentV1 } from '@getir/proto';
-import { startGrpcServer } from '@getir/service-kit';
-import type { GrpcServerHandle } from '@getir/service-kit';
-import { Client, credentials, Metadata } from '@grpc/grpc-js';
-import type { MethodDefinition, ServiceError } from '@grpc/grpc-js';
+import { startTestGrpcServer } from '@getir/service-kit/testing';
+import type { TestGrpcServer, UnaryCall } from '@getir/service-kit/testing';
 import { MongoDBContainer } from '@testcontainers/mongodb';
 import type { StartedMongoDBContainer } from '@testcontainers/mongodb';
 import type { Document } from 'mongodb';
@@ -36,7 +34,6 @@ import { describeOrderStoreContract } from '../support/order-store-contract.js';
 /** infra/docker/docker-compose.dev.yml ile ayni surum. */
 const MONGO_IMAGE = 'mongo:7';
 const DB_NAME = 'getir_order_test';
-const EPHEMERAL_PORT = 0;
 
 const explainSchema = z.object({ queryPlanner: z.object({ winningPlan: z.unknown() }) });
 
@@ -84,32 +81,16 @@ describe('indeks', () => {
 });
 
 describe('gRPC -> Mongo (T4.5 bitti sayilir: siparis Mongo da gorulur)', () => {
-  let handle: GrpcServerHandle;
-  let client: Client;
+  let server: TestGrpcServer | undefined;
 
-  function call<TRequest, TResponse>(
-    method: MethodDefinition<TRequest, TResponse>,
-    request: TRequest,
-  ): Promise<{ error: ServiceError | undefined; response: TResponse | undefined }> {
-    return new Promise((resolve) => {
-      client.makeUnaryRequest(
-        method.path,
-        method.requestSerialize,
-        method.responseDeserialize,
-        request,
-        new Metadata(),
-        (error, response) => {
-          resolve({ error: error ?? undefined, response: response ?? undefined });
-        },
-      );
-    });
-  }
+  const call: UnaryCall = (method, request, metadata) =>
+    server === undefined
+      ? Promise.reject(new Error('test sunucusu henuz baslamadi'))
+      : server.call(method, request, metadata);
 
   beforeAll(async () => {
-    handle = await startGrpcServer({
+    server = await startTestGrpcServer({
       serviceName: 'order-int-test',
-      host: '127.0.0.1',
-      port: EPHEMERAL_PORT,
       services: [
         buildOrderService({
           store: { repository: store, history: store, outbox },
@@ -119,12 +100,10 @@ describe('gRPC -> Mongo (T4.5 bitti sayilir: siparis Mongo da gorulur)', () => {
         }),
       ],
     });
-    client = new Client(`127.0.0.1:${handle.port}`, credentials.createInsecure());
   });
 
   afterAll(async () => {
-    client?.close();
-    await handle?.shutdown('test bitti');
+    await server?.stop();
   });
 
   it('taslak -> odenmis siparis (saga, T7.1): belge orders koleksiyonunda, zaman cizelgesi, bant ve surumuyle', async () => {

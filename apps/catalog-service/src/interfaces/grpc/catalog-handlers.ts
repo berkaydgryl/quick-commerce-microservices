@@ -96,14 +96,22 @@ export function createCatalogImplementation(
 
     // DEPRECATED (ADR-15): sistem market atamaz, kullanici secer. Sozlesmede
     // duruyor (buf breaking), uygulamasi bilerek yok; mesaj yerini soyler.
-    resolveDarkStore: unimplemented('ResolveDarkStore', 'deprecated - ListNearbyMarkets kullanin'),
+    resolveDarkStore: unimplemented(
+      'ResolveDarkStore',
+      'deprecated - ListNearbyMarkets kullanin',
+      deps.logger,
+    ),
 
-    // Sozlesmede tanimli ama HENUZ UYGULANMAMIS RPC'ler; gerekce
-    // @getir/service-kit grpc/unimplemented.ts'te.
-    getProduct: unimplemented('GetProduct', 'T8.4'),
+    // Sozlesmede tanimli ama HENUZ UYGULANMAMIS RPC'ler: NOT_IMPLEMENTED (501),
+    // gerekce @getir/service-kit grpc/unimplemented.ts'te.
+    getProduct: unimplemented('GetProduct', 'T8.4', deps.logger),
     // Fiyatsiz urun okumasi: pazaryerinde (ADR-15) fiyat teklife ait oldugu icin
     // sepet dogrulamasi BatchGetOffers ile yapilir; bu RPC'yi kullanan yok.
-    batchGetProducts: unimplemented('BatchGetProducts', 'kullanan yok - BatchGetOffers kullanin'),
+    batchGetProducts: unimplemented(
+      'BatchGetProducts',
+      'kullanan yok - BatchGetOffers kullanin',
+      deps.logger,
+    ),
 
     batchGetOffers: unaryHandler({
       name: 'BatchGetOffers',

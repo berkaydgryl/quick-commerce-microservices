@@ -11,6 +11,12 @@ importers:
       '@eslint/js':
         specifier: ^9.9.0
         version: 9.39.5
+      '@getir/contracts':
+        specifier: workspace:*
+        version: link:packages/contracts
+      '@getir/core':
+        specifier: workspace:*
+        version: link:packages/core
       '@types/node':
         specifier: ^22.5.0
         version: 22.20.4

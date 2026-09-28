@@ -5,13 +5,13 @@
  * kurali yok; hata cevirisi ve gunlukleme service-kit'in ara katmanindadir.
  *
  * Charge (T5.1), Confirm3Ds (T5.2) ve Refund (T7.1, siparis saga'sinin
- * telafisi). GetPayment'i henuz cagiran yok; tanimlanmayan metoda grpc-js
- * UNIMPLEMENTED doner.
+ * telafisi). GetPayment'i henuz cagiran yok: unimplemented() standart hata
+ * yolundan NOT_IMPLEMENTED (501) doner (D5).
  */
 
 import type { Logger } from '@getir/core';
 import type { paymentV1 } from '@getir/proto';
-import { unaryHandler } from '@getir/service-kit';
+import { unaryHandler, unimplemented } from '@getir/service-kit';
 import type { UntypedServiceImplementation } from '@grpc/grpc-js';
 
 import type { Charge } from '../../application/charge.js';
@@ -62,5 +62,7 @@ export function createPaymentImplementation(
         return { payment: toProtoPayment(payment), alreadyRefunded };
       },
     }),
+
+    getPayment: unimplemented('GetPayment', 'cagiran yok', logger),
   };
 }

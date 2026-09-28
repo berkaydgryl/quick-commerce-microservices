@@ -11,8 +11,21 @@ import type { AppErrorJson, ErrorCode } from '@getir/core';
 import { AppError, ERROR_CODES, isErrorCode, toAppError } from '@getir/core';
 import { Metadata, status as GrpcStatus } from '@grpc/grpc-js';
 import type { ServiceError } from '@grpc/grpc-js';
+import { z } from 'zod';
 
 import { ERROR_METADATA_KEY, REQUEST_ID_METADATA_KEY } from '../config/constants.js';
+
+/**
+ * `x-app-error` yukunun semasi. Karsi servisten gelen metadata DIS VERIDIR:
+ * `as` ile zorlanmaz, semadan gecer (ADR-10, D5). Bilinmeyen kod ya da eksik
+ * mesaj yuku gecersiz kilar; o zaman durum kodundan devam edilir.
+ */
+const appErrorPayloadSchema = z.object({
+  code: z.string().refine(isErrorCode),
+  message: z.string(),
+  details: z.unknown().optional(),
+  requestId: z.string().optional(),
+});
 
 /** Hatanin uretildigi cagriya ait baglam. */
 export interface ErrorContext {
@@ -81,7 +94,7 @@ export function fromServiceError(error: unknown): AppError {
 
 /** Deger, gRPC istemcisinden gelen bir ServiceError mi? */
 export function isServiceError(value: unknown): value is ServiceError {
-  return value instanceof Error && typeof (value as Partial<ServiceError>).code === 'number';
+  return value instanceof Error && 'code' in value && typeof value.code === 'number';
 }
 
 /** Metadata icindeki `x-app-error` yukunu cozer; yoksa veya bozuksa undefined. */
@@ -99,20 +112,17 @@ function parseErrorMetadata(metadata: Metadata | undefined): AppErrorJson | unde
     return undefined;
   }
 
-  if (typeof decoded !== 'object' || decoded === null) {
+  const parsed = appErrorPayloadSchema.safeParse(decoded);
+  if (!parsed.success) {
     return undefined;
   }
-  const candidate = decoded as Record<string, unknown>;
-  if (!isErrorCode(candidate.code) || typeof candidate.message !== 'string') {
-    return undefined;
+  const { code, message, details, requestId } = parsed.data;
+  const json: AppErrorJson = { code, message };
+  if (details !== undefined) {
+    json.details = details;
   }
-
-  const json: AppErrorJson = { code: candidate.code, message: candidate.message };
-  if (candidate.details !== undefined) {
-    json.details = candidate.details;
-  }
-  if (typeof candidate.requestId === 'string') {
-    json.requestId = candidate.requestId;
+  if (requestId !== undefined) {
+    json.requestId = requestId;
   }
   return json;
 }
@@ -121,6 +131,8 @@ function parseErrorMetadata(metadata: Metadata | undefined): AppErrorJson | unde
  * gRPC status -> hata kodu (ters yon, yalnizca metadata yokken).
  * Eslemeyen her status INTERNAL'a duser: bilmedigimiz bir hatayi is hatasi
  * gibi gostermek, cagiran tarafta yanlis kullanici mesajina yol acar.
+ * Gateway'deki kopyasiyla (apps/gateway/internal/apperror/grpc.go codeForStatus)
+ * AYNI kalmalidir.
  */
 function errorCodeForStatus(code: GrpcStatus): ErrorCode {
   switch (code) {
@@ -138,6 +150,9 @@ function errorCodeForStatus(code: GrpcStatus): ErrorCode {
       return ERROR_CODES.CONFLICT;
     case GrpcStatus.RESOURCE_EXHAUSTED:
       return ERROR_CODES.RATE_LIMITED;
+    // Sozlesmede olan ama yazilmamis uc (D5): is hatasi degil, 501.
+    case GrpcStatus.UNIMPLEMENTED:
+      return ERROR_CODES.NOT_IMPLEMENTED;
     // Bagimli servis kapali, deadline doldu veya cagri iptal edildi: uclu de
     // "su an cevap alamadik" demektir ve yeniden denenebilir.
     case GrpcStatus.UNAVAILABLE:

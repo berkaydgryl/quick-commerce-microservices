@@ -1,12 +1,14 @@
 import { AppError, ERROR_CODES, GRPC_STATUS } from '@getir/core';
+import { recordingLogger } from '@getir/core/testing';
+import type { LogLine } from '@getir/core/testing';
 import { Metadata } from '@grpc/grpc-js';
 import type { handleUnaryCall, ServerUnaryCall, ServiceError } from '@grpc/grpc-js';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { ERROR_METADATA_KEY, REQUEST_ID_METADATA_KEY } from '../../src/config/constants.js';
+import { REQUEST_ID_METADATA_KEY } from '../../src/config/constants.js';
 import { unaryHandler } from '../../src/grpc/handler.js';
-import type { Logger } from '../../src/logger.js';
+import { appErrorOf } from '../../src/testing/index.js';
 
 const schema = z.object({
   sku: z.string().min(3),
@@ -38,26 +40,6 @@ function invoke<TResponse>(
   });
 }
 
-/** Cagrilari sayan sahte gunlukcu. */
-function spyLogger(): Logger & { calls: { level: string; fields: Record<string, unknown> }[] } {
-  const calls: { level: string; fields: Record<string, unknown> }[] = [];
-  const record =
-    (level: string) =>
-    (fields: Record<string, unknown>): void => {
-      calls.push({ level, fields });
-    };
-  const logger: Logger & { calls: typeof calls } = {
-    calls,
-    debug: record('debug'),
-    info: record('info'),
-    warn: record('warn'),
-    error: record('error'),
-    fatal: record('fatal'),
-    child: () => logger,
-  };
-  return logger;
-}
-
 describe('unaryHandler', () => {
   it("dogrulanmis girdiyi handler'a tipli olarak gecirir", async () => {
     const handle = vi.fn((_input: z.infer<typeof schema>) => ({ ok: true }));
@@ -80,13 +62,10 @@ describe('unaryHandler', () => {
     expect(handle).not.toHaveBeenCalled();
     expect(result.error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
 
-    const payload = JSON.parse(String(result.error?.metadata.get(ERROR_METADATA_KEY)[0])) as {
-      code: string;
-      details: Record<string, string>;
-    };
-    expect(payload.code).toBe(ERROR_CODES.VALIDATION_FAILED);
+    const payload = appErrorOf(result.error);
+    expect(payload?.code).toBe(ERROR_CODES.VALIDATION_FAILED);
     // Hangi alanin neden gecersiz oldugu tek tek listelenir.
-    expect(Object.keys(payload.details)).toEqual(['sku', 'quantity']);
+    expect(Object.keys(payload?.details ?? {})).toEqual(['sku', 'quantity']);
   });
 
   it('AppError kodunu koruyarak dondurur', async () => {
@@ -139,7 +118,8 @@ describe('unaryHandler', () => {
   });
 
   it('is hatasini warn, beklenmeyen hatayi error seviyesinde gunluge yazar', async () => {
-    const logger = spyLogger();
+    const lines: LogLine[] = [];
+    const logger = recordingLogger(lines);
     const business = unaryHandler({
       name: 'Reserve',
       schema,
@@ -160,6 +140,6 @@ describe('unaryHandler', () => {
     await invoke(business, { sku: 'SUT-1L', quantity: 1 });
     await invoke(unexpected, { sku: 'SUT-1L', quantity: 1 });
 
-    expect(logger.calls.map((call) => call.level)).toEqual(['warn', 'error']);
+    expect(lines.map((line) => line.level)).toEqual(['warn', 'error']);
   });
 });

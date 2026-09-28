@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { MIGROS_MODA } from '../../support/catalog-requests.js';
 import { useCatalogGrpcServer } from '../../support/catalog-grpc-harness.js';
 import { demoLocation, EXPECTED_NEARBY } from '../../support/demo-addresses.js';
-import { appErrorOf } from '../../support/grpc-error.js';
+import { appErrorOf } from '@getir/service-kit/testing';
 
 const call = useCatalogGrpcServer();
 

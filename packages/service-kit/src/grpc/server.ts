@@ -21,12 +21,15 @@ import {
 import { HealthRegistry } from '../health/registry.js';
 import { silentLogger } from '../logger.js';
 import { runGracefulShutdown } from './graceful-shutdown.js';
+import { routeGrpcJsLogs } from './grpc-logging.js';
 import { HealthGrpcService, healthServiceDefinition } from './health.js';
 import type { GrpcServerHandle, GrpcServerOptions } from './types.js';
 
 /** Sunucuyu kurar, portu acar ve health durumunu SERVING'e cevirir. */
 export async function startGrpcServer(options: GrpcServerOptions): Promise<GrpcServerHandle> {
   const logger = (options.logger ?? silentLogger).child({ service: options.serviceName });
+  // Portu acmadan ONCE: dolu porttaki grpc-js satiri da JSON olarak yazilsin (D5).
+  routeGrpcJsLogs(logger);
   const host = options.host ?? DEFAULT_GRPC_HOST;
   const shutdownTimeoutMs = options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS;
 

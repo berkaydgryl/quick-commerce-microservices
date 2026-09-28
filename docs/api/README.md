@@ -65,6 +65,7 @@ Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci 
 | 422  | `COUPON_INVALID`, `MIN_BASKET_NOT_MET`, `PAYMENT_METHOD_NOT_ALLOWED`                                                  |
 | 429  | `RATE_LIMITED`                                                                                                        |
 | 500  | `INTERNAL`                                                                                                            |
+| 501  | `NOT_IMPLEMENTED` (sözleşmede olan ama henüz yazılmamış uç, D5)                                                       |
 | 503  | `SERVICE_UNAVAILABLE`                                                                                                 |
 
 > Bu tablo elle bakim yapilan bir kopya degildir: kaynagi

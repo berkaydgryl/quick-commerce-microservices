@@ -1,5 +1,6 @@
 /**
- * Uctan uca kapi testleri icin gercek order gRPC sunucusu + gercek istemci.
+ * Uctan uca kapi testleri icin gercek order gRPC sunucusu + gercek istemci
+ * (@getir/service-kit/testing, D5).
  *
  * Cagiran spec dosyasinda beforeAll/afterAll kaydeder: her dosya KENDI
  * sunucusunu ve dolayisiyla kendi bellek deposunu alir; dosyalar birbirinin
@@ -7,10 +8,8 @@
  */
 
 import { orderV1 } from '@getir/proto';
-import { startGrpcServer } from '@getir/service-kit';
-import type { GrpcServerHandle } from '@getir/service-kit';
-import { Client, credentials, Metadata } from '@grpc/grpc-js';
-import type { MethodDefinition, ServiceError } from '@grpc/grpc-js';
+import { startTestGrpcServer } from '@getir/service-kit/testing';
+import type { TestGrpcServer, UnaryCall } from '@getir/service-kit/testing';
 import { afterAll, beforeAll } from 'vitest';
 
 import type { CatalogPricing } from '../../src/application/catalog-pricing.js';
@@ -21,18 +20,6 @@ import { FakeCatalogPricing } from './fake-catalog-pricing.js';
 import { FakePayments } from './fake-payments.js';
 import { FakeRiskAssessment } from './fake-risk-assessment.js';
 import { draftRequest } from './order-fixtures.js';
-
-const EPHEMERAL_PORT = 0;
-
-export interface CallResult<TResponse> {
-  readonly error: ServiceError | undefined;
-  readonly response: TResponse | undefined;
-}
-
-export type UnaryCall = <TRequest, TResponse>(
-  method: MethodDefinition<TRequest, TResponse>,
-  request: TRequest,
-) => Promise<CallResult<TResponse>>;
 
 /** Sunucunun dis bagimliliklari; verilmeyen sahtesiyle kurulur. */
 export interface OrderServerDeps {
@@ -50,41 +37,23 @@ export function useOrderGrpcServer(deps: OrderServerDeps = {}): UnaryCall {
   const catalog = deps.catalog ?? new FakeCatalogPricing();
   const risk = deps.risk ?? new FakeRiskAssessment();
   const payments = deps.payments ?? new FakePayments();
-  let handle: GrpcServerHandle | undefined;
-  let client: Client | undefined;
+  let server: TestGrpcServer | undefined;
 
   beforeAll(async () => {
-    handle = await startGrpcServer({
+    server = await startTestGrpcServer({
       serviceName: 'order-test',
-      host: '127.0.0.1',
-      port: EPHEMERAL_PORT,
       services: [buildOrderService({ catalog, risk, payments })],
     });
-    client = new Client(`127.0.0.1:${handle.port}`, credentials.createInsecure());
   });
 
   afterAll(async () => {
-    client?.close();
-    await handle?.shutdown('test bitti');
+    await server?.stop();
   });
 
-  return (method, request) =>
-    new Promise((resolve, reject) => {
-      if (client === undefined) {
-        reject(new Error('test sunucusu henuz baslamadi'));
-        return;
-      }
-      client.makeUnaryRequest(
-        method.path,
-        method.requestSerialize,
-        method.responseDeserialize,
-        request,
-        new Metadata(),
-        (error, response) => {
-          resolve({ error: error ?? undefined, response: response ?? undefined });
-        },
-      );
-    });
+  return (method, request, metadata) =>
+    server === undefined
+      ? Promise.reject(new Error('test sunucusu henuz baslamadi'))
+      : server.call(method, request, metadata);
 }
 
 /** Yeni bir taslak acar ve kimligini doner (onkosul adimi; kendisi test edilmez). */

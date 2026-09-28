@@ -4,40 +4,19 @@
  * ulasilamaz, boylece Charge'in error satiri yazilir.
  */
 
-import type { LogFields, Logger } from '@getir/core';
+import { recordingLogger } from '@getir/core/testing';
+import type { LogLine } from '@getir/core/testing';
 import { paymentV1 } from '@getir/proto';
 import { REQUEST_ID_METADATA_KEY } from '@getir/service-kit';
+import { unaryCall } from '@getir/service-kit/testing';
 import { Metadata } from '@grpc/grpc-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { PaymentProvider } from '../../src/domain/payment-provider.js';
-import { startPaymentService, unaryCall } from '../support/payment-grpc-client.js';
+import { startPaymentService } from '../support/payment-grpc-client.js';
 import type { RunningPaymentService } from '../support/payment-grpc-client.js';
 
 const REQUEST_ID = 'req_log_baglami_payment';
-
-interface LogLine {
-  readonly level: string;
-  readonly fields: LogFields;
-  readonly message: string;
-}
-
-/** Alt gunlukcu alanlarini birlestirerek her satiri kaydeder (pino'nun child'i gibi). */
-function recordingLogger(lines: LogLine[], bound: LogFields = {}): Logger {
-  const write =
-    (level: string) =>
-    (fields: LogFields, message: string): void => {
-      lines.push({ level, fields: { ...bound, ...fields }, message });
-    };
-  return {
-    debug: write('debug'),
-    info: write('info'),
-    warn: write('warn'),
-    error: write('error'),
-    fatal: write('fatal'),
-    child: (fields) => recordingLogger(lines, { ...bound, ...fields }),
-  };
-}
 
 const lines: LogLine[] = [];
 const unreachableProvider: PaymentProvider = {

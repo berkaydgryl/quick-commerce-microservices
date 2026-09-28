@@ -3,6 +3,8 @@
  */
 
 import { AppError, EVENTS, silentLogger } from '@getir/core';
+import { recordingLogger } from '@getir/core/testing';
+import type { LogLine } from '@getir/core/testing';
 import { describe, expect, it, vi } from 'vitest';
 
 import { DEAD_LETTER_REASON } from '../../src/dead-letter.js';
@@ -12,8 +14,6 @@ import { toStreamFields } from '../../src/stream-fields.js';
 import { EVENT_HANDLED, rejectEvent } from '../../src/subscriber.js';
 import type { EventHandler } from '../../src/subscriber.js';
 import { entryOf, envelopeOf } from '../support/envelopes.js';
-import { recordingLogger } from '../support/recording-logger.js';
-import type { LogLine } from '../support/recording-logger.js';
 
 const MAX_DELIVERIES = 3;
 

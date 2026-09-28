@@ -30,8 +30,11 @@ import { HEALTH_SERVICE_NAME, OVERALL_HEALTH_KEY, SERVING_STATUS } from '../conf
 import type { ServingStatus } from '../config/constants.js';
 import type { HealthRegistry, Unsubscribe } from '../health/registry.js';
 import type { Logger } from '../logger.js';
+import { requestIdFrom } from './context.js';
 import { unaryHandler } from './handler.js';
 import { loadServiceDefinition } from './proto.js';
+import { parseRequest } from './request.js';
+import { toServiceError } from './status.js';
 
 /** Health sorgusu: bos servis adi "butun sunucu" demektir. */
 const healthCheckRequestSchema = z.object({
@@ -42,8 +45,11 @@ export interface HealthCheckResponse {
   status: ServingStatus;
 }
 
-/** Watch akisinin sunucu tarafi; her durum degisiminde yeni mesaj yazilir. */
-type HealthWatchStream = ServerWritableStream<{ service?: string }, HealthCheckResponse>;
+/**
+ * Watch akisinin sunucu tarafi; her durum degisiminde yeni mesaj yazilir.
+ * Istek `unknown`dur: dis veri tipi zorlanmaz, Check ile ayni semadan gecer (D5).
+ */
+type HealthWatchStream = ServerWritableStream<unknown, HealthCheckResponse>;
 
 const HEALTH_PROTO_PATH = fileURLToPath(new URL('../../proto/health.proto', import.meta.url));
 
@@ -93,7 +99,15 @@ export class HealthGrpcService {
       }),
 
       Watch: (stream: HealthWatchStream): void => {
-        const service = stream.request.service ?? OVERALL_HEALTH_KEY;
+        const requestId = requestIdFrom(stream.metadata);
+        let service: string;
+        try {
+          ({ service } = parseRequest(healthCheckRequestSchema, stream.request, requestId));
+        } catch (error: unknown) {
+          // Akis INVALID_ARGUMENT ile kapanir (x-app-error trailer'da); abonelik hic acilmaz.
+          stream.emit('error', toServiceError(error, { requestId }));
+          return;
+        }
         stream.write({
           status: this.registry.getStatus(service) ?? SERVING_STATUS.SERVICE_UNKNOWN,
         });

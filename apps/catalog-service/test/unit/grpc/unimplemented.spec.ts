@@ -1,10 +1,12 @@
 /**
  * Sozlesmede duran ama uygulanmayan RPC'ler: deprecated olanlar yerini,
- * henuz yazilmayanlar geldigi gorevi soyler.
+ * henuz yazilmayanlar geldigi gorevi soyler. Cevap diger hatalarla ayni
+ * yoldan doner (D5): x-app-error'da NOT_IMPLEMENTED, gateway'de HTTP 501.
  */
 
-import { GRPC_STATUS } from '@getir/core';
+import { ERROR_CODES, GRPC_STATUS } from '@getir/core';
 import { catalogV1 } from '@getir/proto';
+import { appErrorOf } from '@getir/service-kit/testing';
 import { describe, expect, it } from 'vitest';
 
 import { useCatalogGrpcServer } from '../../support/catalog-grpc-harness.js';
@@ -19,6 +21,7 @@ describe('deprecated ve henuz yazilmamis RPC ler', () => {
     });
 
     expect(error?.code).toBe(GRPC_STATUS.UNIMPLEMENTED);
+    expect(appErrorOf(error)?.code).toBe(ERROR_CODES.NOT_IMPLEMENTED);
     expect(error?.details).toContain('ListNearbyMarkets');
   });
 
