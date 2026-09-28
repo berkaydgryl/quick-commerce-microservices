@@ -5,6 +5,9 @@
   "type": "module",
   "description": "Katalog servisi: urun, kategori ve dark store okuma uclari (gRPC)",
   "main": "./dist/main.js",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",
@@ -15,6 +18,7 @@
     "seed": "node --env-file-if-exists=../../.env dist/seed.js"
   },
   "dependencies": {
+    "@getir/contracts": "workspace:*",
     "@getir/core": "workspace:*",
     "@getir/mongo-kit": "workspace:*",
     "@getir/proto": "workspace:*",
@@ -24,7 +28,6 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@getir/contracts": "workspace:*",
     "@testcontainers/mongodb": "^12.1.0"
   }
 }

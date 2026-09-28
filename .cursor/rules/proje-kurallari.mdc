@@ -168,6 +168,13 @@ Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicid
 ## Docker
 
 - Cok asamali imaj: derleme araclari (buf, devDependencies, kaynak) calisma imajina girmez.
+- Node servis imajinin calisma klasorunde yalnizca `dist`, `node_modules`, `package.json` ve
+  `package.json` `files` alaninda acikca yazilanlar bulunur. `pnpm deploy` servisin kendi
+  dosyalarindan yalnizca o alani (`["dist"]`) kopyalar; calisma aninda diskten okunan yeni dosya
+  ya da klasor (`.proto`, `lua/`) o alana eklenir, import edilen `.json`'u derleyici `dist`'e
+  kopyalar. Kaynak ve derleme artiklari (`src`, `test`, `.turbo`, `tsconfig`) oraya yazilsa bile
+  imaja giremez. Uygulamalar tip bildirimi (`.d.ts`) uretmez. Icerik, `USER` ve MOCK acilisi CI'da
+  `scripts/check-node-image.mjs` ile denetlenir (D12).
 - Kucuk taban imaj (alpine/distroless/scratch).
 - Konteyner root ile calismaz; `USER node` (ya da ozel kullanici) zorunludur.
 - Katman sirasi: az degisen once. Bagimlilik indirmesi `pnpm fetch` ile yapilir ve o katmana

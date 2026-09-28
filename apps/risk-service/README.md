@@ -113,3 +113,4 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/risk/v1/risk.p
 ```
 
 Docker (bağlam depo kökü): `docker build -f apps/risk-service/Dockerfile -t getir/risk-service .`
+İmaj denetimi (D12, CI'da da koşar): `node scripts/check-node-image.mjs getir/risk-service`.

@@ -5,6 +5,9 @@
   "type": "module",
   "description": "Siparis servisi: taslak, siparis, gecmis ve iptal uclari (gRPC), orders koleksiyonu",
   "main": "./dist/main.js",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",

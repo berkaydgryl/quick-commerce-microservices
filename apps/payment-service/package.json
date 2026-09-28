@@ -5,6 +5,9 @@
   "type": "module",
   "description": "Odeme servisi: mock kart cekimi ve 3DS simulasyonu (gRPC), payments koleksiyonu, iade komutu tuketicisi",
   "main": "./dist/main.js",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",

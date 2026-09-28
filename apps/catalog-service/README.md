@@ -192,10 +192,18 @@ metadata'sı ortak `appErrorOf` ile Zod'dan geçerek okunur.
 ```bash
 docker build -f apps/catalog-service/Dockerfile -t getir/catalog-service .
 docker run --rm -p 50051:50051 -e MOCK=true getir/catalog-service
+node scripts/check-node-image.mjs getir/catalog-service   # imaj denetimi (D12), CI'da da kosar
 ```
 
 Build bağlamı **depo köküdür**. İmaj çok aşamalıdır, `node` kullanıcısıyla çalışır ve
 `HEALTHCHECK` servisin kendi `grpc.health.v1` ucunu sorar.
+
+Çalışma klasöründe (`/app`) yalnızca `dist`, `node_modules` ve `package.json` bulunur: `pnpm deploy`
+servisin kendi dosyalarından yalnızca `package.json` `files` alanını (`["dist"]`) kopyalar (D12).
+Kaynakta import edilen her paket `dependencies`'te olmalı; `devDependencies` imaja girmez. D12'de
+`@getir/contracts` bu yüzden taşındı: D6'dan beri `src/` onu kullanıyordu, imaj açılışta
+`ERR_MODULE_NOT_FOUND` ile düşüyordu. İmajdaki seed (`node dist/seed.js`) `NODE_ENV=production`
+iken bilerek çalışmaz; geliştirme verisi için `-e NODE_ENV=development` verilir.
 
 Testler: `pnpm test:unit` (bellek, sözleşmeler, use-case'ler, veri bütünlüğü, gRPC) ve
 `pnpm test:int` (gerçek Mongo: sözleşmeler, seed sayıları ve tekrarı, indeksler, transaction
