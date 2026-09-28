@@ -108,9 +108,28 @@ export function applyRiskDecision(
 }
 
 /**
- * risk-svc'ye giden baglamin order'in bildigi kismi. Risk sinyalleri
- * istemciden ALINMAZ (B9); IP, cihaz, hesap yasi ve oturum konumunu gateway
- * bilir ve T7.5/T8'de ekler. Eksik alan ilgili kurali tetiklemez (risk sozlesmesi).
+ * Gateway'in bildigi, istemcinin GONDEREMEDIGI risk sinyalleri (B9, T7.5).
+ *
+ * Hepsi istege bagli: gelmeyen sinyal ilgili risk kuralini tetiklemez (risk
+ * sozlesmesi, "bos = yok"). T7.5'te gateway yalnizca IP'yi doldurur; digerleri
+ * T8.1'de oturum ve kullanici kaydindan gelir. order-svc bunlari YORUMLAMAZ,
+ * oldugu gibi risk-svc'ye tasir.
+ */
+export interface CheckoutSignals {
+  readonly ipAddress?: string | undefined;
+  readonly ipCity?: string | undefined;
+  readonly deviceId?: string | undefined;
+  /** Ayni cihazda gorulmus hesap sayisi; yoksa olculmedi. */
+  readonly accountsOnDevice?: number | undefined;
+  readonly previousIpAddress?: string | undefined;
+  /** Oturumun acildigi konum (geofence); bicimi teslimat konumuyla ayni. */
+  readonly sessionLocation?: DeliveryLocation | undefined;
+  readonly accountCreatedAt?: Date | undefined;
+}
+
+/**
+ * risk-svc'ye giden baglam: order'in bildigi alanlar ve gateway'den gelen
+ * sinyaller. Eksik alan ilgili kurali tetiklemez (risk sozlesmesi).
  */
 export interface OrderRiskContext {
   readonly userId: string;
@@ -127,9 +146,16 @@ export interface OrderRiskContext {
    */
   readonly checkoutDwellMs: number;
   readonly deliveryLocation: DeliveryLocation;
+  /** Gateway'den gelen sinyaller (T7.5); order yorumlamaz, tasir. */
+  readonly signals: CheckoutSignals;
 }
 
-export function riskContextOf(order: Order, history: RiskHistory, now: Date): OrderRiskContext {
+export function riskContextOf(
+  order: Order,
+  history: RiskHistory,
+  now: Date,
+  signals: CheckoutSignals,
+): OrderRiskContext {
   const dwellMs = Math.max(0, now.getTime() - order.createdAt.getTime());
   return {
     userId: order.userId,
@@ -144,5 +170,6 @@ export function riskContextOf(order: Order, history: RiskHistory, now: Date): Or
       : { userAverageBasketMinor: history.averageBasketMinor }),
     checkoutDwellMs: Math.min(dwellMs, INT32_MAX),
     deliveryLocation: order.deliveryLocation,
+    signals,
   };
 }

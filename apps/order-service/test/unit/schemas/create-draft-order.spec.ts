@@ -3,10 +3,9 @@
  * (beklenen toplam, kupon). Girdi proto'dan cozulmus bicimdir (draftRequest).
  */
 
-import { CART_ITEM_MAX_QUANTITY, CART_MAX_ITEMS } from '@getir/contracts';
+import { CART_ITEM_MAX_QUANTITY, CART_MAX_ITEMS, COUPON_CODE_MAX_LENGTH } from '@getir/contracts';
 import { describe, expect, it } from 'vitest';
 
-import { MAX_COUPON_CODE_LENGTH } from '../../../src/config/constants.js';
 import { createDraftOrderRequestSchema } from '../../../src/interfaces/grpc/schemas.js';
 import { DRAFT_TOTAL_MINOR, draftRequest } from '../../support/order-fixtures.js';
 
@@ -27,6 +26,16 @@ describe('createDraftOrderRequestSchema: sepet ve konum', () => {
   it('gecersiz sku bicimini reddeder', () => {
     // SKU deseni @getir/core'da; Redis anahtarinda gectigi icin bosluk olamaz.
     expect(accepts({ lines: [{ productId: 'prd_01', sku: 'sut 1l', quantity: 1 }] })).toBe(false);
+  });
+
+  it('sku ISTEGE BAGLI (T7.5): bos sku "verilmedi" sayilir, satirda hic tasinmaz', () => {
+    // REST sepeti sku tasimaz; proto3'te gonderilmeyen metin "" gelir.
+    const parsed = createDraftOrderRequestSchema.parse({
+      ...draftRequest,
+      lines: [{ productId: 'prd_01', sku: '', quantity: 2 }],
+    });
+
+    expect(parsed.lines).toEqual([{ productId: 'prd_01', sku: undefined, quantity: 2 }]);
   });
 
   it('sifir ve negatif adedi reddeder', () => {
@@ -52,6 +61,27 @@ describe('createDraftOrderRequestSchema: sepet ve konum', () => {
     // proto3'te ic ice mesaj gonderilmezse undefined gelir; sessizce
     // (0,0) varsaymak siparisi Gine Korfezi'ne teslim ettirirdi.
     expect(accepts({ deliveryLocation: undefined })).toBe(false);
+  });
+
+  it('mesajlar Turkce (T7.5: REST details kullaniciya gorunur); adres 240 karakteri gecemez', () => {
+    const issuesOf = (overrides: Record<string, unknown>) =>
+      createDraftOrderRequestSchema
+        .safeParse({ ...draftRequest, ...overrides })
+        .error?.issues.map((issue) => [issue.path.join('.'), issue.message]);
+
+    expect(issuesOf({ lines: [line('prd_01', 100)] })).toEqual([
+      ['lines.0.quantity', 'en fazla 99 olmali'],
+    ]);
+    expect(issuesOf({ lines: [line('prd_01', 1.5)] })).toEqual([
+      ['lines.0.quantity', 'tam sayi olmali'],
+    ]);
+    expect(issuesOf({ deliveryAddress: 'a'.repeat(241) })).toEqual([
+      ['deliveryAddress', 'en fazla 240 karakter olmali'],
+    ]);
+    expect(accepts({ deliveryAddress: 'a'.repeat(240) })).toBe(true);
+    expect(issuesOf({ expectedTotal: { amountMinor: -1, currency: 'TRY' } })).toEqual([
+      ['expectedTotal.amountMinor', '0 ya da daha buyuk olmali'],
+    ]);
   });
 
   it('gecersiz enlem/boylami reddeder', () => {
@@ -102,7 +132,7 @@ describe('createDraftOrderRequestSchema: kupon (T7.2)', () => {
   });
 
   it('sinirsiz metin kapidan gecmez', () => {
-    expect(accepts({ couponCode: 'A'.repeat(MAX_COUPON_CODE_LENGTH) })).toBe(true);
-    expect(accepts({ couponCode: 'A'.repeat(MAX_COUPON_CODE_LENGTH + 1) })).toBe(false);
+    expect(accepts({ couponCode: 'A'.repeat(COUPON_CODE_MAX_LENGTH) })).toBe(true);
+    expect(accepts({ couponCode: 'A'.repeat(COUPON_CODE_MAX_LENGTH + 1) })).toBe(false);
   });
 });

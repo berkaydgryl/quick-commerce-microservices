@@ -103,11 +103,31 @@ describe('riskContextOf', () => {
       order,
       { deliveredCount: 0, cancelledCount: 2 },
       new Date(order.createdAt.getTime() + 30_000),
+      {},
     );
 
     expect(context.checkoutDwellMs).toBe(30_000);
     expect(context.cancelledOrderCount).toBe(2);
     expect(context).not.toHaveProperty('userAverageBasketMinor');
+  });
+
+  it('gateway sinyalleri (T7.5) YORUMLANMADAN tasinir', () => {
+    const order = draft();
+    const signals = {
+      ipAddress: '85.105.1.20',
+      deviceId: 'dev_1',
+      sessionLocation: { lat: 41.0, lng: 29.0 },
+      accountCreatedAt: new Date('2026-09-01T00:00:00Z'),
+    };
+
+    const context = riskContextOf(
+      order,
+      { deliveredCount: 0, cancelledCount: 0 },
+      order.createdAt,
+      signals,
+    );
+
+    expect(context.signals).toEqual(signals);
   });
 
   it('ortalama sepet gecmisten tasinir; proto int32 ye sigmayan sure kirpilir', () => {
@@ -116,6 +136,7 @@ describe('riskContextOf', () => {
       order,
       { deliveredCount: 3, cancelledCount: 0, averageBasketMinor: 12_345 },
       new Date(order.createdAt.getTime() + 30 * 24 * 60 * 60 * 1000),
+      {},
     );
 
     expect(context.userAverageBasketMinor).toBe(12_345);

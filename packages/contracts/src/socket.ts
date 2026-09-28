@@ -25,7 +25,7 @@ import {
   productIdSchema,
 } from './common.js';
 import { ROOM_PREFIX } from './constants.js';
-import { orderStatusSchema } from './order.js';
+import { orderStatusSchema } from './order-status.js';
 
 /** Tarayiciya giden olay adlari. */
 export const SOCKET_EVENTS = {

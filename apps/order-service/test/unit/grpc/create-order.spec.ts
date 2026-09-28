@@ -55,6 +55,15 @@ describe('CreateOrder', () => {
     expect(response?.order?.status).toBe(orderV1.OrderStatus.ORDER_STATUS_PAYMENT_FAILED);
   });
 
+  it('gateway sinyalleri (T7.5) telden risk degerlendirmesine ulasir; bos alan tasinmaz', async () => {
+    const { error } = await createOrder({
+      signals: orderV1.CheckoutSignals.fromPartial({ ipAddress: '85.105.1.20' }),
+    });
+
+    expect(error).toBeUndefined();
+    expect(risk.contexts.at(-1)?.signals).toEqual({ ipAddress: '85.105.1.20' });
+  });
+
   it('MEDIUM bant: 3DS bekler, challengeId doner', async () => {
     risk.band = RISK_BANDS.MEDIUM;
 

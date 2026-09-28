@@ -122,6 +122,8 @@ describe('CreateOrder - mutlu yol (LOW, kart)', () => {
         currency: 'TRY',
         checkoutDwellMs: DWELL_MS,
         deliveryLocation: { lat: 40.9885, lng: 29.0262 },
+        // Sinyal verilmedi (T7.5): bos nesne, hicbir kural tetiklenmez.
+        signals: {},
       },
     ]);
   });

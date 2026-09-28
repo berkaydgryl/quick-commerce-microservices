@@ -25,6 +25,14 @@ const (
 	defaultLogLevel        = slog.LevelInfo
 )
 
+// NODE_ENV degerleri (Node servisleriyle ayni sozluk). Production, gelistirme
+// kolayliklarinin (X-User-Id kimligi, T7.5) KAPALI oldugu tek ortamdir.
+const (
+	EnvDevelopment = "development"
+	EnvTest        = "test"
+	EnvProduction  = "production"
+)
+
 // Servis adlari: havuzdaki anahtar, gunluk alani ve /healthz'deki "name".
 // Tek yerde tanimli; main ayni adla havuzdan baglanti ister.
 const (
@@ -101,7 +109,7 @@ func Load(getenv Getenv) (Config, error) {
 		problems = append(problems, err)
 	}
 
-	nodeEnv, err := readEnum(getenv, "NODE_ENV", "development", []string{"development", "test", "production"})
+	nodeEnv, err := readEnum(getenv, "NODE_ENV", EnvDevelopment, []string{EnvDevelopment, EnvTest, EnvProduction})
 	if err != nil {
 		problems = append(problems, err)
 	}

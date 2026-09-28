@@ -7,8 +7,10 @@
  */
 
 import {
+  ADDRESS_LINE_MAX_LENGTH,
   CART_ITEM_MAX_QUANTITY,
   CART_MAX_ITEMS,
+  COUPON_CODE_MAX_LENGTH,
   geoPointSchema,
   idempotencyKeySchema,
   marketIdSchema,
@@ -23,9 +25,10 @@ import { z } from 'zod';
 
 import { PAYMENT_METHOD } from '../../domain/checkout-payment.js';
 import type { PaymentMethod } from '../../domain/checkout-payment.js';
+import type { CheckoutSignals } from '../../domain/checkout-risk.js';
 import type { OrderHistoryCursor } from '../../domain/order-history-cursor.js';
 
-import { MAX_CANCEL_REASON_LENGTH, MAX_COUPON_CODE_LENGTH } from '../../config/constants.js';
+import { MAX_CANCEL_REASON_LENGTH, MAX_SIGNAL_TEXT_LENGTH } from '../../config/constants.js';
 import { decodePageToken } from './page-token.js';
 
 const requiredText = (field: string) => z.string().trim().min(1, `${field} zorunlu`);
@@ -42,17 +45,33 @@ const requiredText = (field: string) => z.string().trim().min(1, `${field} zorun
  */
 const idempotencyKey = idempotencyKeySchema;
 
+/**
+ * sku ISTEGE BAGLI (T7.5): REST sepeti sku tasimaz, order onu catalog
+ * teklifinden alir. proto3'te gonderilmeyen metin "" gelir = verilmedi.
+ * Verildiyse bicimi dogru olmali; teklifle eslesmesi price-draft'ta sorulur.
+ */
+const optionalSku = z
+  .string()
+  .trim()
+  .refine((sku) => sku === '' || isSku(sku), 'gecersiz sku bicimi')
+  .transform((sku) => (sku === '' ? undefined : sku));
+
+// Mesajlar Turkce (T7.5): REST cevabinin details'inde kullaniciya gorunur.
 const cartLine = z.object({
   productId: requiredText('productId'),
-  sku: requiredText('sku').refine(isSku, 'gecersiz sku bicimi'),
-  quantity: z.number().int().positive().max(CART_ITEM_MAX_QUANTITY),
+  sku: optionalSku,
+  quantity: z
+    .number()
+    .int('tam sayi olmali')
+    .positive('en az 1 olmali')
+    .max(CART_ITEM_MAX_QUANTITY, `en fazla ${CART_ITEM_MAX_QUANTITY} olmali`),
 });
 
 /** Ayni urun iki satirda gelirse hangisinin adedi gecerli belirsizdir: reddedilir. */
 const cartLines = z
   .array(cartLine)
   .min(1, 'sepet bos olamaz')
-  .max(CART_MAX_ITEMS)
+  .max(CART_MAX_ITEMS, `en fazla ${CART_MAX_ITEMS} kalem olmali`)
   .refine(
     (lines) => new Set(lines.map((line) => line.productId)).size === lines.length,
     'ayni urun birden fazla satirda olamaz',
@@ -78,22 +97,26 @@ const requiredMoney = z.object(
 const couponCode = z
   .string()
   .trim()
-  .max(MAX_COUPON_CODE_LENGTH)
+  .max(COUPON_CODE_MAX_LENGTH, `en fazla ${COUPON_CODE_MAX_LENGTH} karakter olmali`)
   .transform((value) => (value === '' ? undefined : value));
 
 export const createDraftOrderRequestSchema = z.object({
   userId: requiredText('userId'),
   // ADR-15: siparis kullanicinin SECTIGI markete verilir. Bicim kurali
   // (mkt_ + okunabilir govde) sozlesme paketindedir, burada tekrar yazilmaz.
-  // Kullanimdan kalkan dark_store_id OKUNMAZ: onu dolduran istemci yok
-  // (gateway henuz order'a baglanmadi) ve eski "ds_" kimligi bir market degildir.
+  // Kullanimdan kalkan dark_store_id OKUNMAZ: gateway (T7.5) onu doldurmaz ve
+  // eski "ds_" kimligi bir market degildir.
   marketId: marketIdSchema,
   lines: cartLines,
   // Konum ZORUNLU: teslimat noktasi olmadan hangi depodan cikilacagi ve
   // kurye rotasi hesaplanamaz. proto3'te ic ice mesaj gonderilmezse undefined
   // gelir; sema bunu acikca reddeder. WGS84 sinirlari sozlesme paketindedir.
   deliveryLocation: geoPointSchema,
-  deliveryAddress: requiredText('deliveryAddress'),
+  // Uzunluk siniri REST sozlesmesiyle ayni (contracts ADDRESS_LINE_MAX_LENGTH); T7.5
+  // canli testinde sinirsiz metnin gectigi goruldu.
+  deliveryAddress: requiredText('deliveryAddress').pipe(
+    z.string().max(ADDRESS_LINE_MAX_LENGTH, `en fazla ${ADDRESS_LINE_MAX_LENGTH} karakter olmali`),
+  ),
   idempotencyKey,
   // T7.2: istemcinin gordugu toplam ZORUNLU; sunucu kendi hesabiyla karsilastirir.
   expectedTotal: requiredMoney,
@@ -121,6 +144,36 @@ const paymentMethod = z.nativeEnum(paymentV1.PaymentMethod).transform((value, ct
 });
 
 /**
+ * Gateway'in doldurdugu risk sinyalleri (T7.5, proto CheckoutSignals).
+ *
+ * Yalnizca uzunluk ve bicim dogrulanir; deger YORUMLANMAZ, risk-svc'ye tasinir.
+ * proto3'te gonderilmeyen metin "", sayi 0 gelir: ikisi de "yok" demektir (risk
+ * sozlesmesi) ve alan hic tasinmaz. Mesaj hic gelmezse sinyal yoktur.
+ */
+const signalText = z
+  .string()
+  .trim()
+  .max(MAX_SIGNAL_TEXT_LENGTH, `en fazla ${MAX_SIGNAL_TEXT_LENGTH} karakter olmali`)
+  .transform((value) => (value === '' ? undefined : value));
+
+const checkoutSignals = z
+  .object({
+    ipAddress: signalText,
+    ipCity: signalText,
+    deviceId: signalText,
+    accountsOnDevice: z
+      .number()
+      .int()
+      .min(0)
+      .transform((count) => (count === 0 ? undefined : count)),
+    previousIpAddress: signalText,
+    sessionLocation: geoPointSchema.optional(),
+    accountCreatedAt: z.date().optional(),
+  })
+  .optional()
+  .transform((signals): CheckoutSignals => signals ?? {});
+
+/**
  * CreateOrder (T7.1): odeme yontemi ve kart jetonu artik okunur. Kartli odemede
  * jeton zorunlu; kapida odemede dolu jeton sessizce yok sayilmaz (istemci
  * yontemi yanlis secmis olabilir) - payment-svc'deki kuralla ayni.
@@ -133,6 +186,7 @@ export const createOrderRequestSchema = z
     paymentMethod,
     cardToken: z.string().trim(),
     idempotencyKey,
+    signals: checkoutSignals,
   })
   .superRefine((input, ctx) => {
     // Yontem gecersizse jeton kurali ikinci bir hata uretmesin: istemci once yontemi duzeltir.

@@ -56,11 +56,10 @@ Roadmap veri modelindeki `status` indeksi, durumu sorgulayan ilk iş (rezervasyo
 T11.x) geldiğinde eklenir: bugün onu kullanan sorgu yok, gereksiz indeks her yazımı
 pahalılaştırır.
 
-**Bilerek boş bırakılanlar:** proto `Order`'daki fiyatlı kalemler (`items`) ve tutarlar
-(`subtotal`, `total`…) boş döner. Sipariş bugün ham sepet satırı taşır; fiyatın dondurulması
-katalog teklifleri toplu okununca (T9.3) ve pricing bağlanınca gelir. "0 TL" yazmak
-istemciye yanlış tutar gösterirdi. `dark_store_id` okunmaz (ADR-15); `market_id` zorunlu
-ve `mkt_` biçimlidir.
+**Kalemler ve tutarlar:** proto `Order`'daki fiyatlı kalemler (`items`) ve tutarlar (`subtotal`,
+`delivery_fee`, `discount`, `total`) taslakta dondurulan değerlerdir (T7.2); `GetOrder` onları
+olduğu gibi döner. **Bilerek boş bırakılanlar:** `reservation_expires_at` (stok kilidi T11.2'de)
+ve `dark_store_id` (okunmaz, ADR-15); `market_id` zorunlu ve `mkt_` biçimlidir.
 
 ### Durum makinesi (`src/domain/order-state-machine.ts`)
 
@@ -112,7 +111,10 @@ saga (T7.1) yeniden hesaplamaz, kullanıcı rezervasyon boyunca gördüğü fiya
    (`CATALOG_CALL_TIMEOUT_MS`). Adres `CATALOG_GRPC_ADDR` (gateway'le aynı değişken).
 2. **Hesap web'le aynı fonksiyon:** `@getir/pricing` `calculateCart`. ILK10'un "ilk sipariş mi"
    sorusunu order kendi kaydından cevaplar (`hasPaidOrder`, yalnızca kupon girildiyse).
-3. **Kontrol sırası ve hatalar** (hiçbirinde taslak açılmaz):
+3. **`sku` isteğe bağlı (T7.5):** REST sepeti sku taşımaz; kaleme catalog teklifinin sku'su
+   yazılır. Verildiyse (eski istemci, grpcurl) teklifle eşleşmeli, yoksa `skuMismatchProductIds`.
+   Kupon kodu sınırı REST ile ortaktır: contracts `COUPON_CODE_MAX_LENGTH` (32).
+4. **Kontrol sırası ve hatalar** (hiçbirinde taslak açılmaz):
 
 | Durum                                      | Kod (gRPC)                                 | Ayrıntı                                    |
 | ------------------------------------------ | ------------------------------------------ | ------------------------------------------ |
@@ -134,8 +136,14 @@ DRAFT → RISK_CHECK → RESERVED → AWAITING_PAYMENT → PAID
 Order, risk-svc'ye yalnızca **sunucuda bildiklerini** gönderir (B9, istemciden sinyal alınmaz):
 sepet toplamı, teslimat konumu, market, kullanıcının teslim edilen / iptal edilen sipariş sayısı
 ve teslim edilenlerin ortalama sepeti (`OrderHistoryReader.riskHistory`, tek aggregation) ve
-taslaktan siparişe geçen süre (checkout-dwell; T11.2'de başlangıç `reservedAt` olur). IP, cihaz,
-hesap yaşı ve oturum konumunu gateway bilir; T7.5/T8'de eklenir. Eksik alan kuralı tetiklemez.
+taslaktan siparişe geçen süre (checkout-dwell; T11.2'de başlangıç `reservedAt` olur).
+
+**Gateway sinyalleri (T7.5):** IP, IP şehri, cihaz, cihazdaki hesap sayısı, önceki IP, oturum
+konumu ve hesap yaşını gateway bilir; `CreateOrderRequest.signals` (`CheckoutSignals`) ile gelir
+ve order onları **yorumlamadan** `RiskContext`'teki aynı adlı alanlara taşır
+(`infrastructure/risk/grpc-risk-assessment.ts`). Bugün gateway yalnızca bağlantının IP'sini
+doldurur; diğerleri T8.1'de oturumdan gelir. Boş metin, 0 ve gönderilmeyen mesaj "yok" demektir:
+eksik sinyal kuralı tetiklemez. Metinler en fazla 128 karakter (`MAX_SIGNAL_TEXT_LENGTH`).
 
 | Bant       | Sipariş                                        | Cevap                                                                       |
 | ---------- | ---------------------------------------------- | --------------------------------------------------------------------------- |

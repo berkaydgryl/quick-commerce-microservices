@@ -5,15 +5,18 @@ import "fmt"
 // Error, gateway icinde tasinan tek hata tipi. HTTP katmani onu zarfa cevirir.
 type Error struct {
 	Code Code
-	// Details, istemciye gidebilecek ek baglam (alan -> sebep). nil olabilir.
-	Details map[string]string
+	// Details, istemciye gidebilecek ek baglam: JSON nesnesinin alanlari. nil
+	// olabilir. Gateway'in kendi dogrulama hatalari alan -> sebep METNI tasir;
+	// servisten gelen ayrinti oldugu gibi gecer (sayi, dizi, nesne dahil; T7.5).
+	Details map[string]any
 	// Cause, gunluge yazilacak asil hata. Istemciye GITMEZ.
 	Cause error
 }
 
-// New, sebepsiz bir hata uretir.
+// New, sebepsiz bir hata uretir. details alan -> sebep metnidir (gateway'in
+// kendi dogrulamasi); bos harita "ayrinti yok" demektir.
 func New(code Code, details map[string]string) *Error {
-	return &Error{Code: code, Details: details}
+	return &Error{Code: code, Details: textDetails(details)}
 }
 
 func (e *Error) Error() string {
@@ -25,4 +28,15 @@ func (e *Error) Error() string {
 
 func (e *Error) Unwrap() error {
 	return e.Cause
+}
+
+func textDetails(details map[string]string) map[string]any {
+	if len(details) == 0 {
+		return nil
+	}
+	converted := make(map[string]any, len(details))
+	for field, reason := range details {
+		converted[field] = reason
+	}
+	return converted
 }

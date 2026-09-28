@@ -3,12 +3,17 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CART_MAX_ITEMS,
+  COUPON_CODE_MAX_LENGTH,
   createOrderRequestSchema,
   marketProductsQuerySchema,
   loginRequestSchema,
+  orderPlacementSchema,
   orderStatusSchema,
   productSchema,
+  reservationSchema,
   reserveCartRequestSchema,
+  deliveryAddressSchema,
+  savedAddressSchema,
   threeDsRequestSchema,
 } from '../../src/index.js';
 
@@ -17,7 +22,6 @@ const PRODUCT_ID = 'prd_sut-1l';
 const ORDER_ID = 'ord_db77f4c0e24f49919cc1d78a649c9c94';
 
 const VALID_ADDRESS = {
-  title: 'Ev',
   line: 'Bagdat Caddesi 12',
   location: { lat: 41.0082, lng: 28.9784 },
 };
@@ -101,65 +105,109 @@ describe('marketProductsQuerySchema', () => {
 
 describe('reserveCartRequestSchema', () => {
   const item = { productId: PRODUCT_ID, quantity: 2 };
-
-  it('sepet TEK MARKETTIR: marketId zorunlu (ADR-15)', () => {
-    expect(reserveCartRequestSchema.safeParse({ items: [item] }).success).toBe(false);
-  });
+  const valid = {
+    marketId: MARKET_ID,
+    items: [item],
+    address: VALID_ADDRESS,
+    expectedTotal: { amountMinor: 19_360, currency: 'TRY' },
+  };
+  const accepts = (overrides: Record<string, unknown>): boolean =>
+    reserveCartRequestSchema.safeParse({ ...valid, ...overrides }).success;
 
   it('gecerli sepeti kabul eder', () => {
-    expect(reserveCartRequestSchema.safeParse({ marketId: MARKET_ID, items: [item] }).success).toBe(
-      true,
-    );
+    expect(accepts({})).toBe(true);
   });
 
-  it('bos sepeti reddeder', () => {
-    expect(reserveCartRequestSchema.safeParse({ marketId: MARKET_ID, items: [] }).success).toBe(
-      false,
-    );
+  it('sepet TEK MARKETTIR: marketId zorunlu (ADR-15)', () => {
+    expect(accepts({ marketId: undefined })).toBe(false);
   });
 
-  it('ust sinirdan fazla kalemi reddeder', () => {
-    const items = Array.from({ length: CART_MAX_ITEMS + 1 }, () => item);
-
-    expect(reserveCartRequestSchema.safeParse({ marketId: MARKET_ID, items }).success).toBe(false);
+  it('bos sepeti ve ust sinirdan fazla kalemi reddeder', () => {
+    expect(accepts({ items: [] })).toBe(false);
+    expect(accepts({ items: Array.from({ length: CART_MAX_ITEMS + 1 }, () => item) })).toBe(false);
   });
 
   it('sifir adedi reddeder', () => {
-    expect(
-      reserveCartRequestSchema.safeParse({
-        marketId: MARKET_ID,
-        items: [{ productId: PRODUCT_ID, quantity: 0 }],
-      }).success,
-    ).toBe(false);
+    expect(accepts({ items: [{ productId: PRODUCT_ID, quantity: 0 }] })).toBe(false);
   });
 
   it('istemciden gelen fiyati sessizce yok sayar', () => {
     const parsed = reserveCartRequestSchema.parse({
-      marketId: MARKET_ID,
+      ...valid,
       items: [{ ...item, unitPrice: { amountMinor: 1, currency: 'TRY' } }],
     });
 
     expect(parsed.items[0]).toEqual(item);
   });
+
+  it('T7.5: adres ve beklenen toplam ZORUNLU (tutar ve risk konuma gore hesaplanir)', () => {
+    expect(accepts({ address: undefined })).toBe(false);
+    expect(accepts({ expectedTotal: undefined })).toBe(false);
+    expect(accepts({ address: { ...VALID_ADDRESS, line: '   ' } })).toBe(false);
+    expect(accepts({ address: { line: 'Moda', location: { lat: 95, lng: 29 } } })).toBe(false);
+  });
+
+  it('kupon istege bagli; sinir order-service ile ayni sabitten', () => {
+    expect(accepts({ couponCode: 'ILK10' })).toBe(true);
+    expect(accepts({ couponCode: 'A'.repeat(COUPON_CODE_MAX_LENGTH) })).toBe(true);
+    expect(accepts({ couponCode: 'A'.repeat(COUPON_CODE_MAX_LENGTH + 1) })).toBe(false);
+  });
+});
+
+describe('savedAddressSchema (kayitli adres) ve deliveryAddressSchema (siparis)', () => {
+  const saved = { ...VALID_ADDRESS, title: 'Ev', note: 'Kadikoy deposuna duser' };
+
+  it('kayitli adres etiket ister; not istege bagli', () => {
+    expect(savedAddressSchema.safeParse(saved).success).toBe(true);
+    expect(savedAddressSchema.safeParse(VALID_ADDRESS).success).toBe(false);
+  });
+
+  it('siparise giderken yalnizca line ve location tasinir (etiket ve not proto da yok)', () => {
+    expect(deliveryAddressSchema.parse(saved)).toEqual(VALID_ADDRESS);
+  });
+});
+
+describe('reservationSchema', () => {
+  it('stok rezervasyonu (T11.2) gelene kadar expiresAt yok; durum ve kimlik yeter', () => {
+    expect(reservationSchema.safeParse({ orderId: ORDER_ID, status: 'DRAFT' }).success).toBe(true);
+  });
 });
 
 describe('createOrderRequestSchema', () => {
-  it('sepeti degil yalnizca orderId alir', () => {
+  it('sepeti ve adresi degil yalnizca orderId ve odemeyi alir (T7.5)', () => {
     const parsed = createOrderRequestSchema.parse({
       orderId: ORDER_ID,
-      address: VALID_ADDRESS,
       payment: { method: 'CARD', cardToken: 'tok_demo' },
       items: [{ productId: PRODUCT_ID, quantity: 99 }],
+      address: VALID_ADDRESS,
     });
 
-    expect(Object.hasOwn(parsed, 'items')).toBe(false);
+    expect(parsed).toEqual({
+      orderId: ORDER_ID,
+      payment: { method: 'CARD', cardToken: 'tok_demo' },
+    });
   });
 
-  it('adres olmadan kabul etmez', () => {
+  it('kartli odemede jeton zorunlu', () => {
     expect(
       createOrderRequestSchema.safeParse({ orderId: ORDER_ID, payment: { method: 'CARD' } })
         .success,
     ).toBe(false);
+  });
+});
+
+describe('orderPlacementSchema', () => {
+  it('3DS yalnizca bekleniyorsa vardir', () => {
+    expect(orderPlacementSchema.safeParse({ orderId: ORDER_ID, status: 'PAID' }).success).toBe(
+      true,
+    );
+    expect(
+      orderPlacementSchema.safeParse({
+        orderId: ORDER_ID,
+        status: 'AWAITING_PAYMENT',
+        threeDs: { challengeId: 'tds_1' },
+      }).success,
+    ).toBe(true);
   });
 });
 

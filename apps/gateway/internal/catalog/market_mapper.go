@@ -2,28 +2,20 @@ package catalog
 
 import (
 	catalogv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/catalog/v1"
-	commonv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/common/v1"
-)
 
-// defaultCurrency, proto'da bos para birimi TRY demektir; REST sozlesmesi
-// (moneySchema) ise alani acikca "TRY" ister.
-const defaultCurrency = "TRY"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rest"
+)
 
 // ratingScale, proto puani onda bir birimle tam sayi tasir (47 = 4.7).
 // Float'u telde tasimamak yuvarlama farkini onler; ondaliga cevrim tek yerde.
 const ratingScale = 10.0
 
-// Money, kurus cinsinden tutar (@getir/contracts moneySchema). Float yok.
-type Money struct {
-	AmountMinor int64  `json:"amountMinor"`
-	Currency    string `json:"currency"`
-}
-
-// GeoPoint, WGS84 koordinati.
-type GeoPoint struct {
-	Lat float64 `json:"lat"`
-	Lng float64 `json:"lng"`
-}
+// Money ve GeoPoint, REST'in ortak ilkel tipleridir (internal/rest); order
+// adaptoru de ayni bicimi uretir (T7.5'te tasindi, adlar burada korunur).
+type (
+	Money    = rest.Money
+	GeoPoint = rest.GeoPoint
+)
 
 // DeliveryTime, tahmini teslimat araligi (dakika).
 type DeliveryTime struct {
@@ -88,7 +80,7 @@ func toMarket(market *catalogv1.Market, images ImageResolver) Market {
 		Name:                 market.GetName(),
 		Brand:                market.GetBrand(),
 		LogoURL:              images.Resolve(market.GetLogoUrl()),
-		Location:             GeoPoint{Lat: market.GetLocation().GetLat(), Lng: market.GetLocation().GetLng()},
+		Location:             rest.GeoPointFromProto(market.GetLocation()),
 		DeliveryRadiusMeters: market.GetDeliveryRadiusMeters(),
 		IsOpen:               market.GetIsOpen(),
 		DeliveryTime: DeliveryTime{
@@ -100,17 +92,9 @@ func toMarket(market *catalogv1.Market, images ImageResolver) Market {
 			Count:   market.GetRating().GetCount(),
 		},
 		PricingRules: PricingRules{
-			MinBasket:             toMoney(market.GetPricingRules().GetMinBasket()),
-			DeliveryFee:           toMoney(market.GetPricingRules().GetDeliveryFee()),
-			FreeDeliveryThreshold: toMoney(market.GetPricingRules().GetFreeDeliveryThreshold()),
+			MinBasket:             rest.MoneyFromProto(market.GetPricingRules().GetMinBasket()),
+			DeliveryFee:           rest.MoneyFromProto(market.GetPricingRules().GetDeliveryFee()),
+			FreeDeliveryThreshold: rest.MoneyFromProto(market.GetPricingRules().GetFreeDeliveryThreshold()),
 		},
 	}
-}
-
-func toMoney(money *commonv1.Money) Money {
-	currency := money.GetCurrency()
-	if currency == "" {
-		currency = defaultCurrency
-	}
-	return Money{AmountMinor: money.GetAmountMinor(), Currency: currency}
 }

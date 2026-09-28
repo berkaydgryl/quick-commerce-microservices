@@ -51,6 +51,14 @@ export const ADDRESS_LINE_MAX_LENGTH = 240;
 export const ADDRESS_NOTE_MAX_LENGTH = 240;
 
 /**
+ * Kupon kodunun en uzun hali (ornek: ILK10). Bilinmeyen kod zaten
+ * COUPON_INVALID alir; sinir, sinirsiz metnin kapidan gecmemesi icindir.
+ * REST rezervasyon govdesi ve order-service'in gRPC semasi ayni degeri
+ * kullanir (T7.5); iki kapida iki sinir olmasin.
+ */
+export const COUPON_CODE_MAX_LENGTH = 32;
+
+/**
  * Idempotency anahtari (ADR-08). Sinirlar @getir/core'da tanimlidir, cunku
  * ayni kurali REST basligi disinda servislerin gRPC semalari ve redis-kit'in
  * idem:{key} anahtari da uygular. Burada yalnizca yeniden disa verilir ki REST

@@ -76,6 +76,7 @@ const context = (overrides: Partial<OrderRiskContext> = {}): OrderRiskContext =>
   currency: 'TRY',
   checkoutDwellMs: 45_000,
   deliveryLocation: { lat: 40.9885, lng: 29.0262 },
+  signals: {},
   ...overrides,
 });
 
@@ -119,6 +120,43 @@ describe('GrpcRiskAssessment', () => {
     await risk.evaluate(context(), scope);
 
     expect(seen.at(-1)?.context?.userAverageBasket).toBeUndefined();
+  });
+
+  it('gateway sinyalleri (T7.5) RiskContext te ayni adli alanlara gider', async () => {
+    const accountCreatedAt = new Date('2026-09-01T00:00:00.000Z');
+    await risk.evaluate(
+      context({
+        signals: {
+          ipAddress: '85.105.1.20',
+          ipCity: 'Istanbul',
+          deviceId: 'dev_1',
+          accountsOnDevice: 2,
+          previousIpAddress: '85.105.1.19',
+          sessionLocation: { lat: 41.0, lng: 29.0 },
+          accountCreatedAt,
+        },
+      }),
+      scope,
+    );
+
+    expect(seen.at(-1)?.context).toMatchObject({
+      ipAddress: '85.105.1.20',
+      ipCity: 'Istanbul',
+      deviceId: 'dev_1',
+      accountsOnDevice: 2,
+      previousIpAddress: '85.105.1.19',
+      sessionLocation: { lat: 41.0, lng: 29.0 },
+      accountCreatedAt,
+    });
+  });
+
+  it('gelmeyen sinyal bos gider; konum ve zaman mesaji HIC gonderilmez ((0,0) gecerli nokta sayilirdi)', async () => {
+    await risk.evaluate(context({ signals: { ipAddress: '85.105.1.20' } }), scope);
+
+    const sent = seen.at(-1)?.context;
+    expect(sent).toMatchObject({ ipAddress: '85.105.1.20', deviceId: '', accountsOnDevice: 0 });
+    expect(sent?.sessionLocation).toBeUndefined();
+    expect(sent?.accountCreatedAt).toBeUndefined();
   });
 
   it('bantsiz cevapla siparis ilerletilmez: INTERNAL', async () => {

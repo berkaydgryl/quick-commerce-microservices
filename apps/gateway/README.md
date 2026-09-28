@@ -7,7 +7,7 @@ Pnpm workspace'inin parçası değildir: kendi Go modülüdür (`go.mod`). `pnpm
 kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, `go mod tidy -diff`, `-race`
 testleri, statik derleme).
 
-## Bugünkü durum (pazaryeri uçları — T8.4'ün market kısmı öne alındı)
+## Bugünkü durum (T7.5 — sipariş uçları; pazaryeri uçları T8.4'ten öne alındı)
 
 | Parça                | Durum                                                           |
 | -------------------- | --------------------------------------------------------------- |
@@ -21,6 +21,12 @@ testleri, statik derleme).
 | `GET /v1/markets/{id}` | ✅ Market sayfası başlığı; puan onda birden ondalığa (`47` → `4.7`) |
 | `GET /v1/markets/{id}/categories` | ✅ Marketin teklifi olan kategoriler |
 | `GET /v1/markets/{id}/products` | ✅ `categoryId`, `q`, `pageToken`, `pageSize`; **stok yok** (aşağıda) |
+| `POST /v1/cart/reserve` | ✅ order `CreateDraftOrder` (T7.5): taslak, fiyat sunucuda; **stok kilidi yok** (T11.2) |
+| `POST /v1/orders`    | ✅ order `CreateOrder` (saga): 201 `PAID` ya da `AWAITING_PAYMENT` + `threeDs` |
+| `POST /v1/orders/{id}/3ds` | ✅ order `ConfirmPayment`; yanlış kod 402 + kalan hak |
+| `GET /v1/orders/{id}` | ✅ order `GetOrder`; başkasının siparişi 404 |
+| Kullanıcı kimliği    | ⚠️ Geçici: `X-User-Id` yalnızca production dışında (JWT T8.1) |
+| Idempotency-Key      | ✅ Zorunlu (yoksa 400); tekrar koruması ⏳ T8.2                 |
 | gRPC hata çevirisi   | ✅ `x-app-error` trailer'ı, yoksa durum kodu (`apperror`)       |
 | Görsel adresleri     | ✅ Göreli yol → mutlak URL (`ASSET_BASE_URL`, `internal/assets`) |
 | Stok birleştirmesi (B27) | ⏳ inventory-svc ile (T8.4 / T9.x) |
@@ -53,6 +59,42 @@ docker run --rm -p 8080:8080 \
 
 İmaj `distroless/static:nonroot` üzerindedir (~28 MB). İçinde kabuk olmadığı için Docker
 `HEALTHCHECK`'i ikilinin kendi alt komutunu çağırır: `/gateway healthcheck`.
+
+## Sipariş uçları (T7.5)
+
+Dört uç tek adaptörden (`internal/order`) order-service'e gider. Hepsi kimlik ister; yazan
+üçü `Idempotency-Key` ister. Kurallar (fiyat, risk, 3DS, durum geçişi) order-service'tedir.
+
+- **Kimlik (geçici):** JWT T8.1 ile gelir. O zamana kadar `NODE_ENV` production **değilse**
+  kullanıcı `X-User-Id` başlığından okunur (`usr_` + harf/rakam/`_`/`-`); eksik ya da biçimsizse
+  401. Production'da başlık **okunmaz**, uçlar 401 döner. Kimliği belirleyen tek yer
+  `internal/httpapi/identity.go`; T8.1'de yalnızca o değişir.
+- **Katı gövde:** JSON dışı içerik, bozuk JSON, bilinmeyen alan (ör. adres etiketi `title`) ve
+  yanlış tip 400 döner; `details` alan adını taşır. Gövde sınırı 64 KB.
+- **Gateway'in gördüğü yokluk:** iç içe nesneler (`address.location`, `expectedTotal`)
+  gönderilmezse proto'ya da gönderilmez ve servis "zorunlu" der. Gönderilen konumda enlem ya da
+  boylam **yoksa** (0 değil, yok) bunu yalnız gateway görür: 400.
+- **Risk sinyali (B9):** `POST /v1/orders`'ta bağlantının IP'si `CheckoutSignals.ip_address`
+  olarak order'a gider; istemcinin yazabildiği `X-Forwarded-For` okunmaz (güvenilir vekil yok).
+- **Alan adları:** servisin proto yolu REST adına çevrilir: `lines.0.quantity` →
+  `items.0.quantity`, `deliveryLocation.lat` → `address.location.lat`, `code` → `otp`,
+  `idempotencyKey` → `Idempotency-Key`.
+
+```bash
+# zsh degiskendeki basliklari bolmez: basliklar her komutta acikca yazilir.
+curl -s localhost:8080/v1/cart/reserve -H 'Content-Type: application/json' -H 'X-User-Id: usr_1' \
+  -H 'Idempotency-Key: taslak-0001' -d '{
+  "marketId":"mkt_migros-jet-moda",
+  "items":[{"productId":"prd_bulasik-deterjan","quantity":2},{"productId":"prd_cikolata-80","quantity":1}],
+  "address":{"line":"Kadikoy","location":{"lat":40.99,"lng":29.02}},
+  "expectedTotal":{"amountMinor":19360,"currency":"TRY"}}' | jq
+curl -s localhost:8080/v1/orders -H 'Content-Type: application/json' -H 'X-User-Id: usr_1' \
+  -H 'Idempotency-Key: siparis-0001' \
+  -d '{"orderId":"<taslak>","payment":{"method":"CARD","cardToken":"tok_test_4242"}}' | jq
+curl -s localhost:8080/v1/orders/<taslak>/3ds -H 'Content-Type: application/json' -H 'X-User-Id: usr_1' \
+  -H 'Idempotency-Key: onay-0001' -d '{"challengeId":"<tds_...>","otp":"123456"}' | jq   # 3DS istendiyse
+curl -s localhost:8080/v1/orders/<taslak> -H 'X-User-Id: usr_1' | jq
+```
 
 ## Pazaryeri uçları: gateway ne yapar, ne yapmaz
 
@@ -136,7 +178,10 @@ pnpm codes:go:check                  # fark varsa exit 1 (pnpm verify ve CI bunu
 Bağımlı servis hatası şu sırayla çözülür:
 
 1. `x-app-error` trailer'ı (service-kit'in yazdığı AppError JSON'u) varsa ve kod sözlükteyse → o
-   kod ve `details` (yalnızca metin → metin nesnesi; başka biçim düşürülür).
+   kod ve `details`. Ayrıntı bir JSON **nesnesi** olmalı (dizi ya da sayı düşürülür); değerleri
+   OLDUĞU GİBİ geçer (T7.5): `PRICE_CHANGED`'in güncel toplamı sayı, satışta olmayan ürünler dizi
+   olarak istemciye ulaşır. (Önceki sürüm yalnızca metin → metin kabul ediyordu ve bu sayılar
+   yolda kayboluyordu.)
 2. Yoksa gRPC durum kodu → hata kodu (`service-kit` `errorCodeForStatus` ile aynı eşleme):
    `Unavailable` / `DeadlineExceeded` / `Canceled` → `SERVICE_UNAVAILABLE` 503, `NotFound` →
    `NOT_FOUND`, `InvalidArgument` → `VALIDATION_FAILED`, bilinmeyen → `INTERNAL`.

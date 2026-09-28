@@ -1,6 +1,7 @@
 package apperror
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"testing"
@@ -66,6 +67,34 @@ func TestFromGRPCDropsNonObjectDetails(t *testing.T) {
 
 	if err.Code != CodeValidationFailed || err.Details != nil {
 		t.Errorf("kod korunmali, details dusmeli: %+v", err)
+	}
+}
+
+func TestFromGRPCKeepsDetailValuesAsSent(t *testing.T) {
+	// T7.5: sayi ve dizi ayrinti (PRICE_CHANGED'in guncel toplami, satista
+	// olmayan urunler) istemciye OLDUGU GIBI gitmeli; metin Go metni kalir ki
+	// alan adi esleme ve karsilastirma calissin. null da null kalir ("" degil).
+	trailer := metadata.Pairs(MetadataKey, `{"code":"PRICE_CHANGED","message":"x","details":{"totalMinor":19360,"currency":"TRY","ids":["prd_a","prd_b"],"none":null}}`)
+	err := FromGRPC(status.Error(codes.Aborted, "x"), trailer)
+
+	encoded, marshalErr := json.Marshal(err.Details)
+	if marshalErr != nil {
+		t.Fatalf("details kodlanamadi: %v", marshalErr)
+	}
+	if want := `{"currency":"TRY","ids":["prd_a","prd_b"],"none":null,"totalMinor":19360}`; string(encoded) != want {
+		t.Errorf("details:\n got %s\nwant %s", encoded, want)
+	}
+	if err.Details["currency"] != "TRY" {
+		t.Errorf("metin Go metni olmali: %#v", err.Details["currency"])
+	}
+}
+
+func TestNewKeepsTextDetails(t *testing.T) {
+	if err := New(CodeValidationFailed, map[string]string{"lat": "zorunlu"}); err.Details["lat"] != "zorunlu" {
+		t.Errorf("gateway'in kendi ayrintisi metin kalmali: %v", err.Details)
+	}
+	if err := New(CodeNotFound, map[string]string{}); err.Details != nil {
+		t.Errorf("bos ayrinti nil olmali (zarfta alan yok): %v", err.Details)
 	}
 }
 

@@ -39,6 +39,7 @@ describe('createOrderRequestSchema', () => {
       paymentMethod: 'CARD',
       cardToken: 'tok_test_4242',
       idempotencyKey: IDEMPOTENCY_KEY,
+      signals: {},
     });
   });
 
@@ -67,6 +68,69 @@ describe('createOrderRequestSchema', () => {
     ],
   ])('gecersiz odeme %o: tek hata, alaniyla', (overrides, field, message) => {
     expect(issuesOf(overrides)).toEqual([[field, message]]);
+  });
+
+  describe('signals (T7.5, gateway doldurur)', () => {
+    const signalsOf = (signals: orderV1.CreateOrderRequest['signals']) =>
+      createOrderRequestSchema.parse({ ...request, signals }).signals;
+
+    it('mesaj gelmezse sinyal yok: bos nesne', () => {
+      expect(signalsOf(undefined)).toEqual({});
+    });
+
+    it('bos metin ve 0 "yok" demektir: alan tasinmaz (risk sozlesmesi)', () => {
+      const parsed = signalsOf({
+        ipAddress: '',
+        ipCity: '  ',
+        deviceId: '',
+        accountsOnDevice: 0,
+        previousIpAddress: '',
+        sessionLocation: undefined,
+        accountCreatedAt: undefined,
+      });
+
+      expect(parsed).toEqual({});
+    });
+
+    it('dolu sinyaller oldugu gibi okunur (IP kirpilir)', () => {
+      const accountCreatedAt = new Date('2026-09-01T00:00:00Z');
+
+      expect(
+        signalsOf({
+          ipAddress: ' 85.105.1.20 ',
+          ipCity: 'Istanbul',
+          deviceId: 'dev_1',
+          accountsOnDevice: 2,
+          previousIpAddress: '85.105.1.19',
+          sessionLocation: { lat: 41, lng: 29 },
+          accountCreatedAt,
+        }),
+      ).toEqual({
+        ipAddress: '85.105.1.20',
+        ipCity: 'Istanbul',
+        deviceId: 'dev_1',
+        accountsOnDevice: 2,
+        previousIpAddress: '85.105.1.19',
+        sessionLocation: { lat: 41, lng: 29 },
+        accountCreatedAt,
+      });
+    });
+
+    it('sinirsiz metin ve gecersiz konum reddedilir', () => {
+      const empty = {
+        ipAddress: '',
+        ipCity: '',
+        deviceId: '',
+        accountsOnDevice: 0,
+        previousIpAddress: '',
+      };
+      const rejects = (signals: orderV1.CreateOrderRequest['signals']) =>
+        !createOrderRequestSchema.safeParse({ ...request, signals }).success;
+
+      expect(rejects({ ...empty, deviceId: 'd'.repeat(129) })).toBe(true);
+      expect(rejects({ ...empty, accountsOnDevice: -1 })).toBe(true);
+      expect(rejects({ ...empty, sessionLocation: { lat: 95, lng: 29 } })).toBe(true);
+    });
   });
 });
 

@@ -334,17 +334,18 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/cat
   localhost:50051 getir.catalog.v1.CatalogService/ListCategories
 ```
 
-| Servis                                                     | Port  | Bugün ne yapıyor                                                                     |
-| ---------------------------------------------------------- | ----- | ------------------------------------------------------------------------------------ |
-| [`catalog-service`](apps/catalog-service/README.md) (T4.8) | 50051 | Pazaryeri: yakındaki marketler, market sayfası, teklifler — Mongo ya da `MOCK`       |
-| [`order-service`](apps/order-service/README.md) (T7.2)     | 50053 | Taslak (catalog fiyatıyla, sunucu hesabı), sipariş, iptal, geçmiş — ödeme yok (T7.1) |
-| [`payment-service`](apps/payment-service/README.md) (T5.3) | 50054 | `Charge`, `Confirm3Ds` — mock kart + 3DS, idempotent; Mongo `payments` ya da `MOCK`  |
-| [`risk-service`](apps/risk-service/README.md) (T6.3)       | 50055 | `Evaluate`, `GetLastEvaluation` — 6 kural, veto, `risk_events` (Mongo ya da `MOCK`)  |
-| [`gateway`](apps/gateway/README.md) (Go)                   | 8080  | `GET /healthz`, `/v1/categories`, `/v1/markets` ve alt uçları (stoksuz)              |
+| Servis                                                     | Port  | Bugün ne yapıyor                                                                                                      |
+| ---------------------------------------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------- |
+| [`catalog-service`](apps/catalog-service/README.md) (T4.8) | 50051 | Pazaryeri: yakındaki marketler, market sayfası, teklifler — Mongo ya da `MOCK`                                        |
+| [`order-service`](apps/order-service/README.md) (T7.5)     | 50053 | Taslak (catalog fiyatıyla), saga (risk → ödeme → 3DS), iptal, geçmiş, outbox → olay                                   |
+| [`payment-service`](apps/payment-service/README.md) (T5.3) | 50054 | `Charge`, `Confirm3Ds` — mock kart + 3DS, idempotent; Mongo `payments` ya da `MOCK`                                   |
+| [`risk-service`](apps/risk-service/README.md) (T6.3)       | 50055 | `Evaluate`, `GetLastEvaluation` — 6 kural, veto, `risk_events` (Mongo ya da `MOCK`)                                   |
+| [`gateway`](apps/gateway/README.md) (Go, T7.5)             | 8080  | Katalog uçları (stoksuz) ve sipariş uçları: `POST /v1/cart/reserve`, `POST /v1/orders`, `/3ds`, `GET /v1/orders/{id}` |
 
 Katalog T4.1'den beri Mongo'dan okur: `MOCK=true` ise aynı demo verisini bellekten döndürür
 ve Mongo istemez, değilse `MONGO_URI` zorunludur (yoksa açılışta ölür). Kök `.env` varsa okunur;
-`.env.example`'da `MOCK=true`'dur. Siparişler hâlâ bellekte; Mongo bağımlılığı T4.5 ile gelecek.
+`.env.example`'da `MOCK=true`'dur. Sipariş, ödeme ve risk servisleri de aynı kurala uyar (`MOCK=true` →
+bellek, değilse Mongo; order ve payment ayrıca Redis ister).
 
 ### Entegrasyon testleri ve Docker
 

@@ -5,6 +5,11 @@ package httpapi
 //   health.go     - /healthz
 //   categories.go - /v1/categories
 //   markets.go    - /v1/markets ve alt uclari (pazaryeri)
+//   orders.go     - /v1/cart/reserve ve /v1/orders uclari (T7.5)
+//   order_body.go - siparis uclarinin istek govdeleri ve bicim dogrulamasi
+//   identity.go   - kullanici kimligi (JWT T8.1'e kadar gelistirme basligi)
+//   idempotency.go- Idempotency-Key basligi (ADR-08)
+//   body.go       - JSON govdenin kati cozulmesi
 //   params.go     - sorgu parametresinin tipine cevrilmesi
 //   middleware.go - istek gunlugu
 //   errors.go     - hata -> zarf cevirisi
@@ -22,6 +27,7 @@ import (
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/catalog"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
 )
 
 // HealthReporter, /healthz ucunun ihtiyaci olan tek davranis.
@@ -57,6 +63,26 @@ type MarketProductLister interface {
 	MarketProducts(ctx context.Context, query catalog.ProductQuery) (catalog.ProductPage, error)
 }
 
+// CartReserver, POST /v1/cart/reserve.
+type CartReserver interface {
+	Reserve(ctx context.Context, input order.ReserveInput) (order.Reservation, error)
+}
+
+// OrderPlacer, POST /v1/orders.
+type OrderPlacer interface {
+	Place(ctx context.Context, input order.PlaceInput) (order.Placement, error)
+}
+
+// ThreeDSConfirmer, POST /v1/orders/{id}/3ds.
+type ThreeDSConfirmer interface {
+	ConfirmThreeDS(ctx context.Context, input order.ConfirmInput) (order.Placement, error)
+}
+
+// OrderGetter, GET /v1/orders/{id}.
+type OrderGetter interface {
+	Get(ctx context.Context, userID, orderID string) (order.Order, error)
+}
+
 // Deps, yonlendiricinin disaridan aldigi her sey.
 //
 // Katalog uclari ayri alanlardir, tek buyuk arayuz degil: bugun hepsini ayni
@@ -69,7 +95,14 @@ type Deps struct {
 	Market           MarketGetter
 	MarketCategories MarketCategoryLister
 	MarketProducts   MarketProductLister
-	Logger           *slog.Logger
+	CartReserver     CartReserver
+	OrderPlacer      OrderPlacer
+	ThreeDSConfirmer ThreeDSConfirmer
+	OrderGetter      OrderGetter
+	// AllowDemoUser, X-User-Id gelistirme basligi kabul edilsin mi? Yalnizca
+	// production DISINDA true (JWT T8.1'de; bkz. identity.go).
+	AllowDemoUser bool
+	Logger        *slog.Logger
 }
 
 // New, Fiber uygulamasini kurar.
@@ -81,6 +114,8 @@ func New(deps Deps) *fiber.App {
 		// Sunucu adini disariya bildirmek gereksiz bilgi sizdirir.
 		ServerHeader: "",
 		JSONEncoder:  encodeJSON,
+		// Siparis govdeleri kucuktur; sinirsiz govde bellege alinmasin (body.go).
+		BodyLimit: maxBodyBytes,
 	})
 
 	app.Use(requestid.New(requestid.Config{Header: RequestIDHeader}))
@@ -94,6 +129,14 @@ func New(deps Deps) *fiber.App {
 	v1.Get("/markets/:marketId", getMarketHandler(deps.Market))
 	v1.Get("/markets/:marketId/categories", listMarketCategoriesHandler(deps.MarketCategories))
 	v1.Get("/markets/:marketId/products", listMarketProductsHandler(deps.MarketProducts))
+
+	// Siparis uclari (T7.5): once kimlik, sonra uc. Ara katman ROTA BASINA
+	// verilir; /v1 grubuna Use ile verilseydi katalog uclari da kimlik isterdi.
+	user := requireUser(deps.AllowDemoUser)
+	v1.Post("/cart/reserve", user, reserveCartHandler(deps.CartReserver))
+	v1.Post("/orders", user, placeOrderHandler(deps.OrderPlacer))
+	v1.Post("/orders/:"+orderIDParam+"/3ds", user, confirmThreeDSHandler(deps.ThreeDSConfirmer))
+	v1.Get("/orders/:"+orderIDParam, user, getOrderHandler(deps.OrderGetter))
 
 	return app
 }

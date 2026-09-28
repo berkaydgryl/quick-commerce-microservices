@@ -3,8 +3,9 @@
  *
  * Sira bilinclidir:
  *  1. Taslak mi? Degilse risk-svc'ye hic gidilmez (ORDER_STATE_INVALID).
- *  2. Degerlendirme. Ulasilamazsa hicbir sey yazilmaz: riski atlayarak odeme
- *     alinmaz, siparis DRAFT kalir, kullanici tekrar dener.
+ *  2. Degerlendirme: order'in bildigi alanlar + gateway'in sinyalleri (T7.5).
+ *     Ulasilamazsa hicbir sey yazilmaz: riski atlayarak odeme alinmaz,
+ *     siparis DRAFT kalir, kullanici tekrar dener.
  *  3. Odeme yontemi YAZMADAN ONCE kontrol edilir: orta bantta kapida odeme
  *     secildiyse siparis DRAFT kalir ve kullanici kartla tekrar dener.
  *  4. Karar tek yazmayla (surum kontrollu) kaydedilir; durdurulan siparis
@@ -21,6 +22,7 @@ import {
   decideRisk,
   riskContextOf,
 } from '../domain/checkout-risk.js';
+import type { CheckoutSignals } from '../domain/checkout-risk.js';
 import { statusChangedEvents } from '../domain/order-events.js';
 import type { OrderHistoryReader } from '../domain/order-history-reader.js';
 import type { OrderRepository } from '../domain/order-repository.js';
@@ -41,13 +43,14 @@ export async function passRiskStep(
   deps: RiskStepDeps,
   order: Order,
   method: PaymentMethod,
+  signals: CheckoutSignals,
   scope: RequestScope,
 ): Promise<Order> {
   assertTransition(order.id, order.status, ORDER_STATUS.RISK_CHECK);
 
   const history = await deps.history.riskHistory(order.userId);
   const evaluation = await deps.risk.evaluate(
-    riskContextOf(order, history, deps.clock.date()),
+    riskContextOf(order, history, deps.clock.date(), signals),
     scope,
   );
   const decision = decideRisk(evaluation.band);
