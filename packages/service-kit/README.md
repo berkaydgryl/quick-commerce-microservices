@@ -176,7 +176,7 @@ bağlantıyı önce kapatmak tam da önlemeye çalıştığımız yarım işlemi
 
 Test edilen yollar (D5): süre aşımında zorla kapanış (bitmeyen çağrı kesilir, kapanış yine
 biter), kapanış kancasının hatası (ERROR yazılır, kapanış tamamlanır), yakalanmamış hata ve
-reddedilmemiş söz (`FATAL`, kapanış denenir, çıkış kodu 1).
+yakalanmamış söz reddi (`unhandledRejection`; `FATAL`, kapanış denenir, çıkış kodu 1).
 
 ## Test yardımcıları (`@getir/service-kit/testing`, D5)
 
