@@ -77,6 +77,14 @@ describe('AppError', () => {
     expect(rateLimited.grpcStatus).toBe(GRPC_STATUS.RESOURCE_EXHAUSTED);
   });
 
+  it('yazilmamis uc: NOT_IMPLEMENTED -> HTTP 501 ve gRPC UNIMPLEMENTED (D5)', () => {
+    const notImplemented = new AppError(ERROR_CODES.NOT_IMPLEMENTED, 'GetProduct henuz yok');
+
+    expect(notImplemented.httpStatus).toBe(HTTP_STATUS.NOT_IMPLEMENTED);
+    expect(HTTP_STATUS.NOT_IMPLEMENTED).toBe(501);
+    expect(notImplemented.grpcStatus).toBe(GRPC_STATUS.UNIMPLEMENTED);
+  });
+
   it('her hata kodunun HTTP ve gRPC karsiligi vardir', () => {
     for (const code of Object.values(ERROR_CODES)) {
       const error = new AppError(code, code);

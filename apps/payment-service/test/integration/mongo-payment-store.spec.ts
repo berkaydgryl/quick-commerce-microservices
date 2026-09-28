@@ -12,6 +12,7 @@
 
 import { ERROR_CODES, MOCK_THREEDS_CODE } from '@getir/core';
 import type { MongoConnection } from '@getir/mongo-kit';
+import { appErrorOf } from '@getir/service-kit/testing';
 import { MongoDBContainer } from '@testcontainers/mongodb';
 import type { StartedMongoDBContainer } from '@testcontainers/mongodb';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -19,7 +20,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
 import type { PaymentDocument } from '../../src/infrastructure/mongo/documents.js';
 import type { PaymentMongoStore } from '../../src/infrastructure/mongo/payment-mongo-store.js';
-import { appErrorOf } from '../support/grpc-error.js';
 import {
   chargeWith3Ds,
   confirm3Ds,

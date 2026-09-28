@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { FakeRiskAssessment } from '../../support/fake-risk-assessment.js';
 import { TEST_CARD } from '../../support/fake-payments.js';
-import { appErrorOf } from '../../support/grpc-error.js';
+import { appErrorOf } from '@getir/service-kit/testing';
 import { createOrderRequest } from '../../support/order-fixtures.js';
 import { newDraftId, useOrderGrpcServer } from '../../support/order-grpc-harness.js';
 

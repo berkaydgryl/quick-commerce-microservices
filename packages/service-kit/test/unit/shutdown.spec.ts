@@ -1,6 +1,8 @@
+import { recordingLogger } from '@getir/core/testing';
+import type { LogLine } from '@getir/core/testing';
 import { describe, expect, it, vi } from 'vitest';
 
-import { installProcessHandlers, SHUTDOWN_SIGNALS } from '../../src/shutdown.js';
+import { FATAL_EXIT_CODE, installProcessHandlers, SHUTDOWN_SIGNALS } from '../../src/shutdown.js';
 
 /**
  * Testte GERCEK sinyal gonderilmez: process.emit dinleyicileri dogrudan cagirir.
@@ -54,5 +56,75 @@ describe('installProcessHandlers', () => {
 
   it('varsayilan sinyaller SIGINT ve SIGTERM', () => {
     expect(SHUTDOWN_SIGNALS).toEqual(['SIGINT', 'SIGTERM']);
+  });
+});
+
+/**
+ * Yakalanmamis hata (D5). Test kosucusu da bu olaylari dinler: elle yayilan
+ * olayi "testte yakalanmamis hata" sanmasin diye onun dinleyicileri test
+ * boyunca kenara alinir ve sonra geri takilir.
+ */
+type FatalEvent = 'uncaughtException' | 'unhandledRejection';
+
+async function withoutRunnerListeners(event: FatalEvent, run: () => Promise<void>): Promise<void> {
+  // Genel EventEmitter yuzu: iki olayin ayri ayri tipli asiri yuklemeleri birlesemiyor.
+  const emitter: NodeJS.EventEmitter = process;
+  const saved = emitter.listeners(event) as ((...args: unknown[]) => void)[];
+  emitter.removeAllListeners(event);
+  try {
+    await run();
+  } finally {
+    for (const listener of saved) {
+      emitter.on(event, listener);
+    }
+  }
+}
+
+describe('installProcessHandlers: yakalanmamis hata', () => {
+  it.each<[FatalEvent, () => void]>([
+    ['uncaughtException', () => process.emit('uncaughtException', new Error('beklenmeyen'))],
+    [
+      'unhandledRejection',
+      () => process.emit('unhandledRejection', new Error('reddedildi'), Promise.resolve()),
+    ],
+  ])('%s: FATAL yazilir, kapanis denenir, cikis kodu 1', async (kind, emit) => {
+    await withoutRunnerListeners(kind, async () => {
+      const lines: LogLine[] = [];
+      const shutdown = vi.fn(() => Promise.resolve());
+      const exit = vi.fn();
+      const uninstall = installProcessHandlers({
+        shutdown,
+        exit,
+        signals: [],
+        logger: recordingLogger(lines),
+      });
+      try {
+        emit();
+
+        await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(FATAL_EXIT_CODE));
+        expect(shutdown).toHaveBeenCalledWith(kind);
+        expect(lines[0]).toMatchObject({ level: 'fatal', fields: { kind } });
+      } finally {
+        uninstall();
+      }
+    });
+  });
+
+  it('kapanis da basarisiz olsa cikis kodu yine 1', async () => {
+    await withoutRunnerListeners('uncaughtException', async () => {
+      const exit = vi.fn();
+      const uninstall = installProcessHandlers({
+        shutdown: () => Promise.reject(new Error('kapanis bozuk')),
+        exit,
+        signals: [],
+      });
+      try {
+        process.emit('uncaughtException', new Error('beklenmeyen'));
+
+        await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(FATAL_EXIT_CODE));
+      } finally {
+        uninstall();
+      }
+    });
   });
 });

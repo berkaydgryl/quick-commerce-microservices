@@ -85,6 +85,9 @@ func codeForStatus(code codes.Code) Code {
 		return CodeConflict
 	case codes.ResourceExhausted:
 		return CodeRateLimited
+	// Sozlesmede olan ama yazilmamis uc (D5): is hatasi degil, 501.
+	case codes.Unimplemented:
+		return CodeNotImplemented
 	// Servis kapali, deadline doldu ya da cagri iptal edildi: ucu de "su an
 	// cevap alamadik" demektir ve yeniden denenebilir.
 	case codes.Unavailable, codes.DeadlineExceeded, codes.Canceled:

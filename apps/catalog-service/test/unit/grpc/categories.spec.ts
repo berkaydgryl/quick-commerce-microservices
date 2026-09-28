@@ -7,7 +7,7 @@ import { catalogV1 } from '@getir/proto';
 import { describe, expect, it } from 'vitest';
 
 import { useCatalogGrpcServer } from '../../support/catalog-grpc-harness.js';
-import { appErrorOf } from '../../support/grpc-error.js';
+import { appErrorOf } from '@getir/service-kit/testing';
 
 const call = useCatalogGrpcServer();
 

@@ -10,8 +10,7 @@ import {
   CART_ITEM_MAX_QUANTITY,
   CART_MAX_ITEMS,
   geoPointSchema,
-  IDEMPOTENCY_KEY_MAX_LENGTH,
-  IDEMPOTENCY_KEY_MIN_LENGTH,
+  idempotencyKeySchema,
   marketIdSchema,
   moneySchema,
   OTP_PATTERN,
@@ -37,15 +36,11 @@ const requiredText = (field: string) => z.string().trim().min(1, `${field} zorun
  * BUGUN VARLIGI ve UZUNLUGU dogrulaniyor; ayni anahtarla gelen ikinci istegin
  * ilkinin cevabini dondurmesi (tekrar korumasi) idem:{key} kaydi ile gateway
  * tarafinda kurulacak. Anahtari simdiden ZORUNLU tutmak onemli: istemciler
- * gondermeye bugun alissin, koruma acildiginda sozlesme degismesin. Sinirlar
- * REST basligi ve Redis anahtariyla ayni kaynaktan gelir: REST'in kabul ettigi
- * anahtari order reddetmemeli, reddettigini de kabul etmemeli.
+ * gondermeye bugun alissin, koruma acildiginda sozlesme degismesin. Kural
+ * contracts'taki TEK semadir (D5): REST basligi, payment ve order ayni sinirlari
+ * uygular - REST'in kabul ettigi anahtari order reddetmemeli.
  */
-const idempotencyKey = z
-  .string()
-  .trim()
-  .min(IDEMPOTENCY_KEY_MIN_LENGTH, `en az ${IDEMPOTENCY_KEY_MIN_LENGTH} karakter olmali`)
-  .max(IDEMPOTENCY_KEY_MAX_LENGTH, `en fazla ${IDEMPOTENCY_KEY_MAX_LENGTH} karakter olmali`);
+const idempotencyKey = idempotencyKeySchema;
 
 const cartLine = z.object({
   productId: requiredText('productId'),

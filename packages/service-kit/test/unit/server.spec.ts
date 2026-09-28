@@ -10,10 +10,9 @@
 
 import { ERROR_CODES, GRPC_STATUS } from '@getir/core';
 import { Client, credentials } from '@grpc/grpc-js';
-import type { ServiceError } from '@grpc/grpc-js';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ERROR_METADATA_KEY, SERVING_STATUS } from '../../src/config/constants.js';
+import { SERVING_STATUS } from '../../src/config/constants.js';
 import {
   BOOM_MESSAGE,
   createEchoImplementation,
@@ -23,7 +22,8 @@ import {
 import { healthServiceDefinition } from '../../src/grpc/health.js';
 import { startGrpcServer } from '../../src/grpc/server.js';
 import type { GrpcServerHandle } from '../../src/grpc/types.js';
-import { firstMessage, streamCall, unaryCall } from './support/grpc-client.js';
+import { appErrorOf } from '../../src/testing/index.js';
+import { callByName, firstMessage, streamCall } from './support/grpc-client.js';
 
 /** Isletim sistemi bos bir port secsin; testler paralel kosarken cakismaz. */
 const EPHEMERAL_PORT = 0;
@@ -69,15 +69,6 @@ afterEach(async () => {
   openHandle = undefined;
 });
 
-/** Hatanin metadata'sindaki AppError kodunu okur. */
-function errorCodeOf(error: Error | undefined): string | undefined {
-  const raw = (error as ServiceError | undefined)?.metadata.get(ERROR_METADATA_KEY)[0];
-  if (typeof raw !== 'string') {
-    return undefined;
-  }
-  return (JSON.parse(raw) as { code: string }).code;
-}
-
 describe('startGrpcServer', () => {
   it('bos port ister ve gercekten baglandigi portu dondurur', async () => {
     const { handle } = await startTestServer();
@@ -88,7 +79,7 @@ describe('startGrpcServer', () => {
   it('health Check butun sunucu icin SERVING doner', async () => {
     const { client } = await startTestServer();
 
-    const result = await unaryCall<{ service: string }, HealthResponse>(
+    const result = await callByName<{ service: string }, HealthResponse>(
       client,
       healthServiceDefinition,
       'Check',
@@ -102,7 +93,7 @@ describe('startGrpcServer', () => {
   it('kayitli servis adi icin de ayri satir tutar', async () => {
     const { client } = await startTestServer();
 
-    const result = await unaryCall<{ service: string }, HealthResponse>(
+    const result = await callByName<{ service: string }, HealthResponse>(
       client,
       healthServiceDefinition,
       'Check',
@@ -115,20 +106,20 @@ describe('startGrpcServer', () => {
   it('bilinmeyen servisi NOT_FOUND ile reddeder', async () => {
     const { client } = await startTestServer();
 
-    const result = await unaryCall<{ service: string }, HealthResponse>(
+    const result = await callByName<{ service: string }, HealthResponse>(
       client,
       healthServiceDefinition,
       'Check',
       { service: 'getir.yok.v1.YokService' },
     );
 
-    expect((result.error as ServiceError | undefined)?.code).toBe(GRPC_STATUS.NOT_FOUND);
+    expect(result.error?.code).toBe(GRPC_STATUS.NOT_FOUND);
   });
 
   it('ornek RPC gercek cevap doner', async () => {
     const { client } = await startTestServer();
 
-    const result = await unaryCall<{ message: string; repeat: number }, EchoResponse>(
+    const result = await callByName<{ message: string; repeat: number }, EchoResponse>(
       client,
       echoServiceDefinition,
       'Echo',
@@ -141,30 +132,30 @@ describe('startGrpcServer', () => {
   it('gecersiz istek INVALID_ARGUMENT ile doner', async () => {
     const { client } = await startTestServer();
 
-    const result = await unaryCall<{ message: string; repeat: number }, EchoResponse>(
+    const result = await callByName<{ message: string; repeat: number }, EchoResponse>(
       client,
       echoServiceDefinition,
       'Echo',
       { message: '', repeat: 99 },
     );
 
-    expect((result.error as ServiceError | undefined)?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
-    expect(errorCodeOf(result.error)).toBe(ERROR_CODES.VALIDATION_FAILED);
+    expect(result.error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
+    expect(appErrorOf(result.error)?.code).toBe(ERROR_CODES.VALIDATION_FAILED);
   });
 
   it('beklenmeyen hata INTERNAL olur ve ic mesaj disari cikmaz', async () => {
     const { client } = await startTestServer();
 
-    const result = await unaryCall<{ message: string; repeat: number }, EchoResponse>(
+    const result = await callByName<{ message: string; repeat: number }, EchoResponse>(
       client,
       echoServiceDefinition,
       'Echo',
       { message: BOOM_MESSAGE, repeat: 1 },
     );
 
-    expect((result.error as ServiceError | undefined)?.code).toBe(GRPC_STATUS.INTERNAL);
+    expect(result.error?.code).toBe(GRPC_STATUS.INTERNAL);
     expect(result.error?.message).not.toContain('ornek patlama');
-    expect(errorCodeOf(result.error)).toBe(ERROR_CODES.INTERNAL);
+    expect(appErrorOf(result.error)?.code).toBe(ERROR_CODES.INTERNAL);
   });
 });
 

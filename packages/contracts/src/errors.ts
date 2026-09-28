@@ -5,7 +5,7 @@
  * status) @getir/core icindeki ERROR_CODES'a aittir; bu dosya yalnizca o
  * kodlarin insan diline cevirisini tutar. Kodlar burada TEKRAR TANIMLANMAZ.
  *
- * Sozluk Record<ErrorCode, string> olarak yazildigi icin eksiksiz olmak
+ * Sozluk Readonly<Record<ErrorCode, string>> olarak yazildigi icin eksiksiz olmak
  * ZORUNDADIR: core'a yeni bir hata kodu eklendiginde bu dosya derlenmez ve
  * eksik ceviri daha ilk tip kontrolunde yakalanir. Bu davranis bilerek
  * secilmistir; varsayilan bir "Bir hata olustu" metnine dusmek, eksikligi
@@ -20,7 +20,7 @@ import { ERROR_CODES, type ErrorCode } from '@getir/core';
 
 import type { ApiError } from './envelope.js';
 
-export const ERROR_MESSAGES: Record<ErrorCode, string> = {
+export const ERROR_MESSAGES: Readonly<Record<ErrorCode, string>> = {
   [ERROR_CODES.VALIDATION_FAILED]: 'Girdiğin bilgilerde bir sorun var, kontrol eder misin?',
   [ERROR_CODES.UNAUTHORIZED]: 'Oturumun sona ermiş. Tekrar giriş yapman gerekiyor.',
   [ERROR_CODES.FORBIDDEN]: 'Bu işlem için yetkin yok.',
@@ -47,6 +47,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   [ERROR_CODES.RATE_LIMITED]: 'Çok fazla deneme yaptın. Kısa bir süre sonra tekrar dene.',
   [ERROR_CODES.ORDER_STATE_INVALID]: 'Siparişin bu adımda bu işlemi yapmaya uygun değil.',
   [ERROR_CODES.SERVICE_UNAVAILABLE]: 'Servise şu an ulaşamıyoruz. Birazdan tekrar dene.',
+  [ERROR_CODES.NOT_IMPLEMENTED]: 'Bu özellik henüz kullanılamıyor.',
 };
 
 /** Kodun kullaniciya gosterilecek karsiligini dondurur. */

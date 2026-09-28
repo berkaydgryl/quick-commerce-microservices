@@ -8,11 +8,12 @@
 import { connectMongo } from '@getir/mongo-kit';
 import type { MongoConnection } from '@getir/mongo-kit';
 import { paymentV1 } from '@getir/proto';
+import { unaryCall } from '@getir/service-kit/testing';
 import type { Client } from '@grpc/grpc-js';
 
 import { PaymentMongoStore } from '../../src/infrastructure/mongo/payment-mongo-store.js';
 import { PaymentsCollection } from '../../src/infrastructure/mongo/payments-collection.js';
-import { startPaymentService, unaryCall } from './payment-grpc-client.js';
+import { startPaymentService } from './payment-grpc-client.js';
 
 export interface MongoTarget {
   readonly uri: string;

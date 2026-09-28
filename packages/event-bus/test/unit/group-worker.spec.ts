@@ -5,6 +5,8 @@
  */
 
 import { EVENTS, fixedClock } from '@getir/core';
+import { recordingLogger } from '@getir/core/testing';
+import type { LogLine } from '@getir/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEAD_LETTER_REASON } from '../../src/dead-letter.js';
@@ -16,8 +18,6 @@ import type { DeadLetterDetails, PendingEntry, StreamGroup } from '../../src/red
 import { EVENT_HANDLED } from '../../src/subscriber.js';
 import type { EventHandler } from '../../src/subscriber.js';
 import { entryOf, envelopeOf } from '../support/envelopes.js';
-import { recordingLogger } from '../support/recording-logger.js';
-import type { LogLine } from '../support/recording-logger.js';
 
 const NOW_MS = 1_790_000_000_000;
 const settings: DeliverySettings = {

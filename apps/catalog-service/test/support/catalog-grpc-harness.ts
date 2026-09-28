@@ -2,67 +2,34 @@
  * Uctan uca kapi testleri icin gercek catalog gRPC sunucusu + gercek istemci.
  *
  * Dis bagimlilik yok: katalog verisi bellekte (demo verisi), sunucu isletim
- * sisteminin verdigi bos portta. Cagiran spec dosyasinda beforeAll/afterAll
- * kaydeder; her dosya kendi sunucusunu alir, dosyalar paralel kosabilir.
+ * sisteminin verdigi bos portta (@getir/service-kit/testing, D5). Cagiran spec
+ * dosyasinda beforeAll/afterAll kaydeder; her dosya kendi sunucusunu alir,
+ * dosyalar paralel kosabilir.
  */
 
-import { startGrpcServer } from '@getir/service-kit';
-import type { GrpcServerHandle } from '@getir/service-kit';
-import { Client, credentials, Metadata } from '@grpc/grpc-js';
-import type { MethodDefinition, ServiceError } from '@grpc/grpc-js';
+import { startTestGrpcServer } from '@getir/service-kit/testing';
+import type { TestGrpcServer, UnaryCall } from '@getir/service-kit/testing';
 import { afterAll, beforeAll } from 'vitest';
 
 import { buildCatalogService } from '../../src/bootstrap.js';
 
-/** Isletim sistemi bos bir port secsin; testler paralel kosarken cakismaz. */
-const EPHEMERAL_PORT = 0;
-
-export interface CallResult<TResponse> {
-  readonly error: ServiceError | undefined;
-  readonly response: TResponse | undefined;
-}
-
-/** Sozlesmeden gelen serialize/deserialize ile tipli unary cagri. */
-export type UnaryCall = <TRequest, TResponse>(
-  method: MethodDefinition<TRequest, TResponse>,
-  request: TRequest,
-) => Promise<CallResult<TResponse>>;
-
 /** Sunucuyu dosyanin omru boyunca ayakta tutar; tipli unary cagri fonksiyonu doner. */
 export function useCatalogGrpcServer(): UnaryCall {
-  let handle: GrpcServerHandle | undefined;
-  let client: Client | undefined;
+  let server: TestGrpcServer | undefined;
 
   beforeAll(async () => {
-    handle = await startGrpcServer({
+    server = await startTestGrpcServer({
       serviceName: 'catalog-test',
-      host: '127.0.0.1',
-      port: EPHEMERAL_PORT,
       services: [buildCatalogService()],
     });
-    client = new Client(`127.0.0.1:${handle.port}`, credentials.createInsecure());
   });
 
   afterAll(async () => {
-    client?.close();
-    await handle?.shutdown('test bitti');
+    await server?.stop();
   });
 
-  return (method, request) =>
-    new Promise((resolve, reject) => {
-      if (client === undefined) {
-        reject(new Error('test sunucusu henuz baslamadi'));
-        return;
-      }
-      client.makeUnaryRequest(
-        method.path,
-        method.requestSerialize,
-        method.responseDeserialize,
-        request,
-        new Metadata(),
-        (error, response) => {
-          resolve({ error: error ?? undefined, response: response ?? undefined });
-        },
-      );
-    });
+  return (method, request, metadata) =>
+    server === undefined
+      ? Promise.reject(new Error('test sunucusu henuz baslamadi'))
+      : server.call(method, request, metadata);
 }

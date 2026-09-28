@@ -13,7 +13,7 @@ idempotency ve durum makinesi baştan yerinde.
 | `payments`                 | ✅ Mongo (`MOCK=false`) ya da bellek (`MOCK=true`); `attempts[]` geçmişi (T5.3)            |
 | `Refund`                   | ✅ Saga'nın telafisi (T7.1): yalnızca tamamlanmış çekim; tekrar istek `already_refunded`   |
 | `payment.refund_requested` | ✅ Olay tüketicisi (T7.4): saga'nın kalıcı iade komutu `stream:events`'ten, grup `payment` |
-| `GetPayment`               | ⏳ Henüz çağıran yok (`UNIMPLEMENTED`)                                                     |
+| `GetPayment`               | ⏳ Henüz çağıran yok: `NOT_IMPLEMENTED` (gRPC `UNIMPLEMENTED`, HTTP 501; D5)               |
 
 ## Test kartları
 

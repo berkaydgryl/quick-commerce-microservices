@@ -5,12 +5,13 @@
 
 import { ERROR_CODES, GRPC_STATUS, MOCK_THREEDS_CODE } from '@getir/core';
 import { paymentV1 } from '@getir/proto';
+import { appErrorOf, unaryCall } from '@getir/service-kit/testing';
+import type { CallResult } from '@getir/service-kit/testing';
 import type { MethodDefinition, ServiceError } from '@grpc/grpc-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { appErrorOf } from '../support/grpc-error.js';
-import { startPaymentService, unaryCall } from '../support/payment-grpc-client.js';
-import type { CallResult, RunningPaymentService } from '../support/payment-grpc-client.js';
+import { startPaymentService } from '../support/payment-grpc-client.js';
+import type { RunningPaymentService } from '../support/payment-grpc-client.js';
 
 let service: RunningPaymentService;
 
@@ -158,9 +159,12 @@ describe('PaymentService/Confirm3Ds', () => {
     expect(error?.code).toBe(GRPC_STATUS.NOT_FOUND);
   });
 
-  it('henuz yazilmayan GetPayment UNIMPLEMENTED doner', async () => {
+  it('henuz yazilmayan GetPayment UNIMPLEMENTED; x-app-error NOT_IMPLEMENTED (D5)', async () => {
     const { error } = await call(paymentV1.PaymentServiceService.getPayment, { orderId: 'ord_1' });
+
     expect(error?.code).toBe(GRPC_STATUS.UNIMPLEMENTED);
+    // grpc-js'in kendi cevabi degil, standart hata yolu: gateway 501 gosterir.
+    expect(appErrorOf(error)?.code).toBe(ERROR_CODES.NOT_IMPLEMENTED);
   });
 });
 

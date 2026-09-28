@@ -19,6 +19,7 @@ func TestTableMatchesCore(t *testing.T) {
 		CodeReservationExpired: http.StatusGone,
 		CodeRiskReview:         http.StatusAccepted,
 		CodeServiceUnavailable: http.StatusServiceUnavailable,
+		CodeNotImplemented:     http.StatusNotImplemented,
 	}
 	for code, want := range cases {
 		if got := HTTPStatus(code); got != want {
@@ -65,6 +66,22 @@ func TestFromGRPCDropsNonObjectDetails(t *testing.T) {
 
 	if err.Code != CodeValidationFailed || err.Details != nil {
 		t.Errorf("kod korunmali, details dusmeli: %+v", err)
+	}
+}
+
+func TestFromGRPCNotImplemented(t *testing.T) {
+	// Yuk varsa (service-kit unimplemented, D5) kod yukten; yoksa durum kodundan
+	// ayni koda dusulur - Node tarafindaki eslemeyle ayni.
+	withPayload := FromGRPC(
+		status.Error(codes.Unimplemented, "x"),
+		metadata.Pairs(MetadataKey, `{"code":"NOT_IMPLEMENTED","message":"GetProduct henuz uygulanmadi (T8.4)"}`),
+	)
+	withoutPayload := FromGRPC(status.Error(codes.Unimplemented, "x"), nil)
+
+	for _, err := range []*Error{withPayload, withoutPayload} {
+		if err.Code != CodeNotImplemented || HTTPStatus(err.Code) != http.StatusNotImplemented {
+			t.Errorf("NOT_IMPLEMENTED (501) bekleniyordu, %s geldi", err.Code)
+		}
 	}
 }
 

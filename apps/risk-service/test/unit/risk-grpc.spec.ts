@@ -6,43 +6,22 @@
 
 import { ERROR_CODES, fixedClock, GRPC_STATUS } from '@getir/core';
 import { riskV1 } from '@getir/proto';
-import { ERROR_METADATA_KEY, startGrpcServer } from '@getir/service-kit';
-import type { GrpcServerHandle } from '@getir/service-kit';
-import { Client, credentials, Metadata } from '@grpc/grpc-js';
-import type { MethodDefinition, ServiceError } from '@grpc/grpc-js';
+import { appErrorOf, startTestGrpcServer } from '@getir/service-kit/testing';
+import type { TestGrpcServer, UnaryCall } from '@getir/service-kit/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { z } from 'zod';
 
 import { buildRiskService } from '../../src/bootstrap.js';
 import { PERSONA_NOW, PERSONAS } from '../support/personas.js';
 import { toProtoContext } from '../support/proto-context.js';
 
-let handle: GrpcServerHandle;
-let client: Client;
+let server: TestGrpcServer | undefined;
 
-function call<TRequest, TResponse>(
-  method: MethodDefinition<TRequest, TResponse>,
-  request: TRequest,
-): Promise<{ error: ServiceError | undefined; response: TResponse | undefined }> {
-  return new Promise((resolve) => {
-    client.makeUnaryRequest(
-      method.path,
-      method.requestSerialize,
-      method.responseDeserialize,
-      request,
-      new Metadata(),
-      (error, response) => resolve({ error: error ?? undefined, response: response ?? undefined }),
-    );
-  });
-}
+const call: UnaryCall = (method, request, metadata) =>
+  server === undefined
+    ? Promise.reject(new Error('test sunucusu henuz baslamadi'))
+    : server.call(method, request, metadata);
 
-const appErrorSchema = z.object({ code: z.string() });
-function errorCodeOf(error: ServiceError | undefined): string | undefined {
-  const raw = error?.metadata.get(ERROR_METADATA_KEY)[0];
-  if (typeof raw !== 'string') return undefined;
-  const parsed = appErrorSchema.safeParse(JSON.parse(raw));
-  return parsed.success ? parsed.data.code : undefined;
-}
+const errorCodeOf = (error: unknown): string | undefined => appErrorOf(error)?.code;
 
 const BAND = {
   LOW: riskV1.RiskBand.RISK_BAND_LOW,
@@ -52,18 +31,14 @@ const BAND = {
 } as const;
 
 beforeAll(async () => {
-  handle = await startGrpcServer({
+  server = await startTestGrpcServer({
     serviceName: 'risk-test',
-    host: '127.0.0.1',
-    port: 0,
     services: [buildRiskService({ clock: fixedClock(PERSONA_NOW) })],
   });
-  client = new Client(`127.0.0.1:${handle.port}`, credentials.createInsecure());
 });
 
 afterAll(async () => {
-  client?.close();
-  await handle?.shutdown('test bitti');
+  await server?.stop();
 });
 
 describe('RiskService/Evaluate - personalar gercek telden', () => {

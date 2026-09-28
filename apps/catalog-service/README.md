@@ -24,10 +24,10 @@ teslimat süresi ve puan. Market paneli kapsam dışıdır; değerler seed'dendi
 | `GetMarket`            | ✅ Puan, süre, fiyat kuralları; yoksa `NOT_FOUND`                                                                                                 |
 | `ListMarketCategories` | ✅ Marketin aktif teklifi olan kategoriler (manav yalnızca meyve-sebze); sayfasız, en fazla 100                                                   |
 | `ListProducts`         | ✅ `market_id` zorunlu; teklifler o marketin fiyatıyla, kategori + arama + imleç                                                                  |
-| `ResolveDarkStore`     | ⛔ Deprecated (ADR-15): `UNIMPLEMENTED`, mesaj `ListNearbyMarkets`'i gösterir                                                                     |
-| `GetProduct`           | ⏳ `UNIMPLEMENTED` — T8.4                                                                                                                         |
+| `ResolveDarkStore`     | ⛔ Deprecated (ADR-15): `NOT_IMPLEMENTED` (gRPC `UNIMPLEMENTED`, HTTP 501), mesaj `ListNearbyMarkets`'i gösterir                                  |
+| `GetProduct`           | ⏳ `NOT_IMPLEMENTED` (gRPC `UNIMPLEMENTED`, HTTP 501) — T8.4                                                                                      |
 | `BatchGetOffers`       | ✅ Marketin satılabilir teklifleri, **tek sorguda** (en fazla 100 kimlik); pasif / başka marketin / olmayan → `missing`; market yoksa `NOT_FOUND` |
-| `BatchGetProducts`     | ⛔ Deprecated (proto'da işaretli): `UNIMPLEMENTED` — kullanan yok; fiyat teklife ait olduğu için sepet doğrulaması `BatchGetOffers` ile           |
+| `BatchGetProducts`     | ⛔ Deprecated (proto'da işaretli): `NOT_IMPLEMENTED` — kullanan yok; fiyat teklife ait olduğu için sepet doğrulaması `BatchGetOffers` ile         |
 
 T4.2'nin "yarıçap içinde ama kapalı → `STORE_CLOSED`, yarıçap dışı → `OUT_OF_RANGE`" kuralı
 kaybolmadı: tek market için `domain/market-coverage.ts` → `evaluateCoverage`'da duruyor ve
@@ -184,8 +184,8 @@ $G -d '{"market_id":"mkt_kardesler-manavi"}' \
 
 Aynı akışın otomatik karşılığı `test/unit/grpc/*.spec.ts` (kategoriler, marketler, ürünler, toplu
 teklif, uygulanmamış RPC'ler): gerçek sunucu, gerçek istemci, dış bağımlılık yok. Düzenek
-`test/support/catalog-grpc-harness.ts`; hata metadata'sı `test/support/grpc-error.ts` ile Zod'dan geçerek
-okunur.
+`test/support/catalog-grpc-harness.ts` (sunucu ve çağrı `@getir/service-kit/testing`'ten, D5); hata
+metadata'sı ortak `appErrorOf` ile Zod'dan geçerek okunur.
 
 ## Docker
 

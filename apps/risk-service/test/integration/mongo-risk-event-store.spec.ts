@@ -11,10 +11,8 @@ import { fixedClock, RISK_BANDS } from '@getir/core';
 import { connectMongo } from '@getir/mongo-kit';
 import type { MongoConnection } from '@getir/mongo-kit';
 import { riskV1 } from '@getir/proto';
-import { startGrpcServer } from '@getir/service-kit';
-import type { GrpcServerHandle } from '@getir/service-kit';
-import { Client, credentials, Metadata } from '@grpc/grpc-js';
-import type { MethodDefinition, ServiceError } from '@grpc/grpc-js';
+import { startTestGrpcServer } from '@getir/service-kit/testing';
+import type { TestGrpcServer, UnaryCall } from '@getir/service-kit/testing';
 import { MongoDBContainer } from '@testcontainers/mongodb';
 import type { StartedMongoDBContainer } from '@testcontainers/mongodb';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -67,40 +65,23 @@ describe('indeksler', () => {
 });
 
 describe('T6.3: Evaluate kaydi Mongo da gorulur ve sorgulanir', () => {
-  let handle: GrpcServerHandle;
-  let client: Client;
+  let server: TestGrpcServer | undefined;
+
+  const call: UnaryCall = (method, request, metadata) =>
+    server === undefined
+      ? Promise.reject(new Error('test sunucusu henuz baslamadi'))
+      : server.call(method, request, metadata);
 
   beforeAll(async () => {
-    handle = await startGrpcServer({
+    server = await startTestGrpcServer({
       serviceName: 'risk-int',
-      host: '127.0.0.1',
-      port: 0,
       services: [buildRiskService({ events: store, clock: fixedClock(PERSONA_NOW) })],
     });
-    client = new Client(`127.0.0.1:${handle.port}`, credentials.createInsecure());
   });
 
   afterAll(async () => {
-    client.close();
-    await handle.shutdown('test bitti');
+    await server?.stop();
   });
-
-  function call<TRequest, TResponse>(
-    method: MethodDefinition<TRequest, TResponse>,
-    request: TRequest,
-  ): Promise<{ error: ServiceError | undefined; response: TResponse | undefined }> {
-    return new Promise((resolve) => {
-      client.makeUnaryRequest(
-        method.path,
-        method.requestSerialize,
-        method.responseDeserialize,
-        request,
-        new Metadata(),
-        (error, response) =>
-          resolve({ error: error ?? undefined, response: response ?? undefined }),
-      );
-    });
-  }
 
   it('Can (HIGH) ve Ali (veto) degerlendirmeleri koleksiyona yazilir, ham baglam yazilmaz', async () => {
     const can = PERSONAS.find((persona) => persona.name.startsWith('Can'));

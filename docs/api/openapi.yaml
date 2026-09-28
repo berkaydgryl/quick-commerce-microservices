@@ -1298,6 +1298,8 @@ components:
         - SERVICE_UNAVAILABLE
         - RATE_LIMITED
         - REQUEST_IN_PROGRESS
+        # Sozlesmede olan ama henuz yazilmamis uc (D5), HTTP 501
+        - NOT_IMPLEMENTED
         # Stok ve rezervasyon
         - STOCK_INSUFFICIENT
         - RESERVATION_EXPIRED

@@ -186,6 +186,9 @@ export type StockChangedEvent = z.infer<typeof stockChangedEventSchema>;
  *
  * realtime-service yayin yaparken ve web istemcisi dinlerken ayni tabloyu
  * kullanir; boylece bir olayin adi ile govdesi arasindaki bag tek yerde durur.
+ * `satisfies` tabloyu EKSIKSIZ tutar (D5): sunucudan istemciye giden yeni bir
+ * olay adi eklenip semasi unutulursa derleme kirilir (room.join istemciden
+ * sunucuya gider, bu yuzden disaridadir).
  */
 export const SOCKET_EVENT_SCHEMAS = {
   [SOCKET_EVENTS.ORDER_STATUS]: orderStatusEventSchema,
@@ -195,4 +198,6 @@ export const SOCKET_EVENT_SCHEMAS = {
   [SOCKET_EVENTS.COURIER_LOCATION]: courierLocationEventSchema,
   [SOCKET_EVENTS.ORDER_DELIVERED]: orderDeliveredEventSchema,
   [SOCKET_EVENTS.STOCK_CHANGED]: stockChangedEventSchema,
-} as const;
+} as const satisfies Readonly<
+  Record<Exclude<SocketEventName, typeof SOCKET_EVENTS.ROOM_JOIN>, z.ZodTypeAny>
+>;
