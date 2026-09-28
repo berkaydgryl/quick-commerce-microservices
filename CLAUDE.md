@@ -25,7 +25,7 @@ Kurallar bu dosyada TEKRAR EDILMEZ; iki yerde duran kural, bir gun birbirinden a
   DB/I/O calls. Prevent goroutine leaks.
 - **API & gRPC:** Enforce input validation, cursor pagination, structured JSON errors, and
   backward-compatible proto definitions.
-- **Redis:** Always set TTL on keys (the only exceptions are documented in ADR-03). Use key
+- **Redis:** Always set TTL on keys (the only exceptions are documented in ADR-03 and ADR-16). Use key
   namespaces (`app:module:id`). Never execute `KEYS *` in production.
 - **Docker:** Use multi-stage builds, non-root users (`USER node`), and minimal base images.
 - **Database:** Avoid N+1 queries. Always use explicit migrations. Prefer soft deletes for
@@ -54,7 +54,8 @@ are a starting point, not a contract. Ask before designing.
 
 Her kuralin bu repodaki karsiligi (hangi dosya, hangi ADR, hangi istisna) icin bkz.
 `.cursor/rules/proje-kurallari.mdc`. Ozellikle **Redis TTL istisnasi** oraya gerekcesiyle
-yazilmistir: stok sayaci ve rezervasyon indeksi bilincli olarak TTL'sizdir (ADR-03).
+yazilmistir: stok sayaci ve rezervasyon indeksi bilincli olarak TTL'sizdir (ADR-03); olay akislari
+(`stream:events`, `stream:events:dead`) TTL yerine `MAXLEN ~` ile sinirlidir (ADR-16).
 
 ## Kapilar
 

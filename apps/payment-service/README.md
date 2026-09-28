@@ -4,15 +4,16 @@
 gerçek bir sağlayıcı takılabilecek biçimde kuruldu: sağlayıcı bir port (`PaymentProvider`),
 idempotency ve durum makinesi baştan yerinde.
 
-## Bugünkü durum (T7.1 — sipariş saga'sının ödeme adımı)
+## Bugünkü durum (T7.4 — iade komutu tüketicisi)
 
-| Uç           | Durum                                                                                      |
-| ------------ | ------------------------------------------------------------------------------------------ |
-| `Charge`     | ✅ Test kartına göre onay / ret / 3DS; kapıda ödeme `PENDING`; risk 3DS isteyebilir (T7.1) |
-| `Confirm3Ds` | ✅ Sabit kod, 60 sn ömür, 3 yanlışta kilit, tekrar istek güvenli (T5.2)                    |
-| `payments`   | ✅ Mongo (`MOCK=false`) ya da bellek (`MOCK=true`); `attempts[]` geçmişi (T5.3)            |
-| `Refund`     | ✅ Saga'nın telafisi (T7.1): yalnızca tamamlanmış çekim; tekrar istek `already_refunded`   |
-| `GetPayment` | ⏳ Henüz çağıran yok (`UNIMPLEMENTED`)                                                     |
+| Uç                         | Durum                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------ |
+| `Charge`                   | ✅ Test kartına göre onay / ret / 3DS; kapıda ödeme `PENDING`; risk 3DS isteyebilir (T7.1) |
+| `Confirm3Ds`               | ✅ Sabit kod, 60 sn ömür, 3 yanlışta kilit, tekrar istek güvenli (T5.2)                    |
+| `payments`                 | ✅ Mongo (`MOCK=false`) ya da bellek (`MOCK=true`); `attempts[]` geçmişi (T5.3)            |
+| `Refund`                   | ✅ Saga'nın telafisi (T7.1): yalnızca tamamlanmış çekim; tekrar istek `already_refunded`   |
+| `payment.refund_requested` | ✅ Olay tüketicisi (T7.4): saga'nın kalıcı iade komutu `stream:events`'ten, grup `payment` |
+| `GetPayment`               | ⏳ Henüz çağıran yok (`UNIMPLEMENTED`)                                                     |
 
 ## Test kartları
 
@@ -65,12 +66,35 @@ Eş zamanlı iki iade: biri yazar, diğeri sürüm çakışmasında kaydı yenid
 edildi" döner — para iki kez geri verilmez. Gerekçe bir anahtardır (`order_changed_during_payment`),
 Idempotency-Key zorunludur (ADR-08); tekrar koruması kaydın durumundadır.
 
+## İade komutu (`payment.refund_requested`, T7.4)
+
+Sipariş saga'sı tutarı aldı ama siparişi `PAID` yazamadı ve doğrudan `Refund` çağrısı da başarısız
+oldu (T7.1); order komutu outbox'a yazdı (T7.3). Payment bu komutu `stream:events`'ten **`payment`
+tüketici grubuyla** dinler (`@getir/event-bus`, `interfaces/workers/refund-requested.ts`) ve aynı
+`Refund` use-case'ini çalıştırır. Gövde şeması `@getir/contracts` `events.ts`'tedir: order o
+tipten kurar, payment aynı şemadan geçirir. Gerekçe ve anahtar kuralı `Refund` RPC'siyle ortaktır.
+
+| Durum                                                                                            | Sonuç                                                                                 |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| Tamamlanmış çekim                                                                                | `REFUNDED`; olay onaylanır (INFO)                                                     |
+| Zaten iade edilmiş (komut tekrar geldi)                                                          | değişmez, ikinci iade yok; olay onaylanır (INFO)                                      |
+| Gövde sözleşmeye uymuyor · ödeme yok · iade edilemez durum (`PENDING`, `REQUIRES_3DS`, `FAILED`) | **ret**: beklemeden `stream:events:dead`, ERROR                                       |
+| Geçici hata (veritabanı kapalı, sürüm çakışması)                                                 | onaylanmaz; 30 sn sonra yeniden, en fazla 5 deneme; sonra `stream:events:dead`, ERROR |
+
+- **İade edilemez ile sürüm çakışması ayrı:** ikisinin de kodu `CONFLICT` (RPC sözleşmesi
+  değişmedi) ama iade edilemez durum `PaymentNotRefundableError` tipindedir ve tekrar denenmez;
+  sürüm çakışması denenince geçer.
+- **Grup ilk kez akışın başından okur:** payment kapalıyken bırakılan komut açılışta işlenir
+  (28 Eylül kararı). Payment'ın kopyaları aynı gruptadır; bir komutu yalnızca biri işler.
+- **Tüketici adı** `<makine>-<pid>`; zarif kapanışta bekleyen kaydı yoksa gruptan silinir.
+- `MOCK=true` iken dinleme **kapalıdır** (Redis yok).
+
 ## Veri kaynağı: Mongo ya da MOCK
 
-| `MOCK` | Depo                                            | Mongo gerekir mi                 |
-| ------ | ----------------------------------------------- | -------------------------------- |
-| `true` | Bellek (`infrastructure/memory`)                | Hayır; yeniden başlayınca unutur |
-| değil  | `payments` koleksiyonu (`infrastructure/mongo`) | Evet, `MONGO_URI` zorunlu        |
+| `MOCK` | Depo                                            | Mongo / Redis gerekir mi                                     |
+| ------ | ----------------------------------------------- | ------------------------------------------------------------ |
+| `true` | Bellek (`infrastructure/memory`)                | Hayır; yeniden başlayınca unutur, olay dinleme kapalı        |
+| değil  | `payments` koleksiyonu (`infrastructure/mongo`) | Evet: `MONGO_URI` ve `REDIS_URL` (iade komutu, T7.4) zorunlu |
 
 İki depo **aynı sözleşme testinden** geçer (`test/support/payment-store-contract.ts`): birim testinde
 bellek, entegrasyon testinde gerçek Mongo. Depoyu seçip açan tek yer `infrastructure/payment-store.ts`.
@@ -120,14 +144,18 @@ src/
   application/     charge.ts, confirm-3ds.ts, refund.ts
   infrastructure/  memory/ ve mongo/ (depo), payment-store.ts (mod seçimi), mock-provider/
   interfaces/grpc/ şema (Zod), eşleme (Record), handler
-  config/          env.ts, constants.ts (THREEDS_CHALLENGE_TTL_MS = 60 000, THREEDS_MAX_ATTEMPTS = 3)
+  interfaces/workers/ refund-requested.ts (iade komutu işleyicisi, T7.4); kayıt bootstrap.ts subscribePaymentEvents
+  config/          env.ts, constants.ts (THREEDS_CHALLENGE_TTL_MS = 60 000, THREEDS_MAX_ATTEMPTS = 3, EVENT_CONSUMER_GROUP)
 ```
 
 ## Çalıştırma ve doğrulama
 
 ```bash
-pnpm --filter @getir/payment-service build && pnpm --filter @getir/payment-service start   # :50054 (kok .env: MOCK, MONGO_URI)
-pnpm test:int   # gercek Mongo (Testcontainers): sozlesme, indeksler, yeniden baslatma
+pnpm --filter @getir/payment-service build && pnpm --filter @getir/payment-service start   # :50054 (kok .env: MOCK, MONGO_URI, REDIS_URL)
+pnpm test:int   # gercek Mongo + Redis (Testcontainers): sozlesme, indeksler, yeniden baslatma, iade komutu uctan uca
+
+redis-cli XINFO GROUPS stream:events             # payment grubu: pending ve lag 0 olmali
+redis-cli XRANGE stream:events:dead - +          # islenemeyen komutlar (gerekce, deneme sayisi)
 
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/payment/v1/payment.proto \
   -d '{"orderId":"ord_a","userId":"usr_1","amount":{"amountMinor":12990,"currency":"TRY"},

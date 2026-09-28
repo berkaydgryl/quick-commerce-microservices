@@ -2,9 +2,11 @@
  * Siparis olaylarinin turetilmesi (T7.3): saf, I/O yok.
  */
 
+import { refundRequestedPayloadSchema } from '@getir/contracts';
 import { EVENTS, fixedClock, ID_PREFIX, isId, ORDER_STATUS } from '@getir/core';
 import { describe, expect, it } from 'vitest';
 
+import { REFUND_REASON, refundIdempotencyKey } from '../../src/domain/checkout-payment.js';
 import {
   orderCreatedEvents,
   refundRequestedEvent,
@@ -110,5 +112,20 @@ describe('refundRequestedEvent', () => {
         idempotencyKey: `refund-${order.id}`,
       },
     });
+  });
+
+  it('saga nin gercek gerekce ve anahtariyla kurulan govde sozlesmeden gecer (payment ayni semayla dogrular, T7.4)', () => {
+    const order = draft();
+
+    const event = refundRequestedEvent(
+      order,
+      {
+        reason: REFUND_REASON.ORDER_CHANGED_DURING_PAYMENT,
+        idempotencyKey: refundIdempotencyKey(order.id),
+      },
+      new Date(T0),
+    );
+
+    expect(refundRequestedPayloadSchema.safeParse(event.payload).success).toBe(true);
   });
 });

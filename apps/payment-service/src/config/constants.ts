@@ -24,5 +24,8 @@ export const THREEDS_MAX_ATTEMPTS = 3;
  */
 export const CONFIRM_3DS_MAX_WRITE_RETRIES = THREEDS_MAX_ATTEMPTS;
 
-/** Iade gerekcesi anahtarinin en uzun hali (ornek: "order_cancelled_during_payment"). */
-export const MAX_REFUND_REASON_LENGTH = 64;
+/**
+ * Olay dinleme (T7.4): tuketici grubu servis adidir. Payment'in her kopyasi
+ * ayni gruptadir; bir iade komutunu yalnizca biri isler.
+ */
+export const EVENT_CONSUMER_GROUP = SERVICE_NAME;

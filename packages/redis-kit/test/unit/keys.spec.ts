@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   courierLastKey,
   courierTrackKey,
+  EVENTS_DEAD_LETTER_STREAM_KEY,
   EVENTS_STREAM_KEY,
   hashTag,
   hashTagOf,
@@ -37,6 +38,7 @@ describe('anahtar bicimleri', () => {
     expect(idempotencyKey('4f1c3a2b-9d8e')).toBe('idem:{4f1c3a2b-9d8e}');
     expect(rateLimitKey('10.0.0.1', 'POST_/v1/orders')).toBe('rate:{10.0.0.1}:POST_/v1/orders');
     expect(EVENTS_STREAM_KEY).toBe('stream:events');
+    expect(EVENTS_DEAD_LETTER_STREAM_KEY).toBe('stream:events:dead');
     expect(RECONCILE_LOCK_KEY).toBe('lock:reconcile');
   });
 

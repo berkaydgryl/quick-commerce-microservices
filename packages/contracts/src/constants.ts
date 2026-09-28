@@ -59,6 +59,14 @@ export const ADDRESS_NOTE_MAX_LENGTH = 240;
 export { IDEMPOTENCY_KEY_MAX_LENGTH, IDEMPOTENCY_KEY_MIN_LENGTH } from '@getir/core';
 
 /**
+ * Iade gerekcesi ANAHTARI (metin degil; ornek "order_changed_during_payment").
+ * payment'in Refund RPC'si ve payment.refund_requested olayi ayni kurali
+ * uygular (T7.4); kayda ve olaya oldugu gibi yazilir, gosterimde cevrilir.
+ */
+export const REFUND_REASON_MAX_LENGTH = 64;
+export const REFUND_REASON_PATTERN = /^[a-z0-9_]+$/;
+
+/**
  * Sayfalama.
  *
  * Sinir disi pageSize REDDEDILMEZ, ust sinira KIRPILIR. Gerekce: ayni davranis

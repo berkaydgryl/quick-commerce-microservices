@@ -169,7 +169,7 @@ kalır. Aynı `CreateOrder` tekrar gelince risk yeniden sorulmaz (kayıtlı band
 kullanıcı tam o anda iptal etti) → tutar **iade edilir** (`Refund`, anahtar `refund-<orderId>`),
 istemci `CONFLICT` alır. Çakışmayı aynı ödemenin eş zamanlı tekrarı yazdıysa (sipariş zaten
 `PAID`) iade yapılmaz. Doğrudan iade de başarısız olursa `payment.refund_requested` komutu
-outbox'a yazılır (WARN; payment-svc T7.4'te dinleyip iade eder); komut da yazılamazsa son çare
+outbox'a yazılır (WARN; payment-svc dinleyip iade eder, T7.4); komut da yazılamazsa son çare
 ERROR günlüğü. İstemci her durumda `CONFLICT` alır. Eş zamanlı yazımda kaybedenin gerçekten
 `CONFLICT` alması mongo-kit'in transaction yeniden denemesine dayanır (aşağıda, T7.3).
 
@@ -210,10 +210,12 @@ yayınlanmamış olayları sonra `stream:events`'e basar.
   beklemeden devam eder. Zincirli `setTimeout`: turlar üst üste binmez; kapanışta süren tur
   beklenir, sonra Redis, en son Mongo kapanır.
 - **En az bir kez teslim:** yayınla–işaretle arasında çökülürse olay tekrar gider; tüketici
-  `eventId` ile tekilleştirir.
+  tekrar-güvenli yazılır (`eventId` ya da iş anahtarıyla; payment iadeyi kaydın durumundan tanır).
 - **Telafi komutu:** çekim başarılı ama sipariş `PAID` yazılamadıysa önce doğrudan iade denenir;
-  o da olmazsa `payment.refund_requested` outbox'a yazılır, payment-svc T7.4'te dinleyip aynı
-  anahtarla (`refund-<orderId>`) iade eder. Komut da yazılamazsa son çare ERROR günlüğü.
+  o da olmazsa `payment.refund_requested` outbox'a yazılır; payment-svc `payment` tüketici
+  grubuyla dinleyip iade eder (T7.4, gövde şeması `@getir/contracts` `events.ts`). Komut tekrar
+  gelirse ikinci iade yapılmaz; işlenemezse `stream:events:dead`'e düşer (payment README). Komut
+  da yazılamazsa son çare ERROR günlüğü.
 - **İndeks:** `outbox` üzerinde `{ publishedAt, occurredAt, version, _id }`; yayıncının
   `{ publishedAt: null }` + sıralı okuması indeksten, bellekte sıralamasız (explain testli).
   Roadmap veri modelindeki "sparse" bilerek yok: `{ publishedAt: null }` sorgusu alanı hiç

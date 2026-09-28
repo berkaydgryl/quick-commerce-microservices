@@ -7,11 +7,25 @@
  * tekrar-istek sayilir (ag kaybi): ikinci kez iade yapilmaz.
  */
 
-import { AppError } from '@getir/core';
+import { AppError, ERROR_CODES } from '@getir/core';
 import type { Clock } from '@getir/core';
 
 import { ATTEMPT_KIND, ATTEMPT_OUTCOME, PAYMENT_STATUS, withAttempt } from './payment.js';
-import type { Payment } from './payment.js';
+import type { Payment, PaymentStatus } from './payment.js';
+
+/**
+ * Iade edilemez: odeme tamamlanmis bir cekim degil. Kodu CONFLICT'tir (Refund
+ * RPC sozlesmesi degismez) ama surum cakismasindan AYRI tiptedir: surum
+ * cakismasi tekrar denenince gecer, bu gecmez. Iade komutu tuketicisi (T7.4)
+ * ikisini bununla ayirir; bu hata olayi beklemeden olu olaylara gonderir.
+ */
+export class PaymentNotRefundableError extends AppError {
+  constructor(orderId: string, status: PaymentStatus) {
+    super(ERROR_CODES.CONFLICT, 'Iade edilecek tamamlanmis cekim yok', {
+      details: { orderId, status },
+    });
+  }
+}
 
 /** Odeme zaten iade edilmis mi? (tekrar istek: ayni sonuc, yazma yok) */
 export function isRefunded(payment: Payment): boolean {
@@ -20,13 +34,11 @@ export function isRefunded(payment: Payment): boolean {
 
 /**
  * Tamamlanmis cekimi REFUNDED yapar; gecmise deneme, kayda gerekce eklenir.
- * @throws AppError CONFLICT - odeme SUCCEEDED degil (geri verilecek tutar yok).
+ * @throws PaymentNotRefundableError (CONFLICT) - odeme SUCCEEDED degil.
  */
 export function refundPayment(payment: Payment, reason: string, clock: Clock): Payment {
   if (payment.status !== PAYMENT_STATUS.SUCCEEDED) {
-    throw AppError.conflict('Iade edilecek tamamlanmis cekim yok', {
-      details: { orderId: payment.orderId, status: payment.status },
-    });
+    throw new PaymentNotRefundableError(payment.orderId, payment.status);
   }
   const now = clock.date();
   return {

@@ -4,9 +4,14 @@ Tarayıcıya açılan yüzeyin **tek doğruluk kaynağı**: REST gövdeleri, soc
 payload'ları, ortak cevap zarfı ve hata kodlarının Türkçe karşılıkları. Hepsi Zod
 şeması olarak yazılır; TypeScript tipleri `z.infer` ile şemadan türer (ADR-10).
 
-Sınır net: **servisten servise** konuşma buraya girmez, o `packages/proto` içindeki
-`.proto` dosyalarındadır. Bu pakette ayrıca **iş mantığı yoktur** — fiyat hesabı, risk
-kararı ya da durum geçişi burada bulunmaz. Tek cevapladığı soru: "bu ucun gövdesi neye
+Sınır net: **servisten servise senkron** konuşma (gRPC) buraya girmez, o `packages/proto`
+içindeki `.proto` dosyalarındadır. **Tek istisna asenkron olay gövdeleridir** (T7.4,
+`events.ts`): `stream:events`'teki zarfın `payload` alanının proto karşılığı yoktur; üreten
+servis gövdeyi bu tipten kurar, tüketen servis aynı şemadan geçirir, ayrışma derlemede ya da
+sözleşme testinde yakalanır. Zarfın kendisi `@getir/event-bus`'tadır. Burada olmasının bir
+sebebi de bağımlılık yönüdür: üreten servisin `domain/` katmanı tipi saf bir paketten alır,
+Redis taşıyan olay paketinden değil. Bu pakette ayrıca **iş mantığı yoktur** — fiyat hesabı,
+risk kararı ya da durum geçişi burada bulunmaz. Tek cevapladığı soru: "bu ucun gövdesi neye
 benziyor?"
 
 ## Klasör düzeni
@@ -23,6 +28,7 @@ packages/contracts/
 │   ├── cart.ts        # sepet girdisi, rezervasyon, serbest bırakma
 │   ├── order.ts       # sipariş, adres, 3DS, kurye özeti
 │   ├── socket.ts      # oda adları, olay payload'ları, olay sözlüğü
+│   ├── events.ts      # servisler arası olay gövdeleri (payment.refund_requested, T7.4)
 │   └── index.ts
 └── test/unit/
 ```

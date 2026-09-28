@@ -8,7 +8,9 @@
  *   partitionKey Siralamanin gecerli oldugu anahtar (siparis olaylarinda
  *                orderId). Kafka'ya geciste bolum anahtari olur.
  *   occurredAt   Olayin oldugu an, ISO 8601 UTC (JSON'da Date yok).
- *   payload      Olaya ozel govde; semasi olayi URETEN servistedir.
+ *   payload      Olaya ozel govde. Dinlenen olaylarin govde semasi
+ *                @getir/contracts events.ts'tedir: ureten tipten kurar, tuketen
+ *                semadan gecirir (T7.4). Zarf govdeyi yalnizca nesne olarak bilir.
  */
 
 import { EVENTS, ID_PREFIX, isId } from '@getir/core';
