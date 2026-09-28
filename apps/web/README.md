@@ -10,7 +10,7 @@ Müşteri arayüzü: React 18 + Vite + TypeScript. Tarayıcı yalnızca gateway 
 | TanStack Query          | ✅ Yalnızca geçici hata (`SERVICE_UNAVAILABLE`) yeniden denenir; mutasyon denenmez               |
 | HTTP istemcisi          | ✅ Zarf açıcı → `AppError`; mutasyon `Idempotency-Key`'siz derlenmez (ADR-08)                    |
 | Idempotency key         | ✅ `crypto.randomUUID()`, sözleşmedeki uzunluk sınırıyla                                         |
-| Design token'lar        | ✅ `tokens.css`: marka paleti, Nunito, `clamp()` ölçeği, kapsayıcı genişlikleri                  |
+| Design token'lar        | ✅ `tokens.css`: marka paleti, Nunito, `clamp()` ölçeği, kapsayıcı, bileşen ölçüleri (D11)       |
 | Kırılımlar              | ✅ `@custom-media` (48rem / 64rem), JS karşılığı `shared/config/breakpoints.ts`                  |
 | Market veri hook'ları   | ✅ `useNearbyMarkets`, `useMarket`, `useMarketCategories`, `useMarketProducts` (imleçle sayfalı) |
 | Ortak durumlar          | ✅ `QueryStatus`: yükleniyor / hata / boş; \"Tekrar dene\" yalnızca geçici hatada                |
@@ -53,6 +53,20 @@ katmanındadır.
   "Satışta değil" yazısı görünür ve sepete eklenemez. Sepette zaten varsa adet düğmeleri kalır, "+" kapalı.
 - **Henüz yok:** iyimser güncellemenin geri alınması (rezervasyon "stok yetersiz / satışta değil"
   derse adet düzeltme + bildirim; T11.5), kupon alanı (T17.3), oturuma göre ilk sipariş koşulu (T8).
+
+## Stil kuralları (D11)
+
+- **Çıplak birim yok:** CSS modüllerinde `px`, `rem`, `em` yazılmaz; değer `tokens.css`'te işlevsel
+  adla token olur, modül `var(--...)` kullanır. Kapı stylelint `unit-disallowed-list`
+  (`tokens.css`, `global.css`, `breakpoints.css` hariç). Token adları ve değerleri kullanıcının
+  kararıdır.
+- **Kendi bloğu:** bileşen başka bloğun sınıfını ödünç almaz; ortak görünüm ortak bileşendir
+  (`shared/ui/badge/Badge`: "Kapalı" rozeti, liste ve market başlığı birlikte kullanır).
+- **Tanımsız sınıf yok:** `styles['c-yok']` TypeScript'te hata vermez, sessizce stilsiz kalır.
+  `test/unit/css-module-classes.spec.ts` her bileşenin kullandığı sınıfın modülünde tanımlı
+  olduğunu denetler.
+- **"Görünüm aynı" ölçülerek:** D11'de değişiklik öncesi ve sonrası 7 sahne başsız Chrome'da
+  çekildi, görüntüler bayt bayt aynı çıktı (yöntem D11 raporunda).
 
 ## Market ekranları (T5.4) — tasarımsız kabuk
 

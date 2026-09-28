@@ -1,21 +1,24 @@
 import type { Market } from '@getir/contracts';
 
 import { formatDeliveryTime, formatMoney, formatRating } from '../../../shared/services/format';
+import { Badge } from '../../../shared/ui/badge/Badge';
 
 import styles from './Markets.module.css';
 
 /**
  * Market sayfasi basligi - TASARIMSIZ KABUK (T5.4): ad, puan, sure ve sepet
  * kurallari. Kurallar sunucudan gelir (ADR-15); burada hesap yapilmaz.
+ * Kart gorunumu cevreleyen bolumden (c-markets) gelir; kok eleman stil tasimaz.
+ * Baska blogun sinifi kullanilmaz (D11): baslik kendi, rozet ortak Badge.
  */
 export function MarketSummary({ market }: { readonly market: Market }) {
   const { pricingRules } = market;
 
   return (
-    <div className={styles['c-market-summary']}>
-      <h1 className={styles['c-markets__title']}>
+    <div>
+      <h1 className={styles['c-market-summary__title']}>
         {market.name}
-        {!market.isOpen && <span className={styles['c-market-list__badge']}>Kapalı</span>}
+        {!market.isOpen && <Badge>Kapalı</Badge>}
       </h1>
       <dl className={styles['c-market-summary__facts']}>
         <dt>Puan</dt>

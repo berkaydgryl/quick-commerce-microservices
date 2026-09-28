@@ -7,7 +7,7 @@
 
 .c-logo__word {
   font-weight: var(--font-weight-bold);
-  letter-spacing: -0.02em;
+  letter-spacing: var(--letter-spacing-logo);
 }
 
 .c-logo__word--strong {
@@ -19,7 +19,7 @@
   place-items: center;
   width: var(--size-logo-badge);
   aspect-ratio: 1;
-  padding: 0.3em;
+  padding: var(--space-logo-badge-inset);
   color: var(--text-on-accent);
   background: var(--color-brand-accent);
   border-radius: var(--radius-pill);

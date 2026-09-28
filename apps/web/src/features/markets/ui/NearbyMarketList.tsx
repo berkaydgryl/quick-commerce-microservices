@@ -7,6 +7,7 @@ import {
   formatMoney,
   formatRating,
 } from '../../../shared/services/format';
+import { Badge } from '../../../shared/ui/badge/Badge';
 
 import styles from './Markets.module.css';
 
@@ -26,8 +27,8 @@ export function NearbyMarketList({ markets }: { readonly markets: readonly Nearb
             to={`/markets/${encodeURIComponent(market.id)}`}
             className={styles['c-market-list__link']}
           >
-            <span className={styles['c-market-list__name']}>{market.name}</span>
-            {!market.isOpen && <span className={styles['c-market-list__badge']}>Kapalı</span>}
+            <span>{market.name}</span>
+            {!market.isOpen && <Badge>Kapalı</Badge>}
           </Link>
           <p className={styles['c-market-list__meta']}>
             ⭐ {formatRating(market.rating.average)} ({market.rating.count} değerlendirme) ·{' '}
