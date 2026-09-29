@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 
@@ -11,6 +12,7 @@ import (
 	orderv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/order/v1"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/assets"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/catalog"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/clients"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/config"
@@ -19,13 +21,15 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
 )
 
-// bootstrap, parcalari BAGLAR: baglanti havuzu, servis adaptorleri, yonlendirici.
-// Dinlemez ve sinyal beklemez; o is serve'undur (Node tarafindaki
-// bootstrap.ts / main.ts ayrimi). Yeni bir servis istemcisi (order, payment)
-// geldiginde degisen yer burasidir, yasam dongusu degil.
+// bootstrap, parcalari BAGLAR: baglanti havuzu, kimlik servisi (T8.1), servis
+// adaptorleri, yonlendirici. Dinlemez ve sinyal beklemez; o is serve'undur
+// (Node tarafindaki bootstrap.ts / main.ts ayrimi). Yeni bir servis istemcisi
+// (order, payment) geldiginde degisen yer burasidir, yasam dongusu degil.
 //
-// Donen cleanup havuzu kapatir; cagiran, sunucu durduktan SONRA calistirir.
-func bootstrap(cfg config.Config, logger *slog.Logger) (*fiber.App, func(), error) {
+// ctx acilisin baglamidir: Mongo'ya baglanirken sinyal gelirse acilis durur.
+// Donen cleanup havuzu ve Mongo baglantisini kapatir; cagiran, sunucu
+// durduktan SONRA calistirir.
+func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (*fiber.App, func(), error) {
 	targets := make([]clients.Target, 0, len(cfg.Services))
 	for _, service := range cfg.Services {
 		targets = append(targets, clients.Target{Name: service.Name, Address: service.Address})
@@ -35,9 +39,25 @@ func bootstrap(cfg config.Config, logger *slog.Logger) (*fiber.App, func(), erro
 	if err != nil {
 		return nil, nil, fmt.Errorf("baglanti havuzu: %w", err)
 	}
-	cleanup := func() {
+	closePool := func() {
 		if closeErr := pool.Close(); closeErr != nil {
 			logger.Warn("baglantilar temiz kapanmadi", slog.Any("err", closeErr))
+		}
+	}
+
+	identity, err := buildAuth(ctx, cfg, auth.DefaultPasswordCost)
+	if err != nil {
+		closePool()
+		return nil, nil, fmt.Errorf("kimlik: %w", err)
+	}
+	// Kapanista ctx coktan iptal edilmistir (sinyal); Mongo'yu birakmak icin
+	// iptali tasimayan, kapanis suresiyle sinirli yeni bir baglam kurulur.
+	cleanup := func() {
+		closePool()
+		closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cfg.ShutdownTimeout)
+		defer cancel()
+		if closeErr := identity.close(closeCtx); closeErr != nil {
+			logger.Warn("mongo baglantisi temiz kapanmadi", slog.Any("err", closeErr))
 		}
 	}
 
@@ -73,7 +93,7 @@ func bootstrap(cfg config.Config, logger *slog.Logger) (*fiber.App, func(), erro
 	orderService := order.New(orderv1.NewOrderServiceClient(orderConn), cfg.RequestTimeout)
 
 	app := httpapi.New(httpapi.Deps{
-		Health:           health.New(healthClients, cfg.RequestTimeout, cfg.Mock),
+		Health:           health.New(healthClients, identity.pingers, cfg.RequestTimeout, cfg.Mock),
 		Categories:       catalogService,
 		NearbyMarkets:    catalogService,
 		Market:           catalogService,
@@ -83,9 +103,14 @@ func bootstrap(cfg config.Config, logger *slog.Logger) (*fiber.App, func(), erro
 		OrderPlacer:      orderService,
 		ThreeDSConfirmer: orderService,
 		OrderGetter:      orderService,
-		// X-User-Id gelistirme kimligi production'da ASLA kabul edilmez (identity.go).
-		AllowDemoUser: cfg.NodeEnv != config.EnvProduction,
-		Logger:        logger,
+		// Tek kimlik servisi bes kimlik ucunu karsilar (T8.1).
+		UserRegistrar:     identity.service,
+		UserAuthenticator: identity.service,
+		SessionRefresher:  identity.service,
+		SessionRevoker:    identity.service,
+		ProfileGetter:     identity.service,
+		AccessTokens:      identity.tokens,
+		Logger:            logger,
 	})
 
 	return app, cleanup, nil

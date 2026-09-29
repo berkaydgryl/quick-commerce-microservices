@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
 )
 
@@ -79,4 +81,30 @@ func closeBody(t *testing.T, response *http.Response) {
 	if err := response.Body.Close(); err != nil {
 		t.Errorf("cevap govdesi kapatilamadi: %v", err)
 	}
+}
+
+// Kimlik (T8.1): korumali uclarin testleri GERCEK jeton dogrulayicisiyla
+// kurulur. Sahte bir dogrulayici, ara katmanin jetonla nasil konustugunu
+// (sema, imza, sure) hic sinamazdi.
+const (
+	testUserID    = "usr_0123456789abcdef0123456789abcdef"
+	testSessionID = "ses_0123456789abcdef0123456789abcdef"
+)
+
+// testSecret, yalnizca testlerde kullanilan imza sirri (32 bayttan uzun).
+var testSecret = []byte("yalnizca-test-icin-imza-sirri-32-bayttan-uzun")
+
+// testTokens, gercek saatle calisan dogrulayici.
+func testTokens() *auth.Tokens {
+	return auth.NewTokens(testSecret, time.Hour, time.Now)
+}
+
+// bearer, testUserID icin gecerli Authorization degeri.
+func bearer(t *testing.T) string {
+	t.Helper()
+	token, err := testTokens().Issue(auth.Identity{UserID: testUserID, SessionID: testSessionID})
+	if err != nil {
+		t.Fatalf("test jetonu uretilemedi: %v", err)
+	}
+	return bearerScheme + " " + token
 }

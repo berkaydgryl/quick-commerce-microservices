@@ -20,10 +20,15 @@ info:
       Float kullanılmaz, istemci gösterim anında 100'e böler.
     * **Idempotency**: kalıcı durum değiştiren uçlarda `Idempotency-Key` başlığı
       zorunludur. Aynı anahtar + aynı gövde ilk cevabı tekrar döndürür; aynı
-      anahtar + farklı gövde `REQUEST_IN_PROGRESS` ile reddedilir.
-      `POST /v1/auth/login` ve `POST /v1/darkstores/resolve` kalıcı durum
-      değiştirmediği (biri oturum jetonu üretir, diğeri sorgu niteliğindedir)
-      için bu başlığı istemez.
+      anahtar + farklı gövde `REQUEST_IN_PROGRESS` ile reddedilir (tekrar
+      koruması T8.2; bugün gateway yalnızca başlığın VARLIĞINI denetler).
+      `POST /v1/auth/login`, `/v1/auth/refresh` ve `/v1/auth/logout` bu başlığı
+      istemez: giriş ve yenileme kalıcı bir kaynak yaratmaz (oturum jetonu
+      üretir), çıkışın tekrarı zararsızdır.
+    * **Kimlik**: korumalı uçlar `Authorization: Bearer <erişim jetonu>` ister
+      (T8.1). Jeton yoksa ya da geçersizse `401 UNAUTHORIZED` ve
+      `WWW-Authenticate` başlığı döner. Jeton ve kişisel veri taşıyan cevaplar
+      `Cache-Control: no-store` ile gelir.
     * **İzleme**: her cevapta `X-Request-Id` başlığı bulunur; hata gövdesindeki
       `error.requestId` ile aynı değerdir ve log/trace kayıtlarıyla eşleşir.
       Biçim `req_` + 32 küçük onaltılık karakterdir. İstemci bu biçimde kendi
@@ -61,6 +66,15 @@ paths:
       tags: [auth]
       operationId: registerUser
       summary: Yeni kullanıcı kaydı
+      description: |
+        Hesabı açar ve oturumu başlatır: cevapta erişim ve yenileme jetonu
+        birlikte gelir, ayrıca giriş gerekmez. Şifre yalnızca bcrypt özetiyle
+        saklanır. `fullName` baştaki ve sondaki boşluklardan arındırılır.
+
+        `Idempotency-Key` zorunludur; bugün yalnızca varlığı denetlenir, aynı
+        anahtarla gelen tekrarın ilk cevabı alması T8.2 ile gelir. O zamana
+        kadar tekrar eden kayıt `409 PHONE_ALREADY_REGISTERED` alır: ikinci
+        hesap açılmaz, `users.phone` benzersiz indeksi bunu garanti eder.
       security: []
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -76,6 +90,8 @@ paths:
           headers:
             X-Request-Id:
               $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
           content:
             application/json:
               schema:
@@ -86,58 +102,55 @@ paths:
                       data:
                         $ref: "#/components/schemas/AuthSession"
         "400":
-          description: Gövde doğrulaması başarısız ya da idempotency başlığı yok
+          description: |
+            Biçim hatası: eksik başlık, bilinmeyen alan, kural dışı değer. Bütün
+            sorunlar TEK cevapta, `details` içinde alan adıyla döner.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
               examples:
                 validationError:
-                  summary: VALIDATION_FAILED
+                  summary: VALIDATION_FAILED (başlık ve alanlar)
                   value:
                     success: false
                     error:
                       code: VALIDATION_FAILED
-                      message: "İstek gövdesi geçersiz."
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
                       details:
-                        fieldErrors:
-                          password: "En az 8 karakter olmalı."
+                        Idempotency-Key: zorunlu
+                        phone: "+90 ile baslayan 13 karakter olmali (ornek +905321234567)"
+                        password: en az 8 karakter olmali
+                        fullName: en az 2 karakter olmali
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
-                idempotencyKeyRequired:
-                  summary: VALIDATION_FAILED
+                unknownField:
+                  summary: VALIDATION_FAILED (sözleşmede olmayan alan)
                   value:
                     success: false
                     error:
                       code: VALIDATION_FAILED
-                      message: "Idempotency-Key başlığı zorunludur."
-                      details: null
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        email: bu uc bu alani kabul etmiyor
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "409":
-          description: Telefon numarası kayıtlı ya da anahtar farklı gövdeyle tekrar kullanıldı
+          description: |
+            Telefon numarası başka bir hesaba ait. Anahtarın farklı gövdeyle
+            tekrar kullanılması (`REQUEST_IN_PROGRESS`) T8.2 ile gelir.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
               examples:
                 phoneAlreadyRegistered:
-                  summary: CONFLICT
+                  summary: PHONE_ALREADY_REGISTERED
                   value:
                     success: false
                     error:
-                      code: CONFLICT
-                      message: "Bu telefon numarasıyla kayıtlı bir hesap var."
+                      code: PHONE_ALREADY_REGISTERED
+                      message: "Bu telefon numarasıyla kayıtlı bir hesap var. Giriş yapmayı dener misin?"
                       details:
-                        phone: "+905321234567"
-                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
-                idempotencyKeyReused:
-                  summary: REQUEST_IN_PROGRESS
-                  value:
-                    success: false
-                    error:
-                      code: REQUEST_IN_PROGRESS
-                      message: "Aynı Idempotency-Key farklı bir gövde ile kullanıldı."
-                      details:
-                        idempotencyKey: "4f1c3a2b-9d8e-4b7a-8c6d-5e4f3a2b1c0d"
+                        phone: bu numarayla kayitli bir hesap var
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -148,8 +161,13 @@ paths:
       operationId: loginUser
       summary: Oturum açma
       description: |
-        Kalıcı durum değiştirmediği için `Idempotency-Key` istemez.
-        Dönen erişim jetonu JWT_TTL (3600 sn) boyunca geçerlidir.
+        Telefon ve şifreyle yeni bir oturum açar. Kalıcı bir kaynak yaratmadığı
+        için `Idempotency-Key` istemez.
+
+        Yanlış şifre ile kayıtsız numara AYNI cevabı alır (kod, mesaj, süre):
+        kayıtlı numaralar bu uçtan taranamaz. Biçim kuralları (numara biçimi,
+        şifre uzunluğu) ise alan adıyla `400` döner; bunlar hesap hakkında
+        bilgi vermez.
       security: []
       requestBody:
         required: true
@@ -163,6 +181,8 @@ paths:
           headers:
             X-Request-Id:
               $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
           content:
             application/json:
               schema:
@@ -173,7 +193,7 @@ paths:
                       data:
                         $ref: "#/components/schemas/AuthSession"
         "400":
-          description: Gövde doğrulaması başarısız
+          description: Gövde biçimi geçersiz
           content:
             application/json:
               schema:
@@ -185,29 +205,153 @@ paths:
                     success: false
                     error:
                       code: VALIDATION_FAILED
-                      message: "Telefon numarası biçimi geçersiz."
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
                       details:
-                        fieldErrors:
-                          phone: "Telefon +90 ile başlayan 13 haneli olmalı."
+                        phone: "+90 ile baslayan 13 karakter olmali (ornek +905321234567)"
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "401":
-          description: Kimlik bilgileri hatalı
+          description: Telefon numarası ya da şifre hatalı (hangisi olduğu söylenmez)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
               examples:
                 invalidCredentials:
+                  summary: INVALID_CREDENTIALS
+                  value:
+                    success: false
+                    error:
+                      code: INVALID_CREDENTIALS
+                      message: "Telefon numarası ya da şifre hatalı."
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refreshSession
+      summary: Erişim jetonunu yenile
+      description: |
+        Yenileme jetonunu YENİSİYLE DEĞİŞTİRİR ve yeni bir erişim jetonu verir;
+        oturum (`sid`) aynı kalır. Eski yenileme jetonu bir daha geçmez: çalınan
+        jetonla ikinci yenileme reddedilir, aynı jetonla eş zamanlı iki
+        istekten yalnızca biri başarır. Süre her yenilemede o andan itibaren
+        REFRESH_TTL'e uzar; kullanılmayan oturum REFRESH_TTL sonunda kapanır.
+
+        Erişim jetonu istemez: süresinin dolmuş olması bu ucun çağrılma
+        sebebidir. İstemci aynı jetonla iki yenilemeyi aynı anda göndermemeli;
+        cevabı kaybolan yenilemede yeniden giriş gerekir.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: Yeni jeton çifti
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AuthSession"
+        "400":
+          $ref: "#/components/responses/RefreshTokenRequired"
+        "401":
+          description: Yenileme jetonu geçersiz, kullanılmış, iptal edilmiş ya da süresi dolmuş
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                refreshTokenInvalid:
                   summary: UNAUTHORIZED
                   value:
                     success: false
                     error:
                       code: UNAUTHORIZED
-                      message: "Telefon numarası veya parola hatalı."
-                      details: null
+                      message: "Oturumun sona ermiş. Tekrar giriş yapman gerekiyor."
+                      details:
+                        refreshToken: gecersiz, kullanilmis ya da suresi dolmus
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
-        "429":
-          $ref: "#/components/responses/RateLimited"
+
+  /v1/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logoutSession
+      summary: Oturumu kapat
+      description: |
+        Yenileme jetonunu iptal eder (oturum kaydı silinir). Tekrarı zararsızdır:
+        ikinci çağrı `revoked: false` alır, bu yüzden `Idempotency-Key` istemez.
+        İstemci her iki durumda da yerel oturumu siler.
+
+        Erişim jetonu kendi süresi (JWT_TTL) dolana kadar geçerli kalır:
+        durumsuz jetonun bilinen bedeli, ömrünün kısa tutulma sebebi budur.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LogoutRequest"
+      responses:
+        "200":
+          description: Çıkış tamam
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/LogoutResult"
+        "400":
+          $ref: "#/components/responses/RefreshTokenRequired"
+
+  /v1/me:
+    get:
+      tags: [auth]
+      operationId: getMe
+      summary: Oturumdaki kullanıcının profili
+      description: |
+        Erişim jetonundaki kullanıcının profili. Hesap silinmişse jeton artık
+        bir kullanıcıya karşılık gelmez ve `401` döner.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Profil
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/UserProfile"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
 
   /v1/categories:
     get:
@@ -478,7 +622,6 @@ paths:
         stok kilitlenmez ve cevapta `expiresAt` yoktur.
       security:
         - bearerAuth: []
-        - demoUser: []
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -738,7 +881,6 @@ paths:
         order'a iletir; cihaz, oturum konumu ve hesap yaşı T8.1'de oturumdan gelir.
       security:
         - bearerAuth: []
-        - demoUser: []
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -875,7 +1017,6 @@ paths:
         bozuk kod deneme sayılmaz (`400`).
       security:
         - bearerAuth: []
-        - demoUser: []
       parameters:
         - $ref: "#/components/parameters/OrderIdPathId"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -972,7 +1113,6 @@ paths:
         (403 değil): "bu kimlikte bir sipariş var" bilgisi bile sızmamalı.
       security:
         - bearerAuth: []
-        - demoUser: []
       parameters:
         - $ref: "#/components/parameters/OrderIdPathId"
       responses:
@@ -1050,18 +1190,27 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: "`POST /v1/auth/login` ile alınan erişim jetonu (JWT_TTL = 3600 sn). T8.1 ile gelir."
-    demoUser:
-      type: apiKey
-      in: header
-      name: X-User-Id
       description: |
-        GEÇİCİ geliştirme kimliği (T7.5): JWT (T8.1) gelene kadar sipariş uçları
-        kullanıcıyı bu başlıktan okur (`usr_` + harf, rakam, `_`, `-`; ör.
-        `usr_ali`). YALNIZCA production DIŞINDA kabul edilir; production'da
-        okunmaz ve korumalı uçlar 401 döner.
+        Kayıt, giriş ya da yenilemeyle alınan erişim jetonu (T8.1): HS256 ile
+        imzalı JWT, ömrü JWT_TTL (3600 sn). Yalnızca kimlik taşır (`sub`
+        kullanıcı, `sid` oturum); telefon ya da ad gibi kişisel veri taşımaz.
+        Şema adı büyük-küçük harfe duyarsızdır (`bearer` da kabul edilir).
 
   headers:
+    NoStore:
+      description: |
+        Jeton ya da kişisel veri taşıyan cevap tarayıcı önbelleğine ve araya
+        giren vekile yazılmaz (RFC 6749 5.1, RFC 9111).
+      schema:
+        type: string
+        const: no-store
+    WWWAuthenticate:
+      description: |
+        401 cevabında beklenen şema (RFC 6750): jeton yoksa `Bearer`, jeton
+        geçersiz ya da süresi dolmuşsa `Bearer error="invalid_token"`.
+      schema:
+        type: string
+        example: Bearer error="invalid_token"
     XRequestId:
       description: |
         İsteği log ve trace kayıtlarıyla eşleyen kimlik. İstemci aynı biçimde
@@ -1136,31 +1285,55 @@ components:
   responses:
     Unauthenticated:
       description: |
-        Kimlik yok ya da geçersiz. JWT (T8.1) gelene kadar geliştirmede
-        `X-User-Id` başlığı eksik/biçimsizse; production'da her zaman.
+        Erişim jetonu yok, biçimsiz, imzası tutmuyor ya da süresi dolmuş.
+        İstemci önce `/v1/auth/refresh` ile yeniler; o da `401` dönerse
+        kullanıcıyı girişe yönlendirir. Jetonun kendisi ve doğrulama hatasının
+        sebebi cevaba konmaz.
+      headers:
+        WWW-Authenticate:
+          $ref: "#/components/headers/WWWAuthenticate"
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ApiErrorResponse"
           examples:
-            unauthenticated:
-              summary: UNAUTHORIZED
-              value:
-                success: false
-                error:
-                  code: UNAUTHORIZED
-                  message: "Oturumun sona ermiş. Tekrar giriş yapman gerekiyor."
-                  details: null
-                  requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
-            demoUserInvalid:
-              summary: UNAUTHORIZED (geliştirme kimliği biçimsiz)
+            missingToken:
+              summary: UNAUTHORIZED (jeton yok)
               value:
                 success: false
                 error:
                   code: UNAUTHORIZED
                   message: "Oturumun sona ermiş. Tekrar giriş yapman gerekiyor."
                   details:
-                    X-User-Id: gecerli bir kullanici kimligi olmali (usr_...)
+                    Authorization: Bearer erisim jetonu gerekli
+                  requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+            invalidToken:
+              summary: UNAUTHORIZED (jeton geçersiz ya da süresi dolmuş)
+              value:
+                success: false
+                error:
+                  code: UNAUTHORIZED
+                  message: "Oturumun sona ermiş. Tekrar giriş yapman gerekiyor."
+                  details:
+                    Authorization: gecersiz ya da suresi dolmus erisim jetonu
+                  requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+
+    RefreshTokenRequired:
+      description: Gövde biçimi geçersiz ya da `refreshToken` boş
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          examples:
+            refreshTokenRequired:
+              summary: VALIDATION_FAILED
+              value:
+                success: false
+                error:
+                  code: VALIDATION_FAILED
+                  message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                  details:
+                    refreshToken: zorunlu
                   requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
 
     OrderNotFound:
@@ -1293,9 +1466,13 @@ components:
         # Genel / tasima katmani
         - VALIDATION_FAILED
         - UNAUTHORIZED
+        # Giriste telefon ya da sifre hatali (T8.1), HTTP 401
+        - INVALID_CREDENTIALS
         - FORBIDDEN
         - NOT_FOUND
         - CONFLICT
+        # Kayitta telefon baska hesaba ait (T8.1), HTTP 409
+        - PHONE_ALREADY_REGISTERED
         - INTERNAL
         - SERVICE_UNAVAILABLE
         - RATE_LIMITED
@@ -1389,47 +1566,99 @@ components:
       description: |
         Kimlik doğrulama telefon + şifre ile yapılır (ADR-012). E-posta
         toplanmaz: SMS/OTP altyapısı kurulmadığı için doğrulanamayan bir alan
-        kimlik alanı olarak kullanılamaz.
+        kimlik alanı olarak kullanılamaz. Bilinmeyen alan `400` ile reddedilir.
       required: [phone, password, fullName]
+      additionalProperties: false
       properties:
         phone:
-          type: string
-          pattern: "^\\+90[0-9]{10}$"
-          description: E.164 biçimi. `users.phone` üzerinde unique indeks vardır.
+          $ref: "#/components/schemas/Phone"
         password:
-          type: string
-          minLength: 8
-          maxLength: 72
+          $ref: "#/components/schemas/Password"
         fullName:
           type: string
           minLength: 2
           maxLength: 80
+          description: Baştaki ve sondaki boşluklar atılır; sınırlar karakter cinsindendir.
 
     LoginRequest:
       type: object
       required: [phone, password]
+      additionalProperties: false
       properties:
         phone:
-          type: string
-          pattern: "^\\+90[0-9]{10}$"
+          $ref: "#/components/schemas/Phone"
         password:
+          $ref: "#/components/schemas/Password"
+
+    Phone:
+      type: string
+      pattern: "^\\+90[0-9]{10}$"
+      description: E.164 biçimi, yalnızca Türkiye. `users.phone` üzerinde benzersiz indeks vardır.
+      example: "+905321234567"
+
+    Password:
+      type: string
+      minLength: 8
+      maxLength: 72
+      description: |
+        Alt sınır KARAKTER (8), üst sınır BAYT (72, UTF-8): bcrypt girdinin
+        ilk 72 baytını kullanır. Türkçe harfler iki bayt sayılır; JSON Schema
+        bayt sınırı ifade edemediği için `maxLength` gerekli ama yeterli
+        değildir, asıl kural sunucudadır.
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      additionalProperties: false
+      properties:
+        refreshToken:
           type: string
-          minLength: 8
-          maxLength: 72
+          minLength: 1
+          description: Kayıt, giriş ya da önceki yenilemeden gelen opak jeton.
+
+    LogoutRequest:
+      type: object
+      required: [refreshToken]
+      additionalProperties: false
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
+
+    LogoutResult:
+      type: object
+      required: [revoked]
+      properties:
+        revoked:
+          type: boolean
+          description: |
+            `false` HATA DEĞİLDİR: jeton zaten iptal edilmiş ya da süresi
+            dolmuş olabilir.
 
     AuthSession:
       type: object
-      required: [accessToken, expiresIn, user]
+      required: [accessToken, expiresIn, refreshToken, refreshExpiresIn, user]
       properties:
         accessToken:
           type: string
+          description: "`Authorization: Bearer <accessToken>` olarak gönderilir."
         tokenType:
           type: string
           enum: [Bearer]
         expiresIn:
           type: integer
-          description: Saniye cinsinden ömür (JWT_TTL = 3600).
+          description: Erişim jetonunun saniye cinsinden ömrü (JWT_TTL = 3600).
           examples: [3600]
+        refreshToken:
+          type: string
+          description: |
+            Opak yenileme jetonu; yalnızca `/v1/auth/refresh` ve
+            `/v1/auth/logout`'a gider ve bir kez kullanılır. Sunucuda yalnızca
+            özeti (SHA-256) saklanır.
+        refreshExpiresIn:
+          type: integer
+          description: Yenileme jetonunun saniye cinsinden ömrü (REFRESH_TTL = 1209600, 14 gün).
+          examples: [1209600]
         user:
           $ref: "#/components/schemas/UserProfile"
 
@@ -1440,8 +1669,7 @@ components:
         id:
           $ref: "#/components/schemas/RuntimeId"
         phone:
-          type: string
-          pattern: "^\\+90[0-9]{10}$"
+          $ref: "#/components/schemas/Phone"
         fullName:
           type: string
 

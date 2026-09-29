@@ -12,6 +12,9 @@ const CodeValidationFailed Code = "VALIDATION_FAILED"
 // CodeUnauthorized = UNAUTHORIZED.
 const CodeUnauthorized Code = "UNAUTHORIZED"
 
+// CodeInvalidCredentials = INVALID_CREDENTIALS.
+const CodeInvalidCredentials Code = "INVALID_CREDENTIALS"
+
 // CodeForbidden = FORBIDDEN.
 const CodeForbidden Code = "FORBIDDEN"
 
@@ -20,6 +23,9 @@ const CodeNotFound Code = "NOT_FOUND"
 
 // CodeConflict = CONFLICT.
 const CodeConflict Code = "CONFLICT"
+
+// CodePhoneAlreadyRegistered = PHONE_ALREADY_REGISTERED.
+const CodePhoneAlreadyRegistered Code = "PHONE_ALREADY_REGISTERED"
 
 // CodeInternal = INTERNAL.
 const CodeInternal Code = "INTERNAL"
@@ -82,9 +88,11 @@ const CodeNotImplemented Code = "NOT_IMPLEMENTED"
 var codeTable = []codeEntry{
 	{code: CodeValidationFailed, httpStatus: 400, message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"},
 	{code: CodeUnauthorized, httpStatus: 401, message: "Oturumun sona ermiş. Tekrar giriş yapman gerekiyor."},
+	{code: CodeInvalidCredentials, httpStatus: 401, message: "Telefon numarası ya da şifre hatalı."},
 	{code: CodeForbidden, httpStatus: 403, message: "Bu işlem için yetkin yok."},
 	{code: CodeNotFound, httpStatus: 404, message: "Aradığın kaydı bulamadık."},
 	{code: CodeConflict, httpStatus: 409, message: "Bu kayıt az önce değişti. Sayfayı yenileyip tekrar dener misin?"},
+	{code: CodePhoneAlreadyRegistered, httpStatus: 409, message: "Bu telefon numarasıyla kayıtlı bir hesap var. Giriş yapmayı dener misin?"},
 	{code: CodeInternal, httpStatus: 500, message: "Beklenmeyen bir sorun oldu. Birazdan tekrar dene."},
 	{code: CodeStockInsufficient, httpStatus: 409, message: "Bu üründen yeterli stok kalmadı."},
 	{code: CodeReservationExpired, httpStatus: 410, message: "Süre doldu, sepetini yenileyelim."},

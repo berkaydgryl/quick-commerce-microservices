@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"regexp"
 	"strings"
 
 	"github.com/gofiber/fiber/v3"
@@ -9,42 +8,67 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
 )
 
-// Kullanici kimligi (T7.5). JWT dogrulamasi T8.1'de gelir; o zamana kadar
-// GELISTIRME ve TEST ortaminda istemci kimligini X-User-Id basligiyla bildirir.
-//
-// PRODUCTION'DA BU BASLIK OKUNMAZ: kimlik dogrulamasi olmadan herkes kendini
-// baska biri gibi tanitabilirdi. Production'da korumali uclar T8.1'e kadar
-// 401 doner.
+// Kullanici kimligi (T8.1): korumali uclar "Authorization: Bearer <erisim
+// jetonu>" ister (ADR-12). Jeton imzali JWT'dir; kimlik YALNIZCA ondan gelir.
+// T7.5'teki X-User-Id gelistirme basligi kaldirildi: imzasiz bir baslik her
+// ortamda herkesin kendini baska biri gibi tanitmasina izin verirdi.
 //
 // Kimligi belirleyen TEK yer bu ara katmandir; handler'lar userIDOf(c) okur.
-// T8.1'de yalnizca bu dosya degisir (JWT), uclar degismez.
-
-// UserIDHeader, gelistirmede kullanici kimliginin tasindigi baslik.
-const UserIDHeader = "X-User-Id"
 
 const userIDLocal = "userId"
 
-const userIDReason = "gecerli bir kullanici kimligi olmali (usr_...)"
+// bearerScheme, tek desteklenen sema. Sema adi buyuk-kucuk harfe duyarsizdir
+// (RFC 7235): "bearer" da kabul edilir.
+const bearerScheme = "Bearer"
 
-// userIDPattern, demo kimligi: persona ve test kullanicilari ("usr_ali",
-// "usr_1"). Bicim kimligin kendisini degil, basliga rastgele metin
-// yazilmasini sinirlar.
-var userIDPattern = regexp.MustCompile(`^usr_[A-Za-z0-9_-]{1,64}$`)
+const (
+	missingTokenReason = "Bearer erisim jetonu gerekli"
+	invalidTokenReason = "gecersiz ya da suresi dolmus erisim jetonu"
+)
 
-// requireUser, korumali uclarin kimlik ara katmani. allowDemoHeader yalnizca
-// production DISINDA true'dur (bkz. bootstrap).
-func requireUser(allowDemoHeader bool) fiber.Handler {
+// WWW-Authenticate degerleri (RFC 6750): 401 cevabi hangi semanin beklendigini
+// soyler; jeton gecersizse istemci bunu "yenile ya da yeniden giris yap"
+// diye okur.
+const (
+	bearerChallenge       = bearerScheme
+	invalidTokenChallenge = bearerScheme + ` error="invalid_token"`
+)
+
+// requireUser, korumali uclarin kimlik ara katmani. Jeton yoksa, bicimsizse,
+// imzasi tutmuyorsa ya da suresi dolduysa 401 UNAUTHORIZED; handler ve arkadaki
+// servis HIC cagrilmaz.
+//
+// Jetonun kendisi gunluge ve cevaba yazilmaz; dogrulama hatasinin sebebi
+// (suresi dolmus, imza) yalnizca gunlukte, sarmalanmis hatada kalir.
+func requireUser(verifier AccessTokenVerifier) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		if !allowDemoHeader {
-			return apperror.New(apperror.CodeUnauthorized, nil)
+		token, found := bearerToken(c.Get(fiber.HeaderAuthorization))
+		if !found {
+			c.Set(fiber.HeaderWWWAuthenticate, bearerChallenge)
+			return apperror.New(apperror.CodeUnauthorized, map[string]string{fiber.HeaderAuthorization: missingTokenReason})
 		}
-		userID := strings.TrimSpace(c.Get(UserIDHeader))
-		if !userIDPattern.MatchString(userID) {
-			return apperror.New(apperror.CodeUnauthorized, map[string]string{UserIDHeader: userIDReason})
+		identity, err := verifier.Verify(token)
+		if err != nil {
+			c.Set(fiber.HeaderWWWAuthenticate, invalidTokenChallenge)
+			return &apperror.Error{
+				Code:    apperror.CodeUnauthorized,
+				Details: map[string]any{fiber.HeaderAuthorization: invalidTokenReason},
+				Cause:   err,
+			}
 		}
-		c.Locals(userIDLocal, userID)
+		c.Locals(userIDLocal, identity.UserID)
 		return c.Next()
 	}
+}
+
+// bearerToken, basliktan jetonu ayirir: "Bearer <jeton>".
+func bearerToken(header string) (string, bool) {
+	scheme, token, found := strings.Cut(strings.TrimSpace(header), " ")
+	if !found || !strings.EqualFold(scheme, bearerScheme) {
+		return "", false
+	}
+	token = strings.TrimSpace(token)
+	return token, token != ""
 }
 
 // userIDOf, requireUser'in koydugu kimlik. Ara katmandan gecmeyen istekte bos.

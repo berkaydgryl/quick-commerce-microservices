@@ -54,7 +54,7 @@ func TestReserveRejectsBodyFormatErrors(t *testing.T) {
 	}
 	for _, tc := range cases {
 		orders := &fakeOrders{}
-		app := orderApp(orders, true)
+		app := orderApp(orders)
 
 		status, envelope := send(t, app, orderRequest(t, http.MethodPost, "/v1/cart/reserve", tc.body, tc.headers))
 
@@ -73,7 +73,7 @@ func TestReserveRejectsBodyFormatErrors(t *testing.T) {
 
 func TestReserveReportsWrongTypeWithFieldName(t *testing.T) {
 	orders := &fakeOrders{}
-	app := orderApp(orders, true)
+	app := orderApp(orders)
 	body := strings.Replace(validReserveBody, `"quantity":2`, `"quantity":"iki"`, 1)
 
 	status, envelope := send(t, app, orderRequest(t, http.MethodPost, "/v1/cart/reserve", body, nil))
@@ -127,7 +127,7 @@ func TestOversizedBodyIsRejected(t *testing.T) {
 	// by peer" alabilirdi (T7.5'te CI boyle dustu; Linux'ta 300 kosuda 8-11 kez).
 	// Yalnizca baslik gidince sunucuda okunmamis bayt kalmaz, cevap her seferinde okunur.
 	orders := &fakeOrders{}
-	app := orderApp(orders, true)
+	app := orderApp(orders)
 	dialer := net.Dialer{Timeout: ioDeadline}
 	conn, err := dialer.DialContext(t.Context(), "tcp", serveOnLoopback(t, app))
 	if err != nil {
@@ -145,7 +145,7 @@ func TestOversizedBodyIsRejected(t *testing.T) {
 	head := "POST /v1/cart/reserve HTTP/1.1\r\n" +
 		"Host: gateway\r\n" +
 		fiber.HeaderContentType + ": " + fiber.MIMEApplicationJSON + "\r\n" +
-		UserIDHeader + ": usr_1\r\n" +
+		fiber.HeaderAuthorization + ": " + bearer(t) + "\r\n" +
 		IdempotencyKeyHeader + ": anahtar-0001\r\n" +
 		fiber.HeaderContentLength + ": " + strconv.Itoa(maxBodyBytes+1) + "\r\n\r\n"
 	if _, err = io.WriteString(conn, head); err != nil {
@@ -165,7 +165,7 @@ func TestOversizedBodyIsRejected(t *testing.T) {
 	}
 	// Istek ara katmana ulasmadan dustu; kimlik yine uretilmeli ve cevap
 	// basligiyla ayni olmali (D8), yoksa bu hata gunlukte bulunamazdi.
-	if got := envelope.Error.RequestID; !requestIDPattern.MatchString(got) || got != response.Header.Get(RequestIDHeader) {
+	if got := envelope.Error.RequestID; !validRequestID(got) || got != response.Header.Get(RequestIDHeader) {
 		t.Errorf("hata zarfinda bicimli ve baslikla ayni requestId bekleniyordu: %q (baslik %q)", got, response.Header.Get(RequestIDHeader))
 	}
 }

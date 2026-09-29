@@ -14,7 +14,7 @@ func TestPlaceOrderPaymentFormat(t *testing.T) {
 	}
 	for _, tc := range cases {
 		orders := &fakeOrders{}
-		app := orderApp(orders, true)
+		app := orderApp(orders)
 
 		status, envelope := send(t, app, orderRequest(t, http.MethodPost, "/v1/orders", tc.body, nil))
 

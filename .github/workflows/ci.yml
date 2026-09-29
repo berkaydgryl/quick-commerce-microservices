@@ -400,8 +400,10 @@ jobs:
             exit 1
           fi
 
+      # -tags integration: Mongo entegrasyon testleri (T8.1) de denetlensin;
+      # etiketsiz vet o dosyalari hic gormezdi.
       - name: go vet
-        run: go vet ./...
+        run: go vet -tags integration ./...
 
       # D8: projenin Go kurallari (hata yutulmaz, ag cagrisi context alir,
       # cevap govdesi kapatilir) elle degil burada denetlenir; denetleyicilerin
@@ -427,6 +429,15 @@ jobs:
       # -count=1: test onbellegi kapali, her kosu gercekten calisir.
       - name: Testler (race dedektoru acik)
         run: go test -race -count=1 ./...
+
+      # T8.1: gateway'in Mongo depolari (users, sessions) GERCEK Mongo'ya karsi
+      # sinanir: benzersiz telefon, ayni jetonla es zamanli yenilemede tek
+      # kazanan, TTL indeksi. Mongo'yu test kendisi Testcontainers ile kaldirir
+      # ("integration" isindeki gerekceyle ayni: runner'da Docker hazir).
+      # Ayri adim: Docker'a bagli olmayan birim testlerinin sonucu bundan
+      # bagimsiz okunsun. Entegrasyon testi olan yeni bir paket buraya eklenir.
+      - name: Entegrasyon testleri (Testcontainers, Mongo)
+        run: go test -tags integration -race -count=1 ./internal/authstore/...
 
       # Dockerfile ile ayni bayraklar: CI'da derlenen ikili imajdakiyle ayni olsun.
       - name: Derle (statik ikili)

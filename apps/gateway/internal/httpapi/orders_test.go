@@ -49,14 +49,14 @@ func (f *fakeOrders) Get(ctx context.Context, userID, orderID string) (order.Ord
 	return order.Order{ID: orderID, Status: "PAID", Lines: []order.Line{}, Timeline: []order.TimelineEntry{}}, f.err
 }
 
-func orderApp(orders *fakeOrders, allowDemoUser bool) *fiber.App {
+func orderApp(orders *fakeOrders) *fiber.App {
 	return New(Deps{
 		Health:           fakeReporter{report: healthyReport()},
 		CartReserver:     orders,
 		OrderPlacer:      orders,
 		ThreeDSConfirmer: orders,
 		OrderGetter:      orders,
-		AllowDemoUser:    allowDemoUser,
+		AccessTokens:     testTokens(),
 		Logger:           silentLogger(),
 	})
 }
@@ -73,7 +73,7 @@ func orderRequest(t *testing.T, method, path, body string, headers map[string]st
 	t.Helper()
 	request := newRequest(t, method, path, strings.NewReader(body))
 	request.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
-	request.Header.Set(UserIDHeader, "usr_1")
+	request.Header.Set(fiber.HeaderAuthorization, bearer(t))
 	request.Header.Set(IdempotencyKeyHeader, "anahtar-0001")
 	for name, value := range headers {
 		if value == "" {
@@ -109,7 +109,7 @@ func detailsOf(t *testing.T, envelope Envelope) map[string]any {
 
 func TestReserveCartPassesInputAndReturns201(t *testing.T) {
 	orders := &fakeOrders{}
-	app := orderApp(orders, true)
+	app := orderApp(orders)
 
 	status, envelope := send(t, app, orderRequest(t, http.MethodPost, "/v1/cart/reserve", validReserveBody,
 		map[string]string{RequestIDHeader: testRequestID}))
@@ -118,7 +118,7 @@ func TestReserveCartPassesInputAndReturns201(t *testing.T) {
 		t.Fatalf("201 + success bekleniyordu: %d %+v", status, envelope)
 	}
 	input := orders.reserveInput
-	if input.UserID != "usr_1" || input.IdempotencyKey != "anahtar-0001" || input.MarketID != "mkt_migros-jet-moda" {
+	if input.UserID != testUserID || input.IdempotencyKey != "anahtar-0001" || input.MarketID != "mkt_migros-jet-moda" {
 		t.Errorf("kimlik, anahtar ve market tasinmali: %+v", input)
 	}
 	if len(input.Items) != 1 || input.Items[0] != (order.CartItem{ProductID: "prd_cikolata-80", Quantity: 2}) {
@@ -141,7 +141,7 @@ func TestReserveCartPassesInputAndReturns201(t *testing.T) {
 
 func TestPlaceOrderSendsCardAndConnectionIP(t *testing.T) {
 	orders := &fakeOrders{}
-	app := orderApp(orders, true)
+	app := orderApp(orders)
 
 	status, envelope := send(t, app, orderRequest(t, http.MethodPost, "/v1/orders", validPlaceBody,
 		// Istemcinin yazdigi IP basligi YOK SAYILMALI (B9): IP baglantidan gelir.
@@ -151,7 +151,7 @@ func TestPlaceOrderSendsCardAndConnectionIP(t *testing.T) {
 		t.Fatalf("201 bekleniyordu: %d %+v", status, envelope)
 	}
 	input := orders.placeInput
-	if input.OrderID != testOrderID || input.CardToken != "tok_test_4242" || input.UserID != "usr_1" || input.IdempotencyKey != "anahtar-0001" {
+	if input.OrderID != testOrderID || input.CardToken != "tok_test_4242" || input.UserID != testUserID || input.IdempotencyKey != "anahtar-0001" {
 		t.Errorf("siparis, jeton, kimlik ve anahtar tasinmali: %+v", input)
 	}
 	if input.ClientIP == "" || input.ClientIP == "1.2.3.4" {
@@ -165,28 +165,28 @@ func TestPlaceOrderSendsCardAndConnectionIP(t *testing.T) {
 
 func TestConfirmThreeDSUsesPathID(t *testing.T) {
 	orders := &fakeOrders{}
-	app := orderApp(orders, true)
+	app := orderApp(orders)
 
 	status, envelope := send(t, app, orderRequest(t, http.MethodPost, "/v1/orders/"+testOrderID+"/3ds", `{"challengeId":"tds_1","otp":"123456"}`, nil))
 
 	if status != http.StatusOK || !envelope.Success {
 		t.Fatalf("200 bekleniyordu: %d %+v", status, envelope)
 	}
-	if got := orders.confirmInput; got.OrderID != testOrderID || got.ChallengeID != "tds_1" || got.Code != "123456" || got.UserID != "usr_1" {
+	if got := orders.confirmInput; got.OrderID != testOrderID || got.ChallengeID != "tds_1" || got.Code != "123456" || got.UserID != testUserID {
 		t.Errorf("yol kimligi, jeton, kod ve kullanici tasinmali: %+v", got)
 	}
 }
 
 func TestGetOrderUsesPathIDAndUser(t *testing.T) {
 	orders := &fakeOrders{}
-	app := orderApp(orders, true)
+	app := orderApp(orders)
 
 	status, envelope := send(t, app, orderRequest(t, http.MethodGet, "/v1/orders/"+testOrderID, "", nil))
 
 	if status != http.StatusOK || !envelope.Success {
 		t.Fatalf("200 bekleniyordu: %d %+v", status, envelope)
 	}
-	if orders.getUserID != "usr_1" || orders.getOrderID != testOrderID {
+	if orders.getUserID != testUserID || orders.getOrderID != testOrderID {
 		t.Errorf("sahiplik icin kullanici ve yol kimligi tasinmali: %q %q", orders.getUserID, orders.getOrderID)
 	}
 }
@@ -197,7 +197,7 @@ func TestServiceErrorKeepsNumericDetails(t *testing.T) {
 		Code:    apperror.CodePriceChanged,
 		Details: map[string]any{"totalMinor": json.RawMessage(`19360`), "currency": "TRY"},
 	}}
-	app := orderApp(orders, true)
+	app := orderApp(orders)
 
 	status, envelope := send(t, app, orderRequest(t, http.MethodPost, "/v1/cart/reserve", validReserveBody, nil))
 

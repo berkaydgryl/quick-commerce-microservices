@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -57,4 +58,36 @@ func readLogLevel(getenv Getenv) (slog.Level, error) {
 	default:
 		return 0, fmt.Errorf("LOG_LEVEL: trace|debug|info|warn|error|fatal bekleniyor, alinan %q", getenv("LOG_LEVEL"))
 	}
+}
+
+// mongoURIExample, eksik MONGO_URI hatasinda gosterilen ornek (.env.example).
+const mongoURIExample = "mongodb://localhost:27017/getir?directConnection=true"
+
+// readMongoURI, MOCK disinda ZORUNLU Mongo adresini okur (T8.1). MOCK'ta kimlik
+// kayitlari bellekte tutulur; adres verilse de kullanilmaz.
+func readMongoURI(getenv Getenv, mock bool) (string, error) {
+	uri := readString(getenv, "MONGO_URI", "")
+	if uri == "" && !mock {
+		return "", fmt.Errorf("MONGO_URI: MOCK=true degilse zorunlu, ornek: %s", mongoURIExample)
+	}
+	return uri, nil
+}
+
+// readJWTSecret, erisim jetonunun imza sirrini okur (ZORUNLU, T8.1).
+//
+// En az 32 bayt: HS256 icin daha kisa sir kaba kuvvete aciktir. Production'da
+// .env.example'daki ornek deger REDDEDILIR: ornegi kopyalayip degistirmeyi
+// unutmak, herkesin bildigi bir sirla jeton imzalamak demekti. Hata metni
+// sirrin kendisini ASLA icermez.
+func readJWTSecret(getenv Getenv, nodeEnv string) (Secret, error) {
+	value := strings.TrimSpace(getenv("JWT_SECRET"))
+	switch {
+	case value == "":
+		return nil, fmt.Errorf("JWT_SECRET: zorunlu, en az %d bayt; uretmek icin: openssl rand -hex 32", minJWTSecretBytes)
+	case len(value) < minJWTSecretBytes:
+		return nil, fmt.Errorf("JWT_SECRET: en az %d bayt olmali, verilen %d bayt", minJWTSecretBytes, len(value))
+	case nodeEnv == EnvProduction && value == exampleJWTSecret:
+		return nil, errors.New("JWT_SECRET: production'da .env.example'daki ornek sir kullanilamaz")
+	}
+	return Secret(value), nil
 }
