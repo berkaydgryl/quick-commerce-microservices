@@ -27,6 +27,8 @@ import {
 const STORE = 'ds_kadikoy';
 const SKU = 'SUT-1L';
 const ORDER_ID = 'ord_1';
+/** Hiz sinirinin kullanici oznesi: core'daki kimlik bicimi (usr_ + 32 hex). */
+const USER_ID = 'usr_0123456789abcdef0123456789abcdef';
 
 describe('anahtar bicimleri', () => {
   it('roadmap tablosundaki bicimleri birebir uretir', () => {
@@ -41,6 +43,10 @@ describe('anahtar bicimleri', () => {
       'idem:{anon}:4f1c3a2b-9d8e',
     );
     expect(rateLimitKey('10.0.0.1', 'POST_/v1/orders')).toBe('rate:{10.0.0.1}:POST_/v1/orders');
+    expect(rateLimitKey(USER_ID, 'POST_/v1/orders/id/3ds')).toBe(
+      `rate:{${USER_ID}}:POST_/v1/orders/id/3ds`,
+    );
+    expect(rateLimitKey('::1', 'POST_/v1/auth/login')).toBe('rate:{::1}:POST_/v1/auth/login');
     expect(EVENTS_STREAM_KEY).toBe('stream:events');
     expect(EVENTS_DEAD_LETTER_STREAM_KEY).toBe('stream:events:dead');
     expect(RECONCILE_LOCK_KEY).toBe('lock:reconcile');
@@ -115,6 +121,23 @@ describe('dogrulama', () => {
 
   it('IPv6 adresi kabul edilir', () => {
     expect(rateLimitKey('::1', 'GET_/v1/products')).toBe('rate:{::1}:GET_/v1/products');
+  });
+
+  it('hiz sinirinin oznesi IP ya da kullanici kimligidir; baska deger reddedilir (T8.2)', () => {
+    for (const subject of [
+      'usr_7',
+      'ord_0123456789abcdef0123456789abcdef',
+      'kotu:ozne',
+      '{1}',
+      '',
+    ]) {
+      try {
+        rateLimitKey(subject, 'GET_/v1/me');
+        expect.unreachable(`${subject} kabul edilmemeliydi`);
+      } catch (error: unknown) {
+        expect((error as AppError).details).toMatchObject({ field: 'subject' });
+      }
+    }
   });
 
   it('cok kisa idempotency anahtari reddedilir', () => {

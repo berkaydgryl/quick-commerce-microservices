@@ -63,6 +63,14 @@ type Config struct {
 	RedisConnectTimeout time.Duration
 	// IdempotencyTTL, bitmis idempotency kaydinin omru (ADR-08).
 	IdempotencyTTL time.Duration
+	// RateLimitEnabled false ise hiz siniri yoktur (yuk testleri; T8.2, P2).
+	RateLimitEnabled bool
+	// RateLimitWindow, kayan pencerenin uzunlugu.
+	RateLimitWindow time.Duration
+	// Pencere basina izin verilen istek: genel, kimlik uclari, siparis uclari.
+	RateLimitGeneral int
+	RateLimitAuth    int
+	RateLimitOrder   int
 }
 
 // Secret, gunluge ya da hata metnine yazilmamasi gereken deger. fmt (%v, %s,
@@ -170,6 +178,32 @@ func Load(getenv Getenv) (Config, error) {
 		problems = append(problems, err)
 	}
 
+	// Hiz siniri (T8.2, P2): varsayilanlar .env.example ile ayni.
+	rateLimitEnabled, err := readBool(getenv, "RATE_LIMIT_ENABLED", true)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
+	rateLimitWindow, err := readSeconds(getenv, "RATE_LIMIT_WINDOW_SECONDS", defaultRateLimitWindow)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
+	rateLimitGeneral, err := readInt(getenv, "RATE_LIMIT_MAX_REQUESTS", defaultRateLimitGeneral, 1, maxRateLimit)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
+	rateLimitAuth, err := readInt(getenv, "RATE_LIMIT_AUTH_MAX_REQUESTS", defaultRateLimitAuth, 1, maxRateLimit)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
+	rateLimitOrder, err := readInt(getenv, "RATE_LIMIT_ORDER_MAX_REQUESTS", defaultRateLimitOrder, 1, maxRateLimit)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
 	// Servis listesi bugun sabittir: gateway yalnizca ayakta olan iki servisi
 	// taniyor. Yeni servis geldiginde buraya bir satir eklenir; adres yine
 	// ortamdan gelir.
@@ -200,5 +234,10 @@ func Load(getenv Getenv) (Config, error) {
 		RedisURL:                    redisURL,
 		RedisConnectTimeout:         redisConnectTimeout,
 		IdempotencyTTL:              idempotencyTTL,
+		RateLimitEnabled:            rateLimitEnabled,
+		RateLimitWindow:             rateLimitWindow,
+		RateLimitGeneral:            rateLimitGeneral,
+		RateLimitAuth:               rateLimitAuth,
+		RateLimitOrder:              rateLimitOrder,
 	}, nil
 }

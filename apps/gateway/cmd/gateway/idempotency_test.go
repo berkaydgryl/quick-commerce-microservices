@@ -2,53 +2,42 @@ package main
 
 import (
 	"bytes"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/config"
+	"github.com/redis/go-redis/v9"
+
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/idempotency"
 )
 
-func idempotencyConfig(mock bool, redisURL string) config.Config {
-	cfg := authConfig(mock, "")
-	cfg.RedisURL = redisURL
-	cfg.RedisConnectTimeout = 300 * time.Millisecond
+// lazyClient, baglanmayan istemci: go-redis baglantiyi ilk komutta kurar.
+// Kurucularin hangi depoyu sectigini sinamak icin Redis gerekmez.
+func lazyClient(t *testing.T) *redis.Client {
+	t.Helper()
+	client := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1"})
+	t.Cleanup(func() {
+		if err := client.Close(); err != nil {
+			t.Errorf("istemci kapatilamadi: %v", err)
+		}
+	})
+	return client
+}
+
+func TestBuildIdempotencyChoosesStoreByClient(t *testing.T) {
+	cfg := redisConfig(true, "")
 	cfg.IdempotencyTTL = 24 * time.Hour
-	return cfg
-}
 
-func TestBuildIdempotencyInMockModeUsesMemoryAndSkipsRedis(t *testing.T) {
-	// MOCK'ta Redis adresi verilmis olsa bile ona HIC gidilmez; /healthz'de de
-	// redis gorunmez.
-	parts, err := buildIdempotency(t.Context(), idempotencyConfig(true, "redis://127.0.0.1:1"))
-	if err != nil {
-		t.Fatalf("MOCK'ta kurulum Redis'siz basarmali: %v", err)
+	memory := buildIdempotency(cfg, nil)
+	if _, ok := memory.Store.(*idempotency.Memory); !ok {
+		t.Errorf("istemci yokken (MOCK) bellek deposu bekleniyordu: %T", memory.Store)
 	}
-	if _, memory := parts.settings.Store.(*idempotency.Memory); !memory {
-		t.Errorf("MOCK'ta bellek deposu bekleniyordu: %T", parts.settings.Store)
+	if memory.TTL != 24*time.Hour || len(memory.FingerprintKey) == 0 {
+		t.Errorf("omur ve parmak izi anahtari ayardan gelmeli: %+v", memory)
 	}
-	if len(parts.pingers) != 0 {
-		t.Errorf("MOCK'ta saglik raporuna Redis eklenmemeli: %v", parts.pingers)
-	}
-	if parts.settings.TTL != 24*time.Hour || len(parts.settings.FingerprintKey) == 0 {
-		t.Errorf("omur ve parmak izi anahtari ayardan gelmeli: %+v", parts.settings)
-	}
-	if err := parts.close(); err != nil {
-		t.Errorf("MOCK'ta kapatma bir sey yapmamali: %v", err)
-	}
-}
-
-func TestBuildIdempotencyFailsFastWhenRedisIsUnreachable(t *testing.T) {
-	startedAt := time.Now()
-
-	_, err := buildIdempotency(t.Context(), idempotencyConfig(false, "redis://127.0.0.1:1"))
-
-	if err == nil || !strings.Contains(err.Error(), "redis'e ulasilamadi") {
-		t.Fatalf("ulasilamayan Redis acilis hatasi vermeli: %v", err)
-	}
-	if elapsed := time.Since(startedAt); elapsed > 3*time.Second {
-		t.Errorf("baglanti suresi uygulanmali, %v surdu", elapsed)
+	if shared := buildIdempotency(cfg, lazyClient(t)); shared.Store == nil {
+		t.Error("istemci varken Redis deposu kurulmali")
+	} else if _, ok := shared.Store.(*idempotency.Redis); !ok {
+		t.Errorf("Redis deposu bekleniyordu: %T", shared.Store)
 	}
 }
 

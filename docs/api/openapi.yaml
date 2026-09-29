@@ -31,6 +31,10 @@ info:
       alınmaz. `POST /v1/auth/login`, `/v1/auth/refresh` ve `/v1/auth/logout`
       bu başlığı istemez: giriş ve yenileme kalıcı bir kaynak yaratmaz (oturum
       jetonu üretir), çıkışın tekrarı zararsızdır.
+    * **Hız sınırı** (T8.2): uç başına kayan pencere; kimliksiz uçlarda IP,
+      kimlik isteyen uçlarda kullanıcı sayılır. Aşılınca `429 RATE_LIMITED`,
+      `Retry-After` başlığı ve `details.retryAfterSeconds` döner. Sınırlar
+      `RateLimited` cevabında; `/healthz` sınırsızdır.
     * **Kimlik**: korumalı uçlar `Authorization: Bearer <erişim jetonu>` ister
       (T8.1). Jeton yoksa ya da geçersizse `401 UNAUTHORIZED` ve
       `WWW-Authenticate` başlığı döner. Jeton ve kişisel veri taşıyan cevaplar
@@ -308,6 +312,8 @@ paths:
                       details:
                         refreshToken: gecersiz, kullanilmis ya da suresi dolmus
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /v1/auth/logout:
     post:
@@ -345,6 +351,8 @@ paths:
                         $ref: "#/components/schemas/LogoutResult"
         "400":
           $ref: "#/components/responses/RefreshTokenRequired"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /v1/me:
     get:
@@ -375,6 +383,8 @@ paths:
                         $ref: "#/components/schemas/UserProfile"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /v1/categories:
     get:
@@ -519,6 +529,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
@@ -566,6 +578,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /v1/markets/{marketId}/products:
     get:
@@ -1196,6 +1210,8 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "404":
           $ref: "#/components/responses/OrderNotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
@@ -1480,12 +1496,23 @@ components:
                   requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
 
     RateLimited:
-      description: İstek hızı sınırı aşıldı
+      description: |
+        İstek hızı sınırı aşıldı (T8.2, roadmap P2). Sınır kayan pencereyle
+        (varsayılan 60 sn) Redis'te tutulur; gateway örnekleri aynı sayacı
+        paylaşır. Sayım uç başınadır. Kimliksiz uçlarda istemcinin IP'si,
+        kimlik isteyen uçlarda kullanıcı sayılır. Varsayılan sınırlar pencere
+        başına: kimlik uçları (kayıt, giriş, yenileme, çıkış) 10; rezervasyon,
+        sipariş ve 3DS 20; diğer uçlar 120. Yalnızca kabul edilen istek
+        sayılır: beklemeden yeniden denemek süreyi uzatmaz, `Retry-After`
+        kadar beklemek yeter. Hız sınırı sayacına ulaşılamazsa istek geçer.
       headers:
         Retry-After:
-          description: Yeniden denemeden önce beklenecek saniye.
+          description: |
+            Yeniden denemeden önce beklenecek tam saniye (yukarı yuvarlanır):
+            penceredeki en eski kaydın düşmesine kalan süre.
           schema:
             type: integer
+            minimum: 1
       content:
         application/json:
           schema:
@@ -1497,7 +1524,7 @@ components:
                 success: false
                 error:
                   code: RATE_LIMITED
-                  message: "Çok fazla istek gönderdiniz."
+                  message: "Çok fazla deneme yaptın. Kısa bir süre sonra tekrar dene."
                   details:
                     retryAfterSeconds: 30
                   requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"

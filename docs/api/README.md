@@ -115,6 +115,11 @@ Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci 
   (`IDEMPOTENCY_TTL_SECONDS`) tutulur. Kayıt ucu istisnadır: cevabı jeton
   taşıdığı için tekrar edilmez, biten kaydın tekrarı `409 PHONE_ALREADY_REGISTERED`
   alır. Redis erişilemezse bu uçlar `503` döner (korumasız sipariş alınmaz).
+- **Hız sınırı** (T8.2, roadmap P2): uç başına kayan pencere (60 sn), Redis'te; gateway örnekleri
+  aynı sayacı paylaşır. Kimliksiz uçlarda IP, kimlik isteyen uçlarda kullanıcı sayılır. Pencere
+  başına kimlik uçları 10, rezervasyon/sipariş/3DS 20, diğerleri 120 (`RATE_LIMIT_*`). Aşılınca
+  `429 RATE_LIMITED` + `Retry-After` (saniye) + `details.retryAfterSeconds`; yalnızca kabul edilen
+  istek sayılır. Sayaca ulaşılamazsa istek geçer (tekrar koruması ise 503 der). `/healthz` sınırsız.
 - **İzleme**: her cevap `X-Request-Id` başlığı taşır; hata gövdesindeki
   `error.requestId` ile aynı değerdir. Biçim `req_` + 32 küçük onaltılık karakter
   (Node servisleriyle aynı). İstemci bu biçimde kendi kimliğini gönderirse korunur;

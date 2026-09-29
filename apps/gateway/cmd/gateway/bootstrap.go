@@ -22,7 +22,7 @@ import (
 )
 
 // bootstrap, parcalari BAGLAR: baglanti havuzu, kimlik servisi (T8.1), tekrar
-// korumasi (T8.2), servis adaptorleri, yonlendirici. Dinlemez ve sinyal beklemez; o is serve'undur
+// korumasi ve hiz siniri (T8.2), servis adaptorleri, yonlendirici. Dinlemez ve sinyal beklemez; o is serve'undur
 // (Node tarafindaki bootstrap.ts / main.ts ayrimi). Yeni bir servis istemcisi
 // (order, payment) geldiginde degisen yer burasidir, yasam dongusu degil.
 //
@@ -63,16 +63,17 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (*fi
 		}
 	}
 
-	replays, err := buildIdempotency(ctx, cfg)
+	// Tek Redis baglantisi: tekrar korumasi ve hiz siniri paylasir (T8.2).
+	shared, err := buildRedis(ctx, cfg)
 	if err != nil {
 		closePool()
 		closeIdentity()
-		return nil, nil, fmt.Errorf("tekrar korumasi: %w", err)
+		return nil, nil, fmt.Errorf("redis (tekrar korumasi, hiz siniri): %w", err)
 	}
 	cleanup := func() {
 		closePool()
 		closeIdentity()
-		if closeErr := replays.close(); closeErr != nil {
+		if closeErr := shared.close(); closeErr != nil {
 			logger.Warn("redis baglantisi temiz kapanmadi", slog.Any("err", closeErr))
 		}
 	}
@@ -109,7 +110,7 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (*fi
 	orderService := order.New(orderv1.NewOrderServiceClient(orderConn), cfg.RequestTimeout)
 
 	app := httpapi.New(httpapi.Deps{
-		Health:           health.New(healthClients, mergePingers(identity.pingers, replays.pingers), cfg.RequestTimeout, cfg.Mock),
+		Health:           health.New(healthClients, mergePingers(identity.pingers, shared.pingers), cfg.RequestTimeout, cfg.Mock),
 		Categories:       catalogService,
 		NearbyMarkets:    catalogService,
 		Market:           catalogService,
@@ -127,8 +128,9 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (*fi
 		ProfileGetter:     identity.service,
 		CheckoutSignals:   identity.service,
 		AccessTokens:      identity.tokens,
-		// Tekrar korumasi (T8.2): Redis ya da MOCK'ta bellek.
-		Idempotency: replays.settings,
+		// Tekrar korumasi ve hiz siniri (T8.2): Redis ya da MOCK'ta bellek.
+		Idempotency: buildIdempotency(cfg, shared.client),
+		RateLimit:   buildRateLimit(cfg, shared.client),
 		// Cihaz cerezi yalnizca production'da Secure: gelistirme http://localhost.
 		SecureCookies: cfg.NodeEnv == config.EnvProduction,
 		Logger:        logger,

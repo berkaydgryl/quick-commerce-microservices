@@ -12,6 +12,7 @@ package httpapi
 //   identity.go   - kullanici kimligi (Bearer erisim jetonu, T8.1)
 //   device.go     - cihaz cerezi (risk sinyali, T8.1)
 //   idempotency.go- Idempotency-Key basligi ve tekrar korumasi (ADR-08, T8.2)
+//   ratelimit.go  - hiz siniri (kayan pencere; T8.2, roadmap P2)
 //   body.go       - JSON govdenin kati cozulmesi
 //   params.go     - sorgu parametresinin tipine cevrilmesi
 //   middleware.go - istek gunlugu
@@ -150,6 +151,8 @@ type Deps struct {
 	AccessTokens AccessTokenVerifier
 	// Idempotency, mutasyon uclarinin tekrar korumasi (ADR-08, T8.2).
 	Idempotency Idempotency
+	// RateLimit, hiz siniri (T8.2, roadmap P2); Limiter nil ise kapali.
+	RateLimit RateLimit
 	// SecureCookies, cihaz cerezine Secure bayragi (yalnizca production:
 	// gelistirme http://localhost uzerinden calisir).
 	SecureCookies bool
@@ -174,12 +177,20 @@ func New(deps Deps) *fiber.App {
 
 	app.Get("/healthz", healthzHandler(deps.Health))
 
+	// Hiz siniri (T8.2) ROTA BASINA: kimliksiz uclarda IP, korumali uclarda
+	// kimlikten SONRA kullanici sayilir. /healthz sinirsiz.
+	limits := newRateLimiter(deps.RateLimit, deps.Logger)
+	generalByIP := limits.limit(deps.RateLimit.General, byClientIP)
+	authByIP := limits.limit(deps.RateLimit.Auth, byClientIP)
+	generalByUser := limits.limit(deps.RateLimit.General, byUser)
+	orderByUser := limits.limit(deps.RateLimit.Order, byUser)
+
 	v1 := app.Group("/v1")
-	v1.Get("/categories", listCategoriesHandler(deps.Categories))
-	v1.Get("/markets", listNearbyMarketsHandler(deps.NearbyMarkets))
-	v1.Get("/markets/:marketId", getMarketHandler(deps.Market))
-	v1.Get("/markets/:marketId/categories", listMarketCategoriesHandler(deps.MarketCategories))
-	v1.Get("/markets/:marketId/products", listMarketProductsHandler(deps.MarketProducts))
+	v1.Get("/categories", generalByIP, listCategoriesHandler(deps.Categories))
+	v1.Get("/markets", generalByIP, listNearbyMarketsHandler(deps.NearbyMarkets))
+	v1.Get("/markets/:marketId", generalByIP, getMarketHandler(deps.Market))
+	v1.Get("/markets/:marketId/categories", generalByIP, listMarketCategoriesHandler(deps.MarketCategories))
+	v1.Get("/markets/:marketId/products", generalByIP, listMarketProductsHandler(deps.MarketProducts))
 
 	// Kimlik uclari (T8.1): kayit, giris, yenileme ve cikis kimliksizdir.
 	devices := deviceCookies{secure: deps.SecureCookies}
@@ -189,19 +200,19 @@ func New(deps Deps) *fiber.App {
 	register := idempotent(deps.Idempotency, registerPolicy, deps.Logger)
 	mutation := idempotent(deps.Idempotency, mutationPolicy, deps.Logger)
 	checkout := idempotent(deps.Idempotency, checkoutPolicy, deps.Logger)
-	v1.Post("/auth/register", register, registerHandler(deps.UserRegistrar, devices))
-	v1.Post("/auth/login", loginHandler(deps.UserAuthenticator, devices))
-	v1.Post("/auth/refresh", refreshHandler(deps.SessionRefresher))
-	v1.Post("/auth/logout", logoutHandler(deps.SessionRevoker))
+	v1.Post("/auth/register", authByIP, register, registerHandler(deps.UserRegistrar, devices))
+	v1.Post("/auth/login", authByIP, loginHandler(deps.UserAuthenticator, devices))
+	v1.Post("/auth/refresh", authByIP, refreshHandler(deps.SessionRefresher))
+	v1.Post("/auth/logout", authByIP, logoutHandler(deps.SessionRevoker))
 
 	// Korumali uclar: once kimlik, sonra uc. Ara katman ROTA BASINA verilir;
 	// /v1 grubuna Use ile verilseydi katalog ve giris uclari da kimlik isterdi.
 	user := requireUser(deps.AccessTokens)
-	v1.Get("/me", user, meHandler(deps.ProfileGetter))
-	v1.Post("/cart/reserve", user, mutation, reserveCartHandler(deps.CartReserver))
-	v1.Post("/orders", user, checkout, placeOrderHandler(deps.OrderPlacer, deps.CheckoutSignals))
-	v1.Post("/orders/:"+orderIDParam+"/3ds", user, checkout, confirmThreeDSHandler(deps.ThreeDSConfirmer))
-	v1.Get("/orders/:"+orderIDParam, user, getOrderHandler(deps.OrderGetter))
+	v1.Get("/me", user, generalByUser, meHandler(deps.ProfileGetter))
+	v1.Post("/cart/reserve", user, orderByUser, mutation, reserveCartHandler(deps.CartReserver))
+	v1.Post("/orders", user, orderByUser, checkout, placeOrderHandler(deps.OrderPlacer, deps.CheckoutSignals))
+	v1.Post("/orders/:"+orderIDParam+"/3ds", user, orderByUser, checkout, confirmThreeDSHandler(deps.ThreeDSConfirmer))
+	v1.Get("/orders/:"+orderIDParam, user, generalByUser, getOrderHandler(deps.OrderGetter))
 
 	return app
 }

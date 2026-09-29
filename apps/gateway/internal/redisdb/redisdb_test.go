@@ -55,7 +55,7 @@ func TestClientOptionsBoundEveryCommandOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gecerli adres cozulmeli: %v", err)
 	}
-	if parsed.MaxRetries != -1 || parsed.ReadTimeout != 2*time.Second || parsed.WriteTimeout != 2*time.Second ||
+	if parsed.MaxRetries != -1 || !parsed.ContextTimeoutEnabled || parsed.ReadTimeout != 2*time.Second || parsed.WriteTimeout != 2*time.Second ||
 		parsed.DialTimeout != time.Second || parsed.DB != 2 || parsed.Addr != "localhost:6379" {
 		t.Errorf("komut tekrarsiz ve istek suresiyle sinirli olmali: %+v", parsed)
 	}

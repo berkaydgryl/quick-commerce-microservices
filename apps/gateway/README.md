@@ -7,7 +7,7 @@ Pnpm workspace'inin parçası değildir: kendi Go modülüdür (`go.mod`). `pnpm
 kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go mod tidy -diff`,
 `-race` testleri, Mongo ve Redis entegrasyon testleri, statik derleme).
 
-## Bugünkü durum (D8 — Go kuralları CI'da; T7.5 — sipariş uçları; T8.1 — kimlik; T8.2 — tekrar koruması; pazaryeri uçları T8.4'ten öne alındı)
+## Bugünkü durum (D8 — Go kuralları CI'da; T7.5 — sipariş uçları; T8.1 — kimlik; T8.2 — tekrar koruması ve hız sınırı; pazaryeri uçları T8.4'ten öne alındı)
 
 | Parça                | Durum                                                           |
 | -------------------- | --------------------------------------------------------------- |
@@ -39,7 +39,7 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | gRPC hata çevirisi   | ✅ `x-app-error` trailer'ı, yoksa durum kodu (`apperror`)       |
 | Görsel adresleri     | ✅ Göreli yol → mutlak URL (`ASSET_BASE_URL`, `internal/assets`) |
 | Stok birleştirmesi (B27) | ⏳ inventory-svc ile (T8.4 / T9.x) |
-| Rate limit           | ⏳ T8.2 (ikinci PR: `feat/gateway-hiz-siniri`)                  |
+| Rate limit           | ✅ Kayan pencere, Redis'te (T8.2); uç başına; IP ya da kullanıcı; 429 + `Retry-After` |
 | Go kuralları         | ✅ CI'da golangci-lint: `errcheck`, `noctx`, `bodyclose` (D8)    |
 
 ## Çalıştırma
@@ -60,8 +60,8 @@ ASSET_BASE_URL=http://localhost:5173 JWT_SECRET="$(openssl rand -hex 32)" \
 curl -s localhost:8080/v1/categories | jq
 curl -s localhost:8080/healthz | jq
 go test -race ./...
-# Mongo depolari ve Redis tekrar deposu, Docker gerekir (Testcontainers):
-go test -tags integration ./internal/authstore/ ./internal/idempotency/
+# Mongo depolari, Redis tekrar deposu ve hiz siniri sayaci; Docker gerekir (Testcontainers):
+go test -tags integration ./internal/authstore/ ./internal/idempotency/ ./internal/ratelimit/
 ```
 
 `JWT_SECRET` her açılışta yeniden üretilirse önceki jetonlar geçersiz olur (kullanıcı yeniden
@@ -163,8 +163,8 @@ bilmez), `internal/authstore` (Mongo ve bellek depoları), `internal/httpapi` (`
   `GATEWAY_REQUEST_TIMEOUT_MS` ile sınırlıdır.
 - **Bilinen sınırlar:** çıkıştan sonra erişim jetonu süresi (≤ `JWT_TTL`) dolana kadar geçerli
   kalır (durumsuz jetonun bedeli); yalnızca sipariş kapanır (aşağıda). Cevabı kaybolan
-  yenilemede eski jeton harcanmış olur ve yeniden giriş gerekir. Giriş denemesi sınırı T8.2'nin
-  ikinci PR'ındadır. Kayıt ucunun tekrar kuralı aşağıda ("Tekrar koruması").
+  yenilemede eski jeton harcanmış olur ve yeniden giriş gerekir. Giriş denemesi IP başına sınırlıdır
+  (dakikada 10; "Hız sınırı"). Kayıt ucunun tekrar kuralı aşağıda ("Tekrar koruması").
 
 ```bash
 curl -s localhost:8080/v1/auth/register -H 'Content-Type: application/json' -H 'Idempotency-Key: kayit-0001' \
@@ -225,6 +225,52 @@ for i in 1 2; do curl -s -i localhost:8080/v1/cart/reserve -H 'Content-Type: app
   "items":[{"productId":"prd_bulasik-deterjan","quantity":2},{"productId":"prd_cikolata-80","quantity":1}],
   "address":{"line":"Kadikoy","location":{"lat":40.99,"lng":29.02}},
   "expectedTotal":{"amountMinor":19360,"currency":"TRY"}}' | grep -iE '^idempotent|orderId'; done
+```
+
+## Hız sınırı (T8.2, roadmap P2)
+
+Sayaç **kayan pencere günlüğüdür** (sliding window log): kabul edilen her istek zamanıyla Redis
+sorted set'ine yazılır; pencereden çıkanlar atılır, kalanlar sayılır. Üçü tek Lua betiğinde
+(`internal/ratelimit/redis.go`): arada başka istemci giremez. Sabit pencerenin aksine sınır anında
+patlama olmaz. Sayaç Redis'te olduğu için birden fazla gateway örneği **aynı sınırı** paylaşır;
+bellek içi sayaç sınırı örnek sayısı kadar gevşetirdi (proje kuralları).
+
+| Uçlar                                                    | Sınır (pencere başına)           | Kim sayılır |
+| -------------------------------------------------------- | -------------------------------- | ----------- |
+| `POST /v1/auth/register`, `/login`, `/refresh`, `/logout` | `RATE_LIMIT_AUTH_MAX_REQUESTS` (10) | IP          |
+| `POST /v1/cart/reserve`, `/v1/orders`, `/v1/orders/{id}/3ds` | `RATE_LIMIT_ORDER_MAX_REQUESTS` (20) | kullanıcı   |
+| Katalog ve market uçları                                  | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
+| `GET /v1/me`, `GET /v1/orders/{id}`                       | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
+| `/healthz`                                                | sınırsız                         | —           |
+
+- **Anahtar:** `rate:{ozne}:POST_/v1/orders/id/3ds` (`@getir/redis-kit` `rateLimitKey`;
+  `keys_contract_test.go` karşılaştırır). Sayım **uç başınadır**; yol kalıbı kullanılır, gerçek yol
+  değil (her sipariş kimliği ayrı sayaç açmaz). Anahtarın ömrü pencere kadardır.
+- **Kim sayılır:** kimliksiz uçlarda soketin IP'si (`X-Forwarded-For`'a güvenilmez, B9); kimlik
+  isteyen uçlarda kullanıcı: aynı ağın (ofis, mobil operatör) arkasındaki kullanıcılar birbirinin
+  sınırını tüketmez. Korumalı uçta sınırlayıcı kimlikten SONRA, tekrar korumasından ÖNCE çalışır:
+  429 alan isteğin `Idempotency-Key`'i alınmaz.
+- **Yalnızca kabul edilen istek sayılır:** sayaç sınırı hiç aşmaz (saldırı altında Redis büyümez).
+  Beklemeden yeniden denemek süreyi uzatmaz; `Retry-After` kadar beklemek yeter.
+- **Saat Redis'in** (`TIME`, betik içinde): örnekler arası saat farkı pencere sınırında sayımı
+  kaydıramaz.
+- **Cevap:** `429 RATE_LIMITED`, `Retry-After` (tam saniye, yukarı yuvarlanır) ve
+  `details.retryAfterSeconds`.
+- **Redis yoksa istek geçer (fail-open):** hız sınırı bir kesintide siparişi durdurmamalı; tekrar
+  koruması ise durdurur (503, yukarıda). Sayaç en fazla 250 ms beklenir: Redis takılırsa (cevap
+  vermezse) okuma uçları istek süresinin tamamı kadar değil, bu kadar gecikir. Uyarı en fazla 10 sn'de
+  bir yazılır (`"msg":"hiz siniri uygulanamadi, istek gecirildi (fail-open)"`).
+- **Kapatma ve MOCK:** `RATE_LIMIT_ENABLED=false` sınırı kapatır (yük testleri). `MOCK=true`'da sayaç
+  bellektedir (aynı kurallar, yalnızca tek örnek).
+- **Bilinen sınırlar:** yük dengeleyici arkasında gerçek istemci IP'si okunmaz (güvenilir vekil
+  ayarı yok; bugün yerel). Tek hesaba çok IP'den giriş denemesinin (telefon başına) sınırı yok.
+
+```bash
+# Giris siniri (10/dk, IP basina): 11. istek 429 ve Retry-After alir.
+for i in $(seq 1 11); do curl -s -o /dev/null -w '%{http_code} ' localhost:8080/v1/auth/login \
+  -H 'Content-Type: application/json' -d '{"phone":"+905321234567","password":"yanlis-sifre"}'; done; echo
+curl -s -i localhost:8080/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"phone":"+905321234567","password":"yanlis-sifre"}' | grep -iE '^retry-after|RATE_LIMITED'
 ```
 
 ## Sipariş risk sinyalleri (T8.1)
@@ -346,6 +392,11 @@ curl -s "localhost:8080/v1/markets/mkt_migros-jet-moda/products?q=s%C3%BCt" | jq
 | `REDIS_URL`                  | **MOCK değilse zorunlu** | `redis://` ya da `rediss://`; tekrar koruması kayıtları (T8.2). Ulaşılamazsa gateway açılmaz |
 | `REDIS_CONNECT_TIMEOUT_MS`   | `5000`            | Açılışta Redis'i bekleme sınırı (Node ile ortak) |
 | `IDEMPOTENCY_TTL_SECONDS`    | `86400`           | Bitmiş tekrar kaydının ömrü (sn); başarılı sipariş ve 3DS kaydı 2 saat |
+| `RATE_LIMIT_ENABLED`         | `true`            | `false` hız sınırını kapatır (yük testleri) |
+| `RATE_LIMIT_WINDOW_SECONDS`  | `60`              | Kayan pencerenin uzunluğu (sn) |
+| `RATE_LIMIT_MAX_REQUESTS`    | `120`             | Genel sınır: katalog, market, `/v1/me`, sipariş okuma (1-10000) |
+| `RATE_LIMIT_AUTH_MAX_REQUESTS` | `10`            | Kayıt, giriş, yenileme, çıkış (IP başına) |
+| `RATE_LIMIT_ORDER_MAX_REQUESTS` | `20`           | Rezervasyon, sipariş, 3DS (kullanıcı başına) |
 | `NODE_ENV`                   | `development`     | `development/test/production`                   |
 
 ## Görsel adresleri (`ASSET_BASE_URL`)
