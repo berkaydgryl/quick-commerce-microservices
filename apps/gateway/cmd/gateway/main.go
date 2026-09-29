@@ -1,12 +1,13 @@
 // gateway, tarayicinin konustugu TEK dis kapidir.
 //
 // Bugunku sorumlulugu: ayaga kalkmak, bagimli gRPC servislerine baglanti
-// havuzu kurmak, /healthz uzerinden durumlarini bildirmek (T3.3), ilk proxy
-// ucunu (GET /v1/categories, T3.4) sunmak ve sinyalde zarifce kapanmak.
+// havuzu kurmak, /healthz uzerinden durumlarini bildirmek (T3.3), katalog ve
+// siparis uclarini sunmak, kimligi kurmak (kayit, giris, JWT; T8.1) ve
+// sinyalde zarifce kapanmak.
 //
-// Calistirma:
+// Calistirma (zorunlu ortam degiskenleri ve tum tablo: README.md):
 //
-//	go run ./cmd/gateway            (apps/gateway icinden)
+//	ASSET_BASE_URL=http://localhost:5173 JWT_SECRET="$(openssl rand -hex 32)" MOCK=true go run ./cmd/gateway
 //	curl -s localhost:8080/healthz | jq
 //	curl -s localhost:8080/v1/categories | jq
 package main
@@ -51,18 +52,20 @@ func main() {
 }
 
 // run, acilis sirasini tutar: bagla -> dinle -> kapan -> baglantilari birak.
-// Havuz EN SON kapanir: sunucu dururken devam eden istekler hala gRPC cagirir.
+// Havuz ve Mongo EN SON kapanir: sunucu dururken devam eden istekler hala
+// gRPC'yi ve Mongo'yu cagirir.
 func run(cfg config.Config, logger *slog.Logger) error {
-	app, cleanup, err := bootstrap(cfg, logger)
+	// SIGINT/SIGTERM: orkestrator once nazikce ister, sonra oldurur. O pencereyi
+	// kullanmazsak devam eden istekler yarida kesilir. Sinyal baglami acilistan
+	// ONCE kurulur: Mongo'ya baglanirken gelen sinyal acilisi da durdurur.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	app, cleanup, err := bootstrap(ctx, cfg, logger)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
-
-	// SIGINT/SIGTERM: orkestrator once nazikce ister, sonra oldurur. O pencereyi
-	// kullanmazsak devam eden istekler yarida kesilir.
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 
 	logger.Info("gateway dinlemede",
 		slog.Int("port", cfg.Port),

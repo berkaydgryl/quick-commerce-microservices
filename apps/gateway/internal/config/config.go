@@ -9,7 +9,8 @@
 //	config.go   - Config tipi ve Load (ortamin tamami, tek toplu hata)
 //	defaults.go - varsayilanlar ve sabit adlar (port haritasi, NODE_ENV, servisler)
 //	env.go      - genel okuyucular: metin, tam sayi, bool, sure, secenek
-//	policy.go   - kendi kurali olan okuyucular: gorsel kok adresi, log seviyesi
+//	policy.go   - kendi kurali olan okuyucular: gorsel kok adresi, log seviyesi,
+//	              Mongo adresi, JWT sirri (T8.1)
 package config
 
 import (
@@ -44,7 +45,33 @@ type Config struct {
 	// olarak saklar ("/img/cat/sut.png"); gateway (BFF) istemciye giden cevapta
 	// bu koku ekler. Sonunda "/" yoktur.
 	AssetBaseURL *url.URL
+	// MongoURI, gateway'in koleksiyonlari (users, sessions; T8.1) icin. MOCK'ta
+	// bos olabilir: kimlik kayitlari bellekte tutulur.
+	MongoURI                    string
+	MongoDB                     string
+	MongoServerSelectionTimeout time.Duration
+	// JWTSecret, erisim jetonunun imza sirri (HS256). Tipi Secret: yanlislikla
+	// gunluge ya da hataya yazilsa bile "[gizli]" gorunur.
+	JWTSecret Secret
+	// JWTTTL, erisim jetonu omru; RefreshTTL, yenileme jetonu omru.
+	JWTTTL     time.Duration
+	RefreshTTL time.Duration
 }
+
+// Secret, gunluge ya da hata metnine yazilmamasi gereken deger. fmt (%v, %s,
+// %x) ve slog onu "[gizli]" olarak basar; bayt icerigine yalnizca Bytes ile ulasilir.
+type Secret []byte
+
+// String, degeri gizler.
+func (Secret) String() string { return redacted }
+
+// LogValue, slog icin degeri gizler.
+func (Secret) LogValue() slog.Value { return slog.StringValue(redacted) }
+
+// Bytes, imza icin ham deger.
+func (s Secret) Bytes() []byte { return []byte(s) }
+
+const redacted = "[gizli]"
 
 // Addr, Fiber'in dinleyecegi adresi verir.
 func (c Config) Addr() string {
@@ -94,6 +121,32 @@ func Load(getenv Getenv) (Config, error) {
 		problems = append(problems, err)
 	}
 
+	// Kimlik (T8.1): Mongo MOCK disinda zorunlu, sir her zaman zorunlu.
+	mongoURI, err := readMongoURI(getenv, mock)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
+	mongoTimeout, err := readDuration(getenv, "MONGO_SERVER_SELECTION_TIMEOUT_MS", defaultMongoServerSelectionTimeout)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
+	jwtSecret, err := readJWTSecret(getenv, nodeEnv)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
+	jwtTTL, err := readSeconds(getenv, "JWT_TTL", defaultJWTTTL)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
+	refreshTTL, err := readSeconds(getenv, "REFRESH_TTL", defaultRefreshTTL)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
 	// Servis listesi bugun sabittir: gateway yalnizca ayakta olan iki servisi
 	// taniyor. Yeni servis geldiginde buraya bir satir eklenir; adres yine
 	// ortamdan gelir.
@@ -107,13 +160,19 @@ func Load(getenv Getenv) (Config, error) {
 	}
 
 	return Config{
-		Port:            port,
-		NodeEnv:         nodeEnv,
-		LogLevel:        level,
-		Mock:            mock,
-		ShutdownTimeout: shutdownTimeout,
-		RequestTimeout:  requestTimeout,
-		Services:        services,
-		AssetBaseURL:    assetBaseURL,
+		Port:                        port,
+		NodeEnv:                     nodeEnv,
+		LogLevel:                    level,
+		Mock:                        mock,
+		ShutdownTimeout:             shutdownTimeout,
+		RequestTimeout:              requestTimeout,
+		Services:                    services,
+		AssetBaseURL:                assetBaseURL,
+		MongoURI:                    mongoURI,
+		MongoDB:                     readString(getenv, "MONGO_DB", defaultMongoDB),
+		MongoServerSelectionTimeout: mongoTimeout,
+		JWTSecret:                   jwtSecret,
+		JWTTTL:                      jwtTTL,
+		RefreshTTL:                  refreshTTL,
 	}, nil
 }

@@ -5,15 +5,15 @@ doğrudan erişemez; REST isteği burada karşılanır, doğrulanır ve gRPC ça
 
 Pnpm workspace'inin parçası değildir: kendi Go modülüdür (`go.mod`). `pnpm verify` bu klasörü
 kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go mod tidy -diff`,
-`-race` testleri, statik derleme).
+`-race` testleri, Mongo entegrasyon testleri, statik derleme).
 
-## Bugünkü durum (D8 — Go kuralları CI'da; T7.5 — sipariş uçları; pazaryeri uçları T8.4'ten öne alındı)
+## Bugünkü durum (D8 — Go kuralları CI'da; T7.5 — sipariş uçları; T8.1 — kimlik; pazaryeri uçları T8.4'ten öne alındı)
 
 | Parça                | Durum                                                           |
 | -------------------- | --------------------------------------------------------------- |
 | Env doğrulaması      | ✅ Açılışta, hatalar toplu raporlanır; geçersizse çıkış kodu 1  |
 | gRPC istemci havuzu  | ✅ catalog + order, tembel bağlantı, keepalive                  |
-| `GET /healthz`       | ✅ Servisleri paralel sorgular; hepsi ayaktaysa 200, değilse 503 |
+| `GET /healthz`       | ✅ Servisleri (ve MOCK değilse Mongo'yu) paralel sorgular; hepsi ayaktaysa 200, değilse 503 |
 | Cevap zarfı          | ✅ `packages/contracts` ile aynı biçim, her cevapta `requestId` |
 | Korelasyon kimliği   | ✅ `req_` + 32 hex; gelen kimlik yalnızca bu biçimdeyse korunur (D8) |
 | Zarif kapanış        | ✅ SIGINT/SIGTERM → devam eden istekler beklenir                |
@@ -26,12 +26,18 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `POST /v1/orders`    | ✅ order `CreateOrder` (saga): 201 `PAID` ya da `AWAITING_PAYMENT` + `threeDs` |
 | `POST /v1/orders/{id}/3ds` | ✅ order `ConfirmPayment`; yanlış kod 402 + kalan hak |
 | `GET /v1/orders/{id}` | ✅ order `GetOrder`; başkasının siparişi 404 |
-| Kullanıcı kimliği    | ⚠️ Geçici: `X-User-Id` yalnızca production dışında (JWT T8.1) |
+| `POST /v1/auth/register` | ✅ Kayıt + oturum (201); telefon benzersiz, şifre bcrypt (T8.1) |
+| `POST /v1/auth/login` | ✅ Giriş (200); yanlış şifre ile kayıtsız numara aynı cevabı alır |
+| `POST /v1/auth/refresh` | ✅ Yenileme jetonu her kullanımda değişir; eskisi bir daha geçmez |
+| `POST /v1/auth/logout` | ✅ Yenileme jetonunu iptal eder; tekrarı zararsız (`revoked:false`) |
+| `GET /v1/me`         | ✅ Jetondaki kullanıcının profili |
+| Kullanıcı kimliği    | ✅ `Authorization: Bearer` JWT (HS256); `X-User-Id` kalktı (T8.1) |
+| Kimlik deposu        | ✅ Mongo `users` + `sessions` (TTL indeksi); MOCK'ta bellek |
 | Idempotency-Key      | ✅ Zorunlu (yoksa 400); tekrar koruması ⏳ T8.2                 |
 | gRPC hata çevirisi   | ✅ `x-app-error` trailer'ı, yoksa durum kodu (`apperror`)       |
 | Görsel adresleri     | ✅ Göreli yol → mutlak URL (`ASSET_BASE_URL`, `internal/assets`) |
 | Stok birleştirmesi (B27) | ⏳ inventory-svc ile (T8.4 / T9.x) |
-| JWT, rate limit      | ⏳ T8.1, T8.2                                                   |
+| Rate limit           | ⏳ T8.2                                                         |
 | Go kuralları         | ✅ CI'da golangci-lint: `errcheck`, `noctx`, `bodyclose` (D8)    |
 
 ## Çalıştırma
@@ -42,11 +48,20 @@ yoktur. İlk derlemeden (ve her `.proto` değişikliğinden) önce Go kodu üret
 ```bash
 pnpm proto:gen                       # TS + Go (Go icin buf + protoc eklentileri gerekir)
 cd apps/gateway
-ASSET_BASE_URL=http://localhost:5173 go run ./cmd/gateway   # :8080 (ASSET_BASE_URL zorunlu)
+# ASSET_BASE_URL ve JWT_SECRET zorunlu. MOCK=true: hesaplar bellekte (Mongo gerekmez).
+ASSET_BASE_URL=http://localhost:5173 JWT_SECRET="$(openssl rand -hex 32)" MOCK=true go run ./cmd/gateway
+# Hesaplar Mongo'da kalsin (docker compose'daki Mongo):
+ASSET_BASE_URL=http://localhost:5173 JWT_SECRET="$(openssl rand -hex 32)" \
+  MONGO_URI='mongodb://localhost:27017/getir?directConnection=true' go run ./cmd/gateway
 curl -s localhost:8080/v1/categories | jq
 curl -s localhost:8080/healthz | jq
 go test -race ./...
+go test -tags integration ./internal/authstore/   # Mongo depolari, Docker gerekir (Testcontainers)
 ```
+
+`JWT_SECRET` her açılışta yeniden üretilirse önceki jetonlar geçersiz olur (kullanıcı yeniden
+giriş yapar). Kalıcı bir değer için `.env`'e bir kez yazın; `.env.example`'daki örnek değer
+production'da reddedilir.
 
 Go kuralları (CI'daki golangci-lint ile aynı sürüm; Docker yeter, kurulum gerekmez):
 
@@ -61,6 +76,8 @@ Docker (build bağlamı **depo köküdür**):
 docker build -f apps/gateway/Dockerfile -t getir/gateway .
 docker run --rm -p 8080:8080 \
   -e ASSET_BASE_URL=http://localhost:5173 \
+  -e JWT_SECRET="$(openssl rand -hex 32)" \
+  -e MONGO_URI='mongodb://host.docker.internal:27017/getir?directConnection=true' \
   -e CATALOG_GRPC_ADDR=host.docker.internal:50051 \
   -e ORDER_GRPC_ADDR=host.docker.internal:50053 \
   getir/gateway
@@ -97,7 +114,8 @@ golangci-lint ile denetler (`.golangci.yml`, yalnızca kuralı olan üç denetle
 | `bodyclose` | HTTP cevap gövdesi kapatılır |
 
 Gerçekten gerekçeli bir istisna satırında yazılır: `//nolint:errcheck // <gerekçe>`;
-gerekçesiz `nolint` de bulgudur. Birden fazla paketin testinde gereken yardımcılar
+gerekçesiz `nolint` de bulgudur. Entegrasyon testleri (`//go:build integration`) de denetlenir:
+`.golangci.yml`'de `run.build-tags`, CI'daki `go vet`'te `-tags integration`. Birden fazla paketin testinde gereken yardımcılar
 (`BufconnClient`, `AppErrorOf`, `JSON`) `internal/testkit`'tedir; üretim kodu bu paketi
 kullanmaz.
 
@@ -105,15 +123,60 @@ kullanmaz.
 gövdesinde görür. Bu yüzden test yardımcısı `decode` gövdeyi doğrudan kapatır ve yardımcılar
 `*http.Response` döndürmez, durum kodu ve zarf döndürür.
 
+## Kimlik (T8.1)
+
+Kimlik telefon + şifreyle kurulur (ADR-12); `users` ve `sessions` koleksiyonlarının sahibi
+gateway'dir (ADR-05). Katmanlar: `internal/auth` (use-case'ler, kurallar, jeton; HTTP ve Mongo
+bilmez), `internal/authstore` (Mongo ve bellek depoları), `internal/httpapi` (`auth.go`,
+`identity.go`).
+
+- **İki jeton:** erişim jetonu HS256 JWT'dir (`JWT_SECRET`, ömrü `JWT_TTL`); yalnızca kimlik
+  taşır (`sub` kullanıcı, `sid` oturum, `iss`, `iat`, `exp`), telefon ya da ad taşımaz.
+  Doğrulamada yalnızca HS256 kabul edilir (`alg: none` ve başka algoritmalar reddedilir).
+  Yenileme jetonu 256 bit rastgele, opak bir metindir; sunucuda yalnızca **SHA-256 özeti**
+  saklanır.
+- **Yenileme döner:** her `/v1/auth/refresh` jetonu yenisiyle değiştirir (tek atomik Mongo
+  güncellemesi); eski jeton bir daha geçmez, aynı jetonla eş zamanlı iki istekten yalnızca biri
+  kazanır. Süre son kullanımdan itibaren `REFRESH_TTL`'dir; süresi dolan kayıt TTL indeksiyle
+  silinir, silinmeden önce de yenilenmez.
+- **Şifre:** bcrypt, maliyet 12. Üst sınır **72 bayt** (bcrypt'in kullandığı kadar; Türkçe
+  harfler iki bayt), alt sınır 8 karakter. Kurallar `@getir/contracts` ile aynıdır ve
+  `rules_contract_test.go` iki tarafı karşılaştırır.
+- **Tarama koruması:** yanlış şifre ile kayıtsız numara aynı cevabı alır
+  (`401 INVALID_CREDENTIALS`, ayrıntısız); kayıtsız numarada da bcrypt çalışır, süre de ele
+  vermez.
+- **Korumalı uç:** `Authorization: Bearer <jeton>` (şema büyük-küçük harfe duyarsız). Yoksa ya
+  da geçersizse `401 UNAUTHORIZED` + `WWW-Authenticate` döner; handler ve servis hiç çağrılmaz.
+- **Önbellek ve günlük:** jeton ya da profil taşıyan cevaplar `Cache-Control: no-store` ile
+  gelir. Şifre ve jetonlar günlüğe yazılmaz (testle sabit); `JWT_SECRET` `config.Secret`
+  tipindedir, yanlışlıkla yazdırılsa bile `[gizli]` görünür.
+- **Depo seçimi:** `MOCK=true` ise hesaplar bellekte tutulur ve Mongo'ya hiç gidilmez (Node
+  servisleriyle aynı kural; süreç kapanınca hesaplar gider). Değilse `MONGO_URI` zorunludur,
+  açılışta ping atılır ve indeksler kurulur (`users.phone` benzersiz; `sessions.tokenHash`
+  benzersiz, `sessions.expiresAt` TTL, `sessions.userId`). Mongo işlemleri de
+  `GATEWAY_REQUEST_TIMEOUT_MS` ile sınırlıdır.
+- **Bilinen sınırlar:** çıkıştan sonra erişim jetonu süresi (≤ `JWT_TTL`) dolana kadar geçerli
+  kalır (durumsuz jetonun bedeli). Cevabı kaybolan yenilemede eski jeton harcanmış olur ve
+  yeniden giriş gerekir. Giriş denemesi sınırı ve `Idempotency-Key` tekrar koruması T8.2'dedir.
+
+```bash
+curl -s localhost:8080/v1/auth/register -H 'Content-Type: application/json' -H 'Idempotency-Key: kayit-0001' \
+  -d '{"phone":"+905321234567","password":"Gizli-Parola-2026","fullName":"Ayse Yilmaz"}' | jq
+TOKEN="$(curl -s localhost:8080/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"phone":"+905321234567","password":"Gizli-Parola-2026"}' | jq -r .data.accessToken)"
+curl -s localhost:8080/v1/me -H "Authorization: Bearer $TOKEN" | jq
+curl -s localhost:8080/v1/auth/refresh -H 'Content-Type: application/json' -d '{"refreshToken":"<yenileme>"}' | jq
+curl -s localhost:8080/v1/auth/logout -H 'Content-Type: application/json' -d '{"refreshToken":"<yenileme>"}' | jq
+```
+
 ## Sipariş uçları (T7.5)
 
-Dört uç tek adaptörden (`internal/order`) order-service'e gider. Hepsi kimlik ister; yazan
-üçü `Idempotency-Key` ister. Kurallar (fiyat, risk, 3DS, durum geçişi) order-service'tedir.
+Dört uç tek adaptörden (`internal/order`) order-service'e gider. Hepsi erişim jetonu ister
+(yukarıda); yazan üçü `Idempotency-Key` ister. Kurallar (fiyat, risk, 3DS, durum geçişi)
+order-service'tedir.
 
-- **Kimlik (geçici):** JWT T8.1 ile gelir. O zamana kadar `NODE_ENV` production **değilse**
-  kullanıcı `X-User-Id` başlığından okunur (`usr_` + harf/rakam/`_`/`-`); eksik ya da biçimsizse
-  401. Production'da başlık **okunmaz**, uçlar 401 döner. Kimliği belirleyen tek yer
-  `internal/httpapi/identity.go`; T8.1'de yalnızca o değişir.
+- **Kimlik:** kullanıcı yalnızca erişim jetonundan gelir (T8.1); T7.5'teki `X-User-Id`
+  geliştirme başlığı kaldırıldı. Kimliği belirleyen tek yer `internal/httpapi/identity.go`.
 - **Katı gövde:** JSON dışı içerik, bozuk JSON, bilinmeyen alan (ör. adres etiketi `title`) ve
   yanlış tip 400 döner; `details` alan adını taşır. Gövde sınırı 64 KB.
 - **Gateway'in gördüğü yokluk:** iç içe nesneler (`address.location`, `expectedTotal`)
@@ -126,19 +189,19 @@ Dört uç tek adaptörden (`internal/order`) order-service'e gider. Hepsi kimlik
   `idempotencyKey` → `Idempotency-Key`.
 
 ```bash
-# zsh degiskendeki basliklari bolmez: basliklar her komutta acikca yazilir.
-curl -s localhost:8080/v1/cart/reserve -H 'Content-Type: application/json' -H 'X-User-Id: usr_1' \
+# TOKEN: yukaridaki giris komutundan. Basliklar her komutta acikca yazilir.
+curl -s localhost:8080/v1/cart/reserve -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
   -H 'Idempotency-Key: taslak-0001' -d '{
   "marketId":"mkt_migros-jet-moda",
   "items":[{"productId":"prd_bulasik-deterjan","quantity":2},{"productId":"prd_cikolata-80","quantity":1}],
   "address":{"line":"Kadikoy","location":{"lat":40.99,"lng":29.02}},
   "expectedTotal":{"amountMinor":19360,"currency":"TRY"}}' | jq
-curl -s localhost:8080/v1/orders -H 'Content-Type: application/json' -H 'X-User-Id: usr_1' \
+curl -s localhost:8080/v1/orders -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
   -H 'Idempotency-Key: siparis-0001' \
   -d '{"orderId":"<taslak>","payment":{"method":"CARD","cardToken":"tok_test_4242"}}' | jq
-curl -s localhost:8080/v1/orders/<taslak>/3ds -H 'Content-Type: application/json' -H 'X-User-Id: usr_1' \
+curl -s localhost:8080/v1/orders/<taslak>/3ds -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
   -H 'Idempotency-Key: onay-0001' -d '{"challengeId":"<tds_...>","otp":"123456"}' | jq   # 3DS istendiyse
-curl -s localhost:8080/v1/orders/<taslak> -H 'X-User-Id: usr_1' | jq
+curl -s localhost:8080/v1/orders/<taslak> -H "Authorization: Bearer $TOKEN" | jq
 ```
 
 ## Pazaryeri uçları: gateway ne yapar, ne yapmaz
@@ -171,7 +234,13 @@ curl -s "localhost:8080/v1/markets/mkt_migros-jet-moda/products?q=s%C3%BCt" | jq
 | `GATEWAY_REQUEST_TIMEOUT_MS` | `5000`            | Tek bir servis çağrısının üst sınırı            |
 | `GRPC_SHUTDOWN_TIMEOUT_MS`   | `10000`           | Kapanışta devam eden istekler için bekleme      |
 | `LOG_LEVEL`                  | `info`            | `trace/debug/info/warn/error/fatal` (Node ile ortak) |
-| `MOCK`                       | `false`           | `/healthz` cevabında bildirilir (B16)           |
+| `MOCK`                       | `false`           | `/healthz`'de bildirilir (B16); `true` ise hesaplar bellekte, Mongo'ya gidilmez |
+| `JWT_SECRET`                 | **yok — zorunlu** | Erişim jetonunun imza sırrı, en az 32 bayt (`openssl rand -hex 32`); production'da örnek değer reddedilir |
+| `JWT_TTL`                    | `3600`            | Erişim jetonu ömrü (sn)                         |
+| `REFRESH_TTL`                | `1209600`         | Yenileme jetonu ömrü (sn, 14 gün; son kullanımdan itibaren) |
+| `MONGO_URI`                  | **MOCK değilse zorunlu** | `users` ve `sessions` koleksiyonları (T8.1) |
+| `MONGO_DB`                   | `getir`           | Veritabanı adı                                  |
+| `MONGO_SERVER_SELECTION_TIMEOUT_MS` | `5000`     | Açılışta Mongo'yu bekleme sınırı (Node ile ortak) |
 | `NODE_ENV`                   | `development`     | `development/test/production`                   |
 
 ## Görsel adresleri (`ASSET_BASE_URL`)
@@ -201,8 +270,11 @@ ortam degiskenleri gecersiz: ASSET_BASE_URL: zorunlu, ornek: http://localhost:51
 ```json
 { "success": true, "data": { "status": "ok", "mock": false,
   "services": [ { "name": "catalog", "status": "SERVING", "latencyMs": 5 },
+                { "name": "mongo",   "status": "SERVING", "latencyMs": 1 },
                 { "name": "order",   "status": "SERVING", "latencyMs": 6 } ] } }
 ```
+
+`mongo` kalemi yalnızca `MOCK=false` iken vardır (T8.1); MOCK'ta hesaplar bellekte tutulur.
 
 Bir servis düşükse **503** ve hata zarfı döner; rapor `error.details` içindedir. Servis
 durumu üç değerlidir: `SERVING`, `NOT_SERVING` (servis kendini hasta bildirdi) ve

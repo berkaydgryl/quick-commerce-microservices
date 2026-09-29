@@ -27,6 +27,11 @@ export const ID_PREFIX = {
   /** Istek korelasyon kimligi: gunluk kaydi, gRPC metadata'si ve REST hata
    *  zarfindaki `error.requestId` ayni degeri tasir. */
   REQUEST: 'req',
+  /**
+   * Oturum (T8.1): refresh jetonunun sunucudaki kaydi, gateway'in `sessions`
+   * koleksiyonu. Erisim jetonunun `sid` alani bu kimligi tasir.
+   */
+  SESSION: 'ses',
 } as const;
 
 export type IdPrefix = (typeof ID_PREFIX)[keyof typeof ID_PREFIX];

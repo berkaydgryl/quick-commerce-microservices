@@ -39,7 +39,7 @@ func serving() fakeClient {
 const testTimeout = 200 * time.Millisecond
 
 func TestCheckAllServing(t *testing.T) {
-	checker := New(map[string]Client{"catalog": serving(), "order": serving()}, testTimeout, false)
+	checker := New(map[string]Client{"catalog": serving(), "order": serving()}, nil, testTimeout, false)
 
 	report := checker.Check(context.Background())
 
@@ -56,7 +56,7 @@ func TestCheckDegradedWhenOneNotServing(t *testing.T) {
 	checker := New(map[string]Client{
 		"catalog": serving(),
 		"order":   fakeClient{status: grpc_health_v1.HealthCheckResponse_NOT_SERVING},
-	}, testTimeout, false)
+	}, nil, testTimeout, false)
 
 	report := checker.Check(context.Background())
 
@@ -70,7 +70,7 @@ func TestCheckDegradedWhenOneNotServing(t *testing.T) {
 
 func TestCheckMarksUnreachableSeparately(t *testing.T) {
 	// "Cevap vermedi" ile "kendini hasta bildirdi" ayni sey degildir.
-	checker := New(map[string]Client{"catalog": fakeClient{err: errors.New("connection refused")}}, testTimeout, false)
+	checker := New(map[string]Client{"catalog": fakeClient{err: errors.New("connection refused")}}, nil, testTimeout, false)
 
 	report := checker.Check(context.Background())
 
@@ -88,7 +88,7 @@ func TestCheckAppliesTimeoutPerService(t *testing.T) {
 	checker := New(map[string]Client{
 		"catalog": serving(),
 		"order":   fakeClient{delay: time.Second, status: grpc_health_v1.HealthCheckResponse_SERVING},
-	}, testTimeout, false)
+	}, nil, testTimeout, false)
 
 	startedAt := time.Now()
 	report := checker.Check(context.Background())
@@ -104,7 +104,7 @@ func TestCheckAppliesTimeoutPerService(t *testing.T) {
 
 func TestReportCarriesMockFlag(t *testing.T) {
 	// B16: /healthz modu bildirir.
-	report := New(map[string]Client{"catalog": serving()}, testTimeout, true).Check(context.Background())
+	report := New(map[string]Client{"catalog": serving()}, nil, testTimeout, true).Check(context.Background())
 
 	if !report.Mock {
 		t.Error("mock bayragi rapora gecmeliydi")

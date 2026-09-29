@@ -62,6 +62,24 @@ func readDuration(getenv Getenv, name string, fallback time.Duration) (time.Dura
 	return time.Duration(milliseconds) * time.Millisecond, nil
 }
 
+// readSeconds, saniye tasiyan degiskeni okur (JWT_TTL, REFRESH_TTL: adlari
+// .env.example ve ADR-12 boyle tanimlar).
+func readSeconds(getenv Getenv, name string, fallback time.Duration) (time.Duration, error) {
+	raw := strings.TrimSpace(getenv(name))
+	if raw == "" {
+		return fallback, nil
+	}
+
+	seconds, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s: saniye cinsinden tam sayi bekleniyor, alinan %q: %w", name, raw, err)
+	}
+	if seconds <= 0 {
+		return 0, fmt.Errorf("%s: pozitif olmali, alinan %d", name, seconds)
+	}
+	return time.Duration(seconds) * time.Second, nil
+}
+
 func readEnum(getenv Getenv, name, fallback string, allowed []string) (string, error) {
 	value := readString(getenv, name, fallback)
 	for _, candidate := range allowed {

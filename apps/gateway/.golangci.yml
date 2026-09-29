@@ -15,6 +15,12 @@
 # Gerekcesiz nolint bulgudur (nolintlint).
 version: "2"
 
+run:
+  # Entegrasyon testleri (//go:build integration, T8.1) de denetlenir; etiket
+  # verilmeseydi bu dosyalar lint'ten hic gecmezdi.
+  build-tags:
+    - integration
+
 linters:
   default: none
   enable:

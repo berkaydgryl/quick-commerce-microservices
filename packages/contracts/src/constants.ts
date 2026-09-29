@@ -19,7 +19,10 @@ export const PHONE_PATTERN = /^\+90[0-9]{10}$/;
 /** 3DS tek kullanimlik kodu: tam 6 rakam. */
 export const OTP_PATTERN = /^[0-9]{6}$/;
 
-/** Sifre uzunlugu. Ust sinir bcrypt'in 72 baytlik girdi sinirindan gelir. */
+/**
+ * Sifre uzunlugu. Alt sinir KARAKTER, ust sinir BAYT: bcrypt girdinin ilk 72 baytini
+ * kullanir (auth.ts, passwordSchema).
+ */
 export const PASSWORD_MIN_LENGTH = 8;
 export const PASSWORD_MAX_LENGTH = 72;
 

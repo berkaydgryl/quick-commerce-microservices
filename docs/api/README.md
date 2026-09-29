@@ -52,21 +52,21 @@ eklerken sıra şudur:
 Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci dallanmayı
 **her zaman `error.code` üzerinden** yapar; durum kodu yalnızca kaba sınıflamadır.
 
-| HTTP | Hata kodlari                                                                                                          |
-| ---- | --------------------------------------------------------------------------------------------------------------------- |
-| 202  | `RISK_REVIEW`                                                                                                         |
-| 400  | `VALIDATION_FAILED`                                                                                                   |
-| 401  | `UNAUTHORIZED`                                                                                                        |
-| 402  | `PAYMENT_DECLINED`, `THREEDS_FAILED`, `THREEDS_REQUIRED`                                                              |
-| 403  | `FORBIDDEN`, `RISK_BLOCKED`                                                                                           |
-| 404  | `NOT_FOUND`, `NO_STORE`                                                                                               |
-| 409  | `CONFLICT`, `STOCK_INSUFFICIENT`, `RESERVATION_ACTIVE`, `PRICE_CHANGED`, `REQUEST_IN_PROGRESS`, `ORDER_STATE_INVALID` |
-| 410  | `RESERVATION_EXPIRED`                                                                                                 |
-| 422  | `COUPON_INVALID`, `MIN_BASKET_NOT_MET`, `PAYMENT_METHOD_NOT_ALLOWED`                                                  |
-| 429  | `RATE_LIMITED`                                                                                                        |
-| 500  | `INTERNAL`                                                                                                            |
-| 501  | `NOT_IMPLEMENTED` (sözleşmede olan ama henüz yazılmamış uç, D5)                                                       |
-| 503  | `SERVICE_UNAVAILABLE`                                                                                                 |
+| HTTP | Hata kodlari                                                                                                                                      |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 202  | `RISK_REVIEW`                                                                                                                                     |
+| 400  | `VALIDATION_FAILED`                                                                                                                               |
+| 401  | `UNAUTHORIZED`, `INVALID_CREDENTIALS`                                                                                                             |
+| 402  | `PAYMENT_DECLINED`, `THREEDS_FAILED`, `THREEDS_REQUIRED`                                                                                          |
+| 403  | `FORBIDDEN`, `RISK_BLOCKED`                                                                                                                       |
+| 404  | `NOT_FOUND`, `NO_STORE`                                                                                                                           |
+| 409  | `CONFLICT`, `PHONE_ALREADY_REGISTERED`, `STOCK_INSUFFICIENT`, `RESERVATION_ACTIVE`, `PRICE_CHANGED`, `REQUEST_IN_PROGRESS`, `ORDER_STATE_INVALID` |
+| 410  | `RESERVATION_EXPIRED`                                                                                                                             |
+| 422  | `COUPON_INVALID`, `MIN_BASKET_NOT_MET`, `PAYMENT_METHOD_NOT_ALLOWED`                                                                              |
+| 429  | `RATE_LIMITED`                                                                                                                                    |
+| 500  | `INTERNAL`                                                                                                                                        |
+| 501  | `NOT_IMPLEMENTED` (sözleşmede olan ama henüz yazılmamış uç, D5)                                                                                   |
+| 503  | `SERVICE_UNAVAILABLE`                                                                                                                             |
 
 > Bu tablo elle bakim yapilan bir kopya degildir: kaynagi
 > `packages/core/src/error-codes.ts` icindeki `ERROR_CODE_HTTP_STATUS` tablosudur.
@@ -85,18 +85,22 @@ Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci 
   (`unavailableProductIds`), doğrulama hataları alan → sebep metnidir ve alan adı
   istemcinin gönderdiği addır (`items.0.quantity`, `address.location.lat`,
   `Idempotency-Key`).
-- **Kimlik**: sipariş uçları (`/v1/cart/reserve`, `/v1/orders...`) kimlik ister.
-  JWT T8.1 ile gelir; o zamana kadar **yalnızca production dışında** kullanıcı
-  `X-User-Id` başlığından okunur (`usr_` + harf/rakam/`_`/`-`, ör. `usr_ali`).
-  Production'da bu başlık okunmaz ve uçlar 401 döner. Katalog uçları herkese
-  açıktır.
+- **Kimlik** (T8.1): `GET /v1/me` ve sipariş uçları (`/v1/cart/reserve`,
+  `/v1/orders...`) `Authorization: Bearer <erişim jetonu>` ister. Jeton kayıt,
+  giriş ya da yenilemeyle alınır (HS256 JWT, ömrü JWT_TTL); yoksa ya da
+  geçersizse `401 UNAUTHORIZED` + `WWW-Authenticate` döner. Yenileme jetonu
+  opaktır, her kullanımda yenisiyle değişir ve sunucuda yalnızca özetiyle
+  saklanır. Yanlış şifre ile kayıtsız numara aynı cevabı alır
+  (`INVALID_CREDENTIALS`). Katalog uçları herkese açıktır. T7.5'teki
+  `X-User-Id` geliştirme başlığı kaldırıldı.
 - **Risk sinyalleri istemciden alınmaz** (B9): gateway bağlantının IP'sini
   order'a iletir; istemcinin yazabildiği `X-Forwarded-For` okunmaz.
 - **Idempotency-Key**, kalıcı durum değiştiren uçlarda zorunludur:
   `POST /v1/auth/register`, `POST /v1/cart/reserve`,
   `DELETE /v1/cart/reserve/{orderId}`, `POST /v1/orders`,
-  `POST /v1/orders/{id}/3ds`. `POST /v1/auth/login` ve
-  `POST /v1/darkstores/resolve` kalıcı durum değiştirmediği için istemez.
+  `POST /v1/orders/{id}/3ds`. `POST /v1/auth/login`, `/v1/auth/refresh` ve
+  `/v1/auth/logout` istemez: giriş ve yenileme kalıcı bir kaynak yaratmaz,
+  çıkışın tekrarı zararsızdır.
   Bugün gateway yalnızca **varlığını** doğrular (yoksa 400), uzunluk kuralı
   (8-128) servistedir; aynı anahtarla gelen ikinci isteğin ilk cevabı alması
   (tekrar koruması) T8.2 ile gelir.

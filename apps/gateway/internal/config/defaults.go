@@ -15,8 +15,22 @@ const (
 	defaultLogLevel        = slog.LevelInfo
 )
 
+// Kimlik ve Mongo varsayilanlari (T8.1). Adlar ve degerler .env.example ile ayni.
+const (
+	defaultMongoDB                     = "getir"
+	defaultMongoServerSelectionTimeout = 5 * time.Second
+	// JWT_TTL=3600 (ADR-12): erisim jetonu 1 saat.
+	defaultJWTTTL = time.Hour
+	// REFRESH_TTL=1209600: yenileme jetonu 14 gun.
+	defaultRefreshTTL = 14 * 24 * time.Hour
+	// minJWTSecretBytes: HS256 icin daha kisa sir kaba kuvvete aciktir.
+	minJWTSecretBytes = 32
+	// exampleJWTSecret, .env.example'daki ornek sir: production'da REDDEDILIR.
+	exampleJWTSecret = "dev-only-insecure-secret-change-me"
+)
+
 // NODE_ENV degerleri (Node servisleriyle ayni sozluk). Production, gelistirme
-// kolayliklarinin (X-User-Id kimligi, T7.5) KAPALI oldugu tek ortamdir.
+// kolayliklarinin KAPALI oldugu tek ortamdir (ornek sir reddedilir, T8.1).
 const (
 	EnvDevelopment = "development"
 	EnvTest        = "test"

@@ -15,10 +15,20 @@ func envMap(values map[string]string) Getenv {
 // testAssetBase, zorunlu ASSET_BASE_URL icin gecerli bir deger.
 const testAssetBase = "http://localhost:5173"
 
+// testJWTSecret, zorunlu JWT_SECRET icin 32 baytlik test degeri.
+const testJWTSecret = "test-sirri-en-az-otuz-iki-bayt-uzun!"
+
+// testMongoURI, MOCK disinda zorunlu MONGO_URI icin deger (baglanti kurulmaz).
+const testMongoURI = "mongodb://localhost:27017/getir?directConnection=true"
+
 // minimalEnv, yalnizca ZORUNLU degiskenleri tasiyan ortam; ustune test kendi
 // degerlerini yazar.
 func minimalEnv(overrides map[string]string) Getenv {
-	values := map[string]string{"ASSET_BASE_URL": testAssetBase}
+	values := map[string]string{
+		"ASSET_BASE_URL": testAssetBase,
+		"MONGO_URI":      testMongoURI,
+		"JWT_SECRET":     testJWTSecret,
+	}
 	for key, value := range overrides {
 		values[key] = value
 	}

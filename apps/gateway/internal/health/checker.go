@@ -39,6 +39,17 @@ type Client interface {
 	Check(ctx context.Context, in *grpc_health_v1.HealthCheckRequest, opts ...grpc.CallOption) (*grpc_health_v1.HealthCheckResponse, error)
 }
 
+// Pinger, gRPC konusmayan bir bagimliligin (Mongo, T8.1) ayakta olup olmadigini
+// soyler. Tek metotlu ve KULLANAN tarafta: testte sahtesi bir fonksiyondur.
+type Pinger interface {
+	Ping(ctx context.Context) error
+}
+
+// pingFailure, ulasilamayan gRPC disi bagimlilikta rapora yazilan kod. Surucunun
+// mesaji ic ag adresini tasir; /healthz disariya acik oldugu icin o ayrinti
+// cevaba KONMAZ (gRPC servislerindeki kuralla ayni).
+const pingFailure = "Unavailable"
+
 // ServiceStatus, tek bir servisin raporu.
 type ServiceStatus struct {
 	Name      string `json:"name"`
@@ -63,16 +74,18 @@ func (r Report) Healthy() bool {
 	return r.Status == ReportOK
 }
 
-// Checker, kayitli servisleri paralel sorgular.
+// Checker, kayitli servisleri ve bagimliliklari paralel sorgular.
 type Checker struct {
 	clients map[string]Client
+	pingers map[string]Pinger
 	timeout time.Duration
 	mock    bool
 }
 
-// New, ada gore istemcilerden bir denetleyici kurar.
-func New(clients map[string]Client, timeout time.Duration, mock bool) *Checker {
-	return &Checker{clients: clients, timeout: timeout, mock: mock}
+// New, ada gore gRPC istemcilerinden ve gRPC disi bagimliliklardan (Mongo)
+// bir denetleyici kurar. pingers bos olabilir (MOCK'ta Mongo yoktur).
+func New(clients map[string]Client, pingers map[string]Pinger, timeout time.Duration, mock bool) *Checker {
+	return &Checker{clients: clients, pingers: pingers, timeout: timeout, mock: mock}
 }
 
 // Check, tum servisleri AYNI ANDA sorgular.
@@ -80,7 +93,7 @@ func New(clients map[string]Client, timeout time.Duration, mock bool) *Checker {
 // Paralel olmasi onemli: sirayla sorulsaydi, her biri zaman asimina ugrayan uc
 // servis /healthz'i 3 x timeout kadar bekletirdi ve probe'lar bosuna duserdi.
 func (c *Checker) Check(ctx context.Context) Report {
-	statuses := make([]ServiceStatus, len(c.clients))
+	statuses := make([]ServiceStatus, len(c.clients)+len(c.pingers))
 
 	var wait sync.WaitGroup
 	index := 0
@@ -90,6 +103,14 @@ func (c *Checker) Check(ctx context.Context) Report {
 			defer wait.Done()
 			statuses[position] = c.checkOne(ctx, name, client)
 		}(index, name, client)
+		index++
+	}
+	for name, pinger := range c.pingers {
+		wait.Add(1)
+		go func(position int, name string, pinger Pinger) {
+			defer wait.Done()
+			statuses[position] = c.pingOne(ctx, name, pinger)
+		}(index, name, pinger)
 		index++
 	}
 	wait.Wait()
@@ -134,4 +155,18 @@ func (c *Checker) checkOne(ctx context.Context, name string, client Client) Serv
 		status = StatusServing
 	}
 	return ServiceStatus{Name: name, Status: status, LatencyMs: latency}
+}
+
+// pingOne, gRPC disi bagimliligi ayni son tarih kuraliyla sorar.
+func (c *Checker) pingOne(ctx context.Context, name string, pinger Pinger) ServiceStatus {
+	callCtx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+
+	startedAt := time.Now()
+	err := pinger.Ping(callCtx)
+	latency := time.Since(startedAt).Milliseconds()
+	if err != nil {
+		return ServiceStatus{Name: name, Status: StatusUnreachable, LatencyMs: latency, Error: pingFailure}
+	}
+	return ServiceStatus{Name: name, Status: StatusServing, LatencyMs: latency}
 }

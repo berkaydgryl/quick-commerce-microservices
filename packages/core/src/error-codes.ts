@@ -11,12 +11,21 @@ export const ERROR_CODES = {
   VALIDATION_FAILED: 'VALIDATION_FAILED',
   /** Kimlik dogrulanamadi (token yok / gecersiz / suresi dolmus). */
   UNAUTHORIZED: 'UNAUTHORIZED',
+  /**
+   * Giriste telefon ya da sifre hatali (T8.1). UNAUTHORIZED'dan AYRI: o "oturum
+   * yok ya da bitti" demektir ve mesaji "tekrar giris yap" der; yanlis sifre
+   * giren kullaniciya bu metin gitmemeli. Hangisinin hatali oldugu SOYLENMEZ:
+   * kayitli numaralar taranamasin.
+   */
+  INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
   /** Kimlik var ama yetki yok. */
   FORBIDDEN: 'FORBIDDEN',
   /** Kayit bulunamadi. */
   NOT_FOUND: 'NOT_FOUND',
   /** Es zamanli degisiklik / durum cakismasi. */
   CONFLICT: 'CONFLICT',
+  /** Kayitta telefon numarasi baska bir hesaba ait (T8.1; users.phone unique). */
+  PHONE_ALREADY_REGISTERED: 'PHONE_ALREADY_REGISTERED',
   /** Beklenmeyen sunucu hatasi. */
   INTERNAL: 'INTERNAL',
   /** Talep edilen miktar icin yeterli stok yok. */
@@ -114,9 +123,11 @@ export type GrpcStatus = (typeof GRPC_STATUS)[keyof typeof GRPC_STATUS];
 export const ERROR_CODE_HTTP_STATUS: Readonly<Record<ErrorCode, HttpStatus>> = {
   [ERROR_CODES.VALIDATION_FAILED]: HTTP_STATUS.BAD_REQUEST,
   [ERROR_CODES.UNAUTHORIZED]: HTTP_STATUS.UNAUTHORIZED,
+  [ERROR_CODES.INVALID_CREDENTIALS]: HTTP_STATUS.UNAUTHORIZED,
   [ERROR_CODES.FORBIDDEN]: HTTP_STATUS.FORBIDDEN,
   [ERROR_CODES.NOT_FOUND]: HTTP_STATUS.NOT_FOUND,
   [ERROR_CODES.CONFLICT]: HTTP_STATUS.CONFLICT,
+  [ERROR_CODES.PHONE_ALREADY_REGISTERED]: HTTP_STATUS.CONFLICT,
   [ERROR_CODES.INTERNAL]: HTTP_STATUS.INTERNAL_SERVER_ERROR,
   [ERROR_CODES.STOCK_INSUFFICIENT]: HTTP_STATUS.CONFLICT,
   // Rezervasyon vardi ama artik yok: "Gone" en dogru anlami tasir.
@@ -146,9 +157,11 @@ export const ERROR_CODE_HTTP_STATUS: Readonly<Record<ErrorCode, HttpStatus>> = {
 export const ERROR_CODE_GRPC_STATUS: Readonly<Record<ErrorCode, GrpcStatus>> = {
   [ERROR_CODES.VALIDATION_FAILED]: GRPC_STATUS.INVALID_ARGUMENT,
   [ERROR_CODES.UNAUTHORIZED]: GRPC_STATUS.UNAUTHENTICATED,
+  [ERROR_CODES.INVALID_CREDENTIALS]: GRPC_STATUS.UNAUTHENTICATED,
   [ERROR_CODES.FORBIDDEN]: GRPC_STATUS.PERMISSION_DENIED,
   [ERROR_CODES.NOT_FOUND]: GRPC_STATUS.NOT_FOUND,
   [ERROR_CODES.CONFLICT]: GRPC_STATUS.ABORTED,
+  [ERROR_CODES.PHONE_ALREADY_REGISTERED]: GRPC_STATUS.ALREADY_EXISTS,
   [ERROR_CODES.INTERNAL]: GRPC_STATUS.INTERNAL,
   [ERROR_CODES.STOCK_INSUFFICIENT]: GRPC_STATUS.FAILED_PRECONDITION,
   [ERROR_CODES.RESERVATION_EXPIRED]: GRPC_STATUS.FAILED_PRECONDITION,

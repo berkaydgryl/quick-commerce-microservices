@@ -23,9 +23,12 @@ import type { ApiError } from './envelope.js';
 export const ERROR_MESSAGES: Readonly<Record<ErrorCode, string>> = {
   [ERROR_CODES.VALIDATION_FAILED]: 'Girdiğin bilgilerde bir sorun var, kontrol eder misin?',
   [ERROR_CODES.UNAUTHORIZED]: 'Oturumun sona ermiş. Tekrar giriş yapman gerekiyor.',
+  [ERROR_CODES.INVALID_CREDENTIALS]: 'Telefon numarası ya da şifre hatalı.',
   [ERROR_CODES.FORBIDDEN]: 'Bu işlem için yetkin yok.',
   [ERROR_CODES.NOT_FOUND]: 'Aradığın kaydı bulamadık.',
   [ERROR_CODES.CONFLICT]: 'Bu kayıt az önce değişti. Sayfayı yenileyip tekrar dener misin?',
+  [ERROR_CODES.PHONE_ALREADY_REGISTERED]:
+    'Bu telefon numarasıyla kayıtlı bir hesap var. Giriş yapmayı dener misin?',
   [ERROR_CODES.INTERNAL]: 'Beklenmeyen bir sorun oldu. Birazdan tekrar dene.',
   [ERROR_CODES.STOCK_INSUFFICIENT]: 'Bu üründen yeterli stok kalmadı.',
   [ERROR_CODES.RESERVATION_EXPIRED]: 'Süre doldu, sepetini yenileyelim.',
