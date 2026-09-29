@@ -1,0 +1,102 @@
+/*
+ * Kimlik formu alani (T8.5). Cerceve inputun kendisidir; etiket, onek, ikon ve
+ * eylem mutlak konumla onun ustune yerlesir, input da onlara yer acar.
+ */
+.c-auth-field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.c-auth-field__control {
+  position: relative;
+}
+
+.c-auth-field__input {
+  width: 100%;
+  min-height: var(--size-field-min-height);
+
+  /* Ustte etikete yer: bosluk + bir etiket satiri. */
+  padding: calc(var(--space-2) + var(--font-size-xs) * var(--line-height-base)) var(--space-3)
+    var(--space-2);
+  font-size: var(--font-size-md);
+  background: var(--bg-surface);
+  border: var(--border-width-thin) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition: border-color var(--duration-fast) var(--easing-standard);
+}
+
+.c-auth-field__input::placeholder {
+  color: var(--text-muted);
+}
+
+.c-auth-field__input:focus {
+  border-color: var(--color-brand-primary);
+}
+
+.c-auth-field__input[aria-invalid='true'] {
+  border-color: var(--border-danger);
+}
+
+.c-auth-field__label {
+  position: absolute;
+  inset-block-start: var(--space-2);
+  inset-inline-start: var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+/* Onek ("+90"): sol kutu; tiklama altindaki inputa gecer. */
+.c-auth-field__prefix {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--size-field-prefix);
+  font-weight: var(--font-weight-semibold);
+  pointer-events: none;
+  border-inline-end: var(--border-width-thin) solid var(--border-subtle);
+}
+
+.c-auth-field--prefixed .c-auth-field__input {
+  padding-inline-start: calc(var(--size-field-prefix) + var(--space-3));
+}
+
+.c-auth-field--prefixed .c-auth-field__label {
+  inset-inline-start: calc(var(--size-field-prefix) + var(--space-3));
+}
+
+.c-auth-field__icon {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: var(--space-3);
+  display: flex;
+  align-items: center;
+  width: var(--size-field-icon);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.c-auth-field--with-icon .c-auth-field__input {
+  padding-inline-start: calc(var(--space-3) * 2 + var(--size-field-icon));
+}
+
+.c-auth-field--with-icon .c-auth-field__label {
+  inset-inline-start: calc(var(--space-3) * 2 + var(--size-field-icon));
+}
+
+.c-auth-field--with-action .c-auth-field__input {
+  padding-inline-end: calc(var(--space-3) * 2 + var(--size-field-icon));
+}
+
+.c-auth-field__error {
+  font-size: var(--font-size-xs);
+  color: var(--text-danger);
+}
+
+/* Odaktaki alanin etiketi marka renginde (konum kurallarindan sonra: ozgulluk sirasi). */
+.c-auth-field__input:focus + .c-auth-field__label {
+  color: var(--color-brand-primary);
+}

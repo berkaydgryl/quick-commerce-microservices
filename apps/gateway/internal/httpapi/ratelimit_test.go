@@ -149,6 +149,28 @@ func TestAuthEndpointsHaveTheirOwnTighterLimit(t *testing.T) {
 	}
 }
 
+func TestRefreshAndLogoutUseTheGeneralLimit(t *testing.T) {
+	// Web her acilista sessizce yeniler (T8.5): yenileme ve cikis kimlik
+	// grubunun dar sinirina (kaba kuvvet) degil genel sinira girer.
+	clock := newTestClock()
+	app := limitedApp(t, memoryLimits(clock, 5, 1, 10), &fakeOrders{}, silentLogger())
+
+	for i := range 3 {
+		for _, path := range []string{"/v1/auth/refresh", "/v1/auth/logout"} {
+			if status, _ := send(t, app, authPost(t, path)); status == http.StatusTooManyRequests {
+				t.Fatalf("%s %d. istek kimlik sinirina (1) takilmamali", path, i+1)
+			}
+		}
+	}
+	login := func() int {
+		status, _ := send(t, app, jsonRequest(t, http.MethodPost, "/v1/auth/login", loginBodyOf(testPhone, testPassword), nil))
+		return status
+	}
+	if first, second := login(), login(); second != http.StatusTooManyRequests {
+		t.Errorf("giris kimlik sinirinda kalmali: %d %d", first, second)
+	}
+}
+
 func TestProtectedEndpointsAreCountedPerUser(t *testing.T) {
 	// Ayni IP'den iki kullanici: sayaclar ayri (ayni agin arkasindaki
 	// kullanicilar birbirinin sinirini tuketmez).

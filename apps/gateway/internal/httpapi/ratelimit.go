@@ -17,9 +17,9 @@ import (
 
 // Hiz siniri (T8.2, roadmap P2): kayan pencere, Redis'te (MOCK'ta bellekte).
 //
-//	kimlik uclari (kayit, giris, yenileme, cikis)  -> Auth sinir, IP basina
+//	kayit ve giris                                 -> Auth sinir, IP basina (kaba kuvvet)
 //	siparis uclari (rezervasyon, siparis, 3DS)     -> Order sinir, kullanici basina
-//	diger /v1 uclari                               -> General sinir; kimliksizde IP, kimlikte kullanici
+//	diger /v1 uclari (yenileme ve cikis dahil)     -> General sinir; kimliksizde IP, kimlikte kullanici
 //	/healthz                                       -> sinirsiz (altyapi yoklamasi)
 //
 // Sayim ROTA BASINADIR: her uc kendi sayacini tutar (rate:{ozne}:POST_/v1/orders).

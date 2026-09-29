@@ -44,7 +44,7 @@ const (
 	defaultRateLimitWindow = time.Minute
 	// RATE_LIMIT_MAX_REQUESTS=120: genel sinir (katalog, market, profil, siparis okuma).
 	defaultRateLimitGeneral = 120
-	// RATE_LIMIT_AUTH_MAX_REQUESTS=10: kimlik uclari (kaba kuvvet savunmasi).
+	// RATE_LIMIT_AUTH_MAX_REQUESTS=10: kayit ve giris (kaba kuvvet savunmasi).
 	defaultRateLimitAuth = 10
 	// RATE_LIMIT_ORDER_MAX_REQUESTS=20: rezervasyon, siparis ve 3DS.
 	defaultRateLimitOrder = 20

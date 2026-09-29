@@ -1,0 +1,45 @@
+/* Giris ve kayit formlarinin ortak duzeni (T8.5): alanlar, form mesaji, dugme, gecis baglantisi. */
+.c-auth-form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.c-auth-form__alert {
+  padding: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-danger);
+  border: var(--border-width-thin) solid var(--border-danger);
+  border-radius: var(--radius-md);
+}
+
+.c-auth-form__submit {
+  min-height: var(--size-field-min-height);
+  padding: var(--space-3) var(--space-4);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-on-brand);
+  cursor: pointer;
+  background: var(--color-brand-primary);
+  border: none;
+  border-radius: var(--radius-pill);
+  transition: background var(--duration-fast) var(--easing-standard);
+}
+
+.c-auth-form__submit:disabled {
+  cursor: progress;
+  opacity: var(--opacity-disabled);
+}
+
+.c-auth-form__submit:hover:not(:disabled) {
+  background: var(--color-brand-primary-strong);
+}
+
+.c-auth-form__switch {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.c-auth-form__switch-link {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+}

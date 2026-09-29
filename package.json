@@ -25,6 +25,7 @@
     "demo": "node -e \"console.log('TODO Gun 15 (T15.1): uctan uca demo senaryosu henuz yok. Siparis-odeme-kurye akisini tek komutta kosturacak.')\"",
     "seed": "turbo run build --filter=@getir/catalog-service... && pnpm --filter @getir/catalog-service seed",
     "seed:personas": "turbo run build --filter=@getir/order-service... && pnpm --filter @getir/order-service seed:personas && node scripts/seed-gateway-personas.mjs",
+    "web:bundle:check": "node scripts/check-web-bundle.mjs",
     "codes:go": "node scripts/write-go-error-codes.mjs",
     "codes:go:check": "node scripts/write-go-error-codes.mjs --check",
     "proto:gen": "pnpm --filter @getir/proto generate",
@@ -35,7 +36,7 @@
     "infra:logs": "docker compose -f infra/docker/docker-compose.dev.yml logs -f",
     "infra:down": "docker compose -f infra/docker/docker-compose.dev.yml down",
     "infra:reset": "docker compose -f infra/docker/docker-compose.dev.yml down -v",
-    "verify": "pnpm proto:gen:ts && pnpm lint && pnpm lint:style && pnpm lint:proto && pnpm format:check && pnpm typecheck && pnpm build && pnpm codes:go:check && pnpm test:unit",
+    "verify": "pnpm proto:gen:ts && pnpm lint && pnpm lint:style && pnpm lint:proto && pnpm format:check && pnpm typecheck && pnpm build && pnpm web:bundle:check && pnpm codes:go:check && pnpm test:unit",
     "clean": "turbo run clean"
   },
   "devDependencies": {

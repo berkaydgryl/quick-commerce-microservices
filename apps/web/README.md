@@ -2,7 +2,7 @@
 
 Müşteri arayüzü: React 18 + Vite + TypeScript. Tarayıcı yalnızca gateway ile konuşur (`/v1/*`).
 
-## Bugünkü durum (T7.6 — kalıcı sepet, stok sınırı, satışta olmayan teklif; T6.4 — sepet kabuğu)
+## Bugünkü durum (T8.5 — kimlik akışı; T7.6 — kalıcı sepet, stok sınırı, satışta olmayan teklif; T6.4 — sepet kabuğu)
 
 | Parça                   | Durum                                                                                            |
 | ----------------------- | ------------------------------------------------------------------------------------------------ |
@@ -14,7 +14,55 @@ Müşteri arayüzü: React 18 + Vite + TypeScript. Tarayıcı yalnızca gateway 
 | Kırılımlar              | ✅ `@custom-media` (48rem / 64rem), JS karşılığı `shared/config/breakpoints.ts`                  |
 | Market veri hook'ları   | ✅ `useNearbyMarkets`, `useMarket`, `useMarketCategories`, `useMarketProducts` (imleçle sayfalı) |
 | Ortak durumlar          | ✅ `QueryStatus`: yükleniyor / hata / boş; \"Tekrar dene\" yalnızca geçici hatada                |
-| Zustand (sepet, oturum) | ✅ Sepet (`useCartStore`, T6.4; T7.6'dan beri `getir.cart`'ta kalıcı); oturum T8.5               |
+| Zustand (sepet, oturum) | ✅ Sepet (`useCartStore`, T6.4; `getir.cart`'ta kalıcı); oturum (`useSessionStore`, bellekte)    |
+| Kimlik (T8.5)           | ✅ `/giris`, `/kayit`, `/hesabim` (korumalı); sessiz yenileme, sekmeler arası kilit (aşağıda)    |
+
+## Kimlik akışı (T8.5)
+
+Ekranlar `GetirMarket-Giriş-Ekranı` referansına göre: fotoğrafsız marka kartı, `+90` önekli telefon,
+göster/gizle düğmeli şifre; "Şifremi unuttum" ve sosyal girişler yok. Kayıt aynı düzende (ad soyad,
+telefon, şifre). Başlıkta oturumsuzken "Giriş yap", oturumdayken "Hesabım" (dar ekranda yalnızca ikon).
+
+| Katman        | Dosya                                                    | İş                                                                                   |
+| ------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Oturum deposu | `shared/session/session-store.ts`                        | `unknown` / `anonymous` / `authenticated`; erişim jetonu **yalnızca bellekte**       |
+| Kilit         | `shared/session/session-lock.ts`                         | Yenileme, giriş, kayıt, çıkış bütün sekmelerde sırayla (Web Locks, `getir-oturum`)   |
+| Yenileyici    | `shared/session/session-refresher.ts`                    | Sekme içinde tek uçuş; 401 → oturumsuz; geçici hata fırlatılır, oturum yerinde kalır |
+| Yetkili istek | `shared/session/authorized-client.ts`                    | `Bearer` ekler; 401'de **bir kez** yeniler ve **bir kez** tekrarlar (döngü yok)      |
+| Açılış        | `shared/session/restore-session.ts` (`main.tsx`)         | Sayfa yenilenince bir kez sessiz yenileme; herkese açık sayfa beklemez               |
+| Formlar       | `features/auth/services/form-schemas.ts`, `ui/*Form.tsx` | react-hook-form + zodResolver; kurallar ve alan mesajları `@getir/contracts`'tan     |
+| Sunucu hatası | `features/auth/services/server-errors.ts`                | Alan altına / form üstüne; metin sözlükten; 429'da kalan saniye                      |
+| Dönüş adresi  | `features/auth/services/next-path.ts`                    | `?next=` yalnızca uygulama içi yol (`//site`, `/\site`, mutlak adres → ana sayfa)    |
+| Koruma        | `features/auth/ui/RequireAuth.tsx`                       | Oturum yoksa `/giris?next=...`; girişle geri döner                                   |
+
+- **Neden kilit:** yenileme jetonu her kullanımda değişir; kullanılmış jetonu gönderen istek 401 alır
+  ve gateway çerezi siler. İki sekme aynı anda yenilese ikisi birden oturumu kaybederdi. Kilitle ikinci
+  sekme birincinin yazdığı yeni çerezi gönderir (`session-refresher.spec.ts` iki sekmeyi canlandırır).
+  Web Locks yoksa (ör. `http://192.168...` gibi güvensiz bağlam) kilit yalnızca sekme içindedir.
+- **Açılışta geçici hata** (ağ, 503): sekme oturumsuz açılır; çerez yerinde kaldığı için sonraki açılış
+  oturumu geri getirir. Oturumsuz ziyaretçide açılış yenilemesi 401 alır; tarayıcı konsolunda bu bir
+  kırmızı ağ satırı olarak görünür (çerez HttpOnly: betik varlığını soramaz).
+- **Çıkış** başarılıysa sayfa ana sayfaya yeniden yüklenir: bellekteki jeton ve profil önbelleği tek adımda
+  gider. Uygulama içi geçiş kullanılmaz: oturum silinince korumalı sayfanın giriş yönlendirmesi ana sayfaya
+  giden geçişle yarışıyordu (canlı testte bulundu). Çıkış başarısızsa oturum yerinde kalır ve hata
+  gösterilir: betik HttpOnly çerezi silemez; "çıkıldı" görünüp yenilemede geri gelen oturum yanıltırdı.
+- **Kayıt anahtarı:** `Idempotency-Key` her gönderimde yenidir (ADR-08 eki: kayıt cevabı saklanmaz);
+  numarayı düzeltip yeniden gönderen kullanıcı parmak izi çakışması (409) görmez.
+- **Aynı kaynak:** yenileme çerezi `SameSite=Strict`, `Path=/v1/auth`; web ile gateway aynı kaynaktan
+  (geliştirmede Vite vekili) konuşmalıdır. `VITE_API_BASE_URL` başka bir kaynağı gösterirse oturum kurulmaz.
+
+### Demo persona seçici (yalnızca geliştirme)
+
+Giriş ekranının altında Ayşe, Zeynep, Can, Ali ve Komşu: seçilen persona telefon ve demo şifresini
+**doldurur**, girişi kullanıcı yapar. Bayrak derleme zamanıdır (`vite.config.ts` → `__DEMO_PERSONAS__`):
+`pnpm dev`'de açık (`VITE_DEMO_PERSONAS=false` kapatır), `pnpm build`'de ortamdan bağımsız **her zaman
+kapalı**; kapalıyken seçici ve persona verisi pakete hiç girmez.
+
+- Kopya: `features/auth/demo/personas.ts`; gateway'in `personas.json`'ıyla aynı kaldığını
+  `demo-personas.spec.ts` denetler.
+- Paket taraması: `pnpm web:bundle:check` (CI'da "Paket taraması" adımı, `pnpm verify` içinde)
+  `dist/`'te demo şifresini, personaların telefonunu (E.164 ve ulusal), kimliğini ve ad soyadını arar;
+  değerleri `personas.json`'dan okur. Geliştirme kipinde derlenen paket bu taramada kalır.
 
 ## Sepet (T6.4, T7.6) — tasarımsız kabuk
 
@@ -101,15 +149,19 @@ pnpm --filter @getir/web dev
 tarayıcı aynı kaynakla konuşur, gateway'de CORS gerekmez. Gateway başka adresteyse
 `apps/web/.env` içine `GATEWAY_URL=...` yazılır (bkz. `.env.example`).
 
+Giriş için gateway yeterlidir: `MOCK=true` iken demo personaları açılışta belleğe yüklenir
+(`http://localhost:5173/giris`, persona seçiciden biri, "Giriş yap").
+
 ## Klasörler
 
 ```text
 src/
   app/        router, QueryClient, sağlayıcılar
   pages/      rota başına sayfa kabuğu
-  features/   özellik başına api + hook + ui (bugün: catalog)
+  features/   özellik başına api + hook + ui (catalog, markets, cart, auth)
   shared/
     api/      http-client (gönder), envelope (zarf aç), idempotency-key, client (örnek)
+    session/  oturum deposu, kilit, yenileyici, yetkili istemci (T8.5)
     config/   env.ts (import.meta.env yalnız burada), constants.ts, breakpoints.ts
     styles/   tokens.css, breakpoints.css, global.css (yalnız reset + tipografi)
     ui/       paylaşılan bileşenler (Logo, PageContainer)

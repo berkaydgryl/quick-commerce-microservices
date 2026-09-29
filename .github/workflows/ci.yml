@@ -120,6 +120,14 @@ jobs:
       - name: Derleme
         run: pnpm build
 
+      # T8.5: giris ekranindaki demo persona secici yalnizca gelistirmede derlenir
+      # (apps/web/vite.config.ts __DEMO_PERSONAS__). Bayrak yanlis kurulursa ya da
+      # bir dosya persona verisini dogrudan import ederse bilinen sifreli hesaplar
+      # herkese acik pakete sizar; bu ancak derlenmis pakete bakilarak gorulur.
+      # Aranan degerler gateway'in persona dosyasindan okunur. Derlemeden SONRA.
+      - name: Paket taramasi (web production paketinde persona yok)
+        run: pnpm web:bundle:check
+
       # T3.4: gateway (Go) hata kodu tablosunu @getir/core ve @getir/contracts'tan
       # URETILMIS bir dosyadan okur (apps/gateway/internal/apperror/codes_gen.go).
       # Kaynak degisip dosya yeniden uretilmezse gateway yeni kodu tanimaz ya da

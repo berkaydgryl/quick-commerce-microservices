@@ -1,0 +1,41 @@
+.c-header-account {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-2);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+  text-decoration: none;
+  border-radius: var(--radius-pill);
+  transition: background var(--duration-fast) var(--easing-standard);
+}
+
+.c-header-account:hover {
+  background: var(--color-brand-primary-subtle);
+}
+
+.c-header-account__icon {
+  display: flex;
+  width: var(--size-header-icon);
+}
+
+/* Dar ekranda yalnizca ikon: logo ortada kalir, metin sigmaz. */
+.c-header-account__text {
+  display: none;
+}
+
+.c-header-account__placeholder {
+  display: block;
+  width: calc(var(--size-header-icon) + var(--space-2) * 2);
+  aspect-ratio: 1;
+}
+
+@media (--bp-md) {
+  .c-header-account {
+    padding-inline: var(--space-3);
+  }
+
+  .c-header-account__text {
+    display: inline;
+  }
+}
