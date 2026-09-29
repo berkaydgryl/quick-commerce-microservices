@@ -2,6 +2,7 @@ package config
 
 import (
 	"log/slog"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -57,11 +58,17 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Mock {
 		t.Error("MOCK varsayilani false olmaliydi")
 	}
-	if len(cfg.Services) != 2 {
-		t.Fatalf("iki servis bekleniyordu, %d geldi", len(cfg.Services))
+	// Gateway'in dogrudan konustugu uc servis; /healthz de bu listeyi yoklar.
+	wantServices := []ServiceTarget{
+		{Name: CatalogService, Address: defaultCatalogAddress},
+		{Name: InventoryService, Address: "localhost:50052"},
+		{Name: OrderService, Address: defaultOrderAddress},
 	}
-	if cfg.Services[0].Address != defaultCatalogAddress {
-		t.Errorf("katalog adresi: %q geldi", cfg.Services[0].Address)
+	if !slices.Equal(cfg.Services, wantServices) {
+		t.Errorf("servisler: %+v, beklenen %+v", cfg.Services, wantServices)
+	}
+	if cfg.StockTimeout != 300*time.Millisecond {
+		t.Errorf("stok suresi varsayilani 300 ms olmali, %v geldi", cfg.StockTimeout)
 	}
 }
 
@@ -72,9 +79,11 @@ func TestLoadReadsValues(t *testing.T) {
 		"MOCK":                       "true",
 		"NODE_ENV":                   "production",
 		"CATALOG_GRPC_ADDR":          "catalog:50051",
+		"INVENTORY_GRPC_ADDR":        "inventory:50052",
 		"ORDER_GRPC_ADDR":            "order:50053",
 		"GRPC_SHUTDOWN_TIMEOUT_MS":   "2500",
 		"GATEWAY_REQUEST_TIMEOUT_MS": "750",
+		"GATEWAY_STOCK_TIMEOUT_MS":   "120",
 	}))
 	if err != nil {
 		t.Fatalf("gecerli ortamda hata: %v", err)
@@ -92,8 +101,12 @@ func TestLoadReadsValues(t *testing.T) {
 	if cfg.RequestTimeout != 750*time.Millisecond {
 		t.Errorf("istek suresi: %v geldi", cfg.RequestTimeout)
 	}
-	if cfg.Services[0].Address != "catalog:50051" {
-		t.Errorf("konteyner adresi okunamadi: %q", cfg.Services[0].Address)
+	if cfg.StockTimeout != 120*time.Millisecond {
+		t.Errorf("stok suresi: %v geldi", cfg.StockTimeout)
+	}
+	if cfg.Services[0].Address != "catalog:50051" || cfg.Services[1].Address != "inventory:50052" ||
+		cfg.Services[2].Address != "order:50053" {
+		t.Errorf("konteyner adresleri okunamadi: %+v", cfg.Services)
 	}
 }
 
@@ -131,6 +144,8 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 		"port sayi degil":     {"GATEWAY_PORT": "abc"},
 		"port araligin disi":  {"GATEWAY_PORT": "0"},
 		"sure negatif":        {"GRPC_SHUTDOWN_TIMEOUT_MS": "-1"},
+		"stok suresi sifir":   {"GATEWAY_STOCK_TIMEOUT_MS": "0"},
+		"stok suresi metin":   {"GATEWAY_STOCK_TIMEOUT_MS": "300ms"},
 		"bilinmeyen NODE_ENV": {"NODE_ENV": "staging"},
 	}
 

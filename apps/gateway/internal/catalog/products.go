@@ -32,9 +32,9 @@ type ProductQuery struct {
 
 // MarketProducts, marketin urunleri: o marketin fiyati ile (ADR-15).
 //
-// Stok (availableQuantity) BUGUN YAZILMAZ: kaynagi inventory-svc'dir ve henuz
-// bagli degil. Sozlesmede alan istege baglidir ve yoklugu "stok bilgisi yok"
-// demektir (B27 birlestirmesi inventory gelince burada yapilir).
+// Stok (availableQuantity) BURADA YAZILMAZ: kaynagi inventory-svc'dir ve
+// katalog adaptoru onu bilmez. Adetleri storefront paketi, sayfanin butun
+// SKU'larini tek cagriyla sorarak ekler (T8.4, B27).
 func (s *Service) MarketProducts(ctx context.Context, query ProductQuery) (ProductPage, error) {
 	request := &catalogv1.ListProductsRequest{
 		MarketId:   query.MarketID,

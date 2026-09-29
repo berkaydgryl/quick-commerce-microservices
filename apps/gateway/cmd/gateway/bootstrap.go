@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 
 	catalogv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/catalog/v1"
+	inventoryv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/inventory/v1"
 	orderv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/order/v1"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/assets"
@@ -18,7 +19,9 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/config"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/httpapi"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/inventory"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/storefront"
 )
 
 // bootstrap, parcalari BAGLAR: baglanti havuzu, kimlik servisi (T8.1), tekrar
@@ -92,6 +95,11 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (*fi
 		cleanup()
 		return nil, nil, fmt.Errorf("%s baglantisi havuzda yok", config.CatalogService)
 	}
+	inventoryConn, ok := pool.Conn(config.InventoryService)
+	if !ok {
+		cleanup()
+		return nil, nil, fmt.Errorf("%s baglantisi havuzda yok", config.InventoryService)
+	}
 	orderConn, ok := pool.Conn(config.OrderService)
 	if !ok {
 		cleanup()
@@ -106,6 +114,14 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (*fi
 		assets.NewResolver(cfg.AssetBaseURL),
 	)
 
+	// Urun listesi katalog + stoktur (T8.4, B27): stok sorgusunun kendi, kisa
+	// siniri var; stok gelmezse liste stoksuz doner.
+	products := storefront.NewProducts(
+		catalogService,
+		inventory.New(inventoryv1.NewInventoryServiceClient(inventoryConn), cfg.StockTimeout),
+		logger,
+	)
+
 	// Tek siparis adaptoru dort siparis ucunu karsilar (T7.5).
 	orderService := order.New(orderv1.NewOrderServiceClient(orderConn), cfg.RequestTimeout)
 
@@ -115,7 +131,7 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (*fi
 		NearbyMarkets:    catalogService,
 		Market:           catalogService,
 		MarketCategories: catalogService,
-		MarketProducts:   catalogService,
+		MarketProducts:   products,
 		CartReserver:     orderService,
 		OrderPlacer:      orderService,
 		ThreeDSConfirmer: orderService,

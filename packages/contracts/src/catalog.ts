@@ -167,10 +167,13 @@ export const productSchema = z.object({
    * marketId kapsaminda satilabilir adet. Kaynagi inventory-svc'dir ve
    * TOPLU sorgulanir (CheckAvailability(marketId, sku[]), B27).
    *
+   * 0 "tukendi"dir. inventory-svc'de stok kaydi olmayan urun de 0 gelir
+   * ("satilamaz"): rezervasyon da onu reddeder.
+   *
    * ISTEGE BAGLIDIR: alan YOKSA "stok bilgisi yok" demektir, "stok 0" DEGIL.
-   * Iki durumda yoktur: inventory-svc henuz baglanmadi (T9.x oncesi) ya da
-   * cevap vermedi (katalog stoksuz gorunumle ayakta kalir). Istemci bu durumda
-   * stok rozeti gostermez; baglayici kontrol rezervasyonda yapilir (ADR-13).
+   * Yalnizca inventory-svc cevap vermediginde (hata ya da gateway'in stok sure
+   * siniri) yoktur: katalog stoksuz gorunumle ayakta kalir (T8.4). Istemci bu
+   * durumda stok rozeti gostermez; baglayici kontrol rezervasyonda yapilir (ADR-13).
    */
   availableQuantity: z.number().int().min(0).optional(),
 });

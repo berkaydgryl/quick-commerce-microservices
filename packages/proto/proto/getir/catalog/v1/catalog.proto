@@ -94,11 +94,11 @@ message Category {
 //
 // DIKKAT - BU MESAJDA STOK ALANI YOKTUR (B27 karari).
 // Stok gercegi inventory-svc'de tutulur ve TOPLU olarak
-// CheckAvailability(dark_store_id, sku[]) RPC'si ile alinir
+// CheckAvailability(market_id, sku[]) RPC'si ile alinir
 // (getir.inventory.v1, T2.1). Urun basina stok sorgusu yapilmaz; boylece
 // N+1 cagri onlenir ve stok ile katalog arasindaki tutarsizlik tek noktada
-// kalir. Gateway, ListProducts/GetProduct cevabi ile CheckAvailability
-// cevabini BIRLESTIREREK istemciye tek bir gorunum sunar.
+// kalir. Gateway urun listesinde (ListProducts) CheckAvailability cevabini
+// BIRLESTIREREK istemciye tek bir gorunum sunar (T8.4).
 // Ayni sekilde kampanyali fiyat da burada degildir; price liste fiyatidir.
 message Product {
   string id = 1;

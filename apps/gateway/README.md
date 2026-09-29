@@ -7,12 +7,12 @@ Pnpm workspace'inin parçası değildir: kendi Go modülüdür (`go.mod`). `pnpm
 kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go mod tidy -diff`,
 `-race` testleri, Mongo ve Redis entegrasyon testleri, statik derleme).
 
-## Bugünkü durum (D8 — Go kuralları CI'da; T7.5 — sipariş uçları; T8.1 — kimlik; T8.2 — tekrar koruması ve hız sınırı; T8.3 — panik kurtarma ve zarf taraması; pazaryeri uçları T8.4'ten öne alındı)
+## Bugünkü durum (D8 — Go kuralları CI'da; T7.5 — sipariş uçları; T8.1 — kimlik; T8.2 — tekrar koruması ve hız sınırı; T8.3 — panik kurtarma ve zarf taraması; T8.4 — ürün listesinde stok; pazaryeri uçları T8.4'ten öne alındı)
 
 | Parça                | Durum                                                           |
 | -------------------- | --------------------------------------------------------------- |
 | Env doğrulaması      | ✅ Açılışta, hatalar toplu raporlanır; geçersizse çıkış kodu 1  |
-| gRPC istemci havuzu  | ✅ catalog + order, tembel bağlantı, keepalive                  |
+| gRPC istemci havuzu  | ✅ catalog + inventory + order, tembel bağlantı, keepalive      |
 | `GET /healthz`       | ✅ Servisleri (ve MOCK değilse Mongo ile Redis'i) paralel sorgular; hepsi ayaktaysa 200, değilse 503 |
 | Cevap zarfı          | ✅ `packages/contracts` ile aynı biçim, her cevapta `requestId`; bütün rotalar testle taranır (T8.3) |
 | Panik kurtarma       | ✅ Uçtaki panik 500 `INTERNAL` zarfı, süreç ayakta; yığın izi yalnızca günlükte (T8.3) |
@@ -22,7 +22,7 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `GET /v1/markets?lat&lng` | ✅ Yakındaki marketler; boş bölge = boş liste, hata değil |
 | `GET /v1/markets/{id}` | ✅ Market sayfası başlığı; puan onda birden ondalığa (`47` → `4.7`) |
 | `GET /v1/markets/{id}/categories` | ✅ Marketin teklifi olan kategoriler |
-| `GET /v1/markets/{id}/products` | ✅ `categoryId`, `q`, `pageToken`, `pageSize`; **stok yok** (aşağıda); `isActive` (T7.6) |
+| `GET /v1/markets/{id}/products` | ✅ `categoryId`, `q`, `pageToken`, `pageSize`; her üründe `availableQuantity` (T8.4, aşağıda); `isActive` (T7.6) |
 | `POST /v1/cart/reserve` | ✅ order `CreateDraftOrder` (T7.5): taslak, fiyat sunucuda; **stok kilidi yok** (T11.2) |
 | `POST /v1/orders`    | ✅ order `CreateOrder` (saga): 201 `PAID` ya da `AWAITING_PAYMENT` + `threeDs` |
 | `POST /v1/orders/{id}/3ds` | ✅ order `ConfirmPayment`; yanlış kod 402 + kalan hak |
@@ -39,7 +39,7 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | Idempotency-Key      | ✅ Zorunlu; tekrar koruması (T8.2): aynı anahtar ilk cevabı alır, eş zamanlısı 409; Redis, MOCK'ta bellek |
 | gRPC hata çevirisi   | ✅ `x-app-error` trailer'ı, yoksa durum kodu (`apperror`)       |
 | Görsel adresleri     | ✅ Göreli yol → mutlak URL (`ASSET_BASE_URL`, `internal/assets`) |
-| Stok birleştirmesi (B27) | ⏳ inventory-svc ile (T8.4 / T9.x) |
+| Stok birleştirmesi (B27) | ✅ Sayfa başına tek `CheckAvailability` (T8.4); stok servisi 300 ms'de cevap vermezse liste stoksuz döner |
 | Rate limit           | ✅ Kayan pencere, Redis'te (T8.2); uç başına; IP ya da kullanıcı; 429 + `Retry-After` |
 | Go kuralları         | ✅ CI'da golangci-lint: `errcheck`, `noctx`, `bodyclose` (D8)    |
 
@@ -86,6 +86,7 @@ docker run --rm -p 8080:8080 \
   -e MONGO_URI='mongodb://host.docker.internal:27017/getir?directConnection=true' \
   -e REDIS_URL=redis://host.docker.internal:6379 \
   -e CATALOG_GRPC_ADDR=host.docker.internal:50051 \
+  -e INVENTORY_GRPC_ADDR=host.docker.internal:50052 \
   -e ORDER_GRPC_ADDR=host.docker.internal:50053 \
   getir/gateway
 ```
@@ -377,8 +378,16 @@ curl -s localhost:8080/v1/orders/<taslak> -H "Authorization: Bearer $TOKEN" | jq
   gönderdiği adla** değiştirir (`query` → `q`, `location.lat` → `lat`).
 - **Yapmaz:** aralık kuralları (enlem −90..90, arama en az 2 karakter, sayfa boyu kırpma) catalog-service'te
   durur; gateway'de tekrar yazılmaz, iki yerde duran kural bir gün ayrışır.
-- **Stok:** ürünlerde `availableQuantity` bugün **yazılmaz**. Sözleşmede alan isteğe bağlıdır ve yokluğu
-  "stok bilgisi yok" demektir, "0" değil. inventory-svc bağlanınca gateway iki cevabı birleştirir (B27).
+- **Stok (T8.4, B27):** ürün listesi katalogun sayfasıdır; gateway sayfadaki bütün SKU'ları inventory-svc'ye
+  **tek** `CheckAvailability` çağrısıyla sorar ve her ürüne `availableQuantity` yazar (sayfa en fazla 100
+  ürün, stok sorgusu da en fazla 100 SKU). Birleştirme `internal/storefront`'ta: katalog adaptörü stoğu,
+  stok adaptörü (`internal/inventory`) ürünü bilmez.
+  - **0 "tükendi"dir** ve açıkça yazılır.
+  - **Stok kaydı olmayan ürün 0'dır** ("satılamaz"; rezervasyon da onu reddeder). Katalog ile stok ayrışmış
+    ya da Redis boşalmıştır: günlüğe `WARN` "stok kaydi olmayan urunler 0 gosteriliyor" (market, SKU'lar, `requestId`).
+  - **Stok servisi hata verirse ya da `GATEWAY_STOCK_TIMEOUT_MS` (300 ms) aşılırsa** liste yine döner, alan
+    **yazılmaz** ("stok bilgisi yok", sözleşme); günlüğe `WARN` "stok okunamadi, urunler stoksuz donuyor".
+    Katalog stok yüzünden düşmez; bağlayıcı kontrol rezervasyondadır.
 - **Satış durumu (T7.6):** `isActive` her üründe yazılır (`omitempty` yok): liste pasif teklifi de
   döndürür (catalog tasarımı), `false` "satışta değil" demektir; web onu sepete eklemez.
 
@@ -395,8 +404,10 @@ curl -s "localhost:8080/v1/markets/mkt_migros-jet-moda/products?q=s%C3%BCt" | jq
 | `ASSET_BASE_URL`             | **yok — zorunlu** | Görsel adreslerinin kökü (aşağıda)              |
 | `GATEWAY_PORT`               | `8080`            | Dinlenen HTTP portu                             |
 | `CATALOG_GRPC_ADDR`          | `localhost:50051` | catalog-service adresi (`host:port`)            |
+| `INVENTORY_GRPC_ADDR`        | `localhost:50052` | inventory-service adresi (ürün listesindeki stok, T8.4) |
 | `ORDER_GRPC_ADDR`            | `localhost:50053` | order-service adresi                            |
 | `GATEWAY_REQUEST_TIMEOUT_MS` | `5000`            | Tek bir servis çağrısının üst sınırı            |
+| `GATEWAY_STOCK_TIMEOUT_MS`   | `300`             | Ürün listesindeki stok sorgusunun üst sınırı; aşılırsa liste stoksuz döner (T8.4) |
 | `GRPC_SHUTDOWN_TIMEOUT_MS`   | `10000`           | Kapanışta devam eden istekler için bekleme      |
 | `LOG_LEVEL`                  | `info`            | `trace/debug/info/warn/error/fatal` (Node ile ortak) |
 | `MOCK`                       | `false`           | `/healthz`'de bildirilir (B16); `true` ise hesaplar bellekte, Mongo'ya gidilmez |
@@ -442,14 +453,16 @@ ortam degiskenleri gecersiz: ASSET_BASE_URL: zorunlu, ornek: http://localhost:51
 
 ```json
 { "success": true, "data": { "status": "ok", "mock": false,
-  "services": [ { "name": "catalog", "status": "SERVING", "latencyMs": 5 },
-                { "name": "mongo",   "status": "SERVING", "latencyMs": 1 },
-                { "name": "order",   "status": "SERVING", "latencyMs": 6 },
-                { "name": "redis",   "status": "SERVING", "latencyMs": 1 } ] } }
+  "services": [ { "name": "catalog",   "status": "SERVING", "latencyMs": 5 },
+                { "name": "inventory", "status": "SERVING", "latencyMs": 2 },
+                { "name": "mongo",     "status": "SERVING", "latencyMs": 1 },
+                { "name": "order",     "status": "SERVING", "latencyMs": 6 },
+                { "name": "redis",     "status": "SERVING", "latencyMs": 1 } ] } }
 ```
 
 `mongo` (T8.1) ve `redis` (T8.2) kalemleri yalnızca `MOCK=false` iken vardır; MOCK'ta hesaplar
-ve tekrar kayıtları bellekte tutulur.
+ve tekrar kayıtları bellekte tutulur. `inventory` T8.4'ten beri listede ve diğer servislerle aynı
+kurala tabidir: kapalıysa `/healthz` 503 döner. Ürün listesi o sırada da stoksuz çalışır.
 
 Bir servis düşükse **503** ve hata zarfı döner; rapor `error.details` içindedir. Servis
 durumu üç değerlidir: `SERVING`, `NOT_SERVING` (servis kendini hasta bildirdi) ve
