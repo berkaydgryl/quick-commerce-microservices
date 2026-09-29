@@ -306,7 +306,7 @@ Hepsi depo kökünden `pnpm <komut>` ile çalışır. `make` bu projede zorunlu 
 | `test:int`     | `vitest run --config vitest.integration.config.ts`                                                    | Testcontainers ile Mongo/Redis entegrasyon testleri                | Çalışıyor (T2.5)                        |
 | `race`         | `node -e "..."`                                                                                       | Yarış koşulu senaryosu: aynı stok için eş zamanlı rezervasyon      | **Placeholder — Gün 11 (T11.1)**        |
 | `demo`         | `node -e "..."`                                                                                       | Uçtan uca demo: sipariş → ödeme → kurye akışı                      | **Placeholder — Gün 15 (T15.1)**        |
-| `seed`         | `turbo run build --filter=@getir/catalog-service... && pnpm --filter @getir/catalog-service seed`     | Katalogu (kategori, ürün, dark store) Mongo'ya bastan yazar        | Çalışıyor (T4.1: katalog)               |
+| `seed`         | `turbo run build` (catalog + inventory) `&& … seed` (ikisi)                                           | Katalogu ve stoğu Mongo'ya baştan yazar; stok sayaçları Redis'te   | Çalışıyor (T4.1 katalog, T9.1 stok)     |
 | `proto:gen`    | `pnpm --filter @getir/proto generate`                                                                 | `.proto` dosyalarından **TS ve Go** kodu üretir (Go kurulu olmalı) | Çalışıyor (T2.3)                        |
 | `proto:gen:ts` | `pnpm --filter @getir/proto generate:ts`                                                              | Yalnızca TypeScript çıktısı; Go gerektirmez                        | Çalışıyor (T2.3)                        |
 | `proto:check`  | `generate:ts && typecheck && check:go`                                                                | Üretilen kodun **iki dilde de** derlendiğini doğrular              | Çalışıyor (T2.3)                        |
@@ -322,6 +322,7 @@ Hepsi depo kökünden `pnpm <komut>` ile çalışır. `make` bu projede zorunlu 
 
 ```bash
 pnpm --filter @getir/catalog-service build && MOCK=true pnpm --filter @getir/catalog-service start  # :50051, Mongo'suz
+pnpm --filter @getir/inventory-service build && MOCK=true pnpm --filter @getir/inventory-service start  # :50052, stok bellekte
 pnpm --filter @getir/order-service   build && pnpm --filter @getir/order-service   start  # :50053
 pnpm --filter @getir/payment-service build && pnpm --filter @getir/payment-service start  # :50054, mock kart
 pnpm --filter @getir/risk-service    build && pnpm --filter @getir/risk-service    start  # :50055, risk motoru
@@ -337,6 +338,7 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/cat
 | Servis                                                     | Port  | Bugün ne yapıyor                                                                                                      |
 | ---------------------------------------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------- |
 | [`catalog-service`](apps/catalog-service/README.md) (T4.8) | 50051 | Pazaryeri: yakındaki marketler, market sayfası, teklifler — Mongo ya da `MOCK`                                        |
+| [`inventory-service`](apps/inventory-service/README.md)    | 50052 | (T9.1) `CheckAvailability`: toplu stok; Mongo `stock` + Redis sayacı ya da `MOCK`; rezervasyon T10                    |
 | [`order-service`](apps/order-service/README.md) (T7.5)     | 50053 | Taslak (catalog fiyatıyla), saga (risk → ödeme → 3DS), iptal, geçmiş, outbox → olay                                   |
 | [`payment-service`](apps/payment-service/README.md) (T5.3) | 50054 | `Charge`, `Confirm3Ds` — mock kart + 3DS, idempotent; Mongo `payments` ya da `MOCK`                                   |
 | [`risk-service`](apps/risk-service/README.md) (T6.3)       | 50055 | `Evaluate`, `GetLastEvaluation` — 6 kural, veto, `risk_events` (Mongo ya da `MOCK`)                                   |
