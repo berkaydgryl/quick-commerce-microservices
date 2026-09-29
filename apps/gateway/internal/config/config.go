@@ -41,7 +41,10 @@ type Config struct {
 	ShutdownTimeout time.Duration
 	// Tek bir bagimli servise yapilan cagrinin ust siniri (/healthz dahil).
 	RequestTimeout time.Duration
-	Services       []ServiceTarget
+	// StockTimeout, urun listesindeki stok sorgusunun ust siniri (T8.4). Asilirsa
+	// liste stoksuz doner; RequestTimeout'tan kisadir.
+	StockTimeout time.Duration
+	Services     []ServiceTarget
 	// AssetBaseURL, gorsellerin mutlak adresinin koku. Veri gorseli GORELI yol
 	// olarak saklar ("/img/cat/sut.png"); gateway (BFF) istemciye giden cevapta
 	// bu koku ekler. Sonunda "/" yoktur.
@@ -126,6 +129,11 @@ func Load(getenv Getenv) (Config, error) {
 		problems = append(problems, err)
 	}
 
+	stockTimeout, err := readDuration(getenv, "GATEWAY_STOCK_TIMEOUT_MS", defaultStockTimeout)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
 	nodeEnv, err := readEnum(getenv, "NODE_ENV", EnvDevelopment, []string{EnvDevelopment, EnvTest, EnvProduction})
 	if err != nil {
 		problems = append(problems, err)
@@ -204,11 +212,12 @@ func Load(getenv Getenv) (Config, error) {
 		problems = append(problems, err)
 	}
 
-	// Servis listesi bugun sabittir: gateway yalnizca ayakta olan iki servisi
-	// taniyor. Yeni servis geldiginde buraya bir satir eklenir; adres yine
-	// ortamdan gelir.
+	// Servis listesi sabittir: gateway'in dogrudan konustugu uc servis (stok
+	// T8.4'ten beri). Yeni servis geldiginde buraya bir satir eklenir; adres yine
+	// ortamdan gelir. /healthz listedeki her servisi yoklar.
 	services := []ServiceTarget{
 		{Name: CatalogService, Address: readString(getenv, "CATALOG_GRPC_ADDR", defaultCatalogAddress)},
+		{Name: InventoryService, Address: readString(getenv, "INVENTORY_GRPC_ADDR", defaultInventoryAddress)},
 		{Name: OrderService, Address: readString(getenv, "ORDER_GRPC_ADDR", defaultOrderAddress)},
 	}
 
@@ -223,6 +232,7 @@ func Load(getenv Getenv) (Config, error) {
 		Mock:                        mock,
 		ShutdownTimeout:             shutdownTimeout,
 		RequestTimeout:              requestTimeout,
+		StockTimeout:                stockTimeout,
 		Services:                    services,
 		AssetBaseURL:                assetBaseURL,
 		MongoURI:                    mongoURI,

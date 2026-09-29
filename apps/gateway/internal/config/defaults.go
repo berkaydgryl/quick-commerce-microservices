@@ -7,12 +7,16 @@ import (
 
 // Varsayilanlar. Roadmap'teki port haritasi ile birebir ayni.
 const (
-	defaultPort            = 8080
-	defaultCatalogAddress  = "localhost:50051"
-	defaultOrderAddress    = "localhost:50053"
-	defaultShutdownTimeout = 10 * time.Second
-	defaultRequestTimeout  = 5 * time.Second
-	defaultLogLevel        = slog.LevelInfo
+	defaultPort             = 8080
+	defaultCatalogAddress   = "localhost:50051"
+	defaultInventoryAddress = "localhost:50052"
+	defaultOrderAddress     = "localhost:50053"
+	defaultShutdownTimeout  = 10 * time.Second
+	defaultRequestTimeout   = 5 * time.Second
+	// GATEWAY_STOCK_TIMEOUT_MS=300 (T8.4): stok sorgusu tek Redis okumasidir;
+	// asilirsa urun listesi stoksuz doner, genel sinir (5 sn) kadar beklenmez.
+	defaultStockTimeout = 300 * time.Millisecond
+	defaultLogLevel     = slog.LevelInfo
 )
 
 // Kimlik ve Mongo varsayilanlari (T8.1). Adlar ve degerler .env.example ile ayni.
@@ -64,8 +68,9 @@ const (
 // Servis adlari: havuzdaki anahtar, gunluk alani ve /healthz'deki "name".
 // Tek yerde tanimli; main ayni adla havuzdan baglanti ister.
 const (
-	CatalogService = "catalog"
-	OrderService   = "order"
+	CatalogService   = "catalog"
+	InventoryService = "inventory"
+	OrderService     = "order"
 )
 
 const (

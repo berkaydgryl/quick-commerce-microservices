@@ -42,8 +42,9 @@ func TestMarketProductsMapsOfferAndOmitsStock(t *testing.T) {
 		t.Fatalf("hata beklenmiyordu: %v", err)
 	}
 
-	// id = ORTAK urun kimligi, offerId = bu marketin satisi. Stok bilgisi yok:
-	// availableQuantity alani HIC yazilmaz (0 degil). Bos aciklama ve gorsel de yazilmaz.
+	// id = ORTAK urun kimligi, offerId = bu marketin satisi. Katalog adaptoru
+	// stok yazmaz (storefront ekler): availableQuantity alani HIC yazilmaz (0
+	// degil). Bos aciklama ve gorsel de yazilmaz.
 	encoded := testkit.JSON(t, page)
 	want := `{"items":[{"id":"prd_sut-1l","offerId":"ofr_migros-jet-moda-sut-1l","marketId":"mkt_migros-jet-moda",` +
 		`"sku":"SUT-1L","name":"Süt 1 L","categoryId":"cat_sut-kahvaltilik","price":{"amountMinor":4599,"currency":"TRY"},` +

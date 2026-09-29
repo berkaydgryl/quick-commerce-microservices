@@ -625,6 +625,10 @@ paths:
         FİYAT markete özeldir (ADR-15): aynı ürün başka markette farklı fiyattadır.
         `q` verilirse arama yapılır; `categoryId` ile birlikte kullanılabilir.
         Market var ama eşleşme yoksa BOŞ liste döner; market yoksa NOT_FOUND.
+
+        STOK (T8.4, B27): sayfadaki bütün ürünlerin adedi inventory-svc'ye TEK
+        çağrıyla sorulur. Stok servisi cevap vermezse sayfa yine döner, ürünlerde
+        `availableQuantity` olmaz (bkz. `Product.availableQuantity`).
       security: []
       parameters:
         - $ref: "#/components/parameters/MarketIdPath"
@@ -1978,10 +1982,14 @@ components:
             `marketId` kapsamında satılabilir adet. Kaynağı inventory-svc'dir
             ve TOPLU sorgulanır (`CheckAvailability(marketId, sku[])`, B27).
 
+            `0` "tükendi" demektir. inventory-svc'de stok kaydı olmayan ürün de
+            `0` gelir ("satılamaz"): rezervasyon da onu reddeder.
+
             **İsteğe bağlıdır:** alan YOKSA "stok bilgisi yok" demektir, "stok 0"
-            değil. inventory-svc henüz bağlanmadıysa (T9.x öncesi) ya da cevap
-            vermediyse gateway alanı yazmaz; istemci stok rozeti göstermez,
-            bağlayıcı kontrol rezervasyondadır (ADR-13).
+            değil. inventory-svc cevap vermediyse (hata ya da gateway'in stok
+            süre sınırı, `GATEWAY_STOCK_TIMEOUT_MS`) gateway alanı yazmaz; katalog
+            stoksuz görünümle ayakta kalır (T8.4). İstemci bu durumda stok rozeti
+            göstermez; bağlayıcı kontrol rezervasyondadır (ADR-13).
 
     # --- Pazaryeri (ADR-15) -------------------------------------------------
     PricingRules:

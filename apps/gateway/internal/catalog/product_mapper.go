@@ -34,7 +34,8 @@ type Product struct {
 	// teklifi de dondurur; istemci onu sepete eklemez (T7.6).
 	IsActive bool `json:"isActive"`
 	// Stok bilgisi yoksa nil: alan hic yazilmaz ("stok bilgisi yok", 0 DEGIL).
-	// Bugun hep nil; inventory-svc baglaninca gateway doldurur (B27).
+	// Katalog adaptoru hep nil birakir; storefront stok servisinden doldurur
+	// (T8.4, B27). Stok servisi cevap vermezse nil kalir.
 	AvailableQuantity *int32 `json:"availableQuantity,omitempty"`
 }
 

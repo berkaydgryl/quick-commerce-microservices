@@ -150,7 +150,7 @@ message Order {
   string id = 1;
   string user_id = 2;
   // DEPRECATED (ADR-15): market_id kullanin. Alan silinmez; numara ve JSON adi
-  // korunur (buf breaking WIRE_JSON). Yeni istemci doldurmaz, sunucu once market_id'ye bakar.
+  // korunur (buf breaking WIRE_JSON). Sunucu bu alani doldurmaz (bos gelir); market_id'yi okuyun.
   string dark_store_id = 3 [deprecated = true];
 
   // Pazaryerinde siparisin/stogun ait oldugu market (ADR-15): mkt_ onekli kimlik.
@@ -189,7 +189,7 @@ message Order {
 message CreateDraftOrderRequest {
   string user_id = 1;
   // DEPRECATED (ADR-15): market_id kullanin. Alan silinmez; numara ve JSON adi
-  // korunur (buf breaking WIRE_JSON). Yeni istemci doldurmaz, sunucu once market_id'ye bakar.
+  // korunur (buf breaking WIRE_JSON). Yeni istemci doldurmaz; sunucu bu alani OKUMAZ, market_id zorunlu.
   string dark_store_id = 2 [deprecated = true];
 
   // Pazaryerinde siparisin/stogun ait oldugu market (ADR-15): mkt_ onekli kimlik.
