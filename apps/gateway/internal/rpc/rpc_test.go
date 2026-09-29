@@ -4,6 +4,8 @@ import (
 	"errors"
 	"testing"
 
+	"google.golang.org/grpc/metadata"
+
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
 )
 
@@ -51,5 +53,18 @@ func TestRenameFieldsKeepsContextDetailsOfOtherErrors(t *testing.T) {
 
 	if got != error(notFound) || notFound.Details["orderId"] != "ord_1" {
 		t.Errorf("dogrulama disi hatanin ayrintisi degismemeli: %v", got)
+	}
+}
+
+func TestRequestIDFromOutgoingContext(t *testing.T) {
+	// Saglik sorgusunun panik kaydi (T8.3) istegin kimligini buradan okur.
+	const id = "req_0123456789abcdef0123456789abcdef"
+	if got := RequestIDFrom(t.Context()); got != "" {
+		t.Errorf("metadata'siz baglamda bos bekleniyordu: %q", got)
+	}
+	ctx := metadata.AppendToOutgoingContext(t.Context(), RequestIDKey, "req_eski")
+	ctx = metadata.AppendToOutgoingContext(ctx, RequestIDKey, id)
+	if got := RequestIDFrom(ctx); got != id {
+		t.Errorf("son eklenen kimlik bekleniyordu: %q", got)
 	}
 }

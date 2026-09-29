@@ -27,7 +27,7 @@ func (f fakePinger) Ping(ctx context.Context) error {
 }
 
 func TestPingerJoinsReport(t *testing.T) {
-	checker := New(map[string]Client{"catalog": serving()}, map[string]Pinger{"mongo": fakePinger{}}, testTimeout, false)
+	checker := New(map[string]Client{"catalog": serving()}, map[string]Pinger{"mongo": fakePinger{}}, testTimeout, false, discardLogger())
 
 	report := checker.Check(context.Background())
 
@@ -43,7 +43,7 @@ func TestFailingPingerDegradesWithoutLeakingDetails(t *testing.T) {
 	// /healthz disariya acik: surucunun mesajindaki ic adres cevaba girmemeli.
 	checker := New(nil, map[string]Pinger{
 		"mongo": fakePinger{err: errors.New("dial tcp 10.0.0.5:27017: connection refused")},
-	}, testTimeout, false)
+	}, testTimeout, false, discardLogger())
 
 	report := checker.Check(context.Background())
 
@@ -63,7 +63,7 @@ func TestFailingPingerDegradesWithoutLeakingDetails(t *testing.T) {
 }
 
 func TestPingerRespectsTimeout(t *testing.T) {
-	checker := New(nil, map[string]Pinger{"mongo": fakePinger{delay: time.Second}}, testTimeout, false)
+	checker := New(nil, map[string]Pinger{"mongo": fakePinger{delay: time.Second}}, testTimeout, false, discardLogger())
 
 	startedAt := time.Now()
 	report := checker.Check(context.Background())

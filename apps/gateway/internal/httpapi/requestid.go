@@ -7,16 +7,16 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/ids"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rpc"
 )
 
 // Korelasyon kimliginin tasindigi baslik. Node servisleri ayni adi kullanir
 // (service-kit: REQUEST_ID_METADATA_KEY), boylece tek istek uctan uca izlenir.
 const RequestIDHeader = "X-Request-ID"
 
-// requestIDMetadataKey, korelasyon kimliginin gRPC metadata anahtari
-// (service-kit: REQUEST_ID_METADATA_KEY). Servis gunlugu ve hata yuku bu
-// degeri tasir; gateway gunluguyle ayni istegi eslemek icin tek anahtar budur.
-const requestIDMetadataKey = "x-request-id"
+// requestIDMetadataKey, korelasyon kimliginin gRPC metadata anahtari. Tanimi
+// rpc paketinde (tek yer): saglik sorgusu da ayni anahtardan okur (T8.3).
+const requestIDMetadataKey = rpc.RequestIDKey
 
 // requestIDLocalsKey, kimligin istek yerellerindeki anahtari. Disariya kapali
 // tip, baska bir paketin anahtariyla carpismayi onler.
@@ -43,9 +43,11 @@ func requestIDMiddleware(c fiber.Ctx) error {
 
 // ensureRequestID, istegin kimligini doner; yoksa uretip baglar.
 //
-// Ara katmana ULASMADAN dusen istekler icindir (govde siniri, bozuk baslik:
-// Fiber bunlari dogrudan hata isleyiciye verir). Kimliksiz hata cevabi
-// sozlesmeyi bozmaz ama gunlukle eslesmez; o istek sonradan bulunamazdi.
+// Ara katmanlar calismadan hata isleyiciye gelen istekler icin guvence. Fiber
+// sunucu hatalarinda (govde siniri) ara katmanlari once rota isleyicisi
+// olmadan calistirir (middleware.go); yontemi taninmayan istekte bu on gecis
+// yapilmaz ve hata dogrudan buraya gelir. Kimliksiz hata cevabi sozlesmeyi
+// bozmaz ama gunlukle eslesmez; o istek sonradan bulunamazdi.
 func ensureRequestID(c fiber.Ctx) string {
 	if requestID := requestIDOf(c); requestID != "" {
 		return requestID

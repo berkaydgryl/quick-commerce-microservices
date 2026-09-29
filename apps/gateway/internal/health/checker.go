@@ -7,13 +7,19 @@ package health
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
+	"runtime/debug"
 	"sort"
 	"sync"
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
+
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rpc"
 )
 
 // Durum degerleri. SERVING/NOT_SERVING sozlesmeden gelir; UNREACHABLE bizim
@@ -74,18 +80,25 @@ func (r Report) Healthy() bool {
 	return r.Status == ReportOK
 }
 
+// panicFailure, sorgusu panikleyen bagimliligin rapordaki kodu: gRPC'nin
+// "Internal" durum adi (Error alani yalnizca durum kodu tasir). Panigin kendisi
+// yalnizca gunluge yazilir.
+var panicFailure = codes.Internal.String()
+
 // Checker, kayitli servisleri ve bagimliliklari paralel sorgular.
 type Checker struct {
 	clients map[string]Client
 	pingers map[string]Pinger
 	timeout time.Duration
 	mock    bool
+	logger  *slog.Logger
 }
 
 // New, ada gore gRPC istemcilerinden ve gRPC disi bagimliliklardan (Mongo)
-// bir denetleyici kurar. pingers bos olabilir (MOCK'ta Mongo yoktur).
-func New(clients map[string]Client, pingers map[string]Pinger, timeout time.Duration, mock bool) *Checker {
-	return &Checker{clients: clients, pingers: pingers, timeout: timeout, mock: mock}
+// bir denetleyici kurar. pingers bos olabilir (MOCK'ta Mongo yoktur). logger,
+// sorguda yakalanan panigin kaydi icindir (T8.3).
+func New(clients map[string]Client, pingers map[string]Pinger, timeout time.Duration, mock bool, logger *slog.Logger) *Checker {
+	return &Checker{clients: clients, pingers: pingers, timeout: timeout, mock: mock, logger: logger}
 }
 
 // Check, tum servisleri AYNI ANDA sorgular.
@@ -101,7 +114,7 @@ func (c *Checker) Check(ctx context.Context) Report {
 		wait.Add(1)
 		go func(position int, name string, client Client) {
 			defer wait.Done()
-			statuses[position] = c.checkOne(ctx, name, client)
+			statuses[position] = c.guard(ctx, name, func() ServiceStatus { return c.checkOne(ctx, name, client) })
 		}(index, name, client)
 		index++
 	}
@@ -109,7 +122,7 @@ func (c *Checker) Check(ctx context.Context) Report {
 		wait.Add(1)
 		go func(position int, name string, pinger Pinger) {
 			defer wait.Done()
-			statuses[position] = c.pingOne(ctx, name, pinger)
+			statuses[position] = c.guard(ctx, name, func() ServiceStatus { return c.pingOne(ctx, name, pinger) })
 		}(index, name, pinger)
 		index++
 	}
@@ -128,6 +141,28 @@ func (c *Checker) Check(ctx context.Context) Report {
 		}
 	}
 	return report
+}
+
+// guard, tek bagimliligin sorgusunu calistirir; sorguda panik olursa o
+// bagimlilik ULASILAMAZ sayilir ve panik yigin iziyle gunluge yazilir (T8.3).
+//
+// NEDEN BURADA: sorgu ayri goroutine'de calisir; oradaki panik HTTP ara
+// katmaninin kurtarmasina (httpapi recover.go) ulasmaz, butun gateway'i
+// dusururdu. Kayit istegin korelasyon kimligini tasir: /healthz'in gunluk
+// satiriyla eslesir.
+func (c *Checker) guard(ctx context.Context, name string, probe func() ServiceStatus) (result ServiceStatus) {
+	defer func() {
+		if value := recover(); value != nil {
+			c.logger.ErrorContext(ctx, "saglik sorgusunda panik",
+				slog.String("service", name),
+				slog.String("requestId", rpc.RequestIDFrom(ctx)),
+				slog.String("panic", fmt.Sprint(value)),
+				slog.String("stack", string(debug.Stack())),
+			)
+			result = ServiceStatus{Name: name, Status: StatusUnreachable, Error: panicFailure}
+		}
+	}()
+	return probe()
 }
 
 func (c *Checker) checkOne(ctx context.Context, name string, client Client) ServiceStatus {

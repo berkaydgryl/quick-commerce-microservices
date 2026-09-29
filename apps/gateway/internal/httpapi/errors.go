@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 
@@ -12,10 +13,10 @@ import (
 
 // errorHandler, yakalanmamis her hatayi tek zarfa cevirir.
 //
-// Iki kaynak vardir: bizim urettigimiz *apperror.Error (dogrulama, bagimli
-// servis hatasi) ve Fiber'in kendi hatalari (bilinmeyen yol, yanlis fiil).
-// Ikisi de sozlukteki bir koda iner; ic mesaj ve sebep istemciye GITMEZ,
-// yalnizca gunluge yazilir.
+// Uc kaynak vardir: bizim urettigimiz *apperror.Error (dogrulama, bagimli
+// servis hatasi), Fiber'in kendi hatalari (bilinmeyen yol, yanlis fiil) ve
+// ucta yakalanan panik (recover.go, T8.3). Hepsi sozlukteki bir koda iner;
+// ic mesaj, sebep ve yigin izi istemciye GITMEZ, yalnizca gunluge yazilir.
 func errorHandler(logger *slog.Logger) fiber.ErrorHandler {
 	return func(c fiber.Ctx, err error) error {
 		appErr := toAppError(err)
@@ -27,19 +28,42 @@ func errorHandler(logger *slog.Logger) fiber.ErrorHandler {
 		if apperror.HTTPStatus(appErr.Code) >= http.StatusInternalServerError {
 			level = slog.LevelError
 		}
-		logger.Log(c.Context(), level, "istek hatayla dondu",
+		message := "istek hatayla dondu"
+		attrs := []any{
 			slog.String("path", c.Path()),
 			slog.String("code", string(appErr.Code)),
 			slog.String("requestId", requestID),
 			slog.Any("err", err),
-		)
+		}
+		// Fiber'in ham kodu (413, 405...) cevapta sozluk koduna iner; kendisi
+		// burada kalir (classify).
+		var fiberErr *fiber.Error
+		if errors.As(err, &fiberErr) {
+			attrs = append(attrs, slog.Int("rawStatus", fiberErr.Code))
+		}
+		// Panik (recover.go): ayri mesajla, yigin iziyle. Aranan ve alarm
+		// kurulan satir budur; iz yalnizca gunlukte durur.
+		var panicked *recoveredPanic
+		if errors.As(err, &panicked) {
+			message = "istek panikle dondu"
+			attrs = append(attrs, slog.String("stack", panicked.stack))
+		}
+		logger.Log(c.Context(), level, message, attrs...)
 
 		// nil harita "details": {} degil, alan yok olarak cikmali.
 		var details any
 		if len(appErr.Details) > 0 {
 			details = appErr.Details
 		}
-		return fail(c, appErr.Code, details)
+		written := fail(c, appErr.Code, details)
+
+		// Fiber'in sunucu hatasi on gecisinde istek satiri bekletildi
+		// (middleware.go): cevap artik son haliyle yazili, satir burada.
+		if startedAt, pending := c.Locals(pendingRequestLogKey{}).(time.Time); pending {
+			c.Locals(pendingRequestLogKey{}, nil)
+			logRequest(logger, c, startedAt)
+		}
+		return written
 	}
 }
 
@@ -69,7 +93,7 @@ func toAppError(err error) *apperror.Error {
 //	diger 4xx     -> VALIDATION_FAILED  (istek bicimsel olarak kabul edilemez)
 //	5xx ve digeri -> INTERNAL
 //
-// Ham kod kaybolmaz: gunlukteki "err" alaninda durur.
+// Ham kod kaybolmaz: gunlukteki "rawStatus" alaninda durur (errorHandler).
 func classify(rawStatus int) apperror.Code {
 	switch {
 	case rawStatus == http.StatusNotFound || rawStatus == http.StatusMethodNotAllowed:
