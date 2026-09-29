@@ -44,3 +44,20 @@ kurtarmayi imkansiz kilar.
 ## Ilgili
 
 ADR-01, ADR-02, ADR-05; gorev T1.5.
+
+## Ek (T9.1-T9.2, 2026-09-29): acilis seed'inin bicimi
+
+Ustteki karar degismez; "sayac acilista Mongo'dan seed edilir" cumlesini netlestirir. Uygulayan
+`apps/inventory-service` (`infrastructure/stock-source.ts`, `application/seed-counters.ts`).
+
+- Acilis seed'i yalnizca OLMAYAN sayaci yazar (`SET NX`). Var olan sayac rezervasyonlari yansitir
+  (T10); her acilista ezilseydi ayrilmis stok yeniden satilirdi.
+- Hepsini bastan yazmak bilincli bir komuttur: `reseed` (Redis bosaltildiginda ya da
+  kaybedildiginde) ve `seed` (kalici stok topluca degistiginde). T10'dan sonra `reseed` aktif
+  rezervasyon varken kosulmaz.
+- "Seed bitmeden servis hazir sayilmaz": sayaclar gRPC portu acilmadan ONCE yazilir; port kapaliyken
+  saglik yoklamasi da basarisizdir.
+- Redis'in `maxmemory-policy`'si `noeviction` degilse ya da okunamiyorsa servis acilmaz (roadmap
+  P1): tahliye eden bir Redis sayaci silebilir; bu fazla satistir.
+- Kayitlar Mongo'dan kacar kacar (500) okunur ve tek boru hattinda yazilir; butun koleksiyon
+  bellege alinmaz.
