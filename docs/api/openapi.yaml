@@ -92,6 +92,8 @@ paths:
               $ref: "#/components/headers/XRequestId"
             Cache-Control:
               $ref: "#/components/headers/NoStore"
+            Set-Cookie:
+              $ref: "#/components/headers/DeviceCookie"
           content:
             application/json:
               schema:
@@ -183,6 +185,8 @@ paths:
               $ref: "#/components/headers/XRequestId"
             Cache-Control:
               $ref: "#/components/headers/NoStore"
+            Set-Cookie:
+              $ref: "#/components/headers/DeviceCookie"
           content:
             application/json:
               schema:
@@ -877,8 +881,11 @@ paths:
         * HIGH bant: manuel inceleme (`202 RISK_REVIEW`), ödeme alınmaz.
         * CRITICAL bant: ret (`403 RISK_BLOCKED`), ödeme alınmaz.
 
-        Risk sinyalleri istemciden alınmaz (B9): gateway bağlantının IP'sini
-        order'a iletir; cihaz, oturum konumu ve hesap yaşı T8.1'de oturumdan gelir.
+        Risk sinyalleri istemciden alınmaz (B9): IP bağlantıdan; cihaz, önceki
+        giriş IP'si ve oturum konumu erişim jetonunun OTURUMUNDAN; hesap yaşı ve
+        hesabın açıldığı cihazdan açılmış hesap sayısı kullanıcı kaydından
+        (T8.1). Oturum kapatılmışsa (çıkış) jeton süresi dolmamış olsa bile
+        `401` döner.
       security:
         - bearerAuth: []
       parameters:
@@ -1197,6 +1204,15 @@ components:
         Şema adı büyük-küçük harfe duyarsızdır (`bearer` da kabul edilir).
 
   headers:
+    DeviceCookie:
+      description: |
+        Cihaz çerezi (T8.1): `getir_device=dvc_<32 hex>; Path=/; Max-Age=31536000;
+        HttpOnly; SameSite=Lax` (production'da `Secure`). Kimliği gateway üretir;
+        biçim dışı değer yok sayılır ve yenisi verilir. "Aynı cihazdan açılmış
+        hesap sayısı" risk sinyalinin anahtarıdır; istemci okumaz ve yazmaz.
+      schema:
+        type: string
+        example: getir_device=dvc_6d32883768ffcf73beed3d86fbe9f709; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax
     NoStore:
       description: |
         Jeton ya da kişisel veri taşıyan cevap tarayıcı önbelleğine ve araya
@@ -1316,6 +1332,16 @@ components:
                   message: "Oturumun sona ermiş. Tekrar giriş yapman gerekiyor."
                   details:
                     Authorization: gecersiz ya da suresi dolmus erisim jetonu
+                  requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+            sessionEnded:
+              summary: UNAUTHORIZED (oturum kapatılmış; yalnızca POST /v1/orders)
+              value:
+                success: false
+                error:
+                  code: UNAUTHORIZED
+                  message: "Oturumun sona ermiş. Tekrar giriş yapman gerekiyor."
+                  details:
+                    Authorization: oturum kapatilmis ya da suresi dolmus; yeniden giris yap
                   requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
 
     RefreshTokenRequired:

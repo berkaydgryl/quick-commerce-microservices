@@ -23,6 +23,13 @@ type UserStore interface {
 	ByPhone(ctx context.Context, phone string) (User, error)
 	// ByID, kimlige gore kullanici; yoksa ErrUserNotFound.
 	ByID(ctx context.Context, id string) (User, error)
+	// RecordLogin, girisi kullanici kaydina yazar ve ONCEKI durumu doner: son
+	// giris IP'si her zaman, konum yalnizca biliniyorsa (nil degilse) guncellenir.
+	// Tek atomik islemdir: es zamanli iki giris ayni "onceki IP"yi okumaz.
+	// Kullanici yoksa ErrUserNotFound.
+	RecordLogin(ctx context.Context, userID string, login LoginState) (LoginState, error)
+	// CountByRegistrationDevice, cihazdan acilmis hesap sayisi.
+	CountByRegistrationDevice(ctx context.Context, deviceID string) (int, error)
 }
 
 // SessionStore, oturum kayitlari.
@@ -35,4 +42,7 @@ type SessionStore interface {
 	Rotate(ctx context.Context, oldHash, newHash string, now, expiresAt time.Time) (Session, error)
 	// Revoke, ozeti verilen oturumu siler; silindiyse true.
 	Revoke(ctx context.Context, tokenHash string) (bool, error)
+	// ByID, kimlige gore oturum; yoksa ErrSessionNotFound. Suresi dolmus ama
+	// TTL'in henuz silmedigi kaydi da doner: sureyi cagiran denetler.
+	ByID(ctx context.Context, id string) (Session, error)
 }

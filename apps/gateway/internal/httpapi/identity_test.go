@@ -36,6 +36,7 @@ func protectedApp(orders *fakeOrders, profiles *fakeProfiles, logger *slog.Logge
 		ThreeDSConfirmer: orders,
 		OrderGetter:      orders,
 		ProfileGetter:    profiles,
+		CheckoutSignals:  &fakeSignals{},
 		AccessTokens:     testTokens(),
 		Logger:           logger,
 	})

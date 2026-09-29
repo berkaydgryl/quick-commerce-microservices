@@ -2,8 +2,8 @@
 // karakter (16 rastgele bayt). Kaynak @getir/core id.ts (ID_PREFIX,
 // ID_BODY_PATTERN); Node servisleri kimligi ayni bicimde uretir.
 //
-// NEDEN TEK PAKET: korelasyon kimligi (req), kullanici (usr) ve oturum (ses)
-// ayni bicimi kullanir; bicim iki yerde yazilsaydi bir gun ayrisirdi.
+// NEDEN TEK PAKET: korelasyon kimligi (req), kullanici (usr), oturum (ses) ve
+// cihaz (dvc) ayni bicimi kullanir; bicim iki yerde yazilsaydi bir gun ayrisirdi.
 package ids
 
 import (
@@ -17,6 +17,7 @@ const (
 	Request = "req"
 	User    = "usr"
 	Session = "ses"
+	Device  = "dvc"
 )
 
 // bodyBytes, kimlik govdesinin rastgele bayt sayisi: 16 bayt = 32 onaltilik.

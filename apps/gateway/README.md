@@ -33,6 +33,8 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `GET /v1/me`         | ✅ Jetondaki kullanıcının profili |
 | Kullanıcı kimliği    | ✅ `Authorization: Bearer` JWT (HS256); `X-User-Id` kalktı (T8.1) |
 | Kimlik deposu        | ✅ Mongo `users` + `sessions` (TTL indeksi); MOCK'ta bellek |
+| Sipariş risk sinyalleri | ✅ `CheckoutSignals`'ın 7 alanı oturum ve kullanıcı kaydından (T8.1); cihaz çerezi `getir_device` |
+| Demo personaları     | ✅ Ayşe, Zeynep, Can, Ali, Komşu (`pnpm seed:personas`; MOCK'ta açılışta bellekte) |
 | Idempotency-Key      | ✅ Zorunlu (yoksa 400); tekrar koruması ⏳ T8.2                 |
 | gRPC hata çevirisi   | ✅ `x-app-error` trailer'ı, yoksa durum kodu (`apperror`)       |
 | Görsel adresleri     | ✅ Göreli yol → mutlak URL (`ASSET_BASE_URL`, `internal/assets`) |
@@ -156,8 +158,9 @@ bilmez), `internal/authstore` (Mongo ve bellek depoları), `internal/httpapi` (`
   benzersiz, `sessions.expiresAt` TTL, `sessions.userId`). Mongo işlemleri de
   `GATEWAY_REQUEST_TIMEOUT_MS` ile sınırlıdır.
 - **Bilinen sınırlar:** çıkıştan sonra erişim jetonu süresi (≤ `JWT_TTL`) dolana kadar geçerli
-  kalır (durumsuz jetonun bedeli). Cevabı kaybolan yenilemede eski jeton harcanmış olur ve
-  yeniden giriş gerekir. Giriş denemesi sınırı ve `Idempotency-Key` tekrar koruması T8.2'dedir.
+  kalır (durumsuz jetonun bedeli); yalnızca sipariş kapanır (aşağıda). Cevabı kaybolan
+  yenilemede eski jeton harcanmış olur ve yeniden giriş gerekir. Giriş denemesi sınırı ve
+  `Idempotency-Key` tekrar koruması T8.2'dedir.
 
 ```bash
 curl -s localhost:8080/v1/auth/register -H 'Content-Type: application/json' -H 'Idempotency-Key: kayit-0001' \
@@ -167,6 +170,50 @@ TOKEN="$(curl -s localhost:8080/v1/auth/login -H 'Content-Type: application/json
 curl -s localhost:8080/v1/me -H "Authorization: Bearer $TOKEN" | jq
 curl -s localhost:8080/v1/auth/refresh -H 'Content-Type: application/json' -d '{"refreshToken":"<yenileme>"}' | jq
 curl -s localhost:8080/v1/auth/logout -H 'Content-Type: application/json' -d '{"refreshToken":"<yenileme>"}' | jq
+```
+
+## Sipariş risk sinyalleri (T8.1)
+
+`POST /v1/orders` order-service'e `CheckoutSignals`'ı (7 alan) gönderir; hiçbiri istemcinin
+beyanından gelmez (B9). Okuyan tek yer `auth.Service.CheckoutSignals`; biçim doğrulamasından
+**sonra** okunur (biçimsiz istek veritabanına gitmez).
+
+| Alan | Kaynak |
+| ---- | ------ |
+| `ip_address` | İsteğin bağlantısı (`c.IP()`; `X-Forwarded-For` okunmaz) |
+| `device_id` | Oturumun açıldığı cihaz: gateway'in verdiği `getir_device` çerezi (`dvc_` + 32 hex; HttpOnly, SameSite=Lax, 1 yıl, production'da Secure). Kayıt ve girişte verilir; biçim dışı değer yok sayılır, yenisi üretilir |
+| `accounts_on_device` | Hesabın **açıldığı** cihazdan açılmış hesap sayısı (`users.registrationDeviceId`). Girişler sayılmaz: aynı tarayıcıdan başka hesaplara girmek (aile, demo personaları) sayıyı artırmaz; aynı cihazdan açılan her hesap artırır. 3+ risk-svc'de kesin kural (veto). Cihazı bilinmeyen eski hesapta 0 = ölçülmedi |
+| `previous_ip_address` | Kullanıcının bir önceki girişinin IP'si (girişte `users.lastLoginIp`'den oturuma yazılır; tek atomik güncelleme). İlk oturumda boş |
+| `session_location`, `ip_city` | IP'den konum çözücü (`auth.Locator`); yerelde/MOCK'ta çözücü yok (GeoIP bekleyen iş). Çözülemezse oturum kullanıcının **son bilinen** konumunu devralır, şehir boş kalır; hiç bilinmiyorsa gönderilmez ve geofence tetiklenmez |
+| `account_created_at` | `users.createdAt` |
+
+Oturumu kapanmış (çıkış yapılmış ya da süresi dolmuş) jetonla sipariş verilemez: 401
+`UNAUTHORIZED` (`details.Authorization`). Jeton süresince profil okunabilir; kapanan
+oturumla sinyalleri silip sipariş vermek mümkün olmaz.
+
+## Demo personaları (T8.1)
+
+Risk bandlarının her biri için hazır hesap (roadmap "Test personaları"). Hesaplar ve gateway
+sinyalleri `internal/persona` (`personas.json`, `addresses.json`), sipariş geçmişleri
+order-service'te (ADR-05); iki taraf aynı kimlikleri kullanır ve bir test karşılaştırır.
+**Yalnızca yerel/MOCK:** `NODE_ENV=production`'da seed de bellek yüklemesi de reddeder.
+
+| Persona | Telefon | Beklenen band | Neden |
+| ------- | ------- | ------------- | ----- |
+| Ayşe | `+905550000001` | LOW → kart | 30 günlük hesap, 5 teslimat |
+| Zeynep | `+905550000002` | MEDIUM → 3DS | 1 saatlik hesap, teslimat yok |
+| Can | `+905550000003` | HIGH → inceleme | 10 saatlik, %75 iptal, Ankara'dan oturum; **sepet 360 TL'yi geçerse** sepet anomalisi |
+| Ali | `+905550000004` | CRITICAL → 403 | Hesabının açıldığı cihazdan 4 hesap (veto), İzmir'den oturum |
+| Komşu | `+905550000005` | LOW → kart | 90 günlük, 12 teslimat; stok yarışında ikinci tarayıcı |
+
+Demo şifresi hepsinde `Demo-Persona-2026` (herkese açık; gizli değil). Ali'nin cihazındaki diğer
+üç hesap `+905550000014/24/34`. Zeynep ve Can "24 saatten yeni" olduğu için seed'den 24 saat
+sonra bantları kayar: demo öncesi seed yeniden çalıştırılır (tekrarı güvenli). Ali'nin "hızlı
+sipariş" sinyali (3 sn altı) ancak betikle gelir; elle denemede de veto yüzünden CRITICAL kalır.
+
+```bash
+pnpm seed:personas   # kokten: order-service gecmisi + gateway hesaplari, .env ile (Go gerekir)
+# MOCK=true iken seed gerekmez: gateway ve order-service acilista bellege yukler.
 ```
 
 ## Sipariş uçları (T7.5)

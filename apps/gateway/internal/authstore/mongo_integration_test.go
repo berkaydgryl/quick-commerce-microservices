@@ -247,6 +247,9 @@ func TestIndexesAreDeclaredAndIdempotent(t *testing.T) {
 	if _, found := sessions["userId"]; !found {
 		t.Errorf("sessions.userId indeksi olmali: %v", sessions)
 	}
+	if index, found := users["registrationDeviceId"]; !found || index["sparse"] != true {
+		t.Errorf("users.registrationDeviceId seyrek indeksi olmali: %v", users)
+	}
 }
 
 func TestServiceFlowOnMongo(t *testing.T) {
@@ -343,5 +346,143 @@ func isZero(value any) bool {
 		return number == 0
 	default:
 		return false
+	}
+}
+
+func TestUserSignalFieldsRoundTrip(t *testing.T) {
+	users := authstore.NewMongoUsers(testDatabase(t))
+	user := newUser("+905321234567")
+	user.RegistrationDeviceID = ids.New(ids.Device)
+	user.LastLoginIP = "85.105.1.1"
+	user.LastLocation = &auth.GeoPoint{Lat: 39.93, Lng: 32.86}
+	user.Addresses = []auth.SavedAddress{{Title: "Ev", Line: "Moda Cad. 12", Location: auth.GeoPoint{Lat: 40.98, Lng: 29.02}, Note: "zil calismiyor"}}
+	if err := users.Create(t.Context(), user); err != nil {
+		t.Fatalf("kullanici yazilamadi: %v", err)
+	}
+
+	got, err := users.ByID(t.Context(), user.ID)
+
+	if err != nil || got.RegistrationDeviceID != user.RegistrationDeviceID || got.LastLoginIP != user.LastLoginIP ||
+		got.LastLocation == nil || *got.LastLocation != *user.LastLocation || len(got.Addresses) != 1 || got.Addresses[0] != user.Addresses[0] {
+		t.Errorf("sinyal alanlari ve adresler aynen donmeli: %+v %v", got, err)
+	}
+}
+
+func TestRecordLoginReturnsPreviousStateAtomically(t *testing.T) {
+	users := authstore.NewMongoUsers(testDatabase(t))
+	user := newUser("+905321234567")
+	user.LastLoginIP = "85.105.1.1"
+	user.LastLocation = &auth.GeoPoint{Lat: 39.93, Lng: 32.86}
+	if err := users.Create(t.Context(), user); err != nil {
+		t.Fatalf("kullanici yazilamadi: %v", err)
+	}
+
+	// Konum bilinmiyor: yalnizca IP guncellenir, son konum korunur.
+	previous, err := users.RecordLogin(t.Context(), user.ID, auth.LoginState{IPAddress: "85.105.1.2"})
+	if err != nil || previous.IPAddress != "85.105.1.1" || previous.Location == nil || *previous.Location != *user.LastLocation {
+		t.Fatalf("onceki durum donmeli: %+v %v", previous, err)
+	}
+	after, err := users.ByID(t.Context(), user.ID)
+	if err != nil || after.LastLoginIP != "85.105.1.2" || after.LastLocation == nil || *after.LastLocation != *user.LastLocation {
+		t.Errorf("IP guncellenmeli, konum korunmali: %+v %v", after, err)
+	}
+
+	// Es zamanli girislerde her giris FARKLI bir onceki IP gorur: once okuyup
+	// sonra yazan bir uygulamada iki giris ayni onceki degeri gorurdu.
+	var mu sync.Mutex
+	seen := map[string]int{}
+	errs := race(func() error {
+		previous, err := users.RecordLogin(t.Context(), user.ID, auth.LoginState{IPAddress: ids.New("ip")})
+		mu.Lock()
+		seen[previous.IPAddress]++
+		mu.Unlock()
+		return err
+	})
+	for _, err := range errs {
+		if err != nil {
+			t.Errorf("es zamanli giris hatasi: %v", err)
+		}
+	}
+	if len(seen) != concurrency {
+		t.Errorf("%d giris %d farkli onceki IP gormeli, %d gordu: %v", concurrency, concurrency, len(seen), seen)
+	}
+	if _, err := users.RecordLogin(t.Context(), ids.New(ids.User), auth.LoginState{IPAddress: "1.1.1.1"}); !errors.Is(err, auth.ErrUserNotFound) {
+		t.Errorf("olmayan kullanici ErrUserNotFound donmeli: %v", err)
+	}
+}
+
+func TestCountByRegistrationDevice(t *testing.T) {
+	users := authstore.NewMongoUsers(testDatabase(t))
+	shared := ids.New(ids.Device)
+	for i, device := range []string{shared, shared, shared, ids.New(ids.Device), ""} {
+		user := newUser("+90532123456" + string(rune('0'+i)))
+		user.RegistrationDeviceID = device
+		if err := users.Create(t.Context(), user); err != nil {
+			t.Fatalf("kullanici yazilamadi: %v", err)
+		}
+	}
+
+	count, err := users.CountByRegistrationDevice(t.Context(), shared)
+
+	if err != nil || count != 3 {
+		t.Errorf("ortak cihazdan 3 hesap sayilmali: %d %v", count, err)
+	}
+}
+
+func TestSessionSignalFieldsAndByID(t *testing.T) {
+	sessions := authstore.NewMongoSessions(testDatabase(t))
+	session := newSession(ids.New(ids.User), "ozet", time.Now().Add(time.Hour))
+	session.DeviceID = ids.New(ids.Device)
+	session.PreviousIPAddress = "85.105.1.1"
+	session.IPCity = "Ankara"
+	session.Location = &auth.GeoPoint{Lat: 39.93, Lng: 32.86}
+	if err := sessions.Create(t.Context(), session); err != nil {
+		t.Fatalf("oturum yazilamadi: %v", err)
+	}
+	now := time.Now()
+	if _, err := sessions.Rotate(t.Context(), "ozet", "yeni-ozet", now, now.Add(time.Hour)); err != nil {
+		t.Fatalf("yenileme basarisiz: %v", err)
+	}
+
+	got, err := sessions.ByID(t.Context(), session.ID)
+
+	// Yenileme yalnizca jeton alanlarina dokunur; sinyaller oturumla yasar.
+	if err != nil || got.DeviceID != session.DeviceID || got.PreviousIPAddress != "85.105.1.1" || got.IPCity != "Ankara" ||
+		got.Location == nil || *got.Location != *session.Location || got.TokenHash != "yeni-ozet" {
+		t.Errorf("sinyal alanlari yenilemeden sonra da okunmali: %+v %v", got, err)
+	}
+	if _, err := sessions.ByID(t.Context(), ids.New(ids.Session)); !errors.Is(err, auth.ErrSessionNotFound) {
+		t.Errorf("olmayan oturum ErrSessionNotFound donmeli: %v", err)
+	}
+}
+
+func TestReplaceUsersIsRepeatableAndClearsOldSessions(t *testing.T) {
+	db := testDatabase(t)
+	users, sessions := authstore.NewMongoUsers(db), authstore.NewMongoSessions(db)
+	persona := newUser("+905550000001")
+	// Ayni demo numarasiyla elle acilmis bir hesap ve oturumu: seed ikisini de temizler.
+	squatter := newUser(persona.Phone)
+	if err := users.Create(t.Context(), squatter); err != nil {
+		t.Fatalf("hesap yazilamadi: %v", err)
+	}
+	if err := sessions.Create(t.Context(), newSession(squatter.ID, "elle-ozet", time.Now().Add(time.Hour))); err != nil {
+		t.Fatalf("oturum yazilamadi: %v", err)
+	}
+
+	for run := 1; run <= 2; run++ {
+		if err := authstore.ReplaceUsers(t.Context(), db, []auth.User{persona}); err != nil {
+			t.Fatalf("%d. seed basarisiz: %v", run, err)
+		}
+	}
+
+	count, err := db.Collection(authstore.UsersCollection).CountDocuments(t.Context(), bson.D{})
+	if err != nil || count != 1 {
+		t.Errorf("iki calismadan sonra tek hesap kalmali: %d %v", count, err)
+	}
+	if got, err := users.ByPhone(t.Context(), persona.Phone); err != nil || got.ID != persona.ID {
+		t.Errorf("numara personaya ait olmali: %+v %v", got, err)
+	}
+	if left, err := db.Collection(authstore.SessionsCollection).CountDocuments(t.Context(), bson.D{}); err != nil || left != 0 {
+		t.Errorf("silinen hesabin oturumu da silinmeli: %d %v", left, err)
 	}
 }

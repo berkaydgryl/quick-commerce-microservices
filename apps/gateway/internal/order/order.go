@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/common/v1"
 	orderv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/order/v1"
@@ -89,9 +90,9 @@ func (s *Service) Place(ctx context.Context, in PlaceInput) (Placement, error) {
 		PaymentMethod:  paymentv1.PaymentMethod_PAYMENT_METHOD_CARD,
 		CardToken:      in.CardToken,
 		IdempotencyKey: in.IdempotencyKey,
-		// Risk sinyalleri istemciden ALINMAZ (B9): gateway bugun yalnizca
-		// baglantinin IP'sini bilir; digerleri T8.1'de oturumdan gelir.
-		Signals: &orderv1.CheckoutSignals{IpAddress: in.ClientIP},
+		// Risk sinyalleri istemciden ALINMAZ (B9): IP baglantidan, digerleri
+		// oturum ve kullanici kaydindan (T8.1).
+		Signals: toProtoSignals(in.Signals),
 	}
 
 	response, err := rpc.Invoke(ctx, s.timeout, service, "CreateOrder", s.rpc.CreateOrder, request)
@@ -128,4 +129,24 @@ func (s *Service) Get(ctx context.Context, userID, orderID string) (Order, error
 		return Order{}, rpc.RenameFields(err, getFieldNames)
 	}
 	return toOrder(response.GetOrder())
+}
+
+// toProtoSignals, sinyalleri proto'ya cevirir. Bilinmeyen konum ve hesap yasi
+// gonderilmez (mesaj alani yok = bilinmiyor); bos metin ve 0 sayi zaten
+// sozlesmede "yok" demektir.
+func toProtoSignals(signals Signals) *orderv1.CheckoutSignals {
+	out := &orderv1.CheckoutSignals{
+		IpAddress:         signals.IPAddress,
+		IpCity:            signals.IPCity,
+		DeviceId:          signals.DeviceID,
+		AccountsOnDevice:  signals.AccountsOnDevice,
+		PreviousIpAddress: signals.PreviousIPAddress,
+	}
+	if signals.SessionLocation != nil {
+		out.SessionLocation = &commonv1.GeoPoint{Lat: signals.SessionLocation.Lat, Lng: signals.SessionLocation.Lng}
+	}
+	if !signals.AccountCreatedAt.IsZero() {
+		out.AccountCreatedAt = timestamppb.New(signals.AccountCreatedAt)
+	}
+	return out
 }

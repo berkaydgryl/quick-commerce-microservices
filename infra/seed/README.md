@@ -5,12 +5,14 @@ henüz sahibi ayakta olmayan veri ve bu düzenin açıklaması var.
 
 ## Kim neyi yükler
 
-| Veri                                     | Sahibi (ADR-05) | Nerede                                              | Ne zaman yüklenir                  |
-| ---------------------------------------- | --------------- | --------------------------------------------------- | ---------------------------------- |
-| 5 kategori, 15 ürün, 6 market, 71 teklif | catalog         | `apps/catalog-service/src/infrastructure/fixtures/` | `pnpm seed` (T4.1, pazaryeri T4.8) |
-| 3 hazır adres                            | gateway (users) | `infra/seed/data/addresses.json`                    | T8.1 — `users.addresses[]`         |
-| Stok                                     | inventory       | —                                                   | T9.1                               |
-| 3 kurye                                  | courier         | —                                                   | T13.1                              |
+| Veri                                     | Sahibi (ADR-05) | Nerede                                                             | Ne zaman yüklenir                                 |
+| ---------------------------------------- | --------------- | ------------------------------------------------------------------ | ------------------------------------------------- |
+| 5 kategori, 15 ürün, 6 market, 71 teklif | catalog         | `apps/catalog-service/src/infrastructure/fixtures/`                | `pnpm seed` (T4.1, pazaryeri T4.8)                |
+| 3 hazır adres                            | gateway (users) | `apps/gateway/internal/persona/addresses.json`                     | `pnpm seed:personas` (T8.1) — `users.addresses[]` |
+| 5 persona hesabı + Ali'nin 3 ek hesabı   | gateway (users) | `apps/gateway/internal/persona/personas.json`                      | `pnpm seed:personas` (T8.1); MOCK'ta açılışta     |
+| Personaların sipariş geçmişi             | order           | `apps/order-service/src/infrastructure/fixtures/persona-orders.ts` | `pnpm seed:personas` (T8.1); MOCK'ta açılışta     |
+| Stok                                     | inventory       | —                                                                  | T9.1                                              |
+| 3 kurye                                  | courier         | —                                                                  | T13.1                                             |
 
 **Neden veri servisin içinde (roadmap `infra/seed/data/*.json` diyordu):**
 
@@ -22,7 +24,8 @@ henüz sahibi ayakta olmayan veri ve bu düzenin açıklaması var.
 
 ## Adresler
 
-`data/addresses.json`, `@getir/contracts` içindeki `savedAddressSchema` (kayıtlı adres: teslimat
+`apps/gateway/internal/persona/addresses.json` (T8.1'e kadar burada, `data/addresses.json`;
+sahibi gateway ayağa kalkınca oraya taşındı), `@getir/contracts` içindeki `savedAddressSchema` (kayıtlı adres: teslimat
 adresi + etiket + not) biçimindedir; siparişe giderken yalnızca `line` ve `location` taşınır (T7.5) ve
 roadmap'in adres tablosunu izler:
 
@@ -32,14 +35,24 @@ roadmap'in adres tablosunu izler:
 | İş     | Beşiktaş       | 3 market: Migros Jet – Beşiktaş, Carrefour Express, A101 – Abbasağa (**kapalı**) |
 | Yazlık | Şile           | Boş liste: "bölgende market yok"                                                 |
 
-`users` koleksiyonu gateway'e aittir ve T8.1'de açılır; adresler o gün oraya yüklenecek. O güne
-kadar bu dosya, gerçek `ListNearbyMarkets` use-case'ine seed edilmiş Mongo üzerinden verilir
+`users` koleksiyonu gateway'e aittir (T8.1): adresler persona hesaplarının `addresses[]`
+alanına yüklenir; okuyan uç web'in adres seçimiyle (T9.5) gelir. Dosya ayrıca gerçek
+`ListNearbyMarkets` use-case'ine seed edilmiş Mongo üzerinden sınanır
 (`apps/catalog-service/test/integration/mongo-catalog.spec.ts`, T4.8): konum verisinde bir kayma
 olursa demo senaryosu bozulmadan önce test kırmızı olur.
+
+## Personalar (T8.1)
+
+Risk bandlarının her biri için hazır hesap: Ayşe (LOW), Zeynep (MEDIUM), Can (HIGH), Ali
+(CRITICAL), Komşu (LOW). Hesaplar ve gateway sinyalleri (hesap yaşı, hesabın açıldığı cihaz, son
+bilinen konum) gateway'de; sipariş geçmişleri order-service'te. Telefonlar, demo şifresi ve
+beklenen bantlar: `apps/gateway/README.md` "Demo personaları". Yalnızca yerel/MOCK: production'da
+iki seed de reddeder.
 
 ## Komutlar
 
 ```bash
 pnpm infra:up     # Mongo (replica set) + Redis
 pnpm seed         # catalog'u derler ve katalogu bastan yazar (tekrar kosmak guvenli)
+pnpm seed:personas  # personalar: order-service gecmisi + gateway hesaplari (tekrar kosmak guvenli, Go gerekir)
 ```

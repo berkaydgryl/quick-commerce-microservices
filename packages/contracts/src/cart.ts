@@ -71,7 +71,7 @@ export const deliveryAddressSchema = z.object({
 /**
  * Kullanicinin KAYITLI adresi (adres defteri; T8.1 users.addresses[]):
  * teslimat adresi + etiket + istege bagli not. Demo adresleri
- * (infra/seed/data/addresses.json) bu bicimdedir. Siparise giderken yalnizca
+ * (apps/gateway/internal/persona/addresses.json) bu bicimdedir. Siparise giderken yalnizca
  * teslimat adresi kismi (line, location) tasinir.
  */
 export const savedAddressSchema = deliveryAddressSchema.extend({

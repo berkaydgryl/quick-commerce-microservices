@@ -62,3 +62,39 @@ func TestBuildAuthFailsFastWhenMongoIsUnreachable(t *testing.T) {
 		t.Errorf("sunucu secim suresi uygulanmali, %v surdu", elapsed)
 	}
 }
+
+func TestMockModePreloadsLoginablePersonas(t *testing.T) {
+	parts, err := buildAuth(t.Context(), authConfig(true, ""), bcrypt.MinCost)
+	if err != nil {
+		t.Fatalf("MOCK kurulumu basarmali: %v", err)
+	}
+	if parts.personas != 8 {
+		t.Errorf("5 persona + Ali'nin 3 ek hesabi yuklenmeli, %d yuklendi", parts.personas)
+	}
+
+	// Demo sifresiyle giris: seed ile ayni hesap, ayni sifre.
+	grant, err := parts.service.Login(context.Background(),
+		auth.LoginInput{Phone: "+905550000004", Password: "Demo-Persona-2026"}, auth.RequestMeta{IPAddress: "127.0.0.1"})
+	if err != nil || grant.User.FullName != "Ali Çelik" {
+		t.Fatalf("Ali demo sifresiyle girebilmeli: %+v %v", grant.User, err)
+	}
+	identity, err := parts.tokens.Verify(grant.AccessToken)
+	if err != nil {
+		t.Fatalf("jeton dogrulanamadi: %v", err)
+	}
+	signals, err := parts.service.CheckoutSignals(context.Background(), identity, "127.0.0.1")
+	if err != nil || signals.AccountsOnDevice != 4 || signals.SessionLocation == nil {
+		t.Errorf("Ali'nin sinyalleri: cihazda 4 hesap ve Izmir konumu: %+v %v", signals, err)
+	}
+}
+
+func TestProductionMockLoadsNoPersonas(t *testing.T) {
+	cfg := authConfig(true, "")
+	cfg.NodeEnv = config.EnvProduction
+
+	parts, err := buildAuth(t.Context(), cfg, bcrypt.MinCost)
+
+	if err != nil || parts.personas != 0 {
+		t.Errorf("production'da persona yuklenmemeli: %d %v", parts.personas, err)
+	}
+}

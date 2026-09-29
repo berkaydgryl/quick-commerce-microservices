@@ -58,6 +58,36 @@ func (m *MemoryUsers) ByID(_ context.Context, id string) (auth.User, error) {
 	return user, nil
 }
 
+// RecordLogin, girisi tek kilit altinda yazar ve onceki durumu doner.
+func (m *MemoryUsers) RecordLogin(_ context.Context, userID string, login auth.LoginState) (auth.LoginState, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	user, found := m.byID[userID]
+	if !found {
+		return auth.LoginState{}, auth.ErrUserNotFound
+	}
+	previous := auth.LoginState{IPAddress: user.LastLoginIP, Location: user.LastLocation}
+	user.LastLoginIP = login.IPAddress
+	if login.Location != nil {
+		user.LastLocation = login.Location
+	}
+	m.byID[userID] = user
+	return previous, nil
+}
+
+// CountByRegistrationDevice, cihazdan acilmis hesap sayisi.
+func (m *MemoryUsers) CountByRegistrationDevice(_ context.Context, deviceID string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	count := 0
+	for _, user := range m.byID {
+		if user.RegistrationDeviceID == deviceID {
+			count++
+		}
+	}
+	return count, nil
+}
+
 // MemorySessions, bellek ici sessions.
 type MemorySessions struct {
 	mu     sync.Mutex
@@ -98,4 +128,17 @@ func (m *MemorySessions) Revoke(_ context.Context, tokenHash string) (bool, erro
 	_, found := m.byHash[tokenHash]
 	delete(m.byHash, tokenHash)
 	return found, nil
+}
+
+// ByID, kimlige gore oturum. Oturum sayisi kucuk (bellek yalnizca MOCK ve
+// test icindir); dogrusal arama yeterli.
+func (m *MemorySessions) ByID(_ context.Context, id string) (auth.Session, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, session := range m.byHash {
+		if session.ID == id {
+			return session, nil
+		}
+	}
+	return auth.Session{}, auth.ErrSessionNotFound
 }

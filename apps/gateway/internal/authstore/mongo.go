@@ -27,21 +27,43 @@ const (
 )
 
 type userDocument struct {
-	ID           string    `bson:"_id"`
-	Phone        string    `bson:"phone"`
-	PasswordHash string    `bson:"passwordHash"`
-	FullName     string    `bson:"fullName"`
-	CreatedAt    time.Time `bson:"createdAt"`
+	ID                   string            `bson:"_id"`
+	Phone                string            `bson:"phone"`
+	PasswordHash         string            `bson:"passwordHash"`
+	FullName             string            `bson:"fullName"`
+	CreatedAt            time.Time         `bson:"createdAt"`
+	RegistrationDeviceID string            `bson:"registrationDeviceId,omitempty"`
+	LastLoginIP          string            `bson:"lastLoginIp,omitempty"`
+	LastLocation         *geoPointDocument `bson:"lastLocation,omitempty"`
+	Addresses            []addressDocument `bson:"addresses,omitempty"`
 }
 
 type sessionDocument struct {
-	ID          string    `bson:"_id"`
-	UserID      string    `bson:"userId"`
-	TokenHash   string    `bson:"tokenHash"`
-	CreatedAt   time.Time `bson:"createdAt"`
-	RefreshedAt time.Time `bson:"refreshedAt"`
-	ExpiresAt   time.Time `bson:"expiresAt"`
-	IPAddress   string    `bson:"ipAddress,omitempty"`
+	ID                string            `bson:"_id"`
+	UserID            string            `bson:"userId"`
+	TokenHash         string            `bson:"tokenHash"`
+	CreatedAt         time.Time         `bson:"createdAt"`
+	RefreshedAt       time.Time         `bson:"refreshedAt"`
+	ExpiresAt         time.Time         `bson:"expiresAt"`
+	IPAddress         string            `bson:"ipAddress,omitempty"`
+	DeviceID          string            `bson:"deviceId,omitempty"`
+	PreviousIPAddress string            `bson:"previousIpAddress,omitempty"`
+	IPCity            string            `bson:"ipCity,omitempty"`
+	Location          *geoPointDocument `bson:"location,omitempty"`
+}
+
+// geoPointDocument, konum. GeoJSON degil: konum uzerinde cografi sorgu yok,
+// yalnizca risk sinyali olarak tasinir.
+type geoPointDocument struct {
+	Lat float64 `bson:"lat"`
+	Lng float64 `bson:"lng"`
+}
+
+type addressDocument struct {
+	Title    string           `bson:"title"`
+	Line     string           `bson:"line"`
+	Location geoPointDocument `bson:"location"`
+	Note     string           `bson:"note,omitempty"`
 }
 
 // EnsureIndexes, indeksleri kurar; tekrar calistirmak guvenlidir (ayni tanim).
@@ -52,6 +74,9 @@ type sessionDocument struct {
 func EnsureIndexes(ctx context.Context, db *mongo.Database) error {
 	if _, err := db.Collection(UsersCollection).Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "phone", Value: 1}}, Options: options.Index().SetName("phone_unique").SetUnique(true)},
+		// "Ayni cihazdan acilmis hesap" sayimi (T8.1). Seyrek: cihazi
+		// bilinmeyen eski hesaplar indekse girmez.
+		{Keys: bson.D{{Key: "registrationDeviceId", Value: 1}}, Options: options.Index().SetName("registrationDeviceId").SetSparse(true)},
 	}); err != nil {
 		return fmt.Errorf("users indeksleri: %w", err)
 	}
@@ -78,9 +103,7 @@ func NewMongoUsers(db *mongo.Database) *MongoUsers {
 // Create, kullaniciyi yazar; telefon kayitliysa auth.ErrPhoneTaken. Karar
 // benzersiz indekstedir: "once bak, sonra yaz" iki es zamanli kayitta yarisirdi.
 func (m *MongoUsers) Create(ctx context.Context, user auth.User) error {
-	_, err := m.collection.InsertOne(ctx, userDocument{
-		ID: user.ID, Phone: user.Phone, PasswordHash: user.PasswordHash, FullName: user.FullName, CreatedAt: user.CreatedAt,
-	})
+	_, err := m.collection.InsertOne(ctx, toUserDocument(user))
 	if mongo.IsDuplicateKeyError(err) {
 		return auth.ErrPhoneTaken
 	}
@@ -109,7 +132,37 @@ func (m *MongoUsers) findOne(ctx context.Context, filter bson.D) (auth.User, err
 	if err != nil {
 		return auth.User{}, fmt.Errorf("kullanici okunamadi: %w", err)
 	}
-	return auth.User{ID: doc.ID, Phone: doc.Phone, PasswordHash: doc.PasswordHash, FullName: doc.FullName, CreatedAt: doc.CreatedAt}, nil
+	return fromUserDocument(doc), nil
+}
+
+// RecordLogin, girisi TEK atomik guncellemeyle yazar ve guncellemeden ONCEKI
+// degerleri doner: es zamanli iki giris ayni "onceki IP"yi okuyamaz.
+func (m *MongoUsers) RecordLogin(ctx context.Context, userID string, login auth.LoginState) (auth.LoginState, error) {
+	set := bson.D{{Key: "lastLoginIp", Value: login.IPAddress}}
+	if login.Location != nil {
+		set = append(set, bson.E{Key: "lastLocation", Value: toGeoPointDocument(*login.Location)})
+	}
+	opts := options.FindOneAndUpdate().
+		SetReturnDocument(options.Before).
+		SetProjection(bson.D{{Key: "lastLoginIp", Value: 1}, {Key: "lastLocation", Value: 1}})
+	var before userDocument
+	err := m.collection.FindOneAndUpdate(ctx, bson.D{{Key: "_id", Value: userID}}, bson.D{{Key: "$set", Value: set}}, opts).Decode(&before)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return auth.LoginState{}, auth.ErrUserNotFound
+	}
+	if err != nil {
+		return auth.LoginState{}, fmt.Errorf("giris kaydedilemedi: %w", err)
+	}
+	return auth.LoginState{IPAddress: before.LastLoginIP, Location: fromGeoPointDocument(before.LastLocation)}, nil
+}
+
+// CountByRegistrationDevice, cihazdan acilmis hesap sayisi (seyrek indeksle).
+func (m *MongoUsers) CountByRegistrationDevice(ctx context.Context, deviceID string) (int, error) {
+	count, err := m.collection.CountDocuments(ctx, bson.D{{Key: "registrationDeviceId", Value: deviceID}})
+	if err != nil {
+		return 0, fmt.Errorf("cihazdaki hesaplar sayilamadi: %w", err)
+	}
+	return int(count), nil
 }
 
 // MongoSessions, sessions koleksiyonu.
@@ -163,10 +216,53 @@ func (m *MongoSessions) Revoke(ctx context.Context, tokenHash string) (bool, err
 	return result.DeletedCount > 0, nil
 }
 
+// ByID, kimlige gore oturum.
+func (m *MongoSessions) ByID(ctx context.Context, id string) (auth.Session, error) {
+	var doc sessionDocument
+	err := m.collection.FindOne(ctx, bson.D{{Key: "_id", Value: id}}).Decode(&doc)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return auth.Session{}, auth.ErrSessionNotFound
+	}
+	if err != nil {
+		return auth.Session{}, fmt.Errorf("oturum okunamadi: %w", err)
+	}
+	return fromSessionDocument(doc), nil
+}
+
+func toUserDocument(user auth.User) userDocument {
+	doc := userDocument{
+		ID: user.ID, Phone: user.Phone, PasswordHash: user.PasswordHash, FullName: user.FullName, CreatedAt: user.CreatedAt,
+		RegistrationDeviceID: user.RegistrationDeviceID, LastLoginIP: user.LastLoginIP,
+		LastLocation: toGeoPointDocumentPtr(user.LastLocation),
+	}
+	for _, address := range user.Addresses {
+		doc.Addresses = append(doc.Addresses, addressDocument{
+			Title: address.Title, Line: address.Line, Location: toGeoPointDocument(address.Location), Note: address.Note,
+		})
+	}
+	return doc
+}
+
+func fromUserDocument(doc userDocument) auth.User {
+	user := auth.User{
+		ID: doc.ID, Phone: doc.Phone, PasswordHash: doc.PasswordHash, FullName: doc.FullName, CreatedAt: doc.CreatedAt,
+		RegistrationDeviceID: doc.RegistrationDeviceID, LastLoginIP: doc.LastLoginIP,
+		LastLocation: fromGeoPointDocument(doc.LastLocation),
+	}
+	for _, address := range doc.Addresses {
+		user.Addresses = append(user.Addresses, auth.SavedAddress{
+			Title: address.Title, Line: address.Line, Location: auth.GeoPoint(address.Location), Note: address.Note,
+		})
+	}
+	return user
+}
+
 func toSessionDocument(session auth.Session) sessionDocument {
 	return sessionDocument{
 		ID: session.ID, UserID: session.UserID, TokenHash: session.TokenHash, CreatedAt: session.CreatedAt,
 		RefreshedAt: session.RefreshedAt, ExpiresAt: session.ExpiresAt, IPAddress: session.IPAddress,
+		DeviceID: session.DeviceID, PreviousIPAddress: session.PreviousIPAddress, IPCity: session.IPCity,
+		Location: toGeoPointDocumentPtr(session.Location),
 	}
 }
 
@@ -174,5 +270,29 @@ func fromSessionDocument(doc sessionDocument) auth.Session {
 	return auth.Session{
 		ID: doc.ID, UserID: doc.UserID, TokenHash: doc.TokenHash, CreatedAt: doc.CreatedAt,
 		RefreshedAt: doc.RefreshedAt, ExpiresAt: doc.ExpiresAt, IPAddress: doc.IPAddress,
+		DeviceID: doc.DeviceID, PreviousIPAddress: doc.PreviousIPAddress, IPCity: doc.IPCity,
+		Location: fromGeoPointDocument(doc.Location),
 	}
+}
+
+func toGeoPointDocument(point auth.GeoPoint) geoPointDocument {
+	return geoPointDocument(point)
+}
+
+// toGeoPointDocumentPtr, istege bagli konum; nil ise alan yazilmaz (omitempty).
+func toGeoPointDocumentPtr(point *auth.GeoPoint) *geoPointDocument {
+	if point == nil {
+		return nil
+	}
+	doc := toGeoPointDocument(*point)
+	return &doc
+}
+
+// fromGeoPointDocument, belgedeki konum; alan yoksa nil.
+func fromGeoPointDocument(doc *geoPointDocument) *auth.GeoPoint {
+	if doc == nil {
+		return nil
+	}
+	point := auth.GeoPoint(*doc)
+	return &point
 }

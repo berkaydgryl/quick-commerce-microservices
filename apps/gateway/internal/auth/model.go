@@ -16,6 +16,32 @@ type User struct {
 	PasswordHash string
 	FullName     string
 	CreatedAt    time.Time
+	// RegistrationDeviceID, hesabin acildigi cihaz (cihaz cerezi). "Ayni
+	// cihazdan acilmis hesap sayisi" risk sinyali bununla sayilir. Bu ozellikten
+	// (T8.1) once acilmis hesapta bostur: sinyal olculmemis sayilir.
+	RegistrationDeviceID string
+	// LastLoginIP, son girisin IP'si; bir sonraki giriste "onceki IP" olur.
+	LastLoginIP string
+	// LastLocation, son bilinen oturum konumu. IP bir konuma cozulemezse yeni
+	// oturum bunu devralir; hic bilinmiyorsa nil.
+	LastLocation *GeoPoint
+	// Addresses, kayitli adresler (adres defteri). Demo adresleri persona
+	// seed'iyle gelir; okuyan uc web'in adres secimiyle (T9.5) gelir.
+	Addresses []SavedAddress
+}
+
+// GeoPoint, enlem ve boylam (derece).
+type GeoPoint struct {
+	Lat float64
+	Lng float64
+}
+
+// SavedAddress, kayitli adres (@getir/contracts savedAddressSchema).
+type SavedAddress struct {
+	Title    string
+	Line     string
+	Location GeoPoint
+	Note     string
 }
 
 // Profile, istemciye giden kullanici (@getir/contracts userProfileSchema).
@@ -44,8 +70,17 @@ type Session struct {
 	RefreshedAt time.Time
 	ExpiresAt   time.Time
 	// IPAddress, girisin yapildigi baglantinin IP'si (B9: istemciden alinmaz).
-	// T8.1'in ikinci PR'inda oturum sinyalleri buraya eklenir.
 	IPAddress string
+	// DeviceID, oturumun acildigi cihaz (cihaz cerezi).
+	DeviceID string
+	// PreviousIPAddress, kullanicinin bir onceki girisinin IP'si ("IP
+	// degisimi" sinyali); ilk oturumda bos.
+	PreviousIPAddress string
+	// IPCity, girisin IP'sinden cozulen sehir; cozulemediyse bos.
+	IPCity string
+	// Location, oturumun konumu (geofence): IP'den cozulen ya da kullanicinin
+	// son bilinen konumu; hic bilinmiyorsa nil.
+	Location *GeoPoint
 }
 
 // refreshTokenBytes, yenileme jetonunun rastgele bayt sayisi (256 bit).
@@ -77,7 +112,36 @@ type Grant struct {
 const tokenTypeBearer = "Bearer"
 
 // RequestMeta, istegin SUNUCU tarafi bilgisi (B9: risk sinyalleri istemciden
-// alinmaz). T8.1'in ikinci PR'inda cihaz ve oturum sinyalleri eklenir.
+// alinmaz).
 type RequestMeta struct {
+	// IPAddress, baglantinin IP'si (istemcinin yazabildigi bir basliktan degil).
 	IPAddress string
+	// DeviceID, gateway'in verdigi cihaz cerezi (dvc_...). Cerez yoksa ya da
+	// bicim disiysa httpapi yenisini uretir; burada her zaman gecerlidir.
+	DeviceID string
+}
+
+// LoginState, kullanicinin giris kaydi: son girisin IP'si ve son bilinen
+// oturum konumu. Giris bunu gunceller; onceki degeri oturuma "onceki IP"
+// olarak yazilir.
+type LoginState struct {
+	IPAddress string
+	Location  *GeoPoint
+}
+
+// CheckoutSignals, siparis aninda risk-svc'ye giden ve gateway'in bildigi
+// sinyaller (proto order.v1.CheckoutSignals; B9). Bos alan "bilinmiyor"
+// demektir ve ilgili kurali tetiklemez (risk sozlesmesi).
+type CheckoutSignals struct {
+	IPAddress string
+	// IPCity, oturumun IP'sinden cozulen sehir; cozulemediyse bos.
+	IPCity   string
+	DeviceID string
+	// AccountsOnDevice, hesabin acildigi cihazdan acilmis hesap sayisi; 0 =
+	// olculmedi (cihazi bilinmeyen eski hesap).
+	AccountsOnDevice  int
+	PreviousIPAddress string
+	// SessionLocation, oturumun konumu; bilinmiyorsa nil.
+	SessionLocation  *GeoPoint
+	AccountCreatedAt time.Time
 }

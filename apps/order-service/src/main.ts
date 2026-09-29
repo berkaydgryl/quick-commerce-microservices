@@ -87,7 +87,7 @@ async function openEventPublishing(
 // duz metin yigin izi yerine tek satir fatal JSON olarak yazilir ve process kapanir.
 const { handle, store, events } = await startOrExit(
   async () => {
-    const opened = await openOrderStore(env.mongo, logger);
+    const opened = await openOrderStore(env.mongo, logger, env.NODE_ENV);
     const publishing = await openEventPublishing(env.redis, opened.outbox, logger).catch(
       async (error: unknown) => {
         // Redis'e baglanilamadi: acilmis Mongo baglantisi askida kalmasin.

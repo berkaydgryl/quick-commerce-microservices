@@ -4,7 +4,7 @@ import type { GeoPoint } from '@getir/contracts';
 
 /**
  * Teslimat konumu, adres secimi gelene kadar (T9.5) SABIT: seed'deki hazir
- * "Ev" adresi (infra/seed/data/addresses.json, Kadikoy). Bu konumda 3 market
+ * "Ev" adresi (apps/gateway/internal/persona/addresses.json, Kadikoy). Bu konumda 3 market
  * hizmet verir. Adres secimi geldiginde bu sabit kalkar, konum istemci
  * durumundan (Zustand) gelir.
  */

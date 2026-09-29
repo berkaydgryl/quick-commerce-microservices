@@ -11,6 +11,7 @@
 //	env.go      - genel okuyucular: metin, tam sayi, bool, sure, secenek
 //	policy.go   - kendi kurali olan okuyucular: gorsel kok adresi, log seviyesi,
 //	              Mongo adresi, JWT sirri (T8.1)
+//	seed.go     - persona seed komutunun dar yapilandirmasi (T8.1)
 package config
 
 import (

@@ -6,11 +6,13 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
 )
 
@@ -49,13 +51,40 @@ func (f *fakeOrders) Get(ctx context.Context, userID, orderID string) (order.Ord
 	return order.Order{ID: orderID, Status: "PAID", Lines: []order.Line{}, Timeline: []order.TimelineEntry{}}, f.err
 }
 
+// fakeSignals, siparis sinyallerini oturum yerine sabit degerlerden verir;
+// hangi kimlik ve IP ile cagrildigini saklar.
+type fakeSignals struct {
+	identity auth.Identity
+	ip       string
+	called   bool
+	err      error
+}
+
+// testSessionLocation, sahte oturumun konumu (Ankara).
+var testSessionLocation = auth.GeoPoint{Lat: 39.93, Lng: 32.86}
+
+func (f *fakeSignals) CheckoutSignals(_ context.Context, identity auth.Identity, ip string) (auth.CheckoutSignals, error) {
+	f.called, f.identity, f.ip = true, identity, ip
+	location := testSessionLocation
+	return auth.CheckoutSignals{
+		IPAddress: ip, IPCity: "Ankara", DeviceID: "dvc_test", AccountsOnDevice: 2,
+		PreviousIPAddress: "10.0.0.9", SessionLocation: &location,
+		AccountCreatedAt: time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC),
+	}, f.err
+}
+
 func orderApp(orders *fakeOrders) *fiber.App {
+	return orderAppWithSignals(orders, &fakeSignals{})
+}
+
+func orderAppWithSignals(orders *fakeOrders, signals *fakeSignals) *fiber.App {
 	return New(Deps{
 		Health:           fakeReporter{report: healthyReport()},
 		CartReserver:     orders,
 		OrderPlacer:      orders,
 		ThreeDSConfirmer: orders,
 		OrderGetter:      orders,
+		CheckoutSignals:  signals,
 		AccessTokens:     testTokens(),
 		Logger:           silentLogger(),
 	})
@@ -139,9 +168,9 @@ func TestReserveCartPassesInputAndReturns201(t *testing.T) {
 	}
 }
 
-func TestPlaceOrderSendsCardAndConnectionIP(t *testing.T) {
-	orders := &fakeOrders{}
-	app := orderApp(orders)
+func TestPlaceOrderSendsCardAndSessionSignals(t *testing.T) {
+	orders, signals := &fakeOrders{}, &fakeSignals{}
+	app := orderAppWithSignals(orders, signals)
 
 	status, envelope := send(t, app, orderRequest(t, http.MethodPost, "/v1/orders", validPlaceBody,
 		// Istemcinin yazdigi IP basligi YOK SAYILMALI (B9): IP baglantidan gelir.
@@ -154,8 +183,17 @@ func TestPlaceOrderSendsCardAndConnectionIP(t *testing.T) {
 	if input.OrderID != testOrderID || input.CardToken != "tok_test_4242" || input.UserID != testUserID || input.IdempotencyKey != "anahtar-0001" {
 		t.Errorf("siparis, jeton, kimlik ve anahtar tasinmali: %+v", input)
 	}
-	if input.ClientIP == "" || input.ClientIP == "1.2.3.4" {
-		t.Errorf("IP baglantidan gelmeli, basliktan degil: %q", input.ClientIP)
+	// Sinyaller jetondaki OTURUMDAN okunur (T8.1); IP baglantidan.
+	if signals.identity != (auth.Identity{UserID: testUserID, SessionID: testSessionID}) {
+		t.Errorf("sinyal okuyucu jetondaki kullanici ve oturumla cagrilmali: %+v", signals.identity)
+	}
+	if signals.ip == "" || signals.ip == "1.2.3.4" || input.Signals.IPAddress != signals.ip {
+		t.Errorf("IP baglantidan gelmeli, basliktan degil: %q", signals.ip)
+	}
+	got := input.Signals
+	if got.DeviceID != "dvc_test" || got.AccountsOnDevice != 2 || got.PreviousIPAddress != "10.0.0.9" || got.IPCity != "Ankara" ||
+		got.SessionLocation == nil || got.SessionLocation.Lat != testSessionLocation.Lat || got.AccountCreatedAt.IsZero() {
+		t.Errorf("oturum sinyallerinin hepsi siparise tasinmali: %+v", got)
 	}
 	data, isMap := envelope.Data.(map[string]any)
 	if !isMap || data["threeDs"] == nil {
@@ -206,5 +244,34 @@ func TestServiceErrorKeepsNumericDetails(t *testing.T) {
 	}
 	if details := detailsOf(t, envelope); details["totalMinor"] != float64(19360) || details["currency"] != "TRY" {
 		t.Errorf("guncel toplam sayi olarak gelmeli: %+v", details)
+	}
+}
+
+func TestPlaceOrderWithEndedSessionIsUnauthorized(t *testing.T) {
+	// Cikis yapilmis oturum: erisim jetonu suresi dolmamis olsa da siparis
+	// verilemez (sinyal okuyucu 401 doner); siparis servisine gidilmez.
+	orders := &fakeOrders{}
+	signals := &fakeSignals{err: apperror.New(apperror.CodeUnauthorized, map[string]string{"Authorization": "oturum kapatilmis"})}
+	app := orderAppWithSignals(orders, signals)
+
+	status, envelope := send(t, app, orderRequest(t, http.MethodPost, "/v1/orders", validPlaceBody, nil))
+
+	if status != http.StatusUnauthorized || envelope.Error.Code != apperror.CodeUnauthorized {
+		t.Errorf("401 bekleniyordu: %d %+v", status, envelope)
+	}
+	if orders.called {
+		t.Error("oturumu biten istekte siparis servisi cagrilmamaliydi")
+	}
+}
+
+func TestMalformedOrderDoesNotReadSignals(t *testing.T) {
+	// Bicim hatasi veritabanina gitmeden doner: sinyaller dogrulamadan SONRA okunur.
+	orders, signals := &fakeOrders{}, &fakeSignals{}
+	app := orderAppWithSignals(orders, signals)
+
+	status, _ := send(t, app, orderRequest(t, http.MethodPost, "/v1/orders", `{"orderId":"`+testOrderID+`"}`, nil))
+
+	if status != http.StatusBadRequest || signals.called || orders.called {
+		t.Errorf("400 ve sinyal okunmamasi bekleniyordu: %d, sinyal %v, siparis %v", status, signals.called, orders.called)
 	}
 }

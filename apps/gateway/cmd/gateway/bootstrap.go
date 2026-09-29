@@ -50,6 +50,9 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (*fi
 		closePool()
 		return nil, nil, fmt.Errorf("kimlik: %w", err)
 	}
+	if identity.personas > 0 {
+		logger.Info("demo personalari bellege yuklendi (MOCK)", slog.Int("hesap", identity.personas))
+	}
 	// Kapanista ctx coktan iptal edilmistir (sinyal); Mongo'yu birakmak icin
 	// iptali tasimayan, kapanis suresiyle sinirli yeni bir baglam kurulur.
 	cleanup := func() {
@@ -109,8 +112,11 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (*fi
 		SessionRefresher:  identity.service,
 		SessionRevoker:    identity.service,
 		ProfileGetter:     identity.service,
+		CheckoutSignals:   identity.service,
 		AccessTokens:      identity.tokens,
-		Logger:            logger,
+		// Cihaz cerezi yalnizca production'da Secure: gelistirme http://localhost.
+		SecureCookies: cfg.NodeEnv == config.EnvProduction,
+		Logger:        logger,
 	})
 
 	return app, cleanup, nil
