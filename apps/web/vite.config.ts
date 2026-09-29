@@ -16,6 +16,16 @@ const DEFAULT_GATEWAY_URL = 'http://localhost:8080';
 /** Gateway'e yonlenen yol onekleri. */
 const PROXIED_PATHS = ['/v1', '/healthz'] as const;
 
+/**
+ * Demo persona secici (T8.5): gelistirmede acik (VITE_DEMO_PERSONAS=false kapatir),
+ * production derlemesinde (`vite build`) HER ZAMAN kapali; ortam degiskeni onu
+ * acamaz. Kapaliyken secici ve persona verisi pakete girmez; CI paketi tarar
+ * (scripts/check-web-bundle.mjs).
+ */
+function demoPersonasEnabled(mode: string, env: Record<string, string>): boolean {
+  return mode !== 'production' && env['VITE_DEMO_PERSONAS'] !== 'false';
+}
+
 export default defineConfig(({ mode }) => {
   // VITE_ onekli olmayan degiskenler istemci paketine GIRMEZ; yalnizca burada okunur.
   const env = loadEnv(mode, process.cwd(), '');
@@ -23,6 +33,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    define: {
+      __DEMO_PERSONAS__: JSON.stringify(demoPersonasEnabled(mode, env)),
+    },
     resolve: {
       // @getir/core'daki node:crypto importu icin tarayici karsiligi (dosyadaki aciklama).
       alias: {

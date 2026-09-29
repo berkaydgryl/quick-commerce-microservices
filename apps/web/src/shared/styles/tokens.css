@@ -31,6 +31,7 @@
   --text-on-accent: var(--palette-purple-600);
   --text-danger: var(--palette-red-600);
   --border-subtle: var(--palette-gray-300);
+  --border-danger: var(--palette-red-600);
   --focus-ring-color: var(--palette-purple-600);
 
   /* --- Tipografi --- */
@@ -84,6 +85,16 @@
   /* Yuklenirken gorunen iskelet satiri: bir metin satiri yuksekliginde (em). */
   --size-skeleton-line: 1em;
 
+  /* Kimlik formu (T8.5): alan kutusunun en az yuksekligi, alan ikonlari ve
+     telefon onekinin ("+90") kutusu; basliktaki hesap ikonu. */
+  --size-field-min-height: 3.5rem;
+  --size-field-icon: 1.25rem;
+  --size-field-prefix: 4rem;
+  --size-header-icon: 1.5rem;
+
+  /* Kimlik karti genis ekranda da tek sutun form genisliginde kalir. */
+  --container-max-auth: 26rem;
+
   /* --- Kenar, yaricap, golge --- */
   --border-width-thin: 0.0625rem;
   --focus-ring-width: 0.1875rem;
@@ -93,6 +104,9 @@
   --radius-lg: 1rem;
   --radius-pill: 999rem;
   --shadow-surface: 0 0.0625rem 0.25rem rgb(25 25 25 / 8%);
+
+  /* --- Durum --- */
+  --opacity-disabled: 0.6;
 
   /* --- Hareket --- */
   --duration-fast: 150ms;

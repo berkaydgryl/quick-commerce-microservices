@@ -1538,8 +1538,8 @@ components:
         (varsayılan 60 sn) Redis'te tutulur; gateway örnekleri aynı sayacı
         paylaşır. Sayım uç başınadır. Kimliksiz uçlarda istemcinin IP'si,
         kimlik isteyen uçlarda kullanıcı sayılır. Varsayılan sınırlar pencere
-        başına: kimlik uçları (kayıt, giriş, yenileme, çıkış) 10; rezervasyon,
-        sipariş ve 3DS 20; diğer uçlar 120. Yalnızca kabul edilen istek
+        başına: kayıt ve giriş 10; rezervasyon, sipariş ve 3DS 20; diğer uçlar
+        (yenileme ve çıkış dahil) 120. Yalnızca kabul edilen istek
         sayılır: beklemeden yeniden denemek süreyi uzatmaz, `Retry-After`
         kadar beklemek yeter. Hız sınırı sayacına ulaşılamazsa istek geçer.
       headers:

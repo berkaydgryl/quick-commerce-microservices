@@ -3,7 +3,11 @@
  * cikarir. Uclara ozgu bilgi (yol, sema) cagirandan gelir.
  *
  * Mutasyonlar Idempotency-Key'siz DERLENMEZ (ADR-08): istek tipi GET ile
- * yazan fiilleri ayri kollara boler ve yazan kolda anahtar zorunludur.
+ * yazan fiilleri ayri kollara boler ve yazan kolda anahtar zorunludur. Tek
+ * istisna oturum uclaridir (SessionRequest); istisna adiyla secilir.
+ *
+ * Cerezler ayni kaynak kuraliyla gider (fetch varsayilani): yenileme jetonunun
+ * cerezi (ADR-12 eki) web ile gateway ayni kaynaktayken tasinir.
  */
 
 import { errorMessage } from '@getir/contracts';
@@ -13,11 +17,17 @@ import type { z } from 'zod';
 import { unwrapEnvelope } from './envelope';
 
 const IDEMPOTENCY_KEY_HEADER = 'Idempotency-Key';
+const AUTHORIZATION_HEADER = 'Authorization';
 
 interface BaseRequest<T> {
   /** Cevaptaki `data` alaninin semasi. */
   readonly schema: z.ZodType<T>;
   readonly signal?: AbortSignal | undefined;
+  /**
+   * Korumali uc icin erisim jetonu: "Authorization: Bearer <jeton>" (ADR-12).
+   * Jetonu yetkili istemci ekler (shared/session/authorized-client.ts).
+   */
+  readonly accessToken?: string | undefined;
 }
 
 interface ReadRequest<T> extends BaseRequest<T> {
@@ -30,7 +40,19 @@ interface MutationRequest<T> extends BaseRequest<T> {
   readonly body?: unknown;
 }
 
-export type ApiRequest<T> = ReadRequest<T> | MutationRequest<T>;
+/**
+ * Oturum uclari (giris, yenileme, cikis; T8.5): anahtarsiz POST. Kalici kaynak
+ * yaratmazlar ve tekrarlari zararsizdir; gateway anahtar istemez (openapi,
+ * ADR-08 ekindeki korunan uclar listesinde yoklar). Kayit bu kolda DEGILDIR:
+ * hesap yaratir, anahtar ister.
+ */
+interface SessionRequest<T> extends BaseRequest<T> {
+  readonly method: 'POST';
+  readonly session: true;
+  readonly body?: unknown;
+}
+
+export type ApiRequest<T> = ReadRequest<T> | MutationRequest<T> | SessionRequest<T>;
 
 export interface HttpClient {
   request<T>(path: string, request: ApiRequest<T>): Promise<T>;
@@ -58,13 +80,15 @@ function toRequestInit<T>(request: ApiRequest<T>): RequestInit {
   if (request.signal !== undefined) {
     init.signal = request.signal;
   }
-
+  if (request.accessToken !== undefined) {
+    headers.set(AUTHORIZATION_HEADER, `Bearer ${request.accessToken}`);
+  }
   if ('idempotencyKey' in request) {
     headers.set(IDEMPOTENCY_KEY_HEADER, request.idempotencyKey);
-    if (request.body !== undefined) {
-      headers.set('Content-Type', 'application/json');
-      init.body = JSON.stringify(request.body);
-    }
+  }
+  if ('body' in request && request.body !== undefined) {
+    headers.set('Content-Type', 'application/json');
+    init.body = JSON.stringify(request.body);
   }
   return init;
 }

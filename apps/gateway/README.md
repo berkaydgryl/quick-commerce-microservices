@@ -245,7 +245,8 @@ bellek içi sayaç sınırı örnek sayısı kadar gevşetirdi (proje kuralları
 
 | Uçlar                                                    | Sınır (pencere başına)           | Kim sayılır |
 | -------------------------------------------------------- | -------------------------------- | ----------- |
-| `POST /v1/auth/register`, `/login`, `/refresh`, `/logout` | `RATE_LIMIT_AUTH_MAX_REQUESTS` (10) | IP          |
+| `POST /v1/auth/register`, `/v1/auth/login`               | `RATE_LIMIT_AUTH_MAX_REQUESTS` (10) | IP          |
+| `POST /v1/auth/refresh`, `/v1/auth/logout` (T8.5)         | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
 | `POST /v1/cart/reserve`, `/v1/orders`, `/v1/orders/{id}/3ds` | `RATE_LIMIT_ORDER_MAX_REQUESTS` (20) | kullanıcı   |
 | Katalog ve market uçları                                  | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
 | `GET /v1/me`, `GET /v1/orders/{id}`                       | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
@@ -254,6 +255,9 @@ bellek içi sayaç sınırı örnek sayısı kadar gevşetirdi (proje kuralları
 - **Anahtar:** `rate:{ozne}:POST_/v1/orders/id/3ds` (`@getir/redis-kit` `rateLimitKey`;
   `keys_contract_test.go` karşılaştırır). Sayım **uç başınadır**; yol kalıbı kullanılır, gerçek yol
   değil (her sipariş kimliği ayrı sayaç açmaz). Anahtarın ömrü pencere kadardır.
+- **Yenileme ve çıkış genel sınırda (T8.5):** web her sayfa açılışında oturumu sessizce yeniler;
+  yenileme jetonu 256 bit rastgele olduğu için kaba kuvvet sınırına gerek yok. Dar sınır (10) yalnızca
+  tahmin edilebilir girdisi olan kayıt ve giriştedir.
 - **Kim sayılır:** kimliksiz uçlarda soketin IP'si (`X-Forwarded-For`'a güvenilmez, B9); kimlik
   isteyen uçlarda kullanıcı: aynı ağın (ofis, mobil operatör) arkasındaki kullanıcılar birbirinin
   sınırını tüketmez. Korumalı uçta sınırlayıcı kimlikten SONRA, tekrar korumasından ÖNCE çalışır:
@@ -403,7 +407,7 @@ curl -s "localhost:8080/v1/markets/mkt_migros-jet-moda/products?q=s%C3%BCt" | jq
 | `RATE_LIMIT_ENABLED`         | `true`            | `false` hız sınırını kapatır (yük testleri) |
 | `RATE_LIMIT_WINDOW_SECONDS`  | `60`              | Kayan pencerenin uzunluğu (sn) |
 | `RATE_LIMIT_MAX_REQUESTS`    | `120`             | Genel sınır: katalog, market, `/v1/me`, sipariş okuma (1-10000) |
-| `RATE_LIMIT_AUTH_MAX_REQUESTS` | `10`            | Kayıt, giriş, yenileme, çıkış (IP başına) |
+| `RATE_LIMIT_AUTH_MAX_REQUESTS` | `10`            | Kayıt ve giriş (IP başına); yenileme ve çıkış genel sınırda |
 | `RATE_LIMIT_ORDER_MAX_REQUESTS` | `20`           | Rezervasyon, sipariş, 3DS (kullanıcı başına) |
 | `NODE_ENV`                   | `development`     | `development/test/production`                   |
 

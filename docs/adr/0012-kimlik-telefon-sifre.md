@@ -60,3 +60,14 @@ jetonlari tarayicida saklayacagi icin karar oncesinde verildi.
 - Bedel: tarayici disi istemciler (curl, testler) cerez kavanozu kullanir; web ile gateway ayni
   site (gelistirmede Vite vekili) uzerinden calismalidir. Sozlesme degisti: oturum govdesinde
   `refreshToken` yok (`@getir/contracts` authSessionSchema, openapi AuthSession).
+- Web istemcisi (T8.5 ikinci PR): erisim jetonu yalnizca sekmenin belleginde durur; sayfa
+  yenilenince acilista bir kez sessiz yenileme oturumu geri getirir, herkese acik sayfa onu
+  beklemez. 401 alan istek bir kez yenilenip bir kez tekrarlanir (`apps/web/src/shared/session`).
+- Sekmeler arasi sira: jeton her kullanimda degistigi ve kullanilmis jetonun 401'i cerezi sildigi
+  icin iki sekmenin ayni anda yenilemesi ikisinin de oturumunu dusururdu. Yenileme, giris, kayit
+  ve cikis butun sekmelerde tek kilitle (Web Locks API, `getir-oturum`) sirayla calisir; ikinci
+  sekme birincinin yazdigi YENI cerezi gonderir. Web Locks yoksa (guvensiz baglam) kilit sekme
+  icindedir.
+- Yenileme ve cikis genel hiz sinirindadir (IP basina dakikada 120, T8.2): web her acilista
+  yeniler; jeton 256 bit rastgele oldugu icin kaba kuvvet siniri gerekmez. Kayit ve giris 10'da
+  kalir.

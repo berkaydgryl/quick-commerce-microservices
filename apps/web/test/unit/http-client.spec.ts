@@ -88,6 +88,60 @@ describe('http-client', () => {
     });
   });
 
+  it('oturum istegi (T8.5) anahtarsiz POST; govdesizse govde ve Content-Type yok', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({ success: true, data: { ok: true } }));
+
+    await clientWith(fetchMock).request('/v1/auth/refresh', {
+      schema,
+      method: 'POST',
+      session: true,
+    });
+
+    const init = fetchMock.mock.calls[0]?.[1];
+    const headers = new Headers(init?.headers);
+    expect(init?.method).toBe('POST');
+    expect(headers.has('Idempotency-Key')).toBe(false);
+    expect(headers.has('Content-Type')).toBe(false);
+    expect(init?.body).toBeUndefined();
+  });
+
+  it('oturum isteginin govdesi JSON gider (giris)', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({ success: true, data: { ok: true } }));
+
+    await clientWith(fetchMock).request('/v1/auth/login', {
+      schema,
+      method: 'POST',
+      session: true,
+      body: { phone: '+905550000001' },
+    });
+
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(new Headers(init?.headers).get('Content-Type')).toBe('application/json');
+    expect(init?.body).toBe('{"phone":"+905550000001"}');
+  });
+
+  it('erisim jetonu Bearer basligiyla gider; jetonsuz istekte baslik yok', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementation(() =>
+        Promise.resolve(jsonResponse({ success: true, data: { ok: true } })),
+      );
+    const client = clientWith(fetchMock);
+
+    await client.request('/v1/me', { schema, accessToken: 'jeton-1' });
+    await client.request('/v1/markets', { schema });
+
+    const [withToken, withoutToken] = fetchMock.mock.calls.map(
+      ([, init]) => new Headers(init?.headers),
+    );
+    expect(withToken?.get('Authorization')).toBe('Bearer jeton-1');
+    expect(withoutToken?.has('Authorization')).toBe(false);
+  });
+
   it('iptali (AbortError) cevirmeden gecirir', async () => {
     const abort = new DOMException('iptal', 'AbortError');
     const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(abort);

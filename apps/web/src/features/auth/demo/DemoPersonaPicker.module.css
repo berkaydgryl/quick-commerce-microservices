@@ -1,0 +1,48 @@
+/* Gelistirme araci: kesik cizgili cerceve, urunun parcasi olmadigi gorunsun. */
+.c-demo-personas {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: var(--border-width-thin) dashed var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.c-demo-personas__title {
+  font-size: var(--font-size-sm);
+}
+
+.c-demo-personas__note {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.c-demo-personas__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.c-demo-personas__button {
+  display: grid;
+  padding: var(--space-2) var(--space-3);
+  text-align: start;
+  cursor: pointer;
+  background: var(--color-brand-primary-subtle);
+  border: none;
+  border-radius: var(--radius-sm);
+}
+
+.c-demo-personas__button:hover {
+  background: var(--bg-page);
+}
+
+.c-demo-personas__name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+}
+
+.c-demo-personas__band {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}

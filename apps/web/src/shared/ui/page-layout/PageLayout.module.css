@@ -7,11 +7,26 @@
   box-shadow: var(--shadow-surface);
 }
 
+/* Mobil: logo ortada, yuva sagda (ortadaki sutun logonun kendi genisligi). */
+.c-page-layout__bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: var(--space-3);
+  align-items: center;
+}
+
 .c-page-layout__brand {
   display: flex;
+  grid-column: 2;
   justify-content: center;
   font-size: var(--font-size-xl);
   text-decoration: none;
+}
+
+.c-page-layout__actions {
+  display: flex;
+  grid-column: 3;
+  justify-content: flex-end;
 }
 
 .c-page-layout__main {
@@ -19,8 +34,17 @@
 }
 
 @media (--bp-md) {
+  .c-page-layout__bar {
+    grid-template-columns: auto 1fr;
+  }
+
   .c-page-layout__brand {
+    grid-column: 1;
     justify-content: flex-start;
+  }
+
+  .c-page-layout__actions {
+    grid-column: 2;
   }
 
   .c-page-layout__main {

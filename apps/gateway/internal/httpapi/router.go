@@ -203,8 +203,10 @@ func New(deps Deps) *fiber.App {
 	checkout := idempotent(deps.Idempotency, checkoutPolicy, deps.Logger)
 	v1.Post("/auth/register", authByIP, register, registerHandler(deps.UserRegistrar, devices, sessions))
 	v1.Post("/auth/login", authByIP, loginHandler(deps.UserAuthenticator, devices, sessions))
-	v1.Post("/auth/refresh", authByIP, refreshHandler(deps.SessionRefresher, sessions))
-	v1.Post("/auth/logout", authByIP, logoutHandler(deps.SessionRevoker, sessions))
+	// Yenileme ve cikis GENEL sinirda (T8.5): web her acilista sessizce yeniler;
+	// jeton 256 bit rastgele oldugu icin kaba kuvvet siniri ona gerekmez.
+	v1.Post("/auth/refresh", generalByIP, refreshHandler(deps.SessionRefresher, sessions))
+	v1.Post("/auth/logout", generalByIP, logoutHandler(deps.SessionRevoker, sessions))
 
 	// Korumali uclar: once kimlik, sonra uc. Ara katman ROTA BASINA verilir;
 	// /v1 grubuna Use ile verilseydi katalog ve giris uclari da kimlik isterdi.
