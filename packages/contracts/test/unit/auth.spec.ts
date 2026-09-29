@@ -4,14 +4,38 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { z } from 'zod';
 
 import {
   PASSWORD_MAX_LENGTH,
   authSessionSchema,
+  fullNameSchema,
   logoutResultSchema,
   passwordSchema,
+  phoneSchema,
   registerRequestSchema,
 } from '../../src/index.js';
+
+/** Semanin reddettigi degerin ilk mesaji: formun alanin altinda gosterdigi cumle. */
+function messageOf(schema: z.ZodTypeAny, value: unknown): string | undefined {
+  const result = schema.safeParse(value);
+  return result.success ? undefined : result.error.issues[0]?.message;
+}
+
+describe('alan mesajlari kullaniciya gorunur: Turkce karakterli (T8.5 karari)', () => {
+  // Web formu bu cumleleri alanin altinda gosterir; gateway ayni cumleleri doner
+  // (rules_contract_test.go). Iki taraf birlikte ASCII'ye donse o test yesil
+  // kalirdi; urun karari bu testte sabitlenir.
+  it.each([
+    ["+90'dan sonra 10 rakam olmalı (örnek +905321234567)", phoneSchema, '+90555'],
+    ['en az 8 karakter olmalı', passwordSchema, 'kisa'],
+    ['en fazla 72 bayt olmalı (Türkçe harfler iki bayt sayılır)', passwordSchema, 'ş'.repeat(37)],
+    ['en az 2 karakter olmalı', fullNameSchema, ' A '],
+    ['en fazla 80 karakter olmalı', fullNameSchema, 'a'.repeat(81)],
+  ] as const)('"%s"', (message, schema, value) => {
+    expect(messageOf(schema, value)).toBe(message);
+  });
+});
 
 describe('passwordSchema: ust sinir BAYT (bcrypt ilk 72 bayti kullanir)', () => {
   it(`${PASSWORD_MAX_LENGTH} ASCII karakter gecer, bir fazlasi gecmez`, () => {
