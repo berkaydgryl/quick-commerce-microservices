@@ -1,8 +1,6 @@
 package httpapi
 
 import (
-	"strings"
-
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
 )
 
@@ -12,8 +10,6 @@ import (
 // (rules.go, sozlesmeyle ayni degerler); burada govde girdiye cevrilir ve
 // kuralin buldugu sorunlar ayni details haritasina yazilir. Boylece baslik
 // (Idempotency-Key) ve govde hatalari TEK cevapta doner.
-
-const refreshTokenField = "refreshToken"
 
 // registerBody, POST /v1/auth/register (registerRequestSchema).
 type registerBody struct {
@@ -26,12 +22,6 @@ type registerBody struct {
 type loginBody struct {
 	Phone    string `json:"phone"`
 	Password string `json:"password"`
-}
-
-// refreshTokenBody, POST /v1/auth/refresh ve /v1/auth/logout
-// (refreshRequestSchema, logoutRequestSchema).
-type refreshTokenBody struct {
-	RefreshToken string `json:"refreshToken"`
 }
 
 // logoutResult, cikis cevabi (logoutResultSchema). revoked false hata degildir:
@@ -52,15 +42,6 @@ func (b loginBody) toInput(errs fieldErrors) auth.LoginInput {
 	input := auth.LoginInput{Phone: b.Phone, Password: b.Password}
 	collect(errs, input.Check())
 	return input
-}
-
-// token, kirpilmis yenileme jetonu; bossa errs'e yazar.
-func (b refreshTokenBody) token(errs fieldErrors) string {
-	token := strings.TrimSpace(b.RefreshToken)
-	if token == "" {
-		errs[refreshTokenField] = requiredReason
-	}
-	return token
 }
 
 // collect, kuralin buldugu sorunlari details haritasina ekler.

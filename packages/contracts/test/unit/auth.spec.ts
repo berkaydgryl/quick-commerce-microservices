@@ -1,6 +1,6 @@
 /**
- * Kimlik semalari (T8.1): sifrede BAYT siniri, ad kirpma, oturumda yenileme
- * jetonu ve yenileme/cikis istekleri.
+ * Kimlik semalari (T8.1): sifrede BAYT siniri, ad kirpma, oturum govdesi
+ * (yenileme jetonu cerezde, govdede degil) ve cikis sonucu.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -8,10 +8,8 @@ import { describe, expect, it } from 'vitest';
 import {
   PASSWORD_MAX_LENGTH,
   authSessionSchema,
-  logoutRequestSchema,
   logoutResultSchema,
   passwordSchema,
-  refreshRequestSchema,
   registerRequestSchema,
 } from '../../src/index.js';
 
@@ -44,25 +42,22 @@ describe('registerRequestSchema', () => {
   });
 });
 
-describe('oturum ve yenileme', () => {
+describe('oturum', () => {
   const session = {
     accessToken: 'eyJ.x.y',
     tokenType: 'Bearer',
     expiresIn: 3600,
-    refreshToken: 'opak-jeton',
     refreshExpiresIn: 1_209_600,
     user: { id: 'usr_0123456789abcdef0123456789abcdef', phone: '+905321234567', fullName: 'Ayşe' },
   };
 
-  it('oturum yenileme jetonunu ve omrunu TASIR', () => {
+  it('oturum govdesi erisim jetonunu ve yenilemenin OMRUNU tasir, jetonun kendisini DEGIL', () => {
+    // Yenileme jetonu HttpOnly cerezdedir; sema onu tanimaz, gelse bile atar.
     expect(authSessionSchema.safeParse(session).success).toBe(true);
-    const { refreshToken: _token, ...withoutRefresh } = session;
-    expect(authSessionSchema.safeParse(withoutRefresh).success).toBe(false);
-  });
-
-  it('yenileme ve cikis istegi dolu jeton ister', () => {
-    expect(refreshRequestSchema.safeParse({ refreshToken: '  ' }).success).toBe(false);
-    expect(logoutRequestSchema.parse({ refreshToken: ' opak ' }).refreshToken).toBe('opak');
+    expect('refreshToken' in authSessionSchema.shape).toBe(false);
+    expect(authSessionSchema.parse({ ...session, refreshToken: 'sizmamali' })).not.toHaveProperty(
+      'refreshToken',
+    );
   });
 
   it('cikis sonucu: revoked false hata degildir', () => {

@@ -1,7 +1,9 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 
@@ -16,7 +18,8 @@ import (
 // ve basligi dogrula (hatalar TEK cevapta) -> cagir -> zarfla.
 //
 // Sifre ve jetonlar gunluge YAZILMAZ: istek gunlugu yalnizca yol ve durum
-// tasir, hata gunlugu yalnizca sebebi.
+// tasir, hata gunlugu yalnizca sebebi. Yenileme jetonu govdede degil, HttpOnly
+// cerezde tasinir (refresh_cookie.go).
 
 // noStore, jeton ya da kisisel veri tasiyan cevabin basligi: ne tarayici
 // onbellegine ne araya giren bir vekile kalmali (RFC 6749 5.1, RFC 9111).
@@ -24,11 +27,10 @@ const noStore = "no-store"
 
 // registerHandler, POST /v1/auth/register: hesap acar ve oturumu baslatir (201).
 //
-// Idempotency-Key ZORUNLU (ADR-08, kalici kayit yaratan uc) ama bugun yalnizca
-// VARLIGI denetlenir; ayni anahtarla gelen tekrarin ilk cevabi almasi T8.2'de
-// gateway'e gelir. O zamana kadar tekrar eden kayit PHONE_ALREADY_REGISTERED
-// alir: ikinci hesap acilmaz, telefon benzersizligi bunu garanti eder.
-func registerHandler(registrar UserRegistrar, devices deviceCookies) fiber.Handler {
+// Idempotency-Key ZORUNLU (ADR-08, kalici kayit yaratan uc). Tekrar korumasi
+// ara katmandadir (idempotency.go); kayit ucunun cevabi jeton tasidigi icin
+// saklanmaz: biten kaydin tekrari buraya gelir ve PHONE_ALREADY_REGISTERED alir.
+func registerHandler(registrar UserRegistrar, devices deviceCookies, sessions refreshCookies) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if err := rejectUnknownQuery(c); err != nil {
 			return err
@@ -48,13 +50,13 @@ func registerHandler(registrar UserRegistrar, devices deviceCookies) fiber.Handl
 		if err != nil {
 			return err
 		}
-		return private(c, http.StatusCreated, grant)
+		return session(c, http.StatusCreated, grant, sessions)
 	}
 }
 
 // loginHandler, POST /v1/auth/login: telefon ve sifreyle oturum acar.
 // Kalici bir kaynak yaratmadigi icin Idempotency-Key istemez (openapi).
-func loginHandler(authenticator UserAuthenticator, devices deviceCookies) fiber.Handler {
+func loginHandler(authenticator UserAuthenticator, devices deviceCookies, sessions refreshCookies) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if err := rejectUnknownQuery(c); err != nil {
 			return err
@@ -73,39 +75,54 @@ func loginHandler(authenticator UserAuthenticator, devices deviceCookies) fiber.
 		if err != nil {
 			return err
 		}
-		return private(c, http.StatusOK, grant)
+		return session(c, http.StatusOK, grant, sessions)
 	}
 }
 
-// refreshHandler, POST /v1/auth/refresh: yenileme jetonunu yenisiyle
-// degistirir ve yeni erisim jetonu verir. Erisim jetonu istemez: suresi dolmus
-// olmasi bu ucun cagrilma sebebidir.
-func refreshHandler(refresher SessionRefresher) fiber.Handler {
+// refreshHandler, POST /v1/auth/refresh: cerezdeki yenileme jetonunu
+// yenisiyle degistirir (cereze yazar) ve yeni erisim jetonu verir. Erisim
+// jetonu istemez: suresi dolmus olmasi bu ucun cagrilma sebebidir. Govde
+// okunmaz; jeton yalnizca cerezden gelir.
+//
+// Kullanilamayan jetonun (gecersiz, kullanilmis, suresi dolmus) cerezi
+// silinir: tarayici olu jetonu her acilista yeniden gondermesin.
+func refreshHandler(refresher SessionRefresher, sessions refreshCookies) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		token, err := refreshTokenOf(c)
-		if err != nil {
+		if err := rejectUnknownQuery(c); err != nil {
 			return err
+		}
+		token := sessions.token(c)
+		if token == "" {
+			return refreshCookieMissing()
 		}
 		grant, err := refresher.Refresh(c.Context(), token)
 		if err != nil {
+			if unauthorized(err) {
+				sessions.clear(c)
+			}
 			return err
 		}
-		return private(c, http.StatusOK, grant)
+		return session(c, http.StatusOK, grant, sessions)
 	}
 }
 
-// logoutHandler, POST /v1/auth/logout: yenileme jetonunu iptal eder. Tekrari
-// zararsizdir (ikincisi revoked:false alir), bu yuzden Idempotency-Key istemez.
-func logoutHandler(revoker SessionRevoker) fiber.Handler {
+// logoutHandler, POST /v1/auth/logout: cerezdeki yenileme jetonunu iptal eder
+// ve cerezi siler. Tekrari zararsizdir (ikincisi ya da cerezsiz cagri
+// revoked:false alir), bu yuzden Idempotency-Key istemez.
+func logoutHandler(revoker SessionRevoker, sessions refreshCookies) fiber.Handler {
 	return func(c fiber.Ctx) error {
-		token, err := refreshTokenOf(c)
-		if err != nil {
+		if err := rejectUnknownQuery(c); err != nil {
 			return err
 		}
-		revoked, err := revoker.Logout(c.Context(), token)
-		if err != nil {
-			return err
+		token := sessions.token(c)
+		revoked := false
+		if token != "" {
+			var err error
+			if revoked, err = revoker.Logout(c.Context(), token); err != nil {
+				return err
+			}
 		}
+		sessions.clear(c)
 		return ok(c, http.StatusOK, logoutResult{Revoked: revoked})
 	}
 }
@@ -124,21 +141,17 @@ func meHandler(profiles ProfileGetter) fiber.Handler {
 	}
 }
 
-// refreshTokenOf, yenileme ve cikis govdesinden jetonu okur.
-func refreshTokenOf(c fiber.Ctx) (string, error) {
-	if err := rejectUnknownQuery(c); err != nil {
-		return "", err
-	}
-	var body refreshTokenBody
-	if err := decodeJSONBody(c, &body); err != nil {
-		return "", err
-	}
-	errs := fieldErrors{}
-	token := body.token(errs)
-	if len(errs) > 0 {
-		return "", apperror.New(apperror.CodeValidationFailed, errs)
-	}
-	return token, nil
+// session, oturumu baslatan ya da yenileyen cevabi yazar: yenileme jetonu
+// cereze, gerisi (erisim jetonu, sureler, profil) onbelleklenmeyen govdeye.
+func session(c fiber.Ctx, status int, grant auth.Grant, sessions refreshCookies) error {
+	sessions.set(c, grant.RefreshToken, time.Duration(grant.RefreshExpiresIn)*time.Second)
+	return private(c, status, grant)
+}
+
+// unauthorized, hata oturumu gecersiz kilan bir hata mi (401)?
+func unauthorized(err error) bool {
+	var appErr *apperror.Error
+	return errors.As(err, &appErr) && appErr.Code == apperror.CodeUnauthorized
 }
 
 // requestMeta, oturumun SUNUCU tarafi bilgisi: baglantinin IP'si ve gateway'in

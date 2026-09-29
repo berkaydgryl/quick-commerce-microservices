@@ -41,3 +41,22 @@ verir hem de gercek olmayan bir akis icin kod yazdirir.
 ## Ilgili
 
 ADR-06, ADR-08, ADR-09; gorev T1.5.
+
+## Ek (T8.5 hazirligi, 2026-09-29): yenileme jetonu HttpOnly cerezde
+
+Ustteki karar degismez; jetonun istemciye nasil tasindigini netlestirir. Web kimlik akisi (T8.5)
+jetonlari tarayicida saklayacagi icin karar oncesinde verildi.
+
+- Erisim jetonu (JWT, JWT_TTL) cevap govdesinde doner; istemci onu yalnizca bellekte tutar
+  (localStorage'a yazilmaz).
+- Yenileme jetonu govdede DONMEZ: gateway onu `getir_refresh` cerezine yazar. HttpOnly: sayfadaki
+  betik okuyamaz, bir XSS 14 gunluk jetonu calamaz. `SameSite=Strict`: baska bir siteden gelen
+  istek cerezi tasimaz (CSRF). `Path=/v1/auth`: jeton yalnizca kimlik uclarina gider. Omur
+  REFRESH_TTL; production'da `Secure`.
+- `POST /v1/auth/refresh` ve `/v1/auth/logout` govdesizdir; jeton cerezden okunur. Cerezsiz
+  yenileme 401'dir; kullanilamayan jetonun cerezi ve cikista cerez silinir.
+- Elenen: yenileme jetonunu localStorage'da tutmak (gateway degismezdi ama XSS'te jeton
+  calinirdi) ve sessionStorage (sekme kapaninca oturum giderdi).
+- Bedel: tarayici disi istemciler (curl, testler) cerez kavanozu kullanir; web ile gateway ayni
+  site (gelistirmede Vite vekili) uzerinden calismalidir. Sozlesme degisti: oturum govdesinde
+  `refreshToken` yok (`@getir/contracts` authSessionSchema, openapi AuthSession).

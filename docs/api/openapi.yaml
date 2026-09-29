@@ -38,7 +38,11 @@ info:
     * **Kimlik**: korumalı uçlar `Authorization: Bearer <erişim jetonu>` ister
       (T8.1). Jeton yoksa ya da geçersizse `401 UNAUTHORIZED` ve
       `WWW-Authenticate` başlığı döner. Jeton ve kişisel veri taşıyan cevaplar
-      `Cache-Control: no-store` ile gelir.
+      `Cache-Control: no-store` ile gelir. Yenileme jetonu gövdede DEĞİL,
+      gateway'in yazdığı `getir_refresh` çerezindedir (HttpOnly,
+      `SameSite=Strict`, `Path=/v1/auth`): sayfadaki betik okuyamaz. İstemci
+      erişim jetonunu bellekte tutar; sayfa yenilenince `POST /v1/auth/refresh`
+      çağrılır, çerez kendiliğinden gider.
     * **İzleme**: her cevapta `X-Request-Id` başlığı bulunur; hata gövdesindeki
       `error.requestId` ile aynı değerdir ve log/trace kayıtlarıyla eşleşir.
       Biçim `req_` + 32 küçük onaltılık karakterdir. İstemci bu biçimde kendi
@@ -106,7 +110,7 @@ paths:
             Cache-Control:
               $ref: "#/components/headers/NoStore"
             Set-Cookie:
-              $ref: "#/components/headers/DeviceCookie"
+              $ref: "#/components/headers/SessionCookies"
           content:
             application/json:
               schema:
@@ -209,7 +213,7 @@ paths:
             Cache-Control:
               $ref: "#/components/headers/NoStore"
             Set-Cookie:
-              $ref: "#/components/headers/DeviceCookie"
+              $ref: "#/components/headers/SessionCookies"
           content:
             application/json:
               schema:
@@ -269,21 +273,23 @@ paths:
         Erişim jetonu istemez: süresinin dolmuş olması bu ucun çağrılma
         sebebidir. İstemci aynı jetonla iki yenilemeyi aynı anda göndermemeli;
         cevabı kaybolan yenilemede yeniden giriş gerekir.
+
+        Gövdesizdir: jeton `getir_refresh` çerezinden okunur ve yenisi aynı
+        çereze yazılır. Kullanılamayan jetonun çerezi silinir (tarayıcı ölü
+        jetonu her açılışta yeniden göndermesin).
       security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RefreshRequest"
+      parameters:
+        - $ref: "#/components/parameters/RefreshCookieRequired"
       responses:
         "200":
-          description: Yeni jeton çifti
+          description: Yeni erişim jetonu; yenileme jetonu çerezde yenilendi
           headers:
             X-Request-Id:
               $ref: "#/components/headers/XRequestId"
             Cache-Control:
               $ref: "#/components/headers/NoStore"
+            Set-Cookie:
+              $ref: "#/components/headers/RefreshCookie"
           content:
             application/json:
               schema:
@@ -293,24 +299,38 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/AuthSession"
-        "400":
-          $ref: "#/components/responses/RefreshTokenRequired"
         "401":
-          description: Yenileme jetonu geçersiz, kullanılmış, iptal edilmiş ya da süresi dolmuş
+          description: |
+            Çerez yok ya da içindeki jeton geçersiz, kullanılmış, iptal edilmiş
+            veya süresi dolmuş. İstemci girişe yönlenir. Geçersiz jetonun
+            çerezi silinir.
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/RefreshCookieCleared"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
               examples:
-                refreshTokenInvalid:
-                  summary: UNAUTHORIZED
+                refreshCookieMissing:
+                  summary: UNAUTHORIZED (çerez yok)
                   value:
                     success: false
                     error:
                       code: UNAUTHORIZED
                       message: "Oturumun sona ermiş. Tekrar giriş yapman gerekiyor."
                       details:
-                        refreshToken: gecersiz, kullanilmis ya da suresi dolmus
+                        getir_refresh: zorunlu
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                refreshTokenInvalid:
+                  summary: UNAUTHORIZED (jeton kullanılamaz)
+                  value:
+                    success: false
+                    error:
+                      code: UNAUTHORIZED
+                      message: "Oturumun sona ermiş. Tekrar giriş yapman gerekiyor."
+                      details:
+                        getir_refresh: gecersiz, kullanilmis ya da suresi dolmus
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -321,25 +341,24 @@ paths:
       operationId: logoutSession
       summary: Oturumu kapat
       description: |
-        Yenileme jetonunu iptal eder (oturum kaydı silinir). Tekrarı zararsızdır:
-        ikinci çağrı `revoked: false` alır, bu yüzden `Idempotency-Key` istemez.
-        İstemci her iki durumda da yerel oturumu siler.
+        Yenileme jetonunu iptal eder (oturum kaydı silinir) ve `getir_refresh`
+        çerezini siler. Gövdesizdir: jeton çerezden okunur. Tekrarı zararsızdır:
+        ikinci çağrı ya da çerezsiz çağrı `revoked: false` alır, bu yüzden
+        `Idempotency-Key` istemez. İstemci her iki durumda da yerel oturumu siler.
 
         Erişim jetonu kendi süresi (JWT_TTL) dolana kadar geçerli kalır:
         durumsuz jetonun bilinen bedeli, ömrünün kısa tutulma sebebi budur.
       security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LogoutRequest"
+      parameters:
+        - $ref: "#/components/parameters/RefreshCookieOptional"
       responses:
         "200":
-          description: Çıkış tamam
+          description: Çıkış tamam; çerez silindi
           headers:
             X-Request-Id:
               $ref: "#/components/headers/XRequestId"
+            Set-Cookie:
+              $ref: "#/components/headers/RefreshCookieCleared"
           content:
             application/json:
               schema:
@@ -349,8 +368,6 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/LogoutResult"
-        "400":
-          $ref: "#/components/responses/RefreshTokenRequired"
         "429":
           $ref: "#/components/responses/RateLimited"
 
@@ -1275,6 +1292,30 @@ components:
         Şema adı büyük-küçük harfe duyarsızdır (`bearer` da kabul edilir).
 
   headers:
+    SessionCookies:
+      description: |
+        Kayıt ve girişte İKİ çerez yazılır (iki ayrı `Set-Cookie` satırı): cihaz
+        çerezi `getir_device` (aşağıda `DeviceCookie`) ve yenileme jetonu
+        `getir_refresh` (aşağıda `RefreshCookie`). İkisi de HttpOnly'dir.
+      schema:
+        type: string
+        example: getir_refresh=Wm9w...; Path=/v1/auth; Max-Age=1209600; HttpOnly; SameSite=Strict
+    RefreshCookie:
+      description: |
+        Yenileme jetonu çerezi: `getir_refresh=<opak jeton>; Path=/v1/auth;
+        Max-Age=1209600; HttpOnly; SameSite=Strict` (production'da `Secure`).
+        HttpOnly: sayfadaki betik okuyamaz, XSS jetonu çalamaz. SameSite=Strict:
+        başka siteden gelen istek çerezi taşımaz. `Path=/v1/auth`: jeton yalnızca
+        kimlik uçlarına gider. Her yenilemede jeton değişir, süre (REFRESH_TTL)
+        yeniden başlar.
+      schema:
+        type: string
+        example: getir_refresh=Wm9w...; Path=/v1/auth; Max-Age=1209600; HttpOnly; SameSite=Strict
+    RefreshCookieCleared:
+      description: Yenileme çerezi silinir (`Max-Age=0`, aynı yol ve bayraklar).
+      schema:
+        type: string
+        example: getir_refresh=; Path=/v1/auth; Max-Age=0; HttpOnly; SameSite=Strict
     DeviceCookie:
       description: |
         Cihaz çerezi (T8.1): `getir_device=dvc_<32 hex>; Path=/; Max-Age=31536000;
@@ -1316,6 +1357,20 @@ components:
         enum: ["true"]
 
   parameters:
+    RefreshCookieRequired:
+      name: getir_refresh
+      in: cookie
+      required: true
+      description: Kayıt, giriş ya da önceki yenilemenin yazdığı yenileme jetonu (tarayıcı kendisi gönderir).
+      schema:
+        type: string
+    RefreshCookieOptional:
+      name: getir_refresh
+      in: cookie
+      required: false
+      description: Varsa iptal edilecek yenileme jetonu; yoksa çıkış yine başarılıdır (`revoked:false`).
+      schema:
+        type: string
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -1457,24 +1512,6 @@ components:
                   message: "Oturumun sona ermiş. Tekrar giriş yapman gerekiyor."
                   details:
                     Authorization: oturum kapatilmis ya da suresi dolmus; yeniden giris yap
-                  requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
-
-    RefreshTokenRequired:
-      description: Gövde biçimi geçersiz ya da `refreshToken` boş
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ApiErrorResponse"
-          examples:
-            refreshTokenRequired:
-              summary: VALIDATION_FAILED
-              value:
-                success: false
-                error:
-                  code: VALIDATION_FAILED
-                  message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
-                  details:
-                    refreshToken: zorunlu
                   requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
 
     OrderNotFound:
@@ -1760,25 +1797,6 @@ components:
         bayt sınırı ifade edemediği için `maxLength` gerekli ama yeterli
         değildir, asıl kural sunucudadır.
 
-    RefreshRequest:
-      type: object
-      required: [refreshToken]
-      additionalProperties: false
-      properties:
-        refreshToken:
-          type: string
-          minLength: 1
-          description: Kayıt, giriş ya da önceki yenilemeden gelen opak jeton.
-
-    LogoutRequest:
-      type: object
-      required: [refreshToken]
-      additionalProperties: false
-      properties:
-        refreshToken:
-          type: string
-          minLength: 1
-
     LogoutResult:
       type: object
       required: [revoked]
@@ -1791,7 +1809,10 @@ components:
 
     AuthSession:
       type: object
-      required: [accessToken, expiresIn, refreshToken, refreshExpiresIn, user]
+      description: |
+        Oturum gövdesi. Yenileme jetonu burada DEĞİL, HttpOnly `getir_refresh`
+        çerezindedir (`RefreshCookie`); erişim jetonu bellekte tutulur.
+      required: [accessToken, expiresIn, refreshExpiresIn, user]
       properties:
         accessToken:
           type: string
@@ -1803,15 +1824,11 @@ components:
           type: integer
           description: Erişim jetonunun saniye cinsinden ömrü (JWT_TTL = 3600).
           examples: [3600]
-        refreshToken:
-          type: string
-          description: |
-            Opak yenileme jetonu; yalnızca `/v1/auth/refresh` ve
-            `/v1/auth/logout`'a gider ve bir kez kullanılır. Sunucuda yalnızca
-            özeti (SHA-256) saklanır.
         refreshExpiresIn:
           type: integer
-          description: Yenileme jetonunun saniye cinsinden ömrü (REFRESH_TTL = 1209600, 14 gün).
+          description: |
+            Çerezdeki yenileme jetonunun saniye cinsinden ömrü (REFRESH_TTL =
+            1209600, 14 gün): oturum en çok bu kadar kullanılmadan kalabilir.
           examples: [1209600]
         user:
           $ref: "#/components/schemas/UserProfile"

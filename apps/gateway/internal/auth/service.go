@@ -23,7 +23,9 @@ const (
 	phoneTakenReason     = "bu numarayla kayitli bir hesap var"
 	refreshInvalidReason = "gecersiz, kullanilmis ya da suresi dolmus"
 	sessionEndedReason   = "oturum kapatilmis ya da suresi dolmus; yeniden giris yap"
-	fieldRefreshToken    = "refreshToken"
+	// fieldRefreshCookie, yenileme jetonunun cerezi: gecersiz jetonun hatasi
+	// istemcinin gonderdigi seyin adiyla doner (httpapi RefreshCookie ile ayni).
+	fieldRefreshCookie = "getir_refresh"
 	// fieldAuthorization, erisim jetonunun basligi: oturumu biten jetonun
 	// hatasi da bu adla doner (kimlik ara katmaniyla ayni).
 	fieldAuthorization = "Authorization"
@@ -145,7 +147,7 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (Grant, erro
 	next := newRefreshToken()
 	session, err := s.deps.Sessions.Rotate(ctx, HashRefreshToken(refreshToken), HashRefreshToken(next), now, now.Add(s.deps.RefreshTTL))
 	if errors.Is(err, ErrSessionNotFound) {
-		return Grant{}, apperror.New(apperror.CodeUnauthorized, map[string]string{fieldRefreshToken: refreshInvalidReason})
+		return Grant{}, apperror.New(apperror.CodeUnauthorized, map[string]string{fieldRefreshCookie: refreshInvalidReason})
 	}
 	if err != nil {
 		return Grant{}, fmt.Errorf("oturum yenilenemedi: %w", err)

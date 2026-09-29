@@ -53,17 +53,7 @@ func signalsApp(t *testing.T, secureCookies bool) (*fiber.App, *fakeOrders) {
 // deviceCookieOf, cevaptaki cihaz cerezi; yoksa testi durdurur.
 func deviceCookieOf(t *testing.T, header http.Header) *http.Cookie {
 	t.Helper()
-	for _, line := range header.Values(fiber.HeaderSetCookie) {
-		cookie, err := http.ParseSetCookie(line)
-		if err != nil {
-			t.Fatalf("Set-Cookie cozulemedi (%q): %v", line, err)
-		}
-		if cookie.Name == DeviceCookie {
-			return cookie
-		}
-	}
-	t.Fatalf("cihaz cerezi yazilmadi: %v", header.Values(fiber.HeaderSetCookie))
-	return nil
+	return responseCookie(t, header, DeviceCookie)
 }
 
 // withDevice, istege cihaz cerezini ekler.
@@ -192,12 +182,16 @@ func TestOrderAfterLogoutIsUnauthorized(t *testing.T) {
 	// Cikistan sonra erisim jetonu suresi (JWT_TTL) dolana kadar gecerlidir; ama
 	// oturumu kapanmis jetonla siparis verilemez.
 	app, orders := signalsApp(t, false)
-	registered, _ := registerOn(t, app, "", testPhone)
-	if status, _ := send(t, app, jsonRequest(t, http.MethodPost, "/v1/auth/logout", refreshBodyOf(registered.RefreshToken), nil)); status != http.StatusOK {
+	status, header, envelope := exchange(t, app, registerRequest(t, registerBodyOf(testPhone, testPassword, testFullName)))
+	if status != http.StatusCreated {
+		t.Fatalf("kayit 201 donmeli: %d %+v", status, envelope)
+	}
+	registered := dataOf[auth.Grant](t, envelope)
+	if status, _ := send(t, app, withRefresh(authPost(t, "/v1/auth/logout"), refreshTokenOf(t, header))); status != http.StatusOK {
 		t.Fatalf("cikis 200 donmeli: %d", status)
 	}
 
-	status, envelope := placeWith(t, app, registered.AccessToken)
+	status, envelope = placeWith(t, app, registered.AccessToken)
 
 	if status != http.StatusUnauthorized || envelope.Error.Code != apperror.CodeUnauthorized || detailsOf(t, envelope)[fiber.HeaderAuthorization] == nil {
 		t.Errorf("cikistan sonra siparis 401 donmeli: %d %+v", status, envelope)
