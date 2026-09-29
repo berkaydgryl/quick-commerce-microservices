@@ -19,6 +19,23 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
 )
 
+// RequestIDKey, korelasyon kimliginin gRPC metadata anahtari (service-kit:
+// REQUEST_ID_METADATA_KEY). Gateway her cagriya ekler (httpapi
+// outgoingContext); servis gunlugu ve hata yuku bu degeri tasir.
+const RequestIDKey = "x-request-id"
+
+// RequestIDFrom, giden cagri baglamindaki korelasyon kimligi; yoksa bos.
+// Cagrinin icindeki bir adim (saglik sorgusu) kendi gunluk kaydini istekle
+// eslestirebilsin diye (T8.3).
+func RequestIDFrom(ctx context.Context) string {
+	outgoing, _ := metadata.FromOutgoingContext(ctx)
+	values := outgoing.Get(RequestIDKey)
+	if len(values) == 0 {
+		return ""
+	}
+	return values[len(values)-1]
+}
+
 // Unary, uretilen istemcideki tek bir unary metodun imzasi.
 type Unary[Req, Resp any] func(ctx context.Context, in *Req, opts ...grpc.CallOption) (*Resp, error)
 

@@ -7,14 +7,15 @@ Pnpm workspace'inin parçası değildir: kendi Go modülüdür (`go.mod`). `pnpm
 kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go mod tidy -diff`,
 `-race` testleri, Mongo ve Redis entegrasyon testleri, statik derleme).
 
-## Bugünkü durum (D8 — Go kuralları CI'da; T7.5 — sipariş uçları; T8.1 — kimlik; T8.2 — tekrar koruması ve hız sınırı; pazaryeri uçları T8.4'ten öne alındı)
+## Bugünkü durum (D8 — Go kuralları CI'da; T7.5 — sipariş uçları; T8.1 — kimlik; T8.2 — tekrar koruması ve hız sınırı; T8.3 — panik kurtarma ve zarf taraması; pazaryeri uçları T8.4'ten öne alındı)
 
 | Parça                | Durum                                                           |
 | -------------------- | --------------------------------------------------------------- |
 | Env doğrulaması      | ✅ Açılışta, hatalar toplu raporlanır; geçersizse çıkış kodu 1  |
 | gRPC istemci havuzu  | ✅ catalog + order, tembel bağlantı, keepalive                  |
 | `GET /healthz`       | ✅ Servisleri (ve MOCK değilse Mongo ile Redis'i) paralel sorgular; hepsi ayaktaysa 200, değilse 503 |
-| Cevap zarfı          | ✅ `packages/contracts` ile aynı biçim, her cevapta `requestId` |
+| Cevap zarfı          | ✅ `packages/contracts` ile aynı biçim, her cevapta `requestId`; bütün rotalar testle taranır (T8.3) |
+| Panik kurtarma       | ✅ Uçtaki panik 500 `INTERNAL` zarfı, süreç ayakta; yığın izi yalnızca günlükte (T8.3) |
 | Korelasyon kimliği   | ✅ `req_` + 32 hex; gelen kimlik yalnızca bu biçimdeyse korunur (D8) |
 | Zarif kapanış        | ✅ SIGINT/SIGTERM → devam eden istekler beklenir                |
 | `GET /v1/categories` | ✅ catalog `ListCategories`; bilinmeyen sorgu parametresi 400   |
@@ -105,8 +106,12 @@ gRPC metadata'sı (`x-request-id`). Böylece tek istek gateway'den servise kadar
 - **Gelen kimlik** yalnızca bu biçimdeyse korunur; biçim dışı değer (serbest metin, çok uzun
   dizi) yok sayılır ve yenisi üretilir (D8). Başlık istemcinin elindedir ve kabul edilen değer
   her servisin günlüğüne yazılır.
-- `/healthz` de kimliği servislere taşır. Ara katmana ulaşmadan düşen istekte (64 KB gövde
-  sınırı gibi) kimlik hata işleyicide üretilir; hata cevabı yine kimliksiz kalmaz.
+- `/healthz` de kimliği servislere taşır.
+- **Sunucu düzeyindeki hata** (64 KB gövde sınırı, zaman aşımı): Fiber önce ara katmanları rota
+  işleyicisi olmadan çalıştırır, cevabı sonra hata işleyici yazar. İstek satırı (`http istegi`) bu
+  yüzden hata işleyicide, cevabın son durumuyla yazılır (T8.3; önceden 200 yazıyordu, canlı testte
+  bulundu). Ara katmanlar hiç çalışmadan gelen hatada kimlik hata işleyicide üretilir; hata cevabı
+  yine kimliksiz kalmaz.
 
 ## Go kuralları ve lint (D8)
 
@@ -449,7 +454,8 @@ ve tekrar kayıtları bellekte tutulur.
 Bir servis düşükse **503** ve hata zarfı döner; rapor `error.details` içindedir. Servis
 durumu üç değerlidir: `SERVING`, `NOT_SERVING` (servis kendini hasta bildirdi) ve
 `UNREACHABLE` (cevap gelmedi). Ulaşılamayan serviste `error` alanı yalnızca gRPC durum kodunu
-taşır (`Unavailable`); iç ağ adresi `/healthz` dışarıya açık olduğu için cevaba konmaz.
+taşır (`Unavailable`); iç ağ adresi `/healthz` dışarıya açık olduğu için cevaba konmaz. Sorgusu
+panikleyen bağımlılık `UNREACHABLE` + `Internal` olur; panik yalnızca günlüktedir (T8.3).
 
 ## Hata modeli (`internal/apperror`)
 
@@ -491,4 +497,25 @@ sözlüğündeki bir koda indirilir. Cevaptaki HTTP kodu **her zaman** o kodun
 | Diğer 4xx         | `VALIDATION_FAILED` 400      |
 | 5xx               | `INTERNAL` 500               |
 
-Ham kod kaybolmaz: günlükteki `istek hatayla dondu` satırına yazılır.
+Ham kod kaybolmaz: günlükteki `istek hatayla dondu` satırının `rawStatus` alanına yazılır (T8.3).
+
+### Panik (T8.3)
+
+Fiber paniği kendiliğinden yakalamaz: bir uçtaki beklenmedik panik (boş işaretçi, sınır dışı dizin)
+bütün gateway sürecini düşürürdü. `internal/httpapi/recover.go` paniği hataya çevirir:
+
+- İstemci **500 `INTERNAL`** zarfı alır; mesaj diğer iç hatalarla aynıdır. Panik değeri ve yığın izi
+  cevaba **girmez**.
+- Günlüğe tek `ERROR` satırı yazılır: `istek panikle dondu`, `requestId`, `err` (panik değeri) ve
+  `stack`. İstek satırı (`http istegi`) aynı kimlikle 500 yazar; kurtarma katmanı istek günlüğünün
+  içinde çalışır.
+- Panik değeri cevabı **seçmez**: `panic(NOT_FOUND hatası)` da 500'dür (Fiber'in varsayılanı onu
+  404 yapardı).
+- `/healthz` bağımlılıkları ayrı goroutine'lerde sorar; oradaki panik ara katmana ulaşmaz.
+  `health.Checker` kendisi yakalar: bağımlılık `UNREACHABLE` + `Internal` raporlanır, panik
+  `saglik sorgusunda panik` satırına istek kimliğiyle yazılır.
+
+**Kabul testi** (`internal/httpapi/envelope_test.go`): kayıtlı **bütün rotalar** kimliksiz, gövdesiz
+istekle taranır. Her cevap katı zarfta, kod sözlükte, HTTP kodu koddan, `requestId` başlık = gövde =
+günlük; hata cevabının `istek hatayla dondu` satırı vardır. Yeni rota kendiliğinden taranır; yeni
+bir yol parametresi `routeParamValues`'a değer ister.

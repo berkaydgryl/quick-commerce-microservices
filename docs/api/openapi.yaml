@@ -181,6 +181,8 @@ paths:
                   $ref: "#/components/examples/IdempotencyKeyReused"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
@@ -257,6 +259,8 @@ paths:
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /v1/auth/refresh:
     post:
@@ -334,6 +338,8 @@ paths:
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /v1/auth/logout:
     post:
@@ -370,6 +376,8 @@ paths:
                         $ref: "#/components/schemas/LogoutResult"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /v1/me:
     get:
@@ -402,6 +410,8 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /v1/categories:
     get:
@@ -457,6 +467,8 @@ paths:
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
@@ -508,6 +520,8 @@ paths:
                 $ref: "#/components/schemas/ApiErrorResponse"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
@@ -548,6 +562,8 @@ paths:
                 $ref: "#/components/schemas/ApiErrorResponse"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
@@ -597,6 +613,8 @@ paths:
                 $ref: "#/components/schemas/ApiErrorResponse"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /v1/markets/{marketId}/products:
     get:
@@ -659,6 +677,8 @@ paths:
                 $ref: "#/components/schemas/ApiErrorResponse"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /v1/cart/reserve:
     post:
@@ -809,6 +829,8 @@ paths:
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
@@ -923,6 +945,8 @@ paths:
                       details:
                         status: PAID
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /v1/orders:
     post:
@@ -1078,6 +1102,8 @@ paths:
                   $ref: "#/components/examples/IdempotencyKeyReused"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
@@ -1192,6 +1218,8 @@ paths:
                   $ref: "#/components/examples/IdempotencyKeyReused"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
@@ -1229,6 +1257,8 @@ paths:
           $ref: "#/components/responses/OrderNotFound"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
@@ -1278,6 +1308,8 @@ paths:
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "404":
           $ref: "#/components/responses/OrderNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
 components:
   securitySchemes:
@@ -1564,6 +1596,26 @@ components:
                   message: "Çok fazla deneme yaptın. Kısa bir süre sonra tekrar dene."
                   details:
                     retryAfterSeconds: 30
+                  requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+
+    InternalError:
+      description: |
+        Beklenmeyen hata (T8.3), uçta yakalanan panik dahil. Gateway ayakta
+        kalır; iç ayrıntı (panik değeri, yığın izi, bağımlı servisin mesajı)
+        cevaba konmaz, günlüğe yazılır ve `requestId` ile eşleşir. Kalıcıysa
+        `requestId` ile bildirilir.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          examples:
+            internal:
+              summary: INTERNAL
+              value:
+                success: false
+                error:
+                  code: INTERNAL
+                  message: "Beklenmeyen bir sorun oldu. Birazdan tekrar dene."
                   requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
 
     ServiceUnavailable:

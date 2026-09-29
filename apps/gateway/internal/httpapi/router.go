@@ -16,6 +16,7 @@ package httpapi
 //   body.go       - JSON govdenin kati cozulmesi
 //   params.go     - sorgu parametresinin tipine cevrilmesi
 //   middleware.go - istek gunlugu
+//   recover.go    - panik kurtarma (T8.3)
 //   errors.go     - hata -> zarf cevirisi
 //   requestid.go  - korelasyon kimligi (bicim, baslik, gRPC metadata'si)
 //   query.go      - sorgu parametresi dogrulamasi
@@ -172,8 +173,12 @@ func New(deps Deps) *fiber.App {
 		BodyLimit: maxBodyBytes,
 	})
 
+	// Sira onemli: kimlik -> istek gunlugu -> panik kurtarma (T8.3). Panik
+	// hataya gunlugun ICINDE doner; boylece istek gunlugu de 500'u ve ayni
+	// requestId'yi yazar.
 	app.Use(requestIDMiddleware)
 	app.Use(requestLogger(deps.Logger))
+	app.Use(recoverPanics())
 
 	app.Get("/healthz", healthzHandler(deps.Health))
 

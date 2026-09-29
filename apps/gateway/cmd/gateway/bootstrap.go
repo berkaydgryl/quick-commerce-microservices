@@ -110,7 +110,7 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (*fi
 	orderService := order.New(orderv1.NewOrderServiceClient(orderConn), cfg.RequestTimeout)
 
 	app := httpapi.New(httpapi.Deps{
-		Health:           health.New(healthClients, mergePingers(identity.pingers, shared.pingers), cfg.RequestTimeout, cfg.Mock),
+		Health:           health.New(healthClients, mergePingers(identity.pingers, shared.pingers), cfg.RequestTimeout, cfg.Mock, logger),
 		Categories:       catalogService,
 		NearbyMarkets:    catalogService,
 		Market:           catalogService,

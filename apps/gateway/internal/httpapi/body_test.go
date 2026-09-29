@@ -127,7 +127,8 @@ func TestOversizedBodyIsRejected(t *testing.T) {
 	// by peer" alabilirdi (T7.5'te CI boyle dustu; Linux'ta 300 kosuda 8-11 kez).
 	// Yalnizca baslik gidince sunucuda okunmamis bayt kalmaz, cevap her seferinde okunur.
 	orders := &fakeOrders{}
-	app := orderApp(orders)
+	recorder := &logRecorder{}
+	app := limitedApp(t, RateLimit{}, orders, recorder.logger())
 	dialer := net.Dialer{Timeout: ioDeadline}
 	conn, err := dialer.DialContext(t.Context(), "tcp", serveOnLoopback(t, app))
 	if err != nil {
@@ -163,9 +164,19 @@ func TestOversizedBodyIsRejected(t *testing.T) {
 	if orders.called {
 		t.Error("sinir ustu govde servise gitmemeliydi")
 	}
-	// Istek ara katmana ulasmadan dustu; kimlik yine uretilmeli ve cevap
-	// basligiyla ayni olmali (D8), yoksa bu hata gunlukte bulunamazdi.
+	// Sunucu duzeyindeki hata: kimlik yine uretilmeli ve cevap basligiyla ayni
+	// olmali (D8), yoksa bu hata gunlukte bulunamazdi.
 	if got := envelope.Error.RequestID; !validRequestID(got) || got != response.Header.Get(RequestIDHeader) {
 		t.Errorf("hata zarfinda bicimli ve baslikla ayni requestId bekleniyordu: %q (baslik %q)", got, response.Header.Get(RequestIDHeader))
+	}
+	// Ayni kimlik gunlukte (T8.3). Fiber bu hatada ara katmanlari rota
+	// isleyicisi olmadan once calistirir, cevabi sonra yazar: istek satiri
+	// SON durumu (400) yazmali; ilk hali 200 yaziyordu (canli testte bulundu).
+	records := recorder.recordsOf(t, envelope.Error.RequestID)
+	if failure := only(t, records, "istek hatayla dondu"); failure.RawStatus != http.StatusRequestEntityTooLarge {
+		t.Errorf("hata satirinda Fiber'in ham kodu (413) bekleniyordu: %+v", failure)
+	}
+	if request := only(t, records, "http istegi"); request.Status != status {
+		t.Errorf("istek satiri cevabin son durumunu (%d) yazmali, %d yazdi", status, request.Status)
 	}
 }

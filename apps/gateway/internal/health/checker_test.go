@@ -3,6 +3,7 @@ package health
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -38,8 +39,13 @@ func serving() fakeClient {
 
 const testTimeout = 200 * time.Millisecond
 
+// discardLogger, kaydi sinanmayan testlerin gunlukcusu.
+func discardLogger() *slog.Logger {
+	return slog.New(slog.DiscardHandler)
+}
+
 func TestCheckAllServing(t *testing.T) {
-	checker := New(map[string]Client{"catalog": serving(), "order": serving()}, nil, testTimeout, false)
+	checker := New(map[string]Client{"catalog": serving(), "order": serving()}, nil, testTimeout, false, discardLogger())
 
 	report := checker.Check(context.Background())
 
@@ -56,7 +62,7 @@ func TestCheckDegradedWhenOneNotServing(t *testing.T) {
 	checker := New(map[string]Client{
 		"catalog": serving(),
 		"order":   fakeClient{status: grpc_health_v1.HealthCheckResponse_NOT_SERVING},
-	}, nil, testTimeout, false)
+	}, nil, testTimeout, false, discardLogger())
 
 	report := checker.Check(context.Background())
 
@@ -70,7 +76,7 @@ func TestCheckDegradedWhenOneNotServing(t *testing.T) {
 
 func TestCheckMarksUnreachableSeparately(t *testing.T) {
 	// "Cevap vermedi" ile "kendini hasta bildirdi" ayni sey degildir.
-	checker := New(map[string]Client{"catalog": fakeClient{err: errors.New("connection refused")}}, nil, testTimeout, false)
+	checker := New(map[string]Client{"catalog": fakeClient{err: errors.New("connection refused")}}, nil, testTimeout, false, discardLogger())
 
 	report := checker.Check(context.Background())
 
@@ -88,7 +94,7 @@ func TestCheckAppliesTimeoutPerService(t *testing.T) {
 	checker := New(map[string]Client{
 		"catalog": serving(),
 		"order":   fakeClient{delay: time.Second, status: grpc_health_v1.HealthCheckResponse_SERVING},
-	}, nil, testTimeout, false)
+	}, nil, testTimeout, false, discardLogger())
 
 	startedAt := time.Now()
 	report := checker.Check(context.Background())
@@ -104,7 +110,7 @@ func TestCheckAppliesTimeoutPerService(t *testing.T) {
 
 func TestReportCarriesMockFlag(t *testing.T) {
 	// B16: /healthz modu bildirir.
-	report := New(map[string]Client{"catalog": serving()}, nil, testTimeout, true).Check(context.Background())
+	report := New(map[string]Client{"catalog": serving()}, nil, testTimeout, true, discardLogger()).Check(context.Background())
 
 	if !report.Mock {
 		t.Error("mock bayragi rapora gecmeliydi")
