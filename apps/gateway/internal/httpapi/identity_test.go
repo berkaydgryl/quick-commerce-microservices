@@ -38,6 +38,7 @@ func protectedApp(orders *fakeOrders, profiles *fakeProfiles, logger *slog.Logge
 		ProfileGetter:    profiles,
 		CheckoutSignals:  &fakeSignals{},
 		AccessTokens:     testTokens(),
+		Idempotency:      testIdempotency(),
 		Logger:           logger,
 	})
 }

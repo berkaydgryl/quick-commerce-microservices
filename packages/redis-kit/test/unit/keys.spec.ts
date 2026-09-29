@@ -13,6 +13,7 @@ import {
   EVENTS_STREAM_KEY,
   hashTag,
   hashTagOf,
+  IDEMPOTENCY_ANONYMOUS_SCOPE,
   idempotencyKey,
   rateLimitKey,
   RECONCILE_LOCK_KEY,
@@ -35,7 +36,10 @@ describe('anahtar bicimleri', () => {
     expect(userReservationKey('usr_7')).toBe('resv:user:{usr_7}');
     expect(courierTrackKey('crr_2')).toBe('courier:{crr_2}:track');
     expect(courierLastKey('crr_2')).toBe('courier:{crr_2}:last');
-    expect(idempotencyKey('4f1c3a2b-9d8e')).toBe('idem:{4f1c3a2b-9d8e}');
+    expect(idempotencyKey('usr_7', '4f1c3a2b-9d8e')).toBe('idem:{usr_7}:4f1c3a2b-9d8e');
+    expect(idempotencyKey(IDEMPOTENCY_ANONYMOUS_SCOPE, '4f1c3a2b-9d8e')).toBe(
+      'idem:{anon}:4f1c3a2b-9d8e',
+    );
     expect(rateLimitKey('10.0.0.1', 'POST_/v1/orders')).toBe('rate:{10.0.0.1}:POST_/v1/orders');
     expect(EVENTS_STREAM_KEY).toBe('stream:events');
     expect(EVENTS_DEAD_LETTER_STREAM_KEY).toBe('stream:events:dead');
@@ -114,7 +118,7 @@ describe('dogrulama', () => {
   });
 
   it('cok kisa idempotency anahtari reddedilir', () => {
-    expect(() => idempotencyKey('kisa')).toThrow(AppError);
+    expect(() => idempotencyKey('usr_7', 'kisa')).toThrow(AppError);
   });
 
   it('idempotency anahtari sozlesmedeki uzunluk sinirlarini birebir uygular', () => {
@@ -122,17 +126,23 @@ describe('dogrulama', () => {
     // iki yani da denenir: sozlesmenin kabul ettigi anahtar Redis'te reddedilmemeli.
     const ofLength = (length: number): string => 'a'.repeat(length);
 
-    expect(() => idempotencyKey(ofLength(IDEMPOTENCY_KEY_MIN_LENGTH - 1))).toThrow(AppError);
-    expect(idempotencyKey(ofLength(IDEMPOTENCY_KEY_MIN_LENGTH))).toBe(
-      `idem:{${ofLength(IDEMPOTENCY_KEY_MIN_LENGTH)}}`,
+    expect(() => idempotencyKey('usr_7', ofLength(IDEMPOTENCY_KEY_MIN_LENGTH - 1))).toThrow(
+      AppError,
     );
-    expect(idempotencyKey(ofLength(IDEMPOTENCY_KEY_MAX_LENGTH))).toBe(
-      `idem:{${ofLength(IDEMPOTENCY_KEY_MAX_LENGTH)}}`,
+    expect(idempotencyKey('usr_7', ofLength(IDEMPOTENCY_KEY_MIN_LENGTH))).toBe(
+      `idem:{usr_7}:${ofLength(IDEMPOTENCY_KEY_MIN_LENGTH)}`,
     );
-    expect(() => idempotencyKey(ofLength(IDEMPOTENCY_KEY_MAX_LENGTH + 1))).toThrow(AppError);
+    expect(idempotencyKey('usr_7', ofLength(IDEMPOTENCY_KEY_MAX_LENGTH))).toBe(
+      `idem:{usr_7}:${ofLength(IDEMPOTENCY_KEY_MAX_LENGTH)}`,
+    );
+    expect(() => idempotencyKey('usr_7', ofLength(IDEMPOTENCY_KEY_MAX_LENGTH + 1))).toThrow(
+      AppError,
+    );
   });
 
   it('idempotency anahtarinda ayirici karakter reddedilir', () => {
-    expect(() => idempotencyKey('anahtar:{ds_1}')).toThrow(AppError);
+    expect(() => idempotencyKey('usr_7', 'anahtar:{ds_1}')).toThrow(AppError);
+    // Kapsam da anahtar parcasidir: ayirici tasiyamaz.
+    expect(() => idempotencyKey('usr:7', 'anahtar-0001')).toThrow(AppError);
   });
 });

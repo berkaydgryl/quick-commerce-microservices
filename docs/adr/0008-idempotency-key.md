@@ -41,3 +41,56 @@ engeller ve ozetin nasil hesaplandigina bagli kirilgan bir kurala donusur.
 ## Ilgili
 
 ADR-01, ADR-04, ADR-09; gorev T1.5.
+
+## Ek (T8.2, 2026-09-29): kaydin bicimi, kapsami ve omru
+
+Roadmap P5 ve B6'nin bagladigi ayrintilar. Ustteki karar degismez; bu ek onu netlestirir ve
+iki noktada (saklanan cevap, kayit ucu) ustteki metinden ayrilir; ayrilmanin gerekcesi
+yanindadir. Uygulayan gateway'dir (`apps/gateway/internal/httpapi/idempotency.go`, depo
+`internal/idempotency`); korunan uclar POST /v1/auth/register, /v1/cart/reserve, /v1/orders
+ve /v1/orders/{id}/3ds.
+
+- Anahtar bicimi: 8-128 karakter; yalnizca harf, rakam, `-` ve `_` (@getir/core
+  `IDEMPOTENCY_KEY_*`; UUID v4 bu kumededir). `:` ve `{}` Redis anahtarinin ayiricisidir,
+  istemciden gelemez. Bicimsiz anahtar 400 VALIDATION_FAILED; anahtarsiz mutasyon yine 400.
+- Kapsam: kayit `idem:{usr_...}:<anahtar>` anahtarinda durur, anahtar kullanici basinadir.
+  Iki kullanici ayni anahtari secse kayitlari ayrisir; biri digerinin cevabini (kisisel
+  veri) tekrar olarak alamaz. Kimliksiz uc (kayit) ortak `anon` kapsamindadir. Bicim
+  @getir/redis-kit `idempotencyKey(scope, key)`'dedir; gateway'in testi o satiri okuyup
+  karsilastirir.
+- In-progress: `SET NX PX 30000` (B6); kayitta sahibin rastgele jetonu ve istegin parmak izi
+  durur. Bitirme ve birakma yalnizca kayit hala ayni jetonla in-progress ise yazar (Lua):
+  suresi dolup baska istegin aldigi kaydin ustune eski istek yazamaz. Kayit is surerken
+  dusmemeli: korunan ucun butun isi 25 saniyelik bir son tarihle calisir
+  (`GATEWAY_REQUEST_TIMEOUT_MS` ne olursa olsun). Redis komutlari surucu tarafindan yeniden
+  denenmez; cevabi kaybolan bir SET NX'i ayni jetonla goren istek kaydi kendisinin sayar.
+- Parmak izi: yontem, yol ve govdenin HMAC-SHA256'si; anahtari JWT sirrindan ayri etiketle
+  turetilir. Duz ozet degil HMAC: kayit govdesinde sifre var, Redis sizarsa duz ozet kaba
+  kuvvetle cozulebilirdi. Ayni anahtar + farkli istek 409 CONFLICT'tir (anahtarin yanlis
+  yeniden kullanimi, P5).
+- Cevaplar: ayni istek hala isleniyorsa 409 REQUEST_IN_PROGRESS; bitmisse ilk cevap (durum
+  kodu + govde) aynen doner ve `Idempotent-Replayed: true` basligini tasir. Tekrar edilen
+  hata zarfinda requestId bu istegin kimligidir (govdedeki requestId basliktakiyle ayni
+  olmali).
+- Saklanan cevap (ustteki metinden ayrilir): "yanit ozeti" (P5: "kompakt kayit") yerine
+  cevap govdesinin kendisi, en fazla 16 KB. Gerekce: bugunku cevaplar birkac yuz bayttir,
+  P5'in bellek kaygisi boyle de karsilanir; ozetten cevabi yeniden kurmak ikinci bir okuma
+  yolu ve ilk cevaptan ayrisabilen ikinci bir cevap demekti. 16 KB'yi asan govde saklanmaz;
+  tekrarinda uc yeniden calismaz, 409 CONFLICT doner ve gunluge uyari yazilir (bugun hicbir
+  ucta olmaz).
+- Saklanmayanlar: 5xx, 400 (dogrulama; ucun yan etkisi yok), 401 (oturum; yeniden girisle
+  duzelir) ve 429 (hiz siniri). Bunlarda anahtar birakilir, istemci ayni anahtarla yeniden
+  dener. Diger 4xx (is kurali: stok yetersiz, siparis bulunamadi) saklanir ve tekrar edilir.
+- Omur: basarili siparis ve 3DS kaydi (2xx) 2 saat (P5); diger her bitmis kayit
+  `IDEMPOTENCY_TTL_SECONDS` (varsayilan 24 saat); in-progress 30 saniye. TTL'siz kayit yoktur.
+- Kayit ucu (ustteki metinden ayrilir): kayit cevabi erisim ve yenileme jetonu tasir; jeton
+  Redis'e yazilmaz. Kayit ucunda yalnizca in-progress ve parmak izi korumasi vardir; bitmis
+  bir kaydin tekrari uca gecer ve telefon benzersizligi 409 PHONE_ALREADY_REGISTERED
+  dondurur, ikinci hesap acilmaz. "Ayni yanit aynen dondurulur" kuralinin tek istisnasidir.
+- Redis ulasilamazsa korunan uclar 503 SERVICE_UNAVAILABLE doner (fail-closed): korumasiz
+  siparis almak cift siparis riskidir. Gateway Redis'siz acilmaz; /healthz Redis'i raporlar.
+  (Hiz siniri, T8.2'nin ikinci PR'i, bunun tersine fail-open'dir.)
+- MOCK=true: kayitlar gateway'in belleginde, ayni kurallarla tutulur; Redis'e gidilmez. Tek
+  ornekte ayni davranir, ornekler arasinda paylasilmaz.
+- Kabul edilen borc (ustteki) somutlasti: coken istegin in-progress kaydi en fazla 30 saniye
+  kalir; o arada istemci 409 REQUEST_IN_PROGRESS alir, sonra ayni anahtarla yeniden dener.

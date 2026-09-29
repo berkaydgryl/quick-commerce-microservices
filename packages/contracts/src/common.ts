@@ -14,6 +14,7 @@ import {
   CATALOG_ID_BODY_PATTERN,
   CATALOG_ID_MAX_LENGTH,
   CATALOG_ID_PREFIX,
+  IDEMPOTENCY_KEY_CHARSET,
   IDEMPOTENCY_KEY_MAX_LENGTH,
   IDEMPOTENCY_KEY_MIN_LENGTH,
   LATITUDE_MAX,
@@ -159,15 +160,19 @@ export const pageQuerySchema = z.object({
 });
 
 /**
- * Idempotency anahtari (ADR-08): bosluk kirpilir, uzunluk sinirlari core'dan.
- * payment'in gRPC semalari ve payment.refund_requested olayi bunu kullanir
- * (T7.4); order'in gRPC semasindaki kopya D5'te buraya baglanir.
+ * Idempotency anahtari (ADR-08): bosluk kirpilir, uzunluk sinirlari ve izinli
+ * karakterler core'dan. payment'in gRPC semalari ve payment.refund_requested
+ * olayi bunu kullanir (T7.4); order'in gRPC semasindaki kopya D5'te buraya
+ * baglanir. Karakter kurali T8.2'de eklendi: gateway anahtari Redis'e
+ * (idem:{kapsam}:anahtar) yazar; sozlesmenin kabul ettigi anahtar orada
+ * reddedilmemeli.
  */
 export const idempotencyKeySchema = z
   .string()
   .trim()
   .min(IDEMPOTENCY_KEY_MIN_LENGTH, `en az ${IDEMPOTENCY_KEY_MIN_LENGTH} karakter olmali`)
-  .max(IDEMPOTENCY_KEY_MAX_LENGTH, `en fazla ${IDEMPOTENCY_KEY_MAX_LENGTH} karakter olmali`);
+  .max(IDEMPOTENCY_KEY_MAX_LENGTH, `en fazla ${IDEMPOTENCY_KEY_MAX_LENGTH} karakter olmali`)
+  .regex(new RegExp(`^[${IDEMPOTENCY_KEY_CHARSET}]+$`), 'yalnizca harf, rakam, - ve _ olmali');
 
 export type Id = z.infer<typeof idSchema>;
 export type MarketId = z.infer<typeof marketIdSchema>;

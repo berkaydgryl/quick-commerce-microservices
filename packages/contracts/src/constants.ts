@@ -67,7 +67,11 @@ export const COUPON_CODE_MAX_LENGTH = 32;
  * idem:{key} anahtari da uygular. Burada yalnizca yeniden disa verilir ki REST
  * yuzeyinin sinirlari tek pakette okunsun; deger burada TEKRAR YAZILMAZ.
  */
-export { IDEMPOTENCY_KEY_MAX_LENGTH, IDEMPOTENCY_KEY_MIN_LENGTH } from '@getir/core';
+export {
+  IDEMPOTENCY_KEY_CHARSET,
+  IDEMPOTENCY_KEY_MAX_LENGTH,
+  IDEMPOTENCY_KEY_MIN_LENGTH,
+} from '@getir/core';
 
 /**
  * Iade gerekcesi ANAHTARI (metin degil; ornek "order_changed_during_payment").

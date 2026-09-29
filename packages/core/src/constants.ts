@@ -106,6 +106,14 @@ export const IDEMPOTENCY_KEY_MIN_LENGTH = 8;
 export const IDEMPOTENCY_KEY_MAX_LENGTH = 128;
 
 /**
+ * Anahtarda izin verilen karakterler (T8.2): harf, rakam, '-' ve '_' (UUID v4
+ * bu kumede). Redis anahtari bu degerle kurulur; ':' ve '{}' anahtar ayiricisi
+ * oldugu icin istemciden gelemez. Duzenli ifadede karakter sinifi olarak
+ * kullanilir: `[${IDEMPOTENCY_KEY_CHARSET}]`.
+ */
+export const IDEMPOTENCY_KEY_CHARSET = 'A-Za-z0-9_-';
+
+/**
  * Mock odeme saglayicisinin kabul ettigi 3DS kodu (payment.proto: "mock
  * saglayicida sabit bir kod beklenir; deger packages/core icindeki
  * sabitlerden gelir"). Bicim sozlesmedeki OTP kuraliyla ayni: 6 hane.

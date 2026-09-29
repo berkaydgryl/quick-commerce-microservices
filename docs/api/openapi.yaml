@@ -18,13 +18,19 @@ info:
       hatadan ayırır. HTTP durum kodu ile `error.code` birlikte okunur.
     * **Para**: tüm tutarlar minor unit (kuruş) cinsinden **tam sayıdır**.
       Float kullanılmaz, istemci gösterim anında 100'e böler.
-    * **Idempotency**: kalıcı durum değiştiren uçlarda `Idempotency-Key` başlığı
-      zorunludur. Aynı anahtar + aynı gövde ilk cevabı tekrar döndürür; aynı
-      anahtar + farklı gövde `REQUEST_IN_PROGRESS` ile reddedilir (tekrar
-      koruması T8.2; bugün gateway yalnızca başlığın VARLIĞINI denetler).
-      `POST /v1/auth/login`, `/v1/auth/refresh` ve `/v1/auth/logout` bu başlığı
-      istemez: giriş ve yenileme kalıcı bir kaynak yaratmaz (oturum jetonu
-      üretir), çıkışın tekrarı zararsızdır.
+    * **Idempotency** (ADR-08 ve T8.2 eki): kalıcı durum değiştiren uçlarda
+      `Idempotency-Key` başlığı zorunludur; anahtar niyet başına bir kez üretilir
+      ve kullanıcı başınadır. Aynı anahtarla gelen aynı istek ucu İKİNCİ KEZ
+      ÇALIŞTIRMAZ: ilk cevap aynen döner ve `Idempotent-Replayed: true`
+      başlığını taşır. İlk istek hâlâ işleniyorsa `409 REQUEST_IN_PROGRESS`,
+      anahtar farklı bir gövdeyle gelirse `409 CONFLICT` döner. Doğrulama
+      (400), oturum (401), hız sınırı (429) ve sunucu (5xx) hataları saklanmaz:
+      aynı anahtarla yeniden denenir. Kayıt, başarılı sipariş ve 3DS için 2
+      saat, diğerlerinde 24 saat tutulur. Tekrar koruması çalışamıyorsa (Redis
+      erişilemez) uç `503 SERVICE_UNAVAILABLE` döner; korumasız sipariş
+      alınmaz. `POST /v1/auth/login`, `/v1/auth/refresh` ve `/v1/auth/logout`
+      bu başlığı istemez: giriş ve yenileme kalıcı bir kaynak yaratmaz (oturum
+      jetonu üretir), çıkışın tekrarı zararsızdır.
     * **Kimlik**: korumalı uçlar `Authorization: Bearer <erişim jetonu>` ister
       (T8.1). Jeton yoksa ya da geçersizse `401 UNAUTHORIZED` ve
       `WWW-Authenticate` başlığı döner. Jeton ve kişisel veri taşıyan cevaplar
@@ -71,10 +77,13 @@ paths:
         birlikte gelir, ayrıca giriş gerekmez. Şifre yalnızca bcrypt özetiyle
         saklanır. `fullName` baştaki ve sondaki boşluklardan arındırılır.
 
-        `Idempotency-Key` zorunludur; bugün yalnızca varlığı denetlenir, aynı
-        anahtarla gelen tekrarın ilk cevabı alması T8.2 ile gelir. O zamana
-        kadar tekrar eden kayıt `409 PHONE_ALREADY_REGISTERED` alır: ikinci
-        hesap açılmaz, `users.phone` benzersiz indeksi bunu garanti eder.
+        `Idempotency-Key` zorunludur. Bu uç tekrar kuralının TEK istisnasıdır
+        (ADR-08 eki): cevap jeton taşıdığı için saklanmaz ve tekrar edilmez.
+        Aynı anahtarla gelen tekrar, ilki hâlâ işleniyorsa
+        `409 REQUEST_IN_PROGRESS` alır; bitmişse uca geçer ve
+        `409 PHONE_ALREADY_REGISTERED` döner: ikinci hesap açılmaz,
+        `users.phone` benzersiz indeksi bunu garanti eder. Aynı anahtar farklı
+        gövdeyle `409 CONFLICT` alır.
       security: []
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -135,10 +144,14 @@ paths:
                       details:
                         email: bu uc bu alani kabul etmiyor
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                idempotencyKeyInvalid:
+                  $ref: "#/components/examples/IdempotencyKeyInvalid"
         "409":
           description: |
-            Telefon numarası başka bir hesaba ait. Anahtarın farklı gövdeyle
-            tekrar kullanılması (`REQUEST_IN_PROGRESS`) T8.2 ile gelir.
+            Telefon numarası başka bir hesaba ait (`PHONE_ALREADY_REGISTERED`;
+            biten kaydın aynı anahtarla tekrarı da bunu alır). Anahtarla ilgili
+            iki durum: ilk istek hâlâ işleniyor (`REQUEST_IN_PROGRESS`) ya da
+            anahtar farklı bir gövdeyle kullanılmış (`CONFLICT`).
           content:
             application/json:
               schema:
@@ -154,8 +167,14 @@ paths:
                       details:
                         phone: bu numarayla kayitli bir hesap var
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                requestInProgress:
+                  $ref: "#/components/examples/IdempotencyRequestInProgress"
+                keyReused:
+                  $ref: "#/components/examples/IdempotencyKeyReused"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /v1/auth/login:
     post:
@@ -640,6 +659,8 @@ paths:
           headers:
             X-Request-Id:
               $ref: "#/components/headers/XRequestId"
+            Idempotent-Replayed:
+              $ref: "#/components/headers/IdempotentReplayed"
           content:
             application/json:
               schema:
@@ -689,6 +710,8 @@ paths:
                       details:
                         unavailableProductIds: ["prd_yok"]
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                idempotencyKeyInvalid:
+                  $ref: "#/components/examples/IdempotencyKeyInvalid"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
@@ -699,9 +722,10 @@ paths:
                 $ref: "#/components/schemas/ApiErrorResponse"
         "409":
           description: |
-            Fiyat değişti (`PRICE_CHANGED`, ayrıntıda güncel toplam). Stok
-            yetersizliği (`STOCK_INSUFFICIENT`) T11.2, anahtar tekrarı
-            (`REQUEST_IN_PROGRESS`) T8.2 ile gelir.
+            Fiyat değişti (`PRICE_CHANGED`, ayrıntıda güncel toplam). Aynı
+            anahtarlı istek hâlâ işleniyor (`REQUEST_IN_PROGRESS`) ya da anahtar
+            farklı bir gövdeyle kullanılmış (`CONFLICT`). Stok yetersizliği
+            (`STOCK_INSUFFICIENT`) T11.2 ile gelir.
           content:
             application/json:
               schema:
@@ -719,6 +743,10 @@ paths:
                         totalMinor: 19360
                         currency: TRY
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                requestInProgress:
+                  $ref: "#/components/examples/IdempotencyRequestInProgress"
+                keyReused:
+                  $ref: "#/components/examples/IdempotencyKeyReused"
         "422":
           description: Kupon uygulanamadı ya da minimum sepet tutarına ulaşılmadı
           content:
@@ -902,6 +930,8 @@ paths:
           headers:
             X-Request-Id:
               $ref: "#/components/headers/XRequestId"
+            Idempotent-Replayed:
+              $ref: "#/components/headers/IdempotentReplayed"
           content:
             application/json:
               schema:
@@ -937,7 +967,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
         "400":
-          description: Biçim hatası ya da başlık yok
+          description: Biçim hatası, başlık yok ya da anahtar biçimsiz
           content:
             application/json:
               schema:
@@ -953,6 +983,8 @@ paths:
                       details:
                         payment.method: CARD olmali
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                idempotencyKeyInvalid:
+                  $ref: "#/components/examples/IdempotencyKeyInvalid"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "402":
@@ -989,7 +1021,9 @@ paths:
           description: |
             Sipariş bu adıma uygun değil (`ORDER_STATE_INVALID`, ayrıntıda denenen
             geçiş) ya da önceki ödeme denemesi hâlâ sonuçlanmadı
-            (`REQUEST_IN_PROGRESS`).
+            (`REQUEST_IN_PROGRESS`). Aynı anahtarlı istek hâlâ işleniyorsa da
+            `REQUEST_IN_PROGRESS` (ayrıntıda `Idempotency-Key`); anahtar farklı
+            bir gövdeyle kullanılmışsa `CONFLICT`.
           content:
             application/json:
               schema:
@@ -1007,6 +1041,10 @@ paths:
                         from: CANCELLED
                         to: RISK_CHECK
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                requestInProgress:
+                  $ref: "#/components/examples/IdempotencyRequestInProgress"
+                keyReused:
+                  $ref: "#/components/examples/IdempotencyKeyReused"
         "429":
           $ref: "#/components/responses/RateLimited"
         "503":
@@ -1022,6 +1060,11 @@ paths:
         kod `402 THREEDS_FAILED` döner ve kalan hak ayrıntıdadır; hak biter ya da
         süre dolarsa sipariş `PAYMENT_FAILED` olur (`attemptsLeft: 0`). Biçimi
         bozuk kod deneme sayılmaz (`400`).
+
+        Her kod denemesi ayrı bir niyettir: yeni kod YENİ bir `Idempotency-Key`
+        ile gönderilir. Aynı anahtarla farklı kod `409 CONFLICT` alır; aynı kodun
+        aynı anahtarla tekrarı ilk cevabı (ör. `402`, aynı `attemptsLeft`) alır,
+        hak ikinci kez düşmez.
       security:
         - bearerAuth: []
       parameters:
@@ -1039,6 +1082,8 @@ paths:
           headers:
             X-Request-Id:
               $ref: "#/components/headers/XRequestId"
+            Idempotent-Replayed:
+              $ref: "#/components/headers/IdempotentReplayed"
           content:
             application/json:
               schema:
@@ -1049,7 +1094,7 @@ paths:
                       data:
                         $ref: "#/components/schemas/OrderPlacement"
         "400":
-          description: Kod 6 hane değil ya da başlık yok
+          description: Kod 6 hane değil, başlık yok ya da anahtar biçimsiz
           content:
             application/json:
               schema:
@@ -1065,6 +1110,8 @@ paths:
                       details:
                         otp: 6 haneli kod olmali
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                idempotencyKeyInvalid:
+                  $ref: "#/components/examples/IdempotencyKeyInvalid"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "402":
@@ -1099,11 +1146,19 @@ paths:
         "404":
           $ref: "#/components/responses/OrderNotFound"
         "409":
-          description: Sipariş 3DS beklemiyor
+          description: |
+            Sipariş 3DS beklemiyor (`ORDER_STATE_INVALID`), aynı anahtarlı istek
+            hâlâ işleniyor (`REQUEST_IN_PROGRESS`) ya da anahtar farklı bir kodla
+            kullanılmış (`CONFLICT`).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                requestInProgress:
+                  $ref: "#/components/examples/IdempotencyRequestInProgress"
+                keyReused:
+                  $ref: "#/components/examples/IdempotencyKeyReused"
         "429":
           $ref: "#/components/responses/RateLimited"
         "503":
@@ -1235,6 +1290,14 @@ components:
         type: string
         pattern: "^req_[0-9a-f]{32}$"
         example: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+    IdempotentReplayed:
+      description: |
+        Cevap, aynı `Idempotency-Key` ile gelen önceki isteğin KAYDINDAN tekrar
+        edildi: uç ikinci kez çalışmadı (ikinci sipariş açılmadı). Yalnızca
+        tekrar cevaplarında bulunur; hata cevabının tekrarında da gelir.
+      schema:
+        type: string
+        enum: ["true"]
 
   parameters:
     IdempotencyKey:
@@ -1242,14 +1305,18 @@ components:
       in: header
       required: true
       description: |
-        Kalıcı durum değiştiren uçlarda zorunludur. İstemci üretir (UUID v4
-        önerilir). Aynı anahtar + aynı gövde ilk cevabı tekrar döndürür;
-        aynı anahtar + farklı gövde `REQUEST_IN_PROGRESS` ile reddedilir.
+        Kalıcı durum değiştiren uçlarda zorunludur. İstemci niyet başına bir kez
+        üretir (UUID v4 önerilir) ve tekrarlarda aynen gönderir. 8-128 karakter;
+        yalnızca harf, rakam, `-` ve `_` (`:` ve `{}` gibi ayırıcılar kabul
+        edilmez). Anahtar kullanıcı başınadır: iki kullanıcının aynı anahtarı
+        birbirini etkilemez. Tekrar kuralları: bilgi bölümündeki "Idempotency"
+        maddesi.
       schema:
         type: string
         minLength: 8
         maxLength: 128
-      example: "ord_db77f4c0e24f49919cc1d78a649c9c94"
+        pattern: "^[A-Za-z0-9_-]+$"
+      example: "4f1c3a2b-9d8e-4b7a-8c6d-5e4f3a2b1c0d"
 
     MarketIdPath:
       name: marketId
@@ -1297,6 +1364,38 @@ components:
         minimum: 1
         maximum: 100
         default: 20
+
+  examples:
+    IdempotencyKeyInvalid:
+      summary: VALIDATION_FAILED (anahtar biçimi)
+      value:
+        success: false
+        error:
+          code: VALIDATION_FAILED
+          message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+          details:
+            Idempotency-Key: "8-128 karakter olmali; yalnizca harf, rakam, - ve _"
+          requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+    IdempotencyRequestInProgress:
+      summary: REQUEST_IN_PROGRESS (aynı anahtarlı istek sürüyor)
+      value:
+        success: false
+        error:
+          code: REQUEST_IN_PROGRESS
+          message: "İşlemin sürüyor, biraz bekler misin?"
+          details:
+            Idempotency-Key: ayni anahtarli istek hala isleniyor
+          requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+    IdempotencyKeyReused:
+      summary: CONFLICT (anahtar farklı gövdeyle kullanılmış)
+      value:
+        success: false
+        error:
+          code: CONFLICT
+          message: "Bu kayıt az önce değişti. Sayfayı yenileyip tekrar dener misin?"
+          details:
+            Idempotency-Key: bu anahtar farkli bir istekle kullanildi; yeni bir anahtar uret
+          requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
 
   responses:
     Unauthenticated:
@@ -1405,8 +1504,10 @@ components:
 
     ServiceUnavailable:
       description: |
-        Bağımlı servise ulaşılamadı ya da süre içinde cevap vermedi. Yeniden
-        denenebilir; iç ayrıntı (adres, sürücü mesajı) cevaba konmaz, günlüktedir.
+        Bağımlı servise ulaşılamadı ya da süre içinde cevap vermedi; mutasyon
+        uçlarında tekrar korumasının deposu (Redis) erişilemez olabilir: koruma
+        olmadan uç çalıştırılmaz. Yeniden denenebilir (aynı `Idempotency-Key`
+        ile); iç ayrıntı (adres, sürücü mesajı) cevaba konmaz, günlüktedir.
       content:
         application/json:
           schema:

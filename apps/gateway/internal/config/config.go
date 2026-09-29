@@ -10,7 +10,7 @@
 //	defaults.go - varsayilanlar ve sabit adlar (port haritasi, NODE_ENV, servisler)
 //	env.go      - genel okuyucular: metin, tam sayi, bool, sure, secenek
 //	policy.go   - kendi kurali olan okuyucular: gorsel kok adresi, log seviyesi,
-//	              Mongo adresi, JWT sirri (T8.1)
+//	              Mongo adresi, JWT sirri (T8.1), Redis adresi (T8.2)
 //	seed.go     - persona seed komutunun dar yapilandirmasi (T8.1)
 package config
 
@@ -57,6 +57,12 @@ type Config struct {
 	// JWTTTL, erisim jetonu omru; RefreshTTL, yenileme jetonu omru.
 	JWTTTL     time.Duration
 	RefreshTTL time.Duration
+	// RedisURL, tekrar korumasi (T8.2) icin; MOCK'ta bos olabilir: kayitlar
+	// bellekte tutulur. Adres parola tasiyabilir; gunluge yazilmaz.
+	RedisURL            string
+	RedisConnectTimeout time.Duration
+	// IdempotencyTTL, bitmis idempotency kaydinin omru (ADR-08).
+	IdempotencyTTL time.Duration
 }
 
 // Secret, gunluge ya da hata metnine yazilmamasi gereken deger. fmt (%v, %s,
@@ -148,6 +154,22 @@ func Load(getenv Getenv) (Config, error) {
 		problems = append(problems, err)
 	}
 
+	// Tekrar korumasi (T8.2): Redis MOCK disinda zorunlu.
+	redisURL, err := readRedisURL(getenv, mock)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
+	redisConnectTimeout, err := readDuration(getenv, "REDIS_CONNECT_TIMEOUT_MS", defaultRedisConnectTimeout)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
+	idempotencyTTL, err := readSeconds(getenv, "IDEMPOTENCY_TTL_SECONDS", defaultIdempotencyTTL)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
 	// Servis listesi bugun sabittir: gateway yalnizca ayakta olan iki servisi
 	// taniyor. Yeni servis geldiginde buraya bir satir eklenir; adres yine
 	// ortamdan gelir.
@@ -175,5 +197,8 @@ func Load(getenv Getenv) (Config, error) {
 		JWTSecret:                   jwtSecret,
 		JWTTTL:                      jwtTTL,
 		RefreshTTL:                  refreshTTL,
+		RedisURL:                    redisURL,
+		RedisConnectTimeout:         redisConnectTimeout,
+		IdempotencyTTL:              idempotencyTTL,
 	}, nil
 }

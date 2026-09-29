@@ -21,14 +21,14 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
 )
 
-// bootstrap, parcalari BAGLAR: baglanti havuzu, kimlik servisi (T8.1), servis
-// adaptorleri, yonlendirici. Dinlemez ve sinyal beklemez; o is serve'undur
+// bootstrap, parcalari BAGLAR: baglanti havuzu, kimlik servisi (T8.1), tekrar
+// korumasi (T8.2), servis adaptorleri, yonlendirici. Dinlemez ve sinyal beklemez; o is serve'undur
 // (Node tarafindaki bootstrap.ts / main.ts ayrimi). Yeni bir servis istemcisi
 // (order, payment) geldiginde degisen yer burasidir, yasam dongusu degil.
 //
-// ctx acilisin baglamidir: Mongo'ya baglanirken sinyal gelirse acilis durur.
-// Donen cleanup havuzu ve Mongo baglantisini kapatir; cagiran, sunucu
-// durduktan SONRA calistirir.
+// ctx acilisin baglamidir: Mongo'ya ya da Redis'e baglanirken sinyal gelirse
+// acilis durur. Donen cleanup havuzu, Mongo ve Redis baglantilarini kapatir;
+// cagiran, sunucu durduktan SONRA calistirir.
 func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (*fiber.App, func(), error) {
 	targets := make([]clients.Target, 0, len(cfg.Services))
 	for _, service := range cfg.Services {
@@ -55,12 +55,25 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (*fi
 	}
 	// Kapanista ctx coktan iptal edilmistir (sinyal); Mongo'yu birakmak icin
 	// iptali tasimayan, kapanis suresiyle sinirli yeni bir baglam kurulur.
-	cleanup := func() {
-		closePool()
+	closeIdentity := func() {
 		closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cfg.ShutdownTimeout)
 		defer cancel()
 		if closeErr := identity.close(closeCtx); closeErr != nil {
 			logger.Warn("mongo baglantisi temiz kapanmadi", slog.Any("err", closeErr))
+		}
+	}
+
+	replays, err := buildIdempotency(ctx, cfg)
+	if err != nil {
+		closePool()
+		closeIdentity()
+		return nil, nil, fmt.Errorf("tekrar korumasi: %w", err)
+	}
+	cleanup := func() {
+		closePool()
+		closeIdentity()
+		if closeErr := replays.close(); closeErr != nil {
+			logger.Warn("redis baglantisi temiz kapanmadi", slog.Any("err", closeErr))
 		}
 	}
 
@@ -96,7 +109,7 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (*fi
 	orderService := order.New(orderv1.NewOrderServiceClient(orderConn), cfg.RequestTimeout)
 
 	app := httpapi.New(httpapi.Deps{
-		Health:           health.New(healthClients, identity.pingers, cfg.RequestTimeout, cfg.Mock),
+		Health:           health.New(healthClients, mergePingers(identity.pingers, replays.pingers), cfg.RequestTimeout, cfg.Mock),
 		Categories:       catalogService,
 		NearbyMarkets:    catalogService,
 		Market:           catalogService,
@@ -114,10 +127,23 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (*fi
 		ProfileGetter:     identity.service,
 		CheckoutSignals:   identity.service,
 		AccessTokens:      identity.tokens,
+		// Tekrar korumasi (T8.2): Redis ya da MOCK'ta bellek.
+		Idempotency: replays.settings,
 		// Cihaz cerezi yalnizca production'da Secure: gelistirme http://localhost.
 		SecureCookies: cfg.NodeEnv == config.EnvProduction,
 		Logger:        logger,
 	})
 
 	return app, cleanup, nil
+}
+
+// mergePingers, gRPC disi bagimliliklari tek haritada toplar (Mongo, Redis).
+func mergePingers(groups ...map[string]health.Pinger) map[string]health.Pinger {
+	merged := map[string]health.Pinger{}
+	for _, group := range groups {
+		for name, pinger := range group {
+			merged[name] = pinger
+		}
+	}
+	return merged
 }

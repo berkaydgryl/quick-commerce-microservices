@@ -12,6 +12,7 @@ import (
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/idempotency"
 )
 
 // fakeReporter, gercek gRPC baglantisi olmadan rapor doner.
@@ -107,4 +108,12 @@ func bearer(t *testing.T) string {
 		t.Fatalf("test jetonu uretilemedi: %v", err)
 	}
 	return bearerScheme + " " + token
+}
+
+// testFingerprintKey, yalnizca testlerde kullanilan parmak izi anahtari.
+var testFingerprintKey = []byte("yalnizca-test-icin-parmak-izi-anahtari")
+
+// testIdempotency, bellek deposuyla tekrar korumasi (her uygulamaya ayri depo).
+func testIdempotency() Idempotency {
+	return Idempotency{Store: idempotency.NewMemory(time.Now), FingerprintKey: testFingerprintKey, TTL: 24 * time.Hour}
 }
