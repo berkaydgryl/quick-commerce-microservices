@@ -90,7 +90,10 @@ Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci 
   giriş ya da yenilemeyle alınır (HS256 JWT, ömrü JWT_TTL); yoksa ya da
   geçersizse `401 UNAUTHORIZED` + `WWW-Authenticate` döner. Yenileme jetonu
   opaktır, her kullanımda yenisiyle değişir ve sunucuda yalnızca özetiyle
-  saklanır. Yanlış şifre ile kayıtsız numara aynı cevabı alır
+  saklanır. Gövdede taşınmaz: gateway onu `getir_refresh` çerezine yazar
+  (HttpOnly, `SameSite=Strict`, `Path=/v1/auth`); `/v1/auth/refresh` ve
+  `/v1/auth/logout` gövdesizdir. İstemci erişim jetonunu bellekte tutar, sayfa
+  yenilenince `/v1/auth/refresh` ile yeniden alır. Yanlış şifre ile kayıtsız numara aynı cevabı alır
   (`INVALID_CREDENTIALS`). Katalog uçları herkese açıktır. T7.5'teki
   `X-User-Id` geliştirme başlığı kaldırıldı.
 - **Risk sinyalleri istemciden alınmaz** (B9): gateway bağlantının IP'sini

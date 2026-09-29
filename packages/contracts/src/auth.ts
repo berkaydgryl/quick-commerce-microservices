@@ -66,14 +66,12 @@ export const loginRequestSchema = z.object({
   password: passwordSchema,
 });
 
-/** Yenileme jetonu: sunucunun urettigi opak metin; icerigi istemci icin anlamsizdir. */
-export const refreshTokenSchema = z.string().trim().min(1, 'zorunlu');
-
-/** POST /v1/auth/refresh: jeton yenisiyle degisir, eskisi bir daha kullanilamaz. */
-export const refreshRequestSchema = z.object({ refreshToken: refreshTokenSchema });
-
-/** POST /v1/auth/logout: yenileme jetonu iptal edilir. */
-export const logoutRequestSchema = z.object({ refreshToken: refreshTokenSchema });
+/*
+ * Yenileme jetonu GOVDEDE TASINMAZ (T8.5 hazirligi): gateway onu HttpOnly
+ * cereze yazar (getir_refresh; SameSite=Strict, Path=/v1/auth). Sayfadaki betik
+ * jetonu goremez, XSS onu calamaz. POST /v1/auth/refresh ve /v1/auth/logout
+ * govdesizdir: tarayici cerezi kendisi gonderir.
+ */
 
 /**
  * Cikis cevabi. revoked false HATA DEGILDIR: jeton zaten iptal edilmis ya da
@@ -93,9 +91,10 @@ export const authSessionSchema = z.object({
   tokenType: z.literal('Bearer').optional(),
   /** Saniye cinsinden omur (JWT_TTL). Bitis ani DEGIL, SURE tasinir. */
   expiresIn: z.number().int().positive(),
-  /** Erisim jetonu bitince /v1/auth/refresh'e gonderilir; yalnizca bir kez gecerlidir. */
-  refreshToken: z.string(),
-  /** Yenileme jetonunun saniye cinsinden omru (REFRESH_TTL). */
+  /**
+   * Yenileme jetonunun (cerezdeki) saniye cinsinden omru (REFRESH_TTL): oturum en
+   * cok bu kadar kullanilmadan kalabilir. Jetonun kendisi cerezdedir.
+   */
   refreshExpiresIn: z.number().int().positive(),
   user: userProfileSchema,
 });
@@ -103,8 +102,6 @@ export const authSessionSchema = z.object({
 export type Phone = z.infer<typeof phoneSchema>;
 export type RegisterRequest = z.infer<typeof registerRequestSchema>;
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
-export type RefreshRequest = z.infer<typeof refreshRequestSchema>;
-export type LogoutRequest = z.infer<typeof logoutRequestSchema>;
 export type LogoutResult = z.infer<typeof logoutResultSchema>;
 export type UserProfile = z.infer<typeof userProfileSchema>;
 export type AuthSession = z.infer<typeof authSessionSchema>;

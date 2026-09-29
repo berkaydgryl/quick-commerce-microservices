@@ -194,16 +194,17 @@ func New(deps Deps) *fiber.App {
 
 	// Kimlik uclari (T8.1): kayit, giris, yenileme ve cikis kimliksizdir.
 	devices := deviceCookies{secure: deps.SecureCookies}
+	sessions := refreshCookies{secure: deps.SecureCookies}
 	// Tekrar korumasi (T8.2) ROTA BASINA: yalnizca Idempotency-Key isteyen
 	// mutasyon uclarinda. Korumali uclarda kimlikten SONRA: kayit kullanicinin
 	// kapsamindadir (idem:{usr_...}:anahtar).
 	register := idempotent(deps.Idempotency, registerPolicy, deps.Logger)
 	mutation := idempotent(deps.Idempotency, mutationPolicy, deps.Logger)
 	checkout := idempotent(deps.Idempotency, checkoutPolicy, deps.Logger)
-	v1.Post("/auth/register", authByIP, register, registerHandler(deps.UserRegistrar, devices))
-	v1.Post("/auth/login", authByIP, loginHandler(deps.UserAuthenticator, devices))
-	v1.Post("/auth/refresh", authByIP, refreshHandler(deps.SessionRefresher))
-	v1.Post("/auth/logout", authByIP, logoutHandler(deps.SessionRevoker))
+	v1.Post("/auth/register", authByIP, register, registerHandler(deps.UserRegistrar, devices, sessions))
+	v1.Post("/auth/login", authByIP, loginHandler(deps.UserAuthenticator, devices, sessions))
+	v1.Post("/auth/refresh", authByIP, refreshHandler(deps.SessionRefresher, sessions))
+	v1.Post("/auth/logout", authByIP, logoutHandler(deps.SessionRevoker, sessions))
 
 	// Korumali uclar: once kimlik, sonra uc. Ara katman ROTA BASINA verilir;
 	// /v1 grubuna Use ile verilseydi katalog ve giris uclari da kimlik isterdi.

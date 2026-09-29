@@ -35,6 +35,12 @@ const (
 
 func authApp(t *testing.T, logger *slog.Logger) *fiber.App {
 	t.Helper()
+	return authAppWith(t, logger, false)
+}
+
+// authAppWith, cerezlerin Secure ayariyla (production) kimlik uygulamasi.
+func authAppWith(t *testing.T, logger *slog.Logger, secureCookies bool) *fiber.App {
+	t.Helper()
 	passwords, err := auth.NewPasswordHasher(bcrypt.MinCost)
 	if err != nil {
 		t.Fatalf("sifre ozetleyici kurulamadi: %v", err)
@@ -56,6 +62,7 @@ func authApp(t *testing.T, logger *slog.Logger) *fiber.App {
 		ProfileGetter:     service,
 		AccessTokens:      testTokens(),
 		Idempotency:       testIdempotency(),
+		SecureCookies:     secureCookies,
 		Logger:            logger,
 	})
 }
@@ -91,8 +98,38 @@ func loginBodyOf(phone, password string) string {
 	return marshal(map[string]string{"phone": phone, "password": password})
 }
 
-func refreshBodyOf(token string) string {
-	return marshal(map[string]string{"refreshToken": token})
+// responseCookie, cevaptaki adi verilen cerez; yoksa testi durdurur.
+func responseCookie(t *testing.T, header http.Header, name string) *http.Cookie {
+	t.Helper()
+	for _, line := range header.Values(fiber.HeaderSetCookie) {
+		cookie, err := http.ParseSetCookie(line)
+		if err != nil {
+			t.Fatalf("Set-Cookie cozulemedi (%q): %v", line, err)
+		}
+		if cookie.Name == name {
+			return cookie
+		}
+	}
+	t.Fatalf("%s cerezi yazilmadi: %v", name, header.Values(fiber.HeaderSetCookie))
+	return nil
+}
+
+// refreshTokenOf, cevaptaki yenileme cerezinin degeri (jeton).
+func refreshTokenOf(t *testing.T, header http.Header) string {
+	t.Helper()
+	return responseCookie(t, header, RefreshCookie).Value
+}
+
+// withRefresh, istege yenileme cerezini ekler (tarayicinin yaptigi gibi).
+func withRefresh(request *http.Request, token string) *http.Request {
+	request.AddCookie(&http.Cookie{Name: RefreshCookie, Value: token})
+	return request
+}
+
+// authPost, govdesiz kimlik istegi (yenileme, cikis).
+func authPost(t *testing.T, path string) *http.Request {
+	t.Helper()
+	return jsonRequest(t, http.MethodPost, path, "", nil)
 }
 
 func marshal(value map[string]string) string {
@@ -140,9 +177,10 @@ func TestAuthFlowRegisterLoginMeRefreshLogout(t *testing.T) {
 		t.Fatalf("kayit 201 ve no-store donmeli: %d %q %+v", status, header.Get(fiber.HeaderCacheControl), envelope)
 	}
 	registered := dataOf[auth.Grant](t, envelope)
+	registeredToken := refreshTokenOf(t, header)
 	if registered.TokenType != bearerScheme || registered.ExpiresIn != int64(time.Hour/time.Second) ||
-		registered.RefreshExpiresIn != int64(testRefresh/time.Second) || registered.AccessToken == "" || registered.RefreshToken == "" {
-		t.Errorf("jeton cifti eksik ya da omurler yanlis: %+v", registered)
+		registered.RefreshExpiresIn != int64(testRefresh/time.Second) || registered.AccessToken == "" || registeredToken == "" {
+		t.Errorf("erisim jetonu, cerezde yenileme jetonu ve omurler bekleniyordu: %+v", registered)
 	}
 	if user := registered.User; !ids.Valid(ids.User, user.ID) || user.Phone != testPhone || user.FullName != testFullName {
 		t.Errorf("profil yanlis (ad kirpilmali, kimlik usr_ bicimli): %+v", user)
@@ -154,7 +192,8 @@ func TestAuthFlowRegisterLoginMeRefreshLogout(t *testing.T) {
 		t.Fatalf("giris 200 ve no-store donmeli: %d %+v", status, envelope)
 	}
 	loggedIn := dataOf[auth.Grant](t, envelope)
-	if loggedIn.User != registered.User || loggedIn.RefreshToken == registered.RefreshToken {
+	loggedInToken := refreshTokenOf(t, header)
+	if loggedIn.User != registered.User || loggedInToken == registeredToken {
 		t.Errorf("giris ayni kullaniciya YENI bir oturum acmali: %+v", loggedIn)
 	}
 
@@ -167,30 +206,58 @@ func TestAuthFlowRegisterLoginMeRefreshLogout(t *testing.T) {
 		t.Errorf("profil kayittakiyle ayni olmali: %+v", profile)
 	}
 
-	// Yenileme: jeton degisir; eskisi bir daha gecmez.
-	status, header, envelope = exchange(t, app, jsonRequest(t, http.MethodPost, "/v1/auth/refresh", refreshBodyOf(loggedIn.RefreshToken), nil))
+	// Yenileme (cerezle): jeton degisir ve cereze yazilir; eskisi bir daha
+	// gecmez, olu jetonun cerezi silinir.
+	status, header, envelope = exchange(t, app, withRefresh(authPost(t, "/v1/auth/refresh"), loggedInToken))
 	if status != http.StatusOK || header.Get(fiber.HeaderCacheControl) != noStore {
 		t.Fatalf("yenileme 200 ve no-store donmeli: %d %+v", status, envelope)
 	}
 	refreshed := dataOf[auth.Grant](t, envelope)
-	if refreshed.RefreshToken == loggedIn.RefreshToken || refreshed.User != registered.User {
+	refreshedToken := refreshTokenOf(t, header)
+	if refreshedToken == loggedInToken || refreshed.User != registered.User || refreshed.AccessToken == "" {
 		t.Errorf("yenileme yeni jeton vermeli: %+v", refreshed)
 	}
-	status, envelope = send(t, app, jsonRequest(t, http.MethodPost, "/v1/auth/refresh", refreshBodyOf(loggedIn.RefreshToken), nil))
-	if status != http.StatusUnauthorized || detailsOf(t, envelope)[refreshTokenField] == nil {
-		t.Errorf("kullanilmis jeton 401 ve refreshToken ayrintisiyla donmeli: %d %+v", status, envelope)
+	status, header, envelope = exchange(t, app, withRefresh(authPost(t, "/v1/auth/refresh"), loggedInToken))
+	if status != http.StatusUnauthorized || detailsOf(t, envelope)[RefreshCookie] == nil {
+		t.Errorf("kullanilmis jeton 401 ve %s ayrintisiyla donmeli: %d %+v", RefreshCookie, status, envelope)
+	}
+	if cleared := responseCookie(t, header, RefreshCookie); cleared.MaxAge >= 0 || cleared.Value != "" {
+		t.Errorf("kullanilamayan jetonun cerezi silinmeli: %+v", cleared)
 	}
 
-	// Cikis: ilk cagri iptal eder, ikincisi zararsizdir; iptal edilen jeton yenilenmez.
+	// Cikis: ilk cagri iptal eder, ikincisi zararsizdir; ikisi de cerezi siler.
 	for attempt, want := range []bool{true, false} {
-		status, envelope = send(t, app, jsonRequest(t, http.MethodPost, "/v1/auth/logout", refreshBodyOf(refreshed.RefreshToken), nil))
+		status, header, envelope = exchange(t, app, withRefresh(authPost(t, "/v1/auth/logout"), refreshedToken))
 		if status != http.StatusOK || dataOf[logoutResult](t, envelope).Revoked != want {
 			t.Errorf("cikis %d. cagri: 200 ve revoked=%v bekleniyordu: %d %+v", attempt+1, want, status, envelope)
 		}
+		if cleared := responseCookie(t, header, RefreshCookie); cleared.MaxAge >= 0 {
+			t.Errorf("cikis %d. cagri cerezi silmeli: %+v", attempt+1, cleared)
+		}
 	}
-	status, _ = send(t, app, jsonRequest(t, http.MethodPost, "/v1/auth/refresh", refreshBodyOf(refreshed.RefreshToken), nil))
+	status, _ = send(t, app, withRefresh(authPost(t, "/v1/auth/refresh"), refreshedToken))
 	if status != http.StatusUnauthorized {
 		t.Errorf("cikistan sonra yenileme 401 donmeli: %d", status)
+	}
+}
+
+func TestRefreshTokenTravelsOnlyInHTTPOnlyCookie(t *testing.T) {
+	// Yenileme jetonu govdeye girmez: sayfadaki betik (XSS) onu goremez.
+	// Cerez HttpOnly, SameSite=Strict, yalnizca /v1/auth yoluna gider; omru
+	// REFRESH_TTL. Secure yalnizca production'da.
+	for name, secure := range map[string]bool{"gelistirme": false, "production": true} {
+		app := authAppWith(t, silentLogger(), secure)
+
+		status, header, body := exchangeRaw(t, app, registerRequest(t, registerBodyOf(testPhone, testPassword, testFullName)))
+
+		if status != http.StatusCreated || strings.Contains(string(body), "refreshToken") {
+			t.Errorf("%s: kayit 201 donmeli ve govdede refreshToken olmamali: %d %s", name, status, body)
+		}
+		cookie := responseCookie(t, header, RefreshCookie)
+		if cookie.Value == "" || !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode || cookie.Path != "/v1/auth" ||
+			cookie.MaxAge != int(testRefresh/time.Second) || cookie.Secure != secure {
+			t.Errorf("%s: HttpOnly, Strict, /v1/auth, REFRESH_TTL ve Secure=%v bekleniyordu: %+v", name, secure, cookie)
+		}
 	}
 }
 
@@ -291,16 +358,37 @@ func TestLoginValidatesFormatWithoutIdempotencyKey(t *testing.T) {
 	}
 }
 
-func TestRefreshAndLogoutRequireToken(t *testing.T) {
+func TestRefreshWithoutCookieIsUnauthorized(t *testing.T) {
+	// Cerezsiz yenileme oturumu olmayan istektir (401): istemci girise
+	// yonlenir. Govdedeki eski bicim ({"refreshToken": ...}) okunmaz.
 	app := authApp(t, silentLogger())
-	for _, path := range []string{"/v1/auth/refresh", "/v1/auth/logout"} {
-		for _, body := range []string{`{}`, `{"refreshToken":"   "}`} {
-			status, envelope := send(t, app, jsonRequest(t, http.MethodPost, path, body, nil))
+	_, registeredEnvelope := send(t, app, registerRequest(t, registerBodyOf(testPhone, testPassword, testFullName)))
+	dataOf[auth.Grant](t, registeredEnvelope)
 
-			if status != http.StatusBadRequest || detailsOf(t, envelope)[refreshTokenField] != requiredReason {
-				t.Errorf("%s %s: 400 ve refreshToken zorunlu bekleniyordu: %d %+v", path, body, status, envelope)
-			}
+	for name, request := range map[string]*http.Request{
+		"cerez yok":            authPost(t, "/v1/auth/refresh"),
+		"bos cerez":            withRefresh(authPost(t, "/v1/auth/refresh"), "   "),
+		"jeton govdede (eski)": jsonRequest(t, http.MethodPost, "/v1/auth/refresh", `{"refreshToken":"herhangi"}`, nil),
+	} {
+		status, envelope := send(t, app, request)
+		if status != http.StatusUnauthorized || envelope.Error.Code != apperror.CodeUnauthorized || detailsOf(t, envelope)[RefreshCookie] != requiredReason {
+			t.Errorf("%s: 401 ve %s zorunlu bekleniyordu: %d %+v", name, RefreshCookie, status, envelope)
 		}
+	}
+}
+
+func TestLogoutWithoutCookieIsHarmless(t *testing.T) {
+	// Cikisin tekrari zararsizdir: cerezsiz cagri revoked:false alir ve cerez
+	// yine silinir (tarayicida kalmis olabilir).
+	app := authApp(t, silentLogger())
+
+	status, header, envelope := exchange(t, app, authPost(t, "/v1/auth/logout"))
+
+	if status != http.StatusOK || dataOf[logoutResult](t, envelope).Revoked {
+		t.Errorf("cerezsiz cikis 200 ve revoked=false donmeli: %d %+v", status, envelope)
+	}
+	if cleared := responseCookie(t, header, RefreshCookie); cleared.MaxAge >= 0 || cleared.Path != "/v1/auth" {
+		t.Errorf("cerez ayni yolla silinmeli: %+v", cleared)
 	}
 }
 
@@ -308,16 +396,16 @@ func TestSecretsStayOutOfLog(t *testing.T) {
 	var logs bytes.Buffer
 	app := authApp(t, slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
 
-	_, registeredEnvelope := send(t, app, registerRequest(t, registerBodyOf(testPhone, testPassword, testFullName)))
-	registered := dataOf[auth.Grant](t, registeredEnvelope)
+	_, header, _ := exchange(t, app, registerRequest(t, registerBodyOf(testPhone, testPassword, testFullName)))
+	token := refreshTokenOf(t, header)
 	send(t, app, jsonRequest(t, http.MethodPost, "/v1/auth/login", loginBodyOf(testPhone, testPassword+"-yanlis"), nil))
-	send(t, app, jsonRequest(t, http.MethodPost, "/v1/auth/refresh", refreshBodyOf(registered.RefreshToken), nil))
-	send(t, app, jsonRequest(t, http.MethodPost, "/v1/auth/refresh", refreshBodyOf(registered.RefreshToken), nil))
+	send(t, app, withRefresh(authPost(t, "/v1/auth/refresh"), token))
+	send(t, app, withRefresh(authPost(t, "/v1/auth/refresh"), token))
 
 	if !strings.Contains(logs.String(), string(apperror.CodeInvalidCredentials)) {
 		t.Fatalf("hatali giris gunluge dusmeliydi: %s", logs.String())
 	}
-	for name, secret := range map[string]string{"sifre": testPassword, "yenileme jetonu": registered.RefreshToken} {
+	for name, secret := range map[string]string{"sifre": testPassword, "yenileme jetonu": token} {
 		if strings.Contains(logs.String(), secret) {
 			t.Errorf("%s gunluge sizdi: %s", name, logs.String())
 		}

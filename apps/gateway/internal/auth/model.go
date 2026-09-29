@@ -100,10 +100,12 @@ func HashRefreshToken(token string) string {
 // Grant, basarili kayit, giris ya da yenilemenin sonucu
 // (@getir/contracts authSessionSchema).
 type Grant struct {
-	AccessToken      string  `json:"accessToken"`
-	TokenType        string  `json:"tokenType"`
-	ExpiresIn        int64   `json:"expiresIn"`
-	RefreshToken     string  `json:"refreshToken"`
+	AccessToken string `json:"accessToken"`
+	TokenType   string `json:"tokenType"`
+	ExpiresIn   int64  `json:"expiresIn"`
+	// RefreshToken govdeye GIRMEZ: httpapi onu HttpOnly cereze yazar
+	// (getir_refresh). Sayfadaki betik okuyamaz; XSS 14 gunluk jetonu calamaz.
+	RefreshToken     string  `json:"-"`
 	RefreshExpiresIn int64   `json:"refreshExpiresIn"`
 	User             Profile `json:"user"`
 }

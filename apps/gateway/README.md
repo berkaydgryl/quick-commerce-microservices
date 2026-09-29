@@ -141,6 +141,13 @@ bilmez), `internal/authstore` (Mongo ve bellek depoları), `internal/httpapi` (`
   Doğrulamada yalnızca HS256 kabul edilir (`alg: none` ve başka algoritmalar reddedilir).
   Yenileme jetonu 256 bit rastgele, opak bir metindir; sunucuda yalnızca **SHA-256 özeti**
   saklanır.
+- **Yenileme jetonu çerezde, gövdede değil** (`refresh_cookie.go`): kayıt, giriş ve yenileme
+  jetonu `getir_refresh` çerezine yazar: HttpOnly (sayfadaki betik okuyamaz, XSS çalamaz),
+  `SameSite=Strict` (başka siteden gelen istek taşımaz), `Path=/v1/auth` (yalnızca kimlik uçlarına
+  gider), ömrü `REFRESH_TTL`, production'da `Secure`. `/v1/auth/refresh` ve `/v1/auth/logout`
+  gövdesizdir, jetonu çerezden okur. Çerezsiz yenileme `401` (`getir_refresh: zorunlu`);
+  kullanılamayan jetonun çerezi ve çıkışta çerez silinir. İstemci erişim jetonunu bellekte tutar,
+  sayfa yenilenince `/v1/auth/refresh`'i çağırır (ADR-12 eki).
 - **Yenileme döner:** her `/v1/auth/refresh` jetonu yenisiyle değiştirir (tek atomik Mongo
   güncellemesi); eski jeton bir daha geçmez, aynı jetonla eş zamanlı iki istekten yalnızca biri
   kazanır. Süre son kullanımdan itibaren `REFRESH_TTL`'dir; süresi dolan kayıt TTL indeksiyle
@@ -167,13 +174,14 @@ bilmez), `internal/authstore` (Mongo ve bellek depoları), `internal/httpapi` (`
   (dakikada 10; "Hız sınırı"). Kayıt ucunun tekrar kuralı aşağıda ("Tekrar koruması").
 
 ```bash
-curl -s localhost:8080/v1/auth/register -H 'Content-Type: application/json' -H 'Idempotency-Key: kayit-0001' \
-  -d '{"phone":"+905321234567","password":"Gizli-Parola-2026","fullName":"Ayse Yilmaz"}' | jq
-TOKEN="$(curl -s localhost:8080/v1/auth/login -H 'Content-Type: application/json' \
+# Cerezler (cihaz + yenileme) curl'un cerez kavanozunda tutulur: -c yazar, -b gonderir.
+curl -s -c /tmp/getir-cerez -b /tmp/getir-cerez localhost:8080/v1/auth/register -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: kayit-0001' -d '{"phone":"+905321234567","password":"Gizli-Parola-2026","fullName":"Ayse Yilmaz"}' | jq
+TOKEN="$(curl -s -c /tmp/getir-cerez -b /tmp/getir-cerez localhost:8080/v1/auth/login -H 'Content-Type: application/json' \
   -d '{"phone":"+905321234567","password":"Gizli-Parola-2026"}' | jq -r .data.accessToken)"
 curl -s localhost:8080/v1/me -H "Authorization: Bearer $TOKEN" | jq
-curl -s localhost:8080/v1/auth/refresh -H 'Content-Type: application/json' -d '{"refreshToken":"<yenileme>"}' | jq
-curl -s localhost:8080/v1/auth/logout -H 'Content-Type: application/json' -d '{"refreshToken":"<yenileme>"}' | jq
+curl -s -X POST -c /tmp/getir-cerez -b /tmp/getir-cerez localhost:8080/v1/auth/refresh | jq   # yeni erisim jetonu
+curl -s -X POST -c /tmp/getir-cerez -b /tmp/getir-cerez localhost:8080/v1/auth/logout | jq    # revoked: true
 ```
 
 ## Tekrar koruması (`Idempotency-Key`, T8.2)
