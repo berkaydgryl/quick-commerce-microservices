@@ -13,7 +13,11 @@
  * jetonu sunucuda yalnizca ozetiyle (hash) saklanir ve her kullanimda
  * yenisiyle degisir: calinan eski jeton ikinci kez kullanilamaz.
  *
- * Mesajlar Turkce: web kayit ve giris formunu bu semalarla dogrular (T8.5).
+ * Alan mesajlari KULLANICIYA gorunur: web kayit ve giris formu bu semalarla
+ * dogrular (T8.5) ve cumleyi alanin altinda gosterir. Bu yuzden Turkce
+ * karakterlerle yazilir; gateway ayni cumleleri doner (rules.go,
+ * rules_contract_test.go iki tarafi karsilastirir). Projedeki diger alan
+ * sebepleri (katalog, siparis) bugun yalnizca API istemcisine gider ve ASCII'dir.
  */
 
 import { z } from 'zod';
@@ -30,7 +34,7 @@ import {
 /** E.164 bicimi telefon; users.phone uzerinde unique indeks vardir. */
 export const phoneSchema = z
   .string()
-  .regex(PHONE_PATTERN, '+90 ile baslayan 13 karakter olmali (ornek +905321234567)');
+  .regex(PHONE_PATTERN, "+90'dan sonra 10 rakam olmalı (örnek +905321234567)");
 
 const utf8 = new TextEncoder();
 
@@ -43,17 +47,17 @@ const utf8 = new TextEncoder();
  */
 export const passwordSchema = z
   .string()
-  .min(PASSWORD_MIN_LENGTH, `en az ${PASSWORD_MIN_LENGTH} karakter olmali`)
+  .min(PASSWORD_MIN_LENGTH, `en az ${PASSWORD_MIN_LENGTH} karakter olmalı`)
   .refine(
     (value) => utf8.encode(value).length <= PASSWORD_MAX_LENGTH,
-    `en fazla ${PASSWORD_MAX_LENGTH} bayt olmali (Turkce harfler iki bayt sayilir)`,
+    `en fazla ${PASSWORD_MAX_LENGTH} bayt olmalı (Türkçe harfler iki bayt sayılır)`,
   );
 
 export const fullNameSchema = z
   .string()
   .trim()
-  .min(FULL_NAME_MIN_LENGTH, `en az ${FULL_NAME_MIN_LENGTH} karakter olmali`)
-  .max(FULL_NAME_MAX_LENGTH, `en fazla ${FULL_NAME_MAX_LENGTH} karakter olmali`);
+  .min(FULL_NAME_MIN_LENGTH, `en az ${FULL_NAME_MIN_LENGTH} karakter olmalı`)
+  .max(FULL_NAME_MAX_LENGTH, `en fazla ${FULL_NAME_MAX_LENGTH} karakter olmalı`);
 
 export const registerRequestSchema = z.object({
   phone: phoneSchema,

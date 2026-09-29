@@ -22,13 +22,15 @@ const (
 
 var phoneRegexp = regexp.MustCompile(phonePattern)
 
-// Sebepler: istemcinin gordugu alan mesajlari (sozlesmedeki Turkce mesajlarla ayni).
+// Sebepler: istemcinin gordugu alan mesajlari. Web formu bunlari alanin altinda
+// KULLANICIYA gosterir; bu yuzden Turkce karakterlerle yazilir ve sozlesmedeki
+// cumlelerle birebir aynidir (rules_contract_test.go).
 const (
-	phoneReason       = "+90 ile baslayan 13 karakter olmali (ornek +905321234567)"
-	passwordMinReason = "en az 8 karakter olmali"
-	passwordMaxReason = "en fazla 72 bayt olmali (Turkce harfler iki bayt sayilir)"
-	fullNameMinReason = "en az 2 karakter olmali"
-	fullNameMaxReason = "en fazla 80 karakter olmali"
+	phoneReason       = "+90'dan sonra 10 rakam olmalı (örnek +905321234567)"
+	passwordMinReason = "en az 8 karakter olmalı"
+	passwordMaxReason = "en fazla 72 bayt olmalı (Türkçe harfler iki bayt sayılır)"
+	fullNameMinReason = "en az 2 karakter olmalı"
+	fullNameMaxReason = "en fazla 80 karakter olmalı"
 )
 
 // Alan adlari: istek govdesindekiyle ayni.

@@ -138,9 +138,9 @@ paths:
                       message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
                       details:
                         Idempotency-Key: zorunlu
-                        phone: "+90 ile baslayan 13 karakter olmali (ornek +905321234567)"
-                        password: en az 8 karakter olmali
-                        fullName: en az 2 karakter olmali
+                        phone: "+90'dan sonra 10 rakam olmalı (örnek +905321234567)"
+                        password: en az 8 karakter olmalı
+                        fullName: en az 2 karakter olmalı
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
                 unknownField:
                   summary: VALIDATION_FAILED (sözleşmede olmayan alan)
@@ -240,7 +240,7 @@ paths:
                       code: VALIDATION_FAILED
                       message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
                       details:
-                        phone: "+90 ile baslayan 13 karakter olmali (ornek +905321234567)"
+                        phone: "+90'dan sonra 10 rakam olmalı (örnek +905321234567)"
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "401":
           description: Telefon numarası ya da şifre hatalı (hangisi olduğu söylenmez)
