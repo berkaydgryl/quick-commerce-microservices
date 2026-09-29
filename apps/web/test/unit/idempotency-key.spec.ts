@@ -16,5 +16,13 @@ describe('idempotency-key', () => {
   it('cok kisa ve cok uzun anahtari reddeder', () => {
     expect(isValidIdempotencyKey('kisa')).toBe(false);
     expect(isValidIdempotencyKey('x'.repeat(129))).toBe(false);
+    expect(isValidIdempotencyKey('x'.repeat(128))).toBe(true);
+  });
+
+  it('harf, rakam, - ve _ disindaki karakteri reddeder (Redis anahtar ayiricilari dahil)', () => {
+    expect(isValidIdempotencyKey('kayit_anahtari-01')).toBe(true);
+    expect(isValidIdempotencyKey('iki:nokta-anahtar')).toBe(false);
+    expect(isValidIdempotencyKey('{usr_1}-anahtar')).toBe(false);
+    expect(isValidIdempotencyKey('bosluklu anahtar')).toBe(false);
   });
 });

@@ -18,6 +18,7 @@
 
 import {
   AppError,
+  IDEMPOTENCY_KEY_CHARSET,
   IDEMPOTENCY_KEY_MAX_LENGTH,
   IDEMPOTENCY_KEY_MIN_LENGTH,
   isSku,
@@ -32,7 +33,7 @@ const COMPONENT_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
  * sayi yazilirsa sozlesme degistiginde Redis tarafi sessizce geride kalir.
  */
 const IDEMPOTENCY_KEY_PATTERN = new RegExp(
-  `^[A-Za-z0-9_-]{${IDEMPOTENCY_KEY_MIN_LENGTH},${IDEMPOTENCY_KEY_MAX_LENGTH}}$`,
+  `^[${IDEMPOTENCY_KEY_CHARSET}]{${IDEMPOTENCY_KEY_MIN_LENGTH},${IDEMPOTENCY_KEY_MAX_LENGTH}}$`,
 );
 
 /** IPv4 ve IPv6 birlikte: IPv6 iki nokta icerir, bu yuzden ayri desen. */
@@ -154,10 +155,26 @@ export function courierLastKey(courierId: string): string {
   return `courier:${hashTag(courierId)}:last`;
 }
 
-/** idem:{key} -- islenmis istek cevabi ya da "in-progress" isareti (ADR-08). */
-export function idempotencyKey(key: string): string {
+/**
+ * Kimligi dogrulanmamis istegin idempotency kapsami (kayit ucu): anahtar tum
+ * anonim isteklerde ortaktir, farkli govdeyle gelen ayni anahtari istek parmak
+ * izi ayirir (ADR-08 eki, T8.2).
+ */
+export const IDEMPOTENCY_ANONYMOUS_SCOPE = 'anon';
+
+/**
+ * idem:{scope}:key -- islenmis istek cevabi ya da "in-progress" isareti (ADR-08).
+ *
+ * KAPSAM (T8.2): anahtar kullanici basinadir (scope = usr_...). Iki kullanici
+ * ayni anahtari secse bile kayitlari ayrisir; biri digerinin cevabini tekrar
+ * olarak alamaz. Kimliksiz uclarda kapsam IDEMPOTENCY_ANONYMOUS_SCOPE'tur.
+ * Yazan tek taraf gateway'dir (Go); bicim burada tanimli, gateway'in testi
+ * bu satiri okuyup karsilastirir.
+ */
+export function idempotencyKey(scope: string, key: string): string {
+  requireComponent('scope', scope);
   requireComponent('idempotencyKey', key, IDEMPOTENCY_KEY_PATTERN);
-  return `idem:${hashTag(key)}`;
+  return `idem:${hashTag(scope)}:${key}`;
 }
 
 /** rate:{ip}:POST_/v1/orders -- kayan pencere sayaci. */

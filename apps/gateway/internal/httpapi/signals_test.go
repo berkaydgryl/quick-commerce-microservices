@@ -44,6 +44,7 @@ func signalsApp(t *testing.T, secureCookies bool) (*fiber.App, *fakeOrders) {
 		CheckoutSignals:   service,
 		OrderPlacer:       orders,
 		AccessTokens:      testTokens(),
+		Idempotency:       testIdempotency(),
 		SecureCookies:     secureCookies,
 		Logger:            silentLogger(),
 	}), orders

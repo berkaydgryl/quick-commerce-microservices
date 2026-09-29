@@ -11,7 +11,7 @@ package httpapi
 //   auth_body.go  - kimlik uclarinin istek govdeleri
 //   identity.go   - kullanici kimligi (Bearer erisim jetonu, T8.1)
 //   device.go     - cihaz cerezi (risk sinyali, T8.1)
-//   idempotency.go- Idempotency-Key basligi (ADR-08)
+//   idempotency.go- Idempotency-Key basligi ve tekrar korumasi (ADR-08, T8.2)
 //   body.go       - JSON govdenin kati cozulmesi
 //   params.go     - sorgu parametresinin tipine cevrilmesi
 //   middleware.go - istek gunlugu
@@ -148,6 +148,8 @@ type Deps struct {
 	CheckoutSignals   CheckoutSignalReader
 	// AccessTokens, korumali uclarin jeton dogrulayicisi.
 	AccessTokens AccessTokenVerifier
+	// Idempotency, mutasyon uclarinin tekrar korumasi (ADR-08, T8.2).
+	Idempotency Idempotency
 	// SecureCookies, cihaz cerezine Secure bayragi (yalnizca production:
 	// gelistirme http://localhost uzerinden calisir).
 	SecureCookies bool
@@ -181,7 +183,13 @@ func New(deps Deps) *fiber.App {
 
 	// Kimlik uclari (T8.1): kayit, giris, yenileme ve cikis kimliksizdir.
 	devices := deviceCookies{secure: deps.SecureCookies}
-	v1.Post("/auth/register", registerHandler(deps.UserRegistrar, devices))
+	// Tekrar korumasi (T8.2) ROTA BASINA: yalnizca Idempotency-Key isteyen
+	// mutasyon uclarinda. Korumali uclarda kimlikten SONRA: kayit kullanicinin
+	// kapsamindadir (idem:{usr_...}:anahtar).
+	register := idempotent(deps.Idempotency, registerPolicy, deps.Logger)
+	mutation := idempotent(deps.Idempotency, mutationPolicy, deps.Logger)
+	checkout := idempotent(deps.Idempotency, checkoutPolicy, deps.Logger)
+	v1.Post("/auth/register", register, registerHandler(deps.UserRegistrar, devices))
 	v1.Post("/auth/login", loginHandler(deps.UserAuthenticator, devices))
 	v1.Post("/auth/refresh", refreshHandler(deps.SessionRefresher))
 	v1.Post("/auth/logout", logoutHandler(deps.SessionRevoker))
@@ -190,9 +198,9 @@ func New(deps Deps) *fiber.App {
 	// /v1 grubuna Use ile verilseydi katalog ve giris uclari da kimlik isterdi.
 	user := requireUser(deps.AccessTokens)
 	v1.Get("/me", user, meHandler(deps.ProfileGetter))
-	v1.Post("/cart/reserve", user, reserveCartHandler(deps.CartReserver))
-	v1.Post("/orders", user, placeOrderHandler(deps.OrderPlacer, deps.CheckoutSignals))
-	v1.Post("/orders/:"+orderIDParam+"/3ds", user, confirmThreeDSHandler(deps.ThreeDSConfirmer))
+	v1.Post("/cart/reserve", user, mutation, reserveCartHandler(deps.CartReserver))
+	v1.Post("/orders", user, checkout, placeOrderHandler(deps.OrderPlacer, deps.CheckoutSignals))
+	v1.Post("/orders/:"+orderIDParam+"/3ds", user, checkout, confirmThreeDSHandler(deps.ThreeDSConfirmer))
 	v1.Get("/orders/:"+orderIDParam, user, getOrderHandler(deps.OrderGetter))
 
 	return app

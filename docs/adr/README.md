@@ -3,7 +3,9 @@
 Bu klasor, projenin geri donusu pahali kararlarini ve bu kararlarin gerekcelerini tutar.
 Her dosya tek bir karardir ve ayni kalibi izler: Baglam, Karar, Gerekce, Sonuclari,
 Ilgili. Kayitlar degistirilmez; bir karar gecersiz kaldiginda mevcut dosyanin durumu
-guncellenir ve yerini alan yeni bir ADR yazilir.
+guncellenir ve yerini alan yeni bir ADR yazilir. Karari gecersiz kilmayan, onu netlestiren
+bir ayrinti (ornegin roadmap'in bir bulgusunun istedigi) dosyanin sonuna tarihli bir "Ek"
+bolumu olarak yazilir; ozgun metin oldugu gibi kalir (ornek: ADR-08, T8.2 eki).
 
 Yeni kayit eklerken sonraki bos numara kullanilir, dosya adi
 `NNNN-kisa-ingilizce-olmayan-slug.md` bicimindedir ve asagidaki tabloya bir satir eklenir.
@@ -17,7 +19,7 @@ Yeni kayit eklerken sonraki bos numara kullanilir, dosya adi
 | 05  | [Koleksiyon sahipligi](0005-koleksiyon-sahipligi.md)                             | Kabul edildi | Her servis kendi koleksiyonlarinin tek sahibidir; baska servisin koleksiyonuna erismek reddedilir, erisim gRPC ile olur.                                           |
 | 06  | [Realtime ayri process](0006-realtime-ayri-process.md)                           | Kabul edildi | Realtime gateway'den ayri bir process'tir (Socket.io + Redis adapter); WebSocket yasam dongusu REST'ten farkli olceklenir.                                         |
 | 07  | [EventBus arayuzu](0007-eventbus-arayuzu.md)                                     | Kabul edildi | Olay hatti EventBus arayuzu arkasindadir; ilk uygulama Redis Streams, Kafka'ya gecis tek dosyadir.                                                                 |
-| 08  | [Idempotency-Key](0008-idempotency-key.md)                                       | Kabul edildi | Tum mutasyon uclari Idempotency-Key ister; anahtar once NX ile in-progress yazilir, cift tiklama ikinci siparis yaratmaz.                                          |
+| 08  | [Idempotency-Key](0008-idempotency-key.md)                                       | Kabul edildi | Tum mutasyon uclari Idempotency-Key ister; anahtar once NX ile in-progress yazilir, cift tiklama ikinci siparis yaratmaz. Ek (T8.2): kapsam, parmak izi, TTL.      |
 | 09  | [API-first ve MOCK modu](0009-api-first.md)                                      | Kabul edildi | Sozlesme koddan once yazilir (proto + Zod); MOCK=1 modu frontend'i backend'i beklemekten kurtarir.                                                                 |
 | 10  | [Tek dogrulama kutuphanesi](0010-zod-tek-dogrulama.md)                           | Kabul edildi | Calisma zamani dogrulamasi yalnizca Zod ile yapilir; TypeScript tipleri z.infer ile semadan turer.                                                                 |
 | 11  | [Token ve sabitler](0011-token-ve-sabitler.md)                                   | Kabul edildi | Gorsel degerler design token'da, is sabitleri config/constants.ts'te; sihirli sayi ve ondalikli para yasaktir.                                                     |

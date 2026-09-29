@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -54,6 +55,7 @@ func authApp(t *testing.T, logger *slog.Logger) *fiber.App {
 		SessionRevoker:    service,
 		ProfileGetter:     service,
 		AccessTokens:      testTokens(),
+		Idempotency:       testIdempotency(),
 		Logger:            logger,
 	})
 }
@@ -73,10 +75,12 @@ func jsonRequest(t *testing.T, method, path, body string, headers map[string]str
 	return request
 }
 
-// registerRequest, anahtarli kayit istegi.
+// registerRequest, anahtarli kayit istegi. Her cagri YENI anahtar kullanir: ayni
+// anahtarla farkli govde tekrar korumasinda 409 CONFLICT'tir (T8.2).
 func registerRequest(t *testing.T, body string) *http.Request {
 	t.Helper()
-	return jsonRequest(t, http.MethodPost, "/v1/auth/register", body, map[string]string{IdempotencyKeyHeader: "kayit-anahtari-0001"})
+	key := "kayit-" + hex.EncodeToString(ids.RandomBytes(8))
+	return jsonRequest(t, http.MethodPost, "/v1/auth/register", body, map[string]string{IdempotencyKeyHeader: key})
 }
 
 func registerBodyOf(phone, password, fullName string) string {

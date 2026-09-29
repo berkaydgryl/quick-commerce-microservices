@@ -49,4 +49,11 @@ describe.each(MUTATIONS)('$name: idempotency anahtari (ADR-08)', ({ schema, requ
     expect(accepts('a'.repeat(IDEMPOTENCY_KEY_MAX_LENGTH))).toBe(true);
     expect(accepts('a'.repeat(IDEMPOTENCY_KEY_MAX_LENGTH + 1))).toBe(false);
   });
+
+  it('sozlesmenin karakter kurali: harf, rakam, - ve _ (T8.2)', () => {
+    // Gateway'in kabul ettigi (UUID) gecer; Redis anahtar ayiricilari gecmez.
+    expect(accepts('4f1c3a2b-9d8e-4b7a-8c6d-5e4f3a2b1c0d')).toBe(true);
+    expect(accepts('iki:nokta-anahtar')).toBe(false);
+    expect(accepts('{usr_1}-anahtar')).toBe(false);
+  });
 });

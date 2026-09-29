@@ -2,8 +2,9 @@
 //
 // Bugunku sorumlulugu: ayaga kalkmak, bagimli gRPC servislerine baglanti
 // havuzu kurmak, /healthz uzerinden durumlarini bildirmek (T3.3), katalog ve
-// siparis uclarini sunmak, kimligi kurmak (kayit, giris, JWT; T8.1) ve
-// sinyalde zarifce kapanmak.
+// siparis uclarini sunmak, kimligi kurmak (kayit, giris, JWT; T8.1), mutasyon
+// uclarini tekrara karsi korumak (Idempotency-Key, Redis; T8.2) ve sinyalde
+// zarifce kapanmak.
 //
 // Calistirma (zorunlu ortam degiskenleri ve tum tablo: README.md):
 //
@@ -20,6 +21,7 @@ import (
 	"syscall"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/config"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/redisdb"
 )
 
 // Yapilandirma hatasinda donen cikis kodu (Node tarafiyla ayni: 1).
@@ -44,6 +46,11 @@ func main() {
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel})).
 		With(slog.String("service", "gateway"))
+	// Redis surucusunun gunlugu de JSON olsun (baglanti hatalari dahil). Surucu
+	// gunlugu paket geneli bir degiskendir: surec basinda, hicbir istemci
+	// kurulmadan ONCE bir kez baglanir (sonradan yazmak surucunun arka plan
+	// goroutine'leriyle yarisirdi; Linux stres testinde goruldu).
+	redisdb.RouteDriverLogs(logger)
 
 	if err := run(cfg, logger); err != nil {
 		logger.Error("gateway hatayla kapandi", slog.Any("err", err))
@@ -52,12 +59,13 @@ func main() {
 }
 
 // run, acilis sirasini tutar: bagla -> dinle -> kapan -> baglantilari birak.
-// Havuz ve Mongo EN SON kapanir: sunucu dururken devam eden istekler hala
-// gRPC'yi ve Mongo'yu cagirir.
+// Havuz, Mongo ve Redis EN SON kapanir: sunucu dururken devam eden istekler
+// hala gRPC'yi, Mongo'yu ve Redis'i cagirir.
 func run(cfg config.Config, logger *slog.Logger) error {
 	// SIGINT/SIGTERM: orkestrator once nazikce ister, sonra oldurur. O pencereyi
 	// kullanmazsak devam eden istekler yarida kesilir. Sinyal baglami acilistan
-	// ONCE kurulur: Mongo'ya baglanirken gelen sinyal acilisi da durdurur.
+	// ONCE kurulur: Mongo'ya ya da Redis'e baglanirken gelen sinyal acilisi da
+	// durdurur.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 

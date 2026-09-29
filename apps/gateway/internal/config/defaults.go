@@ -29,6 +29,15 @@ const (
 	exampleJWTSecret = "dev-only-insecure-secret-change-me"
 )
 
+// Redis ve tekrar korumasi varsayilanlari (T8.2). Adlar ve degerler .env.example ile ayni.
+const (
+	// REDIS_CONNECT_TIMEOUT_MS=5000: Redis kapaliysa acilista hizlica ol.
+	defaultRedisConnectTimeout = 5 * time.Second
+	// IDEMPOTENCY_TTL_SECONDS=86400: bitmis kaydin omru (ADR-08); basarili
+	// siparisin kaydi 2 saattir (ADR-08 eki, httpapi).
+	defaultIdempotencyTTL = 24 * time.Hour
+)
+
 // NODE_ENV degerleri (Node servisleriyle ayni sozluk). Production, gelistirme
 // kolayliklarinin KAPALI oldugu tek ortamdir (ornek sir reddedilir, T8.1).
 const (

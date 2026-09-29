@@ -73,6 +73,28 @@ func readMongoURI(getenv Getenv, mock bool) (string, error) {
 	return uri, nil
 }
 
+// redisURLExample, eksik REDIS_URL hatasinda gosterilen ornek (.env.example).
+const redisURLExample = "redis://localhost:6379"
+
+// readRedisURL, MOCK disinda ZORUNLU Redis adresini okur (T8.2): tekrar
+// korumasi olmadan siparis acilmaz. MOCK'ta kayitlar bellekte tutulur.
+//
+// Hata metni adresi ICERMEZ: adres parola tasiyabilir (redis://:parola@host).
+func readRedisURL(getenv Getenv, mock bool) (string, error) {
+	raw := readString(getenv, "REDIS_URL", "")
+	if raw == "" {
+		if mock {
+			return "", nil
+		}
+		return "", fmt.Errorf("REDIS_URL: MOCK=true degilse zorunlu, ornek: %s", redisURLExample)
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || (parsed.Scheme != "redis" && parsed.Scheme != "rediss") || parsed.Host == "" {
+		return "", fmt.Errorf("REDIS_URL: redis:// ya da rediss:// ile baslayan bir adres olmali, ornek: %s", redisURLExample)
+	}
+	return raw, nil
+}
+
 // readJWTSecret, erisim jetonunun imza sirrini okur (ZORUNLU, T8.1).
 //
 // En az 32 bayt: HS256 icin daha kisa sir kaba kuvvete aciktir. Production'da

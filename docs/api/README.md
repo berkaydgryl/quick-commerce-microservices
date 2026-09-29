@@ -105,9 +105,16 @@ Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci 
   `POST /v1/orders/{id}/3ds`. `POST /v1/auth/login`, `/v1/auth/refresh` ve
   `/v1/auth/logout` istemez: giriş ve yenileme kalıcı bir kaynak yaratmaz,
   çıkışın tekrarı zararsızdır.
-  Bugün gateway yalnızca **varlığını** doğrular (yoksa 400), uzunluk kuralı
-  (8-128) servistedir; aynı anahtarla gelen ikinci isteğin ilk cevabı alması
-  (tekrar koruması) T8.2 ile gelir.
+  Tekrar koruması gateway'dedir (T8.2, ADR-08 eki; `DELETE /v1/cart/reserve/{orderId}`
+  henüz gateway'de yok): anahtar 8-128 karakter, yalnızca harf, rakam, `-` ve
+  `_` (biçimsizse 400) ve kullanıcı başınadır. Aynı anahtarla aynı istek ucu
+  ikinci kez çalıştırmaz, ilk cevap `Idempotent-Replayed: true` başlığıyla aynen
+  döner; ilk istek sürüyorsa `409 REQUEST_IN_PROGRESS`, anahtar farklı gövdeyle
+  gelirse `409 CONFLICT`. 400, 401, 429 ve 5xx saklanmaz (aynı anahtarla yeniden
+  denenir). Kayıt başarılı sipariş/3DS için 2 saat, diğerlerinde 24 saat
+  (`IDEMPOTENCY_TTL_SECONDS`) tutulur. Kayıt ucu istisnadır: cevabı jeton
+  taşıdığı için tekrar edilmez, biten kaydın tekrarı `409 PHONE_ALREADY_REGISTERED`
+  alır. Redis erişilemezse bu uçlar `503` döner (korumasız sipariş alınmaz).
 - **İzleme**: her cevap `X-Request-Id` başlığı taşır; hata gövdesindeki
   `error.requestId` ile aynı değerdir. Biçim `req_` + 32 küçük onaltılık karakter
   (Node servisleriyle aynı). İstemci bu biçimde kendi kimliğini gönderirse korunur;

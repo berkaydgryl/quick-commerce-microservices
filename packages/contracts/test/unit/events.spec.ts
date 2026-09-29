@@ -68,4 +68,19 @@ describe('idempotencyKeySchema', () => {
       false,
     );
   });
+
+  it('yalnizca harf, rakam, - ve _ kabul eder (T8.2: anahtar Redis anahtarina girer)', () => {
+    expect(idempotencyKeySchema.safeParse('4f1c3a2b-9d8e-4b7a-8c6d-5e4f3a2b1c0d').success).toBe(
+      true,
+    );
+    expect(idempotencyKeySchema.safeParse('charge-ord_0123456789abcdef').success).toBe(true);
+    for (const key of [
+      'iki:nokta-anahtar',
+      '{usr_1}-anahtar',
+      'bosluklu anahtar',
+      'turkce-ş-anahtar',
+    ]) {
+      expect(idempotencyKeySchema.safeParse(key).success).toBe(false);
+    }
+  });
 });

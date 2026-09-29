@@ -5,15 +5,15 @@ doğrudan erişemez; REST isteği burada karşılanır, doğrulanır ve gRPC ça
 
 Pnpm workspace'inin parçası değildir: kendi Go modülüdür (`go.mod`). `pnpm verify` bu klasörü
 kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go mod tidy -diff`,
-`-race` testleri, Mongo entegrasyon testleri, statik derleme).
+`-race` testleri, Mongo ve Redis entegrasyon testleri, statik derleme).
 
-## Bugünkü durum (D8 — Go kuralları CI'da; T7.5 — sipariş uçları; T8.1 — kimlik; pazaryeri uçları T8.4'ten öne alındı)
+## Bugünkü durum (D8 — Go kuralları CI'da; T7.5 — sipariş uçları; T8.1 — kimlik; T8.2 — tekrar koruması; pazaryeri uçları T8.4'ten öne alındı)
 
 | Parça                | Durum                                                           |
 | -------------------- | --------------------------------------------------------------- |
 | Env doğrulaması      | ✅ Açılışta, hatalar toplu raporlanır; geçersizse çıkış kodu 1  |
 | gRPC istemci havuzu  | ✅ catalog + order, tembel bağlantı, keepalive                  |
-| `GET /healthz`       | ✅ Servisleri (ve MOCK değilse Mongo'yu) paralel sorgular; hepsi ayaktaysa 200, değilse 503 |
+| `GET /healthz`       | ✅ Servisleri (ve MOCK değilse Mongo ile Redis'i) paralel sorgular; hepsi ayaktaysa 200, değilse 503 |
 | Cevap zarfı          | ✅ `packages/contracts` ile aynı biçim, her cevapta `requestId` |
 | Korelasyon kimliği   | ✅ `req_` + 32 hex; gelen kimlik yalnızca bu biçimdeyse korunur (D8) |
 | Zarif kapanış        | ✅ SIGINT/SIGTERM → devam eden istekler beklenir                |
@@ -35,11 +35,11 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | Kimlik deposu        | ✅ Mongo `users` + `sessions` (TTL indeksi); MOCK'ta bellek |
 | Sipariş risk sinyalleri | ✅ `CheckoutSignals`'ın 7 alanı oturum ve kullanıcı kaydından (T8.1); cihaz çerezi `getir_device` |
 | Demo personaları     | ✅ Ayşe, Zeynep, Can, Ali, Komşu (`pnpm seed:personas`; MOCK'ta açılışta bellekte) |
-| Idempotency-Key      | ✅ Zorunlu (yoksa 400); tekrar koruması ⏳ T8.2                 |
+| Idempotency-Key      | ✅ Zorunlu; tekrar koruması (T8.2): aynı anahtar ilk cevabı alır, eş zamanlısı 409; Redis, MOCK'ta bellek |
 | gRPC hata çevirisi   | ✅ `x-app-error` trailer'ı, yoksa durum kodu (`apperror`)       |
 | Görsel adresleri     | ✅ Göreli yol → mutlak URL (`ASSET_BASE_URL`, `internal/assets`) |
 | Stok birleştirmesi (B27) | ⏳ inventory-svc ile (T8.4 / T9.x) |
-| Rate limit           | ⏳ T8.2                                                         |
+| Rate limit           | ⏳ T8.2 (ikinci PR: `feat/gateway-hiz-siniri`)                  |
 | Go kuralları         | ✅ CI'da golangci-lint: `errcheck`, `noctx`, `bodyclose` (D8)    |
 
 ## Çalıştırma
@@ -50,15 +50,18 @@ yoktur. İlk derlemeden (ve her `.proto` değişikliğinden) önce Go kodu üret
 ```bash
 pnpm proto:gen                       # TS + Go (Go icin buf + protoc eklentileri gerekir)
 cd apps/gateway
-# ASSET_BASE_URL ve JWT_SECRET zorunlu. MOCK=true: hesaplar bellekte (Mongo gerekmez).
+# ASSET_BASE_URL ve JWT_SECRET zorunlu. MOCK=true: hesaplar ve tekrar kayitlari bellekte
+# (Mongo ve Redis gerekmez).
 ASSET_BASE_URL=http://localhost:5173 JWT_SECRET="$(openssl rand -hex 32)" MOCK=true go run ./cmd/gateway
-# Hesaplar Mongo'da kalsin (docker compose'daki Mongo):
+# Hesaplar Mongo'da, tekrar kayitlari Redis'te kalsin (docker compose'daki Mongo ve Redis):
 ASSET_BASE_URL=http://localhost:5173 JWT_SECRET="$(openssl rand -hex 32)" \
-  MONGO_URI='mongodb://localhost:27017/getir?directConnection=true' go run ./cmd/gateway
+  MONGO_URI='mongodb://localhost:27017/getir?directConnection=true' \
+  REDIS_URL=redis://localhost:6379 go run ./cmd/gateway
 curl -s localhost:8080/v1/categories | jq
 curl -s localhost:8080/healthz | jq
 go test -race ./...
-go test -tags integration ./internal/authstore/   # Mongo depolari, Docker gerekir (Testcontainers)
+# Mongo depolari ve Redis tekrar deposu, Docker gerekir (Testcontainers):
+go test -tags integration ./internal/authstore/ ./internal/idempotency/
 ```
 
 `JWT_SECRET` her açılışta yeniden üretilirse önceki jetonlar geçersiz olur (kullanıcı yeniden
@@ -80,6 +83,7 @@ docker run --rm -p 8080:8080 \
   -e ASSET_BASE_URL=http://localhost:5173 \
   -e JWT_SECRET="$(openssl rand -hex 32)" \
   -e MONGO_URI='mongodb://host.docker.internal:27017/getir?directConnection=true' \
+  -e REDIS_URL=redis://host.docker.internal:6379 \
   -e CATALOG_GRPC_ADDR=host.docker.internal:50051 \
   -e ORDER_GRPC_ADDR=host.docker.internal:50053 \
   getir/gateway
@@ -159,8 +163,8 @@ bilmez), `internal/authstore` (Mongo ve bellek depoları), `internal/httpapi` (`
   `GATEWAY_REQUEST_TIMEOUT_MS` ile sınırlıdır.
 - **Bilinen sınırlar:** çıkıştan sonra erişim jetonu süresi (≤ `JWT_TTL`) dolana kadar geçerli
   kalır (durumsuz jetonun bedeli); yalnızca sipariş kapanır (aşağıda). Cevabı kaybolan
-  yenilemede eski jeton harcanmış olur ve yeniden giriş gerekir. Giriş denemesi sınırı ve
-  `Idempotency-Key` tekrar koruması T8.2'dedir.
+  yenilemede eski jeton harcanmış olur ve yeniden giriş gerekir. Giriş denemesi sınırı T8.2'nin
+  ikinci PR'ındadır. Kayıt ucunun tekrar kuralı aşağıda ("Tekrar koruması").
 
 ```bash
 curl -s localhost:8080/v1/auth/register -H 'Content-Type: application/json' -H 'Idempotency-Key: kayit-0001' \
@@ -170,6 +174,57 @@ TOKEN="$(curl -s localhost:8080/v1/auth/login -H 'Content-Type: application/json
 curl -s localhost:8080/v1/me -H "Authorization: Bearer $TOKEN" | jq
 curl -s localhost:8080/v1/auth/refresh -H 'Content-Type: application/json' -d '{"refreshToken":"<yenileme>"}' | jq
 curl -s localhost:8080/v1/auth/logout -H 'Content-Type: application/json' -d '{"refreshToken":"<yenileme>"}' | jq
+```
+
+## Tekrar koruması (`Idempotency-Key`, T8.2)
+
+Yazan dört uç (`POST /v1/auth/register`, `/v1/cart/reserve`, `/v1/orders`,
+`/v1/orders/{id}/3ds`) aynı niyetin ikinci kez işlenmesine karşı korunur (ADR-08 ve T8.2 eki).
+Katmanlar: `internal/idempotency` (kayıt deposu: Redis ve bellek; HTTP bilmez),
+`internal/httpapi/idempotency.go` (ara katman: ne saklanır, ne tekrar edilir),
+`internal/redisdb` (bağlantı, `/healthz` pingi, sürücü günlüğünün JSON'a yönlendirilmesi).
+
+| Durum                                   | Cevap                                                        |
+| --------------------------------------- | ------------------------------------------------------------ |
+| Anahtar yok                             | 400 `Idempotency-Key: zorunlu` (gövde hatalarıyla tek cevapta) |
+| Anahtar biçimsiz (8-128; harf, rakam, `-`, `_`) | 400 VALIDATION_FAILED                                |
+| İlk istek                               | Uç çalışır; cevap kaydedilir                                 |
+| Aynı istek, ilki hâlâ işleniyor         | 409 REQUEST_IN_PROGRESS (çift tıklama, B6)                   |
+| Aynı istek, ilki bitmiş                 | İlk cevap aynen + `Idempotent-Replayed: true`; uç çalışmaz   |
+| Aynı anahtar, farklı istek              | 409 CONFLICT                                                 |
+| Redis'e ulaşılamıyor                    | 503 SERVICE_UNAVAILABLE (korumasız sipariş alınmaz)          |
+
+- **Kayıt:** `idem:{usr_…}:<anahtar>` (kullanıcı başına; kayıt ucunda `idem:{anon}:…`). Biçim
+  `@getir/redis-kit` `idempotencyKey`'dedir; `keys_contract_test.go` karşılaştırır. Anahtar
+  kuralı `@getir/core`'dadır; `idempotency_contract_test.go` karşılaştırır.
+- **Atomiklik:** `SET NX PX 30000` ile "işleniyor" alınır (sahibin jetonu ve isteğin parmak
+  izi: yöntem + yol + gövde, JWT sırrından türetilen anahtarla HMAC). Bitirme ve bırakma Lua
+  ile yalnızca aynı jeton hâlâ sahipse yazar. Korunan ucun bütün işi 25 sn'lik bir son
+  tarihle çalışır: "işleniyor" kaydı (30 sn) iş sürerken düşmez.
+- **Saklanan:** durum kodu + cevap gövdesi (en fazla 16 KB). 5xx, 400, 401 ve 429 saklanmaz;
+  anahtar bırakılır, istemci aynı anahtarla yeniden dener. İş kuralı hataları (402, 403, 404,
+  409, 422) saklanır ve tekrar edilir.
+- **Ömür:** başarılı sipariş ve 3DS kaydı 2 saat; diğerleri `IDEMPOTENCY_TTL_SECONDS`
+  (24 saat); "işleniyor" 30 sn.
+- **Kayıt ucu istisnası:** cevap jeton taşır, jeton Redis'e yazılmaz. Biten kaydın aynı
+  anahtarla tekrarı uca geçer ve 409 PHONE_ALREADY_REGISTERED alır.
+- **3DS:** her kod denemesi yeni bir anahtarla gönderilir; aynı anahtarla farklı kod 409
+  CONFLICT alır.
+- **Süre:** her Redis komutu `GATEWAY_REQUEST_TIMEOUT_MS` ile sınırlıdır ve sürücü tarafından
+  yeniden denenmez (yeniden denemeyi istemci aynı anahtarla yapar); Redis takılırsa istek bu
+  sürede 503 alır. Sürücünün kendi günlük satırları da JSON'dur (`"msg":"redis surucusu"`).
+- **MOCK=true:** kayıtlar bellekte (aynı kurallar); Redis'e gidilmez, `/healthz`'de `redis`
+  kalemi yoktur.
+
+```bash
+# TOKEN: "Kimlik" bolumundeki giris komutundan. Ayni anahtarla iki istek: ikisi de ayni
+# orderId'yi alir, taslak bir kez acilir; ikinci cevap "Idempotent-Replayed: true" tasir.
+for i in 1 2; do curl -s -i localhost:8080/v1/cart/reserve -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" -H 'Idempotency-Key: taslak-0002' -d '{
+  "marketId":"mkt_migros-jet-moda",
+  "items":[{"productId":"prd_bulasik-deterjan","quantity":2},{"productId":"prd_cikolata-80","quantity":1}],
+  "address":{"line":"Kadikoy","location":{"lat":40.99,"lng":29.02}},
+  "expectedTotal":{"amountMinor":19360,"currency":"TRY"}}' | grep -iE '^idempotent|orderId'; done
 ```
 
 ## Sipariş risk sinyalleri (T8.1)
@@ -288,6 +343,9 @@ curl -s "localhost:8080/v1/markets/mkt_migros-jet-moda/products?q=s%C3%BCt" | jq
 | `MONGO_URI`                  | **MOCK değilse zorunlu** | `users` ve `sessions` koleksiyonları (T8.1) |
 | `MONGO_DB`                   | `getir`           | Veritabanı adı                                  |
 | `MONGO_SERVER_SELECTION_TIMEOUT_MS` | `5000`     | Açılışta Mongo'yu bekleme sınırı (Node ile ortak) |
+| `REDIS_URL`                  | **MOCK değilse zorunlu** | `redis://` ya da `rediss://`; tekrar koruması kayıtları (T8.2). Ulaşılamazsa gateway açılmaz |
+| `REDIS_CONNECT_TIMEOUT_MS`   | `5000`            | Açılışta Redis'i bekleme sınırı (Node ile ortak) |
+| `IDEMPOTENCY_TTL_SECONDS`    | `86400`           | Bitmiş tekrar kaydının ömrü (sn); başarılı sipariş ve 3DS kaydı 2 saat |
 | `NODE_ENV`                   | `development`     | `development/test/production`                   |
 
 ## Görsel adresleri (`ASSET_BASE_URL`)
@@ -318,10 +376,12 @@ ortam degiskenleri gecersiz: ASSET_BASE_URL: zorunlu, ornek: http://localhost:51
 { "success": true, "data": { "status": "ok", "mock": false,
   "services": [ { "name": "catalog", "status": "SERVING", "latencyMs": 5 },
                 { "name": "mongo",   "status": "SERVING", "latencyMs": 1 },
-                { "name": "order",   "status": "SERVING", "latencyMs": 6 } ] } }
+                { "name": "order",   "status": "SERVING", "latencyMs": 6 },
+                { "name": "redis",   "status": "SERVING", "latencyMs": 1 } ] } }
 ```
 
-`mongo` kalemi yalnızca `MOCK=false` iken vardır (T8.1); MOCK'ta hesaplar bellekte tutulur.
+`mongo` (T8.1) ve `redis` (T8.2) kalemleri yalnızca `MOCK=false` iken vardır; MOCK'ta hesaplar
+ve tekrar kayıtları bellekte tutulur.
 
 Bir servis düşükse **503** ve hata zarfı döner; rapor `error.details` içindedir. Servis
 durumu üç değerlidir: `SERVING`, `NOT_SERVING` (servis kendini hasta bildirdi) ve

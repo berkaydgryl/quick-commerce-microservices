@@ -28,21 +28,23 @@ type fakeOrders struct {
 	getOrderID   string
 	ctx          context.Context
 	called       bool
-	err          error
+	// calls, adaptorun kac kez cagrildigi (tekrar korumasi: ayni anahtar tek cagri).
+	calls int
+	err   error
 }
 
 func (f *fakeOrders) Reserve(ctx context.Context, input order.ReserveInput) (order.Reservation, error) {
-	f.called, f.ctx, f.reserveInput = true, ctx, input
+	f.called, f.ctx, f.reserveInput, f.calls = true, ctx, input, f.calls+1
 	return order.Reservation{OrderID: testOrderID, Status: "DRAFT"}, f.err
 }
 
 func (f *fakeOrders) Place(ctx context.Context, input order.PlaceInput) (order.Placement, error) {
-	f.called, f.ctx, f.placeInput = true, ctx, input
+	f.called, f.ctx, f.placeInput, f.calls = true, ctx, input, f.calls+1
 	return order.Placement{OrderID: input.OrderID, Status: "AWAITING_PAYMENT", ThreeDS: &order.ThreeDSChallenge{ChallengeID: "tds_1"}}, f.err
 }
 
 func (f *fakeOrders) ConfirmThreeDS(ctx context.Context, input order.ConfirmInput) (order.Placement, error) {
-	f.called, f.ctx, f.confirmInput = true, ctx, input
+	f.called, f.ctx, f.confirmInput, f.calls = true, ctx, input, f.calls+1
 	return order.Placement{OrderID: input.OrderID, Status: "PAID"}, f.err
 }
 
@@ -86,6 +88,7 @@ func orderAppWithSignals(orders *fakeOrders, signals *fakeSignals) *fiber.App {
 		OrderGetter:      orders,
 		CheckoutSignals:  signals,
 		AccessTokens:     testTokens(),
+		Idempotency:      testIdempotency(),
 		Logger:           silentLogger(),
 	})
 }
