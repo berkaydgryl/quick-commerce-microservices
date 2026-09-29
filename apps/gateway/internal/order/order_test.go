@@ -3,6 +3,7 @@ package order
 import (
 	"context"
 	"testing"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -12,6 +13,7 @@ import (
 	paymentv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/payment/v1"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rest"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/testkit"
 )
 
@@ -84,16 +86,21 @@ func TestReserveKeepsNumericDetails(t *testing.T) {
 	}
 }
 
-func TestPlaceSendsCardAndClientIP(t *testing.T) {
+func TestPlaceSendsCardAndSignals(t *testing.T) {
 	stub := &stubServer{placeResponse: &orderv1.CreateOrderResponse{
 		OrderId:     orderID,
 		Status:      orderv1.OrderStatus_ORDER_STATUS_AWAITING_PAYMENT,
 		ChallengeId: "tds_1",
 	}}
 	service := startStub(t, stub)
+	createdAt := time.Date(2026, 8, 30, 9, 0, 0, 0, time.UTC)
 
 	placement, err := service.Place(context.Background(), PlaceInput{
-		UserID: "usr_1", OrderID: orderID, CardToken: "tok_test_4242", IdempotencyKey: "anahtar-0002", ClientIP: "85.105.1.20",
+		UserID: "usr_1", OrderID: orderID, CardToken: "tok_test_4242", IdempotencyKey: "anahtar-0002",
+		Signals: Signals{
+			IPAddress: "85.105.1.20", IPCity: "Istanbul", DeviceID: "dvc_1", AccountsOnDevice: 4,
+			PreviousIPAddress: "85.105.1.19", SessionLocation: &rest.GeoPoint{Lat: 39.93, Lng: 32.86}, AccountCreatedAt: createdAt,
+		},
 	})
 	if err != nil {
 		t.Fatalf("hata beklenmiyordu: %v", err)
@@ -103,12 +110,37 @@ func TestPlaceSendsCardAndClientIP(t *testing.T) {
 	if sent.GetPaymentMethod() != paymentv1.PaymentMethod_PAYMENT_METHOD_CARD || sent.GetCardToken() != "tok_test_4242" {
 		t.Errorf("kart yontemi ve jeton tasinmali: %v", sent)
 	}
-	// Risk sinyali (B9): IP gateway'den, digerleri T8.1'e kadar BOS.
-	if sent.GetSignals().GetIpAddress() != "85.105.1.20" || sent.GetSignals().GetDeviceId() != "" {
-		t.Errorf("yalnizca IP sinyali gitmeli: %v", sent.GetSignals())
+	// Risk sinyalleri (B9): yedi alanin hepsi gateway'den.
+	signals := sent.GetSignals()
+	if signals.GetIpAddress() != "85.105.1.20" || signals.GetIpCity() != "Istanbul" || signals.GetDeviceId() != "dvc_1" ||
+		signals.GetAccountsOnDevice() != 4 || signals.GetPreviousIpAddress() != "85.105.1.19" ||
+		signals.GetSessionLocation().GetLat() != 39.93 || signals.GetSessionLocation().GetLng() != 32.86 ||
+		!signals.GetAccountCreatedAt().AsTime().Equal(createdAt) {
+		t.Errorf("sinyallerin hepsi tasinmali: %v", signals)
 	}
 	if got := testkit.JSON(t, placement); got != `{"orderId":"`+orderID+`","status":"AWAITING_PAYMENT","threeDs":{"challengeId":"tds_1"}}` {
 		t.Errorf("cevap: %s", got)
+	}
+}
+
+func TestPlaceOmitsUnknownSignals(t *testing.T) {
+	// Bilinmeyen konum ve hesap yasi GONDERILMEZ: risk sozlesmesinde "mesaj
+	// yok = bilinmiyor"; sifir konum (0,0) ya da 1970 tarihi gercek deger sanilirdi.
+	stub := &stubServer{placeResponse: &orderv1.CreateOrderResponse{
+		OrderId: orderID, Status: orderv1.OrderStatus_ORDER_STATUS_PAID,
+	}}
+	service := startStub(t, stub)
+
+	if _, err := service.Place(context.Background(), PlaceInput{
+		UserID: "usr_1", OrderID: orderID, CardToken: "tok_test_4242", IdempotencyKey: "anahtar-0003",
+		Signals: Signals{IPAddress: "85.105.1.20"},
+	}); err != nil {
+		t.Fatalf("hata beklenmiyordu: %v", err)
+	}
+
+	signals := stub.placeRequest.GetSignals()
+	if signals.GetIpAddress() != "85.105.1.20" || signals.GetSessionLocation() != nil || signals.GetAccountCreatedAt() != nil {
+		t.Errorf("yalnizca bilinen sinyaller gitmeli: %v", signals)
 	}
 }
 

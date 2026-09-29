@@ -10,6 +10,7 @@ package httpapi
 //   auth.go       - /v1/auth ve /v1/me uclari (T8.1)
 //   auth_body.go  - kimlik uclarinin istek govdeleri
 //   identity.go   - kullanici kimligi (Bearer erisim jetonu, T8.1)
+//   device.go     - cihaz cerezi (risk sinyali, T8.1)
 //   idempotency.go- Idempotency-Key basligi (ADR-08)
 //   body.go       - JSON govdenin kati cozulmesi
 //   params.go     - sorgu parametresinin tipine cevrilmesi
@@ -110,6 +111,12 @@ type ProfileGetter interface {
 	Profile(ctx context.Context, userID string) (auth.Profile, error)
 }
 
+// CheckoutSignalReader, POST /v1/orders'in risk sinyalleri (T8.1): oturum ve
+// kullanici kaydindan; gercegi auth.Service.
+type CheckoutSignalReader interface {
+	CheckoutSignals(ctx context.Context, identity auth.Identity, ipAddress string) (auth.CheckoutSignals, error)
+}
+
 // AccessTokenVerifier, korumali uclarin erisim jetonunu dogrular (identity.go);
 // gercegi auth.Tokens.
 type AccessTokenVerifier interface {
@@ -138,9 +145,13 @@ type Deps struct {
 	SessionRefresher  SessionRefresher
 	SessionRevoker    SessionRevoker
 	ProfileGetter     ProfileGetter
+	CheckoutSignals   CheckoutSignalReader
 	// AccessTokens, korumali uclarin jeton dogrulayicisi.
 	AccessTokens AccessTokenVerifier
-	Logger       *slog.Logger
+	// SecureCookies, cihaz cerezine Secure bayragi (yalnizca production:
+	// gelistirme http://localhost uzerinden calisir).
+	SecureCookies bool
+	Logger        *slog.Logger
 }
 
 // New, Fiber uygulamasini kurar.
@@ -169,8 +180,9 @@ func New(deps Deps) *fiber.App {
 	v1.Get("/markets/:marketId/products", listMarketProductsHandler(deps.MarketProducts))
 
 	// Kimlik uclari (T8.1): kayit, giris, yenileme ve cikis kimliksizdir.
-	v1.Post("/auth/register", registerHandler(deps.UserRegistrar))
-	v1.Post("/auth/login", loginHandler(deps.UserAuthenticator))
+	devices := deviceCookies{secure: deps.SecureCookies}
+	v1.Post("/auth/register", registerHandler(deps.UserRegistrar, devices))
+	v1.Post("/auth/login", loginHandler(deps.UserAuthenticator, devices))
 	v1.Post("/auth/refresh", refreshHandler(deps.SessionRefresher))
 	v1.Post("/auth/logout", logoutHandler(deps.SessionRevoker))
 
@@ -179,7 +191,7 @@ func New(deps Deps) *fiber.App {
 	user := requireUser(deps.AccessTokens)
 	v1.Get("/me", user, meHandler(deps.ProfileGetter))
 	v1.Post("/cart/reserve", user, reserveCartHandler(deps.CartReserver))
-	v1.Post("/orders", user, placeOrderHandler(deps.OrderPlacer))
+	v1.Post("/orders", user, placeOrderHandler(deps.OrderPlacer, deps.CheckoutSignals))
 	v1.Post("/orders/:"+orderIDParam+"/3ds", user, confirmThreeDSHandler(deps.ThreeDSConfirmer))
 	v1.Get("/orders/:"+orderIDParam, user, getOrderHandler(deps.OrderGetter))
 

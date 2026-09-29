@@ -43,7 +43,10 @@ func reserveCartHandler(reserver CartReserver) fiber.Handler {
 
 // placeOrderHandler, POST /v1/orders: risk -> odeme -> siparis zinciri. 3DS
 // gerekirse siparis AWAITING_PAYMENT ve threeDs.challengeId ile doner.
-func placeOrderHandler(placer OrderPlacer) fiber.Handler {
+//
+// Risk sinyalleri (T8.1) bicim dogrulamasindan SONRA okunur: bicimsiz istek
+// veritabanina gitmez. Oturum kapatilmissa sinyal okuyucu 401 doner.
+func placeOrderHandler(placer OrderPlacer, signalReader CheckoutSignalReader) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if err := rejectUnknownQuery(c); err != nil {
 			return err
@@ -54,12 +57,18 @@ func placeOrderHandler(placer OrderPlacer) fiber.Handler {
 		}
 		errs := fieldErrors{}
 		key := idempotencyKeyOf(c, errs)
-		// IP baglantidan (B9): istemcinin yazabildigi X-Forwarded-For'a guvenilmez;
-		// Fiber'da guvenilir vekil tanimli olmadikca c.IP() soketin adresidir.
-		input := body.toInput(userIDOf(c), key, c.IP(), errs)
+		input := body.toInput(userIDOf(c), key, errs)
 		if len(errs) > 0 {
 			return apperror.New(apperror.CodeValidationFailed, errs)
 		}
+
+		// IP baglantidan (B9): istemcinin yazabildigi X-Forwarded-For'a guvenilmez;
+		// Fiber'da guvenilir vekil tanimli olmadikca c.IP() soketin adresidir.
+		signals, err := signalReader.CheckoutSignals(c.Context(), identityOf(c), c.IP())
+		if err != nil {
+			return err
+		}
+		input.Signals = toOrderSignals(signals)
 
 		placement, err := placer.Place(outgoingContext(c), input)
 		if err != nil {

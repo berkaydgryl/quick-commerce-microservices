@@ -1,6 +1,9 @@
 package httpapi
 
 import (
+	"math"
+
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rest"
 )
@@ -113,13 +116,13 @@ func (m *moneyBody) toMoney(field string, errs fieldErrors) *rest.Money {
 }
 
 // toInput, siparis govdesini adaptor girdisine cevirir. REST'te tek yontem
-// kart; baska bir deger bicim hatasidir (servis onu hic gormez).
-func (b placeBody) toInput(userID, idempotencyKey, clientIP string, errs fieldErrors) order.PlaceInput {
+// kart; baska bir deger bicim hatasidir (servis onu hic gormez). Risk
+// sinyalleri govdeden GELMEZ (B9); handler onlari oturumdan ekler.
+func (b placeBody) toInput(userID, idempotencyKey string, errs fieldErrors) order.PlaceInput {
 	input := order.PlaceInput{
 		UserID:         userID,
 		OrderID:        b.OrderID,
 		IdempotencyKey: idempotencyKey,
-		ClientIP:       clientIP,
 	}
 	switch {
 	case b.Payment == nil:
@@ -141,4 +144,30 @@ func (b threeDSBody) toInput(userID, orderID, idempotencyKey string) order.Confi
 		Code:           b.OTP,
 		IdempotencyKey: idempotencyKey,
 	}
+}
+
+// toOrderSignals, kimlik servisinin sinyallerini siparis adaptorunun girdisine
+// cevirir. Iki paket birbirini bilmez; ceviri HTTP katmanindadir.
+func toOrderSignals(signals auth.CheckoutSignals) order.Signals {
+	out := order.Signals{
+		IPAddress:         signals.IPAddress,
+		IPCity:            signals.IPCity,
+		DeviceID:          signals.DeviceID,
+		AccountsOnDevice:  clampInt32(signals.AccountsOnDevice),
+		PreviousIPAddress: signals.PreviousIPAddress,
+		AccountCreatedAt:  signals.AccountCreatedAt,
+	}
+	if signals.SessionLocation != nil {
+		out.SessionLocation = &rest.GeoPoint{Lat: signals.SessionLocation.Lat, Lng: signals.SessionLocation.Lng}
+	}
+	return out
+}
+
+// clampInt32, sayiyi proto int32 sinirina oturtur (cihaz basina hesap sayisi
+// pratikte kucuktur; sinir yalnizca tasmayi onler).
+func clampInt32(value int) int32 {
+	if value > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	return int32(value)
 }

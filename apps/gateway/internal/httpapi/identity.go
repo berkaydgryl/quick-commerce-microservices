@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
 )
 
 // Kullanici kimligi (T8.1): korumali uclar "Authorization: Bearer <erisim
@@ -13,9 +14,13 @@ import (
 // T7.5'teki X-User-Id gelistirme basligi kaldirildi: imzasiz bir baslik her
 // ortamda herkesin kendini baska biri gibi tanitmasina izin verirdi.
 //
-// Kimligi belirleyen TEK yer bu ara katmandir; handler'lar userIDOf(c) okur.
+// Kimligi belirleyen TEK yer bu ara katmandir; handler'lar userIDOf(c) ya da
+// identityOf(c) okur.
 
-const userIDLocal = "userId"
+const (
+	userIDLocal    = "userId"
+	sessionIDLocal = "sessionId"
+)
 
 // bearerScheme, tek desteklenen sema. Sema adi buyuk-kucuk harfe duyarsizdir
 // (RFC 7235): "bearer" da kabul edilir.
@@ -57,6 +62,7 @@ func requireUser(verifier AccessTokenVerifier) fiber.Handler {
 			}
 		}
 		c.Locals(userIDLocal, identity.UserID)
+		c.Locals(sessionIDLocal, identity.SessionID)
 		return c.Next()
 	}
 }
@@ -77,4 +83,10 @@ func userIDOf(c fiber.Ctx) string {
 		return userID
 	}
 	return ""
+}
+
+// identityOf, jetondaki kullanici ve oturum (siparis sinyalleri oturumdan okunur).
+func identityOf(c fiber.Ctx) auth.Identity {
+	sessionID, _ := c.Locals(sessionIDLocal).(string)
+	return auth.Identity{UserID: userIDOf(c), SessionID: sessionID}
 }

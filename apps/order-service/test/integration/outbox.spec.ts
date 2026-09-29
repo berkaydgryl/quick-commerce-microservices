@@ -62,6 +62,7 @@ beforeAll(async () => {
   store = await openOrderStore(
     { MONGO_URI: uri, MONGO_DB: DB_NAME, MONGO_SERVER_SELECTION_TIMEOUT_MS: 5_000 },
     silentLogger,
+    'test',
   );
   raw = await MongoClient.connect(uri);
   redis = await connectRedis({ url: redisContainer.getConnectionUrl(), name: 'order-outbox-test' });

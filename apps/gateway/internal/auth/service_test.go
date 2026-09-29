@@ -332,3 +332,150 @@ func TestInfrastructureErrorsAreNotBusinessErrors(t *testing.T) {
 		t.Errorf("altyapi hatasi sarmalanmis olarak donmeli: %v", err)
 	}
 }
+
+// fixedLocator, belirli IP'leri cozen sahte GeoIP.
+type fixedLocator map[string]auth.Located
+
+func (f fixedLocator) Locate(ip string) (auth.Located, bool) {
+	located, found := f[ip]
+	return located, found
+}
+
+func (f *fixture) registerFrom(t *testing.T, phone string, meta auth.RequestMeta) auth.Grant {
+	t.Helper()
+	grant, err := f.service.Register(context.Background(), auth.RegisterInput{Phone: phone, Password: password, FullName: fullName}, meta)
+	if err != nil {
+		t.Fatalf("kayit basarisiz: %v", err)
+	}
+	return grant
+}
+
+func (f *fixture) loginFrom(t *testing.T, phone string, meta auth.RequestMeta) auth.Grant {
+	t.Helper()
+	grant, err := f.service.Login(context.Background(), auth.LoginInput{Phone: phone, Password: password}, meta)
+	if err != nil {
+		t.Fatalf("giris basarisiz: %v", err)
+	}
+	return grant
+}
+
+func (f *fixture) signalsOf(t *testing.T, grant auth.Grant, ip string) (auth.CheckoutSignals, error) {
+	t.Helper()
+	identity, err := f.tokens.Verify(grant.AccessToken)
+	if err != nil {
+		t.Fatalf("jeton dogrulanamadi: %v", err)
+	}
+	return f.service.CheckoutSignals(context.Background(), identity, ip)
+}
+
+const deviceA = "dvc_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+func TestRegisterRecordsDeviceAndFirstSessionHasNoPreviousIP(t *testing.T) {
+	f := newFixture(t)
+	grant := f.registerFrom(t, phone, auth.RequestMeta{IPAddress: "85.105.1.1", DeviceID: deviceA})
+
+	user, err := f.users.ByID(context.Background(), grant.User.ID)
+	if err != nil || user.RegistrationDeviceID != deviceA || user.LastLoginIP != "85.105.1.1" {
+		t.Errorf("kayit cihazi ve IP'yi yazmali: %+v %v", user, err)
+	}
+	signals, err := f.signalsOf(t, grant, "85.105.1.1")
+	if err != nil {
+		t.Fatalf("sinyaller okunamadi: %v", err)
+	}
+	if signals.DeviceID != deviceA || signals.PreviousIPAddress != "" || signals.AccountsOnDevice != 1 ||
+		!signals.AccountCreatedAt.Equal(user.CreatedAt) || signals.SessionLocation != nil {
+		t.Errorf("ilk oturum: cihaz, 1 hesap, hesap yasi; onceki IP ve konum yok: %+v", signals)
+	}
+}
+
+func TestLoginCarriesPreviousLoginIP(t *testing.T) {
+	f := newFixture(t)
+	f.registerFrom(t, phone, auth.RequestMeta{IPAddress: "85.105.1.1", DeviceID: deviceA})
+	f.loginFrom(t, phone, auth.RequestMeta{IPAddress: "85.105.1.2", DeviceID: deviceA})
+
+	third := f.loginFrom(t, phone, auth.RequestMeta{IPAddress: "85.105.1.3", DeviceID: deviceA})
+
+	signals, err := f.signalsOf(t, third, "85.105.1.3")
+	if err != nil || signals.PreviousIPAddress != "85.105.1.2" || signals.IPAddress != "85.105.1.3" {
+		t.Errorf("onceki IP bir onceki girisin IP'si olmali: %+v %v", signals, err)
+	}
+}
+
+func TestSessionLocationFallsBackToLastKnown(t *testing.T) {
+	// IP cozulebilirse konum oradan gelir ve kullanicinin son konumu olur;
+	// cozulemezse (yerel ag, VPN) oturum son bilinen konumu devralir.
+	f := newFixture(t)
+	ankara := auth.GeoPoint{Lat: 39.93, Lng: 32.86}
+	f.service = auth.NewService(auth.Deps{
+		Users: f.users, Sessions: f.sessions, Passwords: f.passwords, Tokens: f.tokens,
+		Locator:    fixedLocator{"85.105.1.1": {Location: ankara, City: "Ankara"}},
+		RefreshTTL: refreshTTL, Now: f.clock.Now,
+	})
+	registered := f.registerFrom(t, phone, auth.RequestMeta{IPAddress: "85.105.1.1", DeviceID: deviceA})
+
+	located, err := f.signalsOf(t, registered, "85.105.1.1")
+	if err != nil || located.SessionLocation == nil || *located.SessionLocation != ankara || located.IPCity != "Ankara" {
+		t.Fatalf("cozulen IP konum ve sehir vermeli: %+v %v", located, err)
+	}
+
+	unresolved := f.loginFrom(t, phone, auth.RequestMeta{IPAddress: "127.0.0.1", DeviceID: deviceA})
+	inherited, err := f.signalsOf(t, unresolved, "127.0.0.1")
+	if err != nil || inherited.SessionLocation == nil || *inherited.SessionLocation != ankara || inherited.IPCity != "" {
+		t.Errorf("cozulemeyen IP'de konum son bilinenden, sehir bos gelmeli: %+v %v", inherited, err)
+	}
+}
+
+func TestCheckoutSignalsRequireLiveSession(t *testing.T) {
+	f := newFixture(t)
+	grant := f.registerFrom(t, phone, auth.RequestMeta{IPAddress: "85.105.1.1", DeviceID: deviceA})
+	identity, err := f.tokens.Verify(grant.AccessToken)
+	if err != nil {
+		t.Fatalf("jeton dogrulanamadi: %v", err)
+	}
+
+	other := identity
+	other.UserID = ids.New(ids.User)
+	if _, err := f.service.CheckoutSignals(context.Background(), other, "85.105.1.1"); codeOf(err) != apperror.CodeUnauthorized {
+		t.Errorf("baska kullanicinin oturumu UNAUTHORIZED donmeli: %v", err)
+	}
+
+	f.clock.advance(refreshTTL)
+	if _, err := f.service.CheckoutSignals(context.Background(), identity, "85.105.1.1"); codeOf(err) != apperror.CodeUnauthorized {
+		t.Errorf("suresi dolan oturum UNAUTHORIZED donmeli: %v", err)
+	}
+}
+
+func TestCheckoutSignalsAfterLogoutAreRefused(t *testing.T) {
+	f := newFixture(t)
+	grant := f.registerFrom(t, phone, auth.RequestMeta{IPAddress: "85.105.1.1", DeviceID: deviceA})
+	if _, err := f.service.Logout(context.Background(), grant.RefreshToken); err != nil {
+		t.Fatalf("cikis basarisiz: %v", err)
+	}
+
+	if _, err := f.signalsOf(t, grant, "85.105.1.1"); codeOf(err) != apperror.CodeUnauthorized {
+		t.Errorf("kapatilan oturumla sinyal okunmamali: %v", err)
+	}
+}
+
+func TestAccountsOnDeviceCountsRegistrationsNotLogins(t *testing.T) {
+	// Sayim hesabin ACILDIGI cihaza gore: ayni tarayicidan baska hesaplara
+	// girmek sayiyi artirmaz (aile cihazi, demo personalari); ayni cihazdan
+	// acilan her hesap artirir (coklu hesap).
+	f := newFixture(t)
+	first := f.registerFrom(t, phone, auth.RequestMeta{IPAddress: "85.105.1.1", DeviceID: deviceA})
+	f.registerFrom(t, "+905321230002", auth.RequestMeta{IPAddress: "85.105.1.1", DeviceID: "dvc_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"})
+	secondOnA := f.loginFrom(t, "+905321230002", auth.RequestMeta{IPAddress: "85.105.1.1", DeviceID: deviceA})
+
+	for name, tc := range map[string]struct {
+		grant auth.Grant
+		want  int
+	}{
+		"A'dan acilan hesap":             {grant: first, want: 1},
+		"B'den acilip A'dan giren hesap": {grant: secondOnA, want: 1},
+	} {
+		signals, err := f.signalsOf(t, tc.grant, "85.105.1.1")
+		if err != nil || signals.AccountsOnDevice != tc.want {
+			t.Errorf("%s: %d hesap bekleniyordu: %+v %v", name, tc.want, signals, err)
+		}
+	}
+}

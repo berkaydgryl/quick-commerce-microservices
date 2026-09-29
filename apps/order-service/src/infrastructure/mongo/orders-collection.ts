@@ -66,11 +66,6 @@ export class OrdersCollection extends MongoRepository<OrderDocument> {
   }
 
   /**
-   * Kullanicinin verilen durumlardan birinde en az bir siparisi var mi?
-   * userId esitligi mevcut userId_createdAt_id indeksinin onekini kullanir;
-   * durum filtresi yalnizca o kullanicinin siparisleri uzerinde calisir.
-   */
-  /**
    * Kullanicinin verilen durumlardaki siparis sayisi ve tutar toplami, durum
    * basina TEK aggregation (en fazla statuses.length satir doner). userId
    * esitligi userId_createdAt_id indeksinin onekini kullanir.
@@ -96,6 +91,11 @@ export class OrdersCollection extends MongoRepository<OrderDocument> {
     return new Map(rows.map((row) => [row._id, { count: row.count, totalMinor: row.totalMinor }]));
   }
 
+  /**
+   * Kullanicinin verilen durumlardan birinde en az bir siparisi var mi?
+   * userId esitligi mevcut userId_createdAt_id indeksinin onekini kullanir;
+   * durum filtresi yalnizca o kullanicinin siparisleri uzerinde calisir.
+   */
   async existsWithStatus(userId: string, statuses: readonly OrderStatus[]): Promise<boolean> {
     const found = await this.run('existsWithStatus', () =>
       this.collection.findOne(
@@ -104,6 +104,37 @@ export class OrdersCollection extends MongoRepository<OrderDocument> {
       ),
     );
     return found !== null;
+  }
+
+  /**
+   * Verilen kullanicilarin butun siparislerini siler (persona seed'i, T8.1).
+   * userId esitligi userId_createdAt_id indeksinin onekini kullanir.
+   * @returns Silinen belge sayisi.
+   */
+  async deleteByUsers(userIds: readonly string[], options: SessionOption = {}): Promise<number> {
+    const result = await this.run('deleteByUsers', () =>
+      this.collection.deleteMany(
+        { userId: { $in: [...userIds] } },
+        options.session === undefined ? {} : { session: options.session },
+      ),
+    );
+    return result.deletedCount;
+  }
+
+  /** Belgeleri toplu yazar (persona seed'i). Bos listede surucuye gidilmez. */
+  async insertMany(
+    documents: readonly OrderDocument[],
+    options: SessionOption = {},
+  ): Promise<void> {
+    if (documents.length === 0) {
+      return;
+    }
+    await this.run('insertMany', () =>
+      this.collection.insertMany(
+        [...documents],
+        options.session === undefined ? {} : { session: options.session },
+      ),
+    );
   }
 }
 

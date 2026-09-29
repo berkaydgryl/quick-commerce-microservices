@@ -94,7 +94,11 @@ Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci 
   (`INVALID_CREDENTIALS`). Katalog uçları herkese açıktır. T7.5'teki
   `X-User-Id` geliştirme başlığı kaldırıldı.
 - **Risk sinyalleri istemciden alınmaz** (B9): gateway bağlantının IP'sini
-  order'a iletir; istemcinin yazabildiği `X-Forwarded-For` okunmaz.
+  order'a iletir; istemcinin yazabildiği `X-Forwarded-For` okunmaz. Cihaz, önceki
+  giriş IP'si ve oturum konumu oturumdan; hesap yaşı ve hesabın açıldığı cihazdan
+  açılmış hesap sayısı kullanıcı kaydından gelir (T8.1). Cihaz kimliğini gateway kayıt
+  ve girişte `getir_device` çereziyle (HttpOnly) verir. Oturumu kapatılmış jetonla
+  sipariş `401` alır.
 - **Idempotency-Key**, kalıcı durum değiştiren uçlarda zorunludur:
   `POST /v1/auth/register`, `POST /v1/cart/reserve`,
   `DELETE /v1/cart/reserve/{orderId}`, `POST /v1/orders`,

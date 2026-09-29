@@ -49,6 +49,21 @@ export function loadServiceEnv(): OrderServiceEnv {
     : { ...base, mongo: loadEnvOrExit(mongoEnvSchema), redis: loadEnvOrExit(redisEnvSchema) };
 }
 
+const seedSchema = mongoEnvSchema.extend({
+  NODE_ENV: serviceEnvSchema.shape.NODE_ENV,
+  LOG_LEVEL: serviceEnvSchema.shape.LOG_LEVEL,
+});
+
+export type SeedEnv = z.infer<typeof seedSchema>;
+
+/**
+ * Persona seed'inin ortami (T8.1): Mongo HER ZAMAN zorunlu (seed'in isi Mongo'ya
+ * yazmaktir; MOCK'ta gecmis acilista bellege yuklenir). catalog seed'iyle ayni.
+ */
+export function loadSeedEnv(): SeedEnv {
+  return loadEnvOrExit(seedSchema);
+}
+
 const healthcheckSchema = z.object({ ORDER_GRPC_PORT: grpcPort(DEFAULT_ORDER_GRPC_PORT) });
 
 /**

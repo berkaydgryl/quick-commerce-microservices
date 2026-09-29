@@ -1,0 +1,89 @@
+{
+  "password": "Demo-Persona-2026",
+  "accounts": [
+    {
+      "persona": "Ayşe",
+      "band": "LOW",
+      "id": "usr_a9e0eddcc7fe5bf4c620ae453c227c6a",
+      "phone": "+905550000001",
+      "fullName": "Ayşe Yılmaz",
+      "ageHours": 720,
+      "registrationDeviceId": "dvc_f6d7a7a01e836155f20b666342850aef",
+      "lastLocation": { "lat": 40.9885, "lng": 29.0262 },
+      "addresses": true,
+      "selectable": true
+    },
+    {
+      "persona": "Zeynep",
+      "band": "MEDIUM",
+      "id": "usr_7ba4ba2d91bb51133bf18ef64e49bc5e",
+      "phone": "+905550000002",
+      "fullName": "Zeynep Kaya",
+      "ageHours": 1,
+      "registrationDeviceId": "dvc_abdd2eb1fef89667580f7de744f865c0",
+      "lastLocation": { "lat": 40.9885, "lng": 29.0262 },
+      "addresses": true,
+      "selectable": true
+    },
+    {
+      "persona": "Can",
+      "band": "HIGH",
+      "id": "usr_41098a7bffad8e43cdb031102b61debe",
+      "phone": "+905550000003",
+      "fullName": "Can Demir",
+      "ageHours": 10,
+      "registrationDeviceId": "dvc_add852b3f604b938d22142ddd7fdb3c2",
+      "lastLocation": { "lat": 39.9334, "lng": 32.8597 },
+      "addresses": true,
+      "selectable": true
+    },
+    {
+      "persona": "Ali",
+      "band": "CRITICAL",
+      "id": "usr_68dd28754d4cdc3657e26627d25dad38",
+      "phone": "+905550000004",
+      "fullName": "Ali Çelik",
+      "ageHours": 1440,
+      "registrationDeviceId": "dvc_6d32883768ffcf73beed3d86fbe9f709",
+      "lastLocation": { "lat": 38.4237, "lng": 27.1428 },
+      "addresses": true,
+      "selectable": true
+    },
+    {
+      "persona": "Komşu",
+      "band": "LOW",
+      "id": "usr_f0c2cae267283f94a5b5e2ea5ea4be54",
+      "phone": "+905550000005",
+      "fullName": "Mert Aydın",
+      "ageHours": 2160,
+      "registrationDeviceId": "dvc_4e767be62914493b86e20ea2b2d5fdfd",
+      "lastLocation": { "lat": 40.9885, "lng": 29.0262 },
+      "addresses": true,
+      "selectable": true
+    },
+    {
+      "persona": "Ali (2. hesap)",
+      "id": "usr_19454dd794b03a00b6219dcaad51e032",
+      "phone": "+905550000014",
+      "fullName": "Ali Çelik",
+      "ageHours": 1400,
+      "registrationDeviceId": "dvc_6d32883768ffcf73beed3d86fbe9f709"
+    },
+    {
+      "persona": "Ali (3. hesap)",
+      "id": "usr_d343b161c4f22540bfc2bdf1d70115ba",
+      "phone": "+905550000024",
+      "fullName": "Ali Çelik",
+      "ageHours": 1300,
+      "registrationDeviceId": "dvc_6d32883768ffcf73beed3d86fbe9f709"
+    },
+    {
+      "persona": "Ali (4. hesap)",
+      "id": "usr_1336677bd0eee6c2389508966fb5c76f",
+      "phone": "+905550000034",
+      "fullName": "Ali Çelik",
+      "ageHours": 1200,
+      "registrationDeviceId": "dvc_6d32883768ffcf73beed3d86fbe9f709"
+    }
+  ]
+}

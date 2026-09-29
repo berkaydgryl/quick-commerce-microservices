@@ -1,5 +1,6 @@
-// Package auth, kimlik use-case'leridir (T8.1): kayit, giris, yenileme, cikis
-// ve profil. Kimlik telefon + sifre ile kurulur (ADR-12).
+// Package auth, kimlik use-case'leridir (T8.1): kayit, giris, yenileme, cikis,
+// profil ve siparis anindaki oturum sinyalleri. Kimlik telefon + sifre ile
+// kurulur (ADR-12).
 //
 // HTTP'yi ve Mongo'yu BILMEZ: girdi dogrulanmis gelir (httpapi, rules.go),
 // kayitlar depolardan okunur (authstore). Is sonuclari *apperror.Error olarak
@@ -21,7 +22,11 @@ import (
 const (
 	phoneTakenReason     = "bu numarayla kayitli bir hesap var"
 	refreshInvalidReason = "gecersiz, kullanilmis ya da suresi dolmus"
+	sessionEndedReason   = "oturum kapatilmis ya da suresi dolmus; yeniden giris yap"
 	fieldRefreshToken    = "refreshToken"
+	// fieldAuthorization, erisim jetonunun basligi: oturumu biten jetonun
+	// hatasi da bu adla doner (kimlik ara katmaniyla ayni).
+	fieldAuthorization = "Authorization"
 )
 
 // Passwords, sifre ozetleme; gercegi PasswordHasher (bcrypt).
@@ -43,6 +48,8 @@ type Deps struct {
 	Sessions  SessionStore
 	Passwords Passwords
 	Tokens    TokenIssuer
+	// Locator, IP'yi oturum konumuna cevirir; yerelde NoLocator.
+	Locator Locator
 	// RefreshTTL, yenileme jetonunun omru (REFRESH_TTL).
 	RefreshTTL time.Duration
 	// Now, saat; testte sabitlenir.
@@ -60,17 +67,24 @@ func NewService(deps Deps) *Service {
 }
 
 // Register, yeni kullanici acar ve oturumunu baslatir. Girdi dogrulanmis gelir.
+//
+// Hesabin acildigi cihaz kaydedilir: "ayni cihazdan acilmis hesap sayisi"
+// sinyali bununla sayilir. Ilk oturumun "onceki IP"si yoktur.
 func (s *Service) Register(ctx context.Context, input RegisterInput, meta RequestMeta) (Grant, error) {
 	hash, err := s.deps.Passwords.Hash(input.Password)
 	if err != nil {
 		return Grant{}, err
 	}
+	located := s.locate(meta.IPAddress)
 	user := User{
-		ID:           ids.New(ids.User),
-		Phone:        input.Phone,
-		PasswordHash: hash,
-		FullName:     input.FullName,
-		CreatedAt:    s.deps.Now().UTC(),
+		ID:                   ids.New(ids.User),
+		Phone:                input.Phone,
+		PasswordHash:         hash,
+		FullName:             input.FullName,
+		CreatedAt:            s.deps.Now().UTC(),
+		RegistrationDeviceID: meta.DeviceID,
+		LastLoginIP:          meta.IPAddress,
+		LastLocation:         located.location(),
 	}
 	if err := s.deps.Users.Create(ctx, user); err != nil {
 		if errors.Is(err, ErrPhoneTaken) {
@@ -78,7 +92,9 @@ func (s *Service) Register(ctx context.Context, input RegisterInput, meta Reques
 		}
 		return Grant{}, fmt.Errorf("kullanici yazilamadi: %w", err)
 	}
-	return s.startSession(ctx, user, meta)
+	return s.startSession(ctx, user, sessionStart{
+		deviceID: meta.DeviceID, ipAddress: meta.IPAddress, ipCity: located.city(), location: located.location(),
+	})
 }
 
 // Login, telefon ve sifreyle oturum acar.
@@ -101,7 +117,25 @@ func (s *Service) Login(ctx context.Context, input LoginInput, meta RequestMeta)
 	if !matches {
 		return Grant{}, apperror.New(apperror.CodeInvalidCredentials, nil)
 	}
-	return s.startSession(ctx, user, meta)
+
+	// Giris kaydi: onceki IP oturuma "onceki IP" olarak yazilir; konum IP'den
+	// cozulemezse oturum kullanicinin son bilinen konumunu devralir.
+	located := s.locate(meta.IPAddress)
+	previous, err := s.deps.Users.RecordLogin(ctx, user.ID, LoginState{IPAddress: meta.IPAddress, Location: located.location()})
+	if errors.Is(err, ErrUserNotFound) {
+		return Grant{}, apperror.New(apperror.CodeInvalidCredentials, nil)
+	}
+	if err != nil {
+		return Grant{}, fmt.Errorf("giris kaydedilemedi: %w", err)
+	}
+	location := located.location()
+	if location == nil {
+		location = previous.Location
+	}
+	return s.startSession(ctx, user, sessionStart{
+		deviceID: meta.DeviceID, ipAddress: meta.IPAddress, previousIPAddress: previous.IPAddress,
+		ipCity: located.city(), location: location,
+	})
 }
 
 // Refresh, yenileme jetonunu yenisiyle DEGISTIRIR ve yeni erisim jetonu verir.
@@ -137,6 +171,50 @@ func (s *Service) Logout(ctx context.Context, refreshToken string) (bool, error)
 	return revoked, nil
 }
 
+// CheckoutSignals, siparis veren oturumun risk sinyalleri (T8.1): cihaz, onceki
+// IP ve konum oturumdan; hesap yasi ve cihazdan acilmis hesap sayisi kullanici
+// kaydindan; IP istegin baglantisindan gelir.
+//
+// Oturum kapatilmis (cikis) ya da suresi dolmussa UNAUTHORIZED: erisim jetonu
+// suresi dolana kadar gecerli olsa bile kapatilan oturumla siparis verilemez.
+// Oturumu silmek risk sinyallerini silmenin yolu da olamaz.
+func (s *Service) CheckoutSignals(ctx context.Context, identity Identity, ipAddress string) (CheckoutSignals, error) {
+	ended := apperror.New(apperror.CodeUnauthorized, map[string]string{fieldAuthorization: sessionEndedReason})
+	session, err := s.deps.Sessions.ByID(ctx, identity.SessionID)
+	if errors.Is(err, ErrSessionNotFound) {
+		return CheckoutSignals{}, ended
+	}
+	if err != nil {
+		return CheckoutSignals{}, fmt.Errorf("oturum okunamadi: %w", err)
+	}
+	if session.UserID != identity.UserID || !session.ExpiresAt.After(s.deps.Now()) {
+		return CheckoutSignals{}, ended
+	}
+	user, err := s.deps.Users.ByID(ctx, identity.UserID)
+	if errors.Is(err, ErrUserNotFound) {
+		return CheckoutSignals{}, ended
+	}
+	if err != nil {
+		return CheckoutSignals{}, fmt.Errorf("kullanici okunamadi: %w", err)
+	}
+	accounts := 0
+	if user.RegistrationDeviceID != "" {
+		accounts, err = s.deps.Users.CountByRegistrationDevice(ctx, user.RegistrationDeviceID)
+		if err != nil {
+			return CheckoutSignals{}, fmt.Errorf("cihazdaki hesaplar sayilamadi: %w", err)
+		}
+	}
+	return CheckoutSignals{
+		IPAddress:         ipAddress,
+		IPCity:            session.IPCity,
+		DeviceID:          session.DeviceID,
+		AccountsOnDevice:  accounts,
+		PreviousIPAddress: session.PreviousIPAddress,
+		SessionLocation:   session.Location,
+		AccountCreatedAt:  user.CreatedAt,
+	}, nil
+}
+
 // Profile, oturumdaki kullanicinin profili. Kullanici silinmisse jeton artik
 // bir hesaba karsilik gelmez: UNAUTHORIZED.
 func (s *Service) Profile(ctx context.Context, userID string) (Profile, error) {
@@ -150,17 +228,30 @@ func (s *Service) Profile(ctx context.Context, userID string) (Profile, error) {
 	return user.Profile(), nil
 }
 
-func (s *Service) startSession(ctx context.Context, user User, meta RequestMeta) (Grant, error) {
+// sessionStart, yeni oturumun sinyal alanlari.
+type sessionStart struct {
+	deviceID          string
+	ipAddress         string
+	previousIPAddress string
+	ipCity            string
+	location          *GeoPoint
+}
+
+func (s *Service) startSession(ctx context.Context, user User, start sessionStart) (Grant, error) {
 	now := s.deps.Now().UTC()
 	token := newRefreshToken()
 	session := Session{
-		ID:          ids.New(ids.Session),
-		UserID:      user.ID,
-		TokenHash:   HashRefreshToken(token),
-		CreatedAt:   now,
-		RefreshedAt: now,
-		ExpiresAt:   now.Add(s.deps.RefreshTTL),
-		IPAddress:   meta.IPAddress,
+		ID:                ids.New(ids.Session),
+		UserID:            user.ID,
+		TokenHash:         HashRefreshToken(token),
+		CreatedAt:         now,
+		RefreshedAt:       now,
+		ExpiresAt:         now.Add(s.deps.RefreshTTL),
+		IPAddress:         start.ipAddress,
+		DeviceID:          start.deviceID,
+		PreviousIPAddress: start.previousIPAddress,
+		IPCity:            start.ipCity,
+		Location:          start.location,
 	}
 	if err := s.deps.Sessions.Create(ctx, session); err != nil {
 		return Grant{}, fmt.Errorf("oturum yazilamadi: %w", err)
@@ -181,4 +272,35 @@ func (s *Service) grant(user User, sessionID, refreshToken string) (Grant, error
 		RefreshExpiresIn: int64(s.deps.RefreshTTL / time.Second),
 		User:             user.Profile(),
 	}, nil
+}
+
+// located, IP'nin cozum sonucu; cozulemediyse bos.
+type located struct {
+	place Located
+	found bool
+}
+
+func (s *Service) locate(ipAddress string) located {
+	if s.deps.Locator == nil {
+		return located{}
+	}
+	place, found := s.deps.Locator.Locate(ipAddress)
+	return located{place: place, found: found}
+}
+
+// location, cozulen konum; cozulemediyse nil.
+func (l located) location() *GeoPoint {
+	if !l.found {
+		return nil
+	}
+	point := l.place.Location
+	return &point
+}
+
+// city, cozulen sehir; cozulemediyse bos.
+func (l located) city() string {
+	if !l.found {
+		return ""
+	}
+	return l.place.City
 }

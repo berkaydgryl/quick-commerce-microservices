@@ -1,6 +1,10 @@
 /**
  * Siparis deposunu ACAR: MOCK=true -> bellek, aksi halde Mongo.
  *
+ * Bellekte demo personalarinin siparis gecmisi acilista yuklenir (T8.1): MOCK'ta
+ * seed komutu calismaz, persona bantlari yine de dogru cikmali. Production'da
+ * YUKLENMEZ.
+ *
  * Baglanmak, indeks kurmak ve hata olursa baglantiyi birakmak altyapi isidir;
  * bootstrap.ts'in tek isi parcalari BAGLAMAK (catalog-source.ts ile ayni ayrim).
  */
@@ -10,9 +14,11 @@ import { connectMongo } from '@getir/mongo-kit';
 import type { MongoEnv } from '@getir/mongo-kit';
 
 import { SERVICE_NAME } from '../config/constants.js';
+import type { OrderServiceEnv } from '../config/env.js';
 import type { OrderHistoryReader } from '../domain/order-history-reader.js';
 import type { OrderOutbox } from '../domain/order-outbox.js';
 import type { OrderRepository } from '../domain/order-repository.js';
+import { buildPersonaOrders } from './fixtures/persona-orders.js';
 import { InMemoryOrderStore } from './memory/in-memory-order-store.js';
 import { MongoOrderOutbox } from './mongo/mongo-order-outbox.js';
 import { OrderMongoStore } from './mongo/order-mongo-store.js';
@@ -33,9 +39,17 @@ export interface OrderStore {
 export async function openOrderStore(
   mongo: MongoEnv | undefined,
   logger: Logger,
+  nodeEnv: OrderServiceEnv['NODE_ENV'],
 ): Promise<OrderStore> {
   if (mongo === undefined) {
     const memory = new InMemoryOrderStore();
+    if (nodeEnv !== 'production') {
+      const orders = buildPersonaOrders(new Date());
+      for (const order of orders) {
+        await memory.insert(order, []);
+      }
+      logger.info({ orders: orders.length }, 'persona siparis gecmisi bellege yuklendi (MOCK)');
+    }
     return {
       repository: memory,
       history: memory,

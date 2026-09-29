@@ -1,6 +1,10 @@
 package order
 
-import "github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rest"
+import (
+	"time"
+
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rest"
+)
 
 // Adaptorun girdileri: HTTP katmani bunlari istek govdesinden, yol
 // parametresinden, kimlikten ve basliklardan doldurur. JSON etiketi yoktur;
@@ -33,9 +37,23 @@ type PlaceInput struct {
 	OrderID        string
 	CardToken      string
 	IdempotencyKey string
-	// ClientIP, istegin geldigi IP: gateway TCP baglantisindan okur, istemcinin
-	// yazabildigi bir basliktan degil (B9).
-	ClientIP string
+	// Signals, gateway'in bildigi risk sinyalleri (B9: istemciden alinmaz).
+	Signals Signals
+}
+
+// Signals, siparisin risk sinyalleri (proto order.v1.CheckoutSignals). IP
+// baglantidan, digerleri oturum ve kullanici kaydindan gelir (T8.1). Bos alan
+// "bilinmiyor" demektir ve ilgili risk kuralini tetiklemez.
+type Signals struct {
+	IPAddress         string
+	IPCity            string
+	DeviceID          string
+	AccountsOnDevice  int32
+	PreviousIPAddress string
+	// SessionLocation nil ise oturumun konumu bilinmiyor.
+	SessionLocation *rest.GeoPoint
+	// AccountCreatedAt sifirsa hesap yasi bilinmiyor.
+	AccountCreatedAt time.Time
 }
 
 // ConfirmInput, POST /v1/orders/{id}/3ds.

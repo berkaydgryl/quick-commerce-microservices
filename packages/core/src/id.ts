@@ -32,6 +32,12 @@ export const ID_PREFIX = {
    * koleksiyonu. Erisim jetonunun `sid` alani bu kimligi tasir.
    */
   SESSION: 'ses',
+  /**
+   * Cihaz (T8.1): gateway'in kayit ve giriste verdigi cihaz cerezi. "Ayni
+   * cihazdan acilmis hesap sayisi" risk sinyalinin anahtaridir; istemci
+   * uretmez, bicim disi deger yok sayilir ve yenisi verilir.
+   */
+  DEVICE: 'dvc',
 } as const;
 
 export type IdPrefix = (typeof ID_PREFIX)[keyof typeof ID_PREFIX];

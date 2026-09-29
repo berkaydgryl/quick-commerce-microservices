@@ -22,10 +22,10 @@ skor önerir.
 
 ## Veri kaynağı: Mongo ya da MOCK
 
-| `MOCK` | Kaynak                                                      | Gerekenler                                                   |
-| ------ | ----------------------------------------------------------- | ------------------------------------------------------------ |
-| `true` | Bellek (`infrastructure/memory`); olaylar bellekte          | Yok; yeniden başlayınca unutur, **olay yayını kapalı**       |
-| değil  | `orders` + `outbox` koleksiyonları (`infrastructure/mongo`) | `MONGO_URI` ve `REDIS_URL` zorunlu (yayın `stream:events`'e) |
+| `MOCK` | Kaynak                                                      | Gerekenler                                                                                       |
+| ------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `true` | Bellek (`infrastructure/memory`); olaylar bellekte          | Yok; yeniden başlayınca unutur, **olay yayını kapalı**; persona geçmişi açılışta yüklenir (T8.1) |
+| değil  | `orders` + `outbox` koleksiyonları (`infrastructure/mongo`) | `MONGO_URI` ve `REDIS_URL` zorunlu (yayın `stream:events`'e)                                     |
 
 İki uygulama **aynı sözleşme testinden** geçer (`test/support/order-store-contract.ts`): birim
 testinde bellek, entegrasyon testinde gerçek Mongo. Depoyu seçip açan tek yer
@@ -264,6 +264,7 @@ src/
 │   ├── catalog/                 # order -> catalog gRPC istemcisi (service-kit callUnary)
 │   ├── risk/, payment/          # order -> risk / payment gRPC istemcileri (T7.1)
 │   ├── memory/                  # MOCK: bellek deposu
+│   ├── fixtures/persona-orders.ts  # demo personalarının sipariş geçmişi (T8.1)
 │   └── mongo/                   # belge şekli, çeviriciler, sorgular (orders, outbox), portlar
 ├── interfaces/grpc/   # ince handler'lar: doğrula → çağır → çevir
 │   ├── schemas.ts     # Zod istek şemaları (sayfa boyutu kırpma, jeton çözme)
@@ -279,6 +280,28 @@ src/
 
 Zaman `Clock` soyutlaması üzerinden okunur — `Date.now()` iş mantığında çağrılmaz, böylece
 testte saat sabitlenebilir.
+
+## Demo personalarının sipariş geçmişi (T8.1)
+
+risk-svc'nin `order-history` ve `basket-anomaly` kuralları bu servisin siparişlerinden beslenir
+(`riskHistory`: teslim ve iptal sayısı, ortalama sepet). Personaların hesapları gateway'dedir;
+geçmişleri burada (`infrastructure/fixtures/persona-orders.ts`), aynı kullanıcı kimlikleriyle:
+
+| Persona | Teslim | İptal | Ortalama sepet |
+| ------- | ------ | ----- | -------------- |
+| Ayşe    | 5      | 0     | 200 TL         |
+| Zeynep  | 0      | 0     | —              |
+| Can     | 1      | 3     | 120 TL         |
+| Ali     | 3      | 1     | 180 TL         |
+| Komşu   | 12     | 1     | 280 TL         |
+
+Siparişler hazır "Ev" adresine, geçmiş tarihlidir; kimlikleri persona ve sıradan türetilir
+(tekrar yazımda kopya olmaz). Olay YAZILMAZ: geçmiş sipariş bugün olmuş gibi yayınlanmaz.
+
+- `MOCK=true`: servis açılırken belleğe yüklenir (production dışında).
+- Mongo: `pnpm --filter @getir/order-service seed:personas` personaların eski siparişlerini
+  silip tek transaction'da yeniden yazar; `NODE_ENV=production` iken reddeder. Kökteki
+  `pnpm seed:personas` bunu gateway'in hesap seed'iyle birlikte çalıştırır.
 
 ## Çalıştırma ve doğrulama
 

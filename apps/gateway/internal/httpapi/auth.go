@@ -28,7 +28,7 @@ const noStore = "no-store"
 // VARLIGI denetlenir; ayni anahtarla gelen tekrarin ilk cevabi almasi T8.2'de
 // gateway'e gelir. O zamana kadar tekrar eden kayit PHONE_ALREADY_REGISTERED
 // alir: ikinci hesap acilmaz, telefon benzersizligi bunu garanti eder.
-func registerHandler(registrar UserRegistrar) fiber.Handler {
+func registerHandler(registrar UserRegistrar, devices deviceCookies) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if err := rejectUnknownQuery(c); err != nil {
 			return err
@@ -44,7 +44,7 @@ func registerHandler(registrar UserRegistrar) fiber.Handler {
 			return apperror.New(apperror.CodeValidationFailed, errs)
 		}
 
-		grant, err := registrar.Register(c.Context(), input, requestMeta(c))
+		grant, err := registrar.Register(c.Context(), input, requestMeta(c, devices))
 		if err != nil {
 			return err
 		}
@@ -54,7 +54,7 @@ func registerHandler(registrar UserRegistrar) fiber.Handler {
 
 // loginHandler, POST /v1/auth/login: telefon ve sifreyle oturum acar.
 // Kalici bir kaynak yaratmadigi icin Idempotency-Key istemez (openapi).
-func loginHandler(authenticator UserAuthenticator) fiber.Handler {
+func loginHandler(authenticator UserAuthenticator, devices deviceCookies) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if err := rejectUnknownQuery(c); err != nil {
 			return err
@@ -69,7 +69,7 @@ func loginHandler(authenticator UserAuthenticator) fiber.Handler {
 			return apperror.New(apperror.CodeValidationFailed, errs)
 		}
 
-		grant, err := authenticator.Login(c.Context(), input, requestMeta(c))
+		grant, err := authenticator.Login(c.Context(), input, requestMeta(c, devices))
 		if err != nil {
 			return err
 		}
@@ -141,10 +141,11 @@ func refreshTokenOf(c fiber.Ctx) (string, error) {
 	return token, nil
 }
 
-// requestMeta, oturumun SUNUCU tarafi bilgisi: baglantinin IP'si (B9: risk
-// sinyali istemcinin beyanindan alinmaz).
-func requestMeta(c fiber.Ctx) auth.RequestMeta {
-	return auth.RequestMeta{IPAddress: c.IP()}
+// requestMeta, oturumun SUNUCU tarafi bilgisi: baglantinin IP'si ve gateway'in
+// verdigi cihaz kimligi (B9: risk sinyali istemcinin beyanindan alinmaz).
+// Cihaz cerezi yoksa burada verilir; basarisiz giriste de cihaz tanimlanir.
+func requestMeta(c fiber.Ctx, devices deviceCookies) auth.RequestMeta {
+	return auth.RequestMeta{IPAddress: c.IP(), DeviceID: devices.ensure(c)}
 }
 
 // private, onbelleklenmemesi gereken basarili cevabi yazar.

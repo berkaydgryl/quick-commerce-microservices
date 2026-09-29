@@ -14,6 +14,7 @@
     "dev": "node --env-file-if-exists=../../.env --watch dist/main.js",
     "start": "node --env-file-if-exists=../../.env dist/main.js",
     "healthcheck": "node dist/healthcheck.js",
+    "seed:personas": "node --env-file-if-exists=../../.env dist/seed-personas.js",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\""
   },
   "dependencies": {

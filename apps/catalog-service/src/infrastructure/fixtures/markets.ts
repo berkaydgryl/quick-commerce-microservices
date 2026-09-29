@@ -1,7 +1,7 @@
 /**
  * Demo verisi: iki semtte 6 market, her birinin kendi kurallariyla (ADR-15).
  * Degerler docs/roadmap.md "Pazaryeri demo verisi" tablosuyla birebir.
- * Konumlar infra/seed/data/addresses.json'daki Ev (Kadikoy) ve Is (Besiktas)
+ * Konumlar apps/gateway/internal/persona/addresses.json'daki Ev (Kadikoy) ve Is (Besiktas)
  * adreslerinin yaricapi icindedir; Yazlik (Sile) hicbirinin icinde degil.
  */
 
