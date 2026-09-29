@@ -60,6 +60,11 @@ func Connect(ctx context.Context, opts Options) (*redis.Client, error) {
 // SET NX tekrarlandiginda istek kendi kaydini "dolu" gorur. Yeniden denemeyi
 // istemci yapar: ayni Idempotency-Key ile, guvenle. Baglanti kurma denemeleri
 // (dial) ayri bir ayardir ve varsayilanda kalir.
+//
+// BAGLAMIN SON TARIHI UYGULANIR (ContextTimeoutEnabled): surucu varsayilan
+// olarak okuma/yazmada baglami yok sayar, yalnizca OperationTimeout'a bakar.
+// Hiz siniri sayaci kisa bir son tarihle sorar (fail-open): Redis takilirsa
+// istek o kadar bekler, istek suresinin tamami kadar degil.
 func clientOptions(opts Options) (*redis.Options, error) {
 	parsed, err := redis.ParseURL(opts.URL)
 	if err != nil {
@@ -69,6 +74,7 @@ func clientOptions(opts Options) (*redis.Options, error) {
 	parsed.ReadTimeout = opts.OperationTimeout
 	parsed.WriteTimeout = opts.OperationTimeout
 	parsed.MaxRetries = -1
+	parsed.ContextTimeoutEnabled = true
 	return parsed, nil
 }
 

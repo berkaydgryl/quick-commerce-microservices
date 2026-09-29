@@ -18,8 +18,8 @@ Tek doğru kaynak `src/keys.ts`.
 | `reservationIndexKey(store)`       | `resv:index:{ds_kadikoy}`         | zset   |
 | `userReservationKey(userId)`       | `resv:user:{usr_7}`               | string |
 | `courierTrackKey / courierLastKey` | `courier:{crr_2}:track`           | list   |
-| `idempotencyKey(key)`              | `idem:{4f1c...}`                  | string |
-| `rateLimitKey(ip, route)`          | `rate:{10.0.0.1}:POST_/v1/orders` | string |
+| `idempotencyKey(scope, key)`       | `idem:{usr_7}:4f1c...`            | string |
+| `rateLimitKey(subject, route)`     | `rate:{10.0.0.1}:POST_/v1/orders` | zset   |
 | `EVENTS_STREAM_KEY`                | `stream:events`                   | stream |
 | `RECONCILE_LOCK_KEY`               | `lock:reconcile`                  | string |
 

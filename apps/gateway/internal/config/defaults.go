@@ -38,6 +38,21 @@ const (
 	defaultIdempotencyTTL = 24 * time.Hour
 )
 
+// Hiz siniri varsayilanlari (T8.2, roadmap P2). Adlar ve degerler .env.example ile ayni.
+const (
+	// RATE_LIMIT_WINDOW_SECONDS=60: kayan pencerenin uzunlugu.
+	defaultRateLimitWindow = time.Minute
+	// RATE_LIMIT_MAX_REQUESTS=120: genel sinir (katalog, market, profil, siparis okuma).
+	defaultRateLimitGeneral = 120
+	// RATE_LIMIT_AUTH_MAX_REQUESTS=10: kimlik uclari (kaba kuvvet savunmasi).
+	defaultRateLimitAuth = 10
+	// RATE_LIMIT_ORDER_MAX_REQUESTS=20: rezervasyon, siparis ve 3DS.
+	defaultRateLimitOrder = 20
+	// maxRateLimit, pencere basina en buyuk sinir. Sayac yalnizca kabul edilen
+	// istekleri tutar: bu deger bir sayacin Redis'teki en buyuk boyutudur.
+	maxRateLimit = 10000
+)
+
 // NODE_ENV degerleri (Node servisleriyle ayni sozluk). Production, gelistirme
 // kolayliklarinin KAPALI oldugu tek ortamdir (ornek sir reddedilir, T8.1).
 const (

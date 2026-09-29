@@ -168,7 +168,8 @@ Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicid
   sayaci onbellek kacirmasi degil fazla satistir. Stok sayacina yazan servis acilista politikayi
   dogrular, `noeviction` degilse acilmaz (roadmap P1).
 - Hiz siniri ve paylasilan sayaclar Redis'te tutulur, bellek ici DEGIL: coklu gateway orneginde
-  bellek ici sayac siniri ornek sayisi kadar gevsetir (roadmap P2).
+  bellek ici sayac siniri ornek sayisi kadar gevsetir (roadmap P2). Tek istisna `MOCK=true`: Redis'siz,
+  tek ornekli gelistirmede sayac bellektedir (T8.2; tekrar korumasiyla ayni kural).
 
 ## Docker
 

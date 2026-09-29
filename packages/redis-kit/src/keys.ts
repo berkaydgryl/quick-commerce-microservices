@@ -18,9 +18,11 @@
 
 import {
   AppError,
+  ID_PREFIX,
   IDEMPOTENCY_KEY_CHARSET,
   IDEMPOTENCY_KEY_MAX_LENGTH,
   IDEMPOTENCY_KEY_MIN_LENGTH,
+  isId,
   isSku,
 } from '@getir/core';
 
@@ -177,9 +179,22 @@ export function idempotencyKey(scope: string, key: string): string {
   return `idem:${hashTag(scope)}:${key}`;
 }
 
-/** rate:{ip}:POST_/v1/orders -- kayan pencere sayaci. */
-export function rateLimitKey(ip: string, route: string): string {
-  requireComponent('ip', ip, IP_PATTERN);
+/**
+ * rate:{ozne}:POST_/v1/orders -- kayan pencere sayaci (T8.2, roadmap P2).
+ *
+ * OZNE: kimliksiz uclarda istemcinin IP'si, kimlikli uclarda kullanici
+ * (usr_...). Ayni agin (ofis, mobil operator) arkasindaki kullanicilar
+ * birbirinin sinirini tuketmez; hesap acma zaten IP basina sinirlidir.
+ * Yol parametresi ':' olmadan yazilir (POST_/v1/orders/id/3ds): ':' anahtar
+ * ayiricisidir. Yazan tek taraf gateway'dir (Go); bicim burada tanimli,
+ * gateway'in testi bu satiri okuyup karsilastirir.
+ */
+export function rateLimitKey(subject: string, route: string): string {
+  if (!IP_PATTERN.test(subject) && !isId(ID_PREFIX.USER, subject)) {
+    throw AppError.validation('Gecersiz Redis anahtar parcasi: subject', {
+      details: { field: 'subject', value: subject },
+    });
+  }
   requireComponent('route', route, ROUTE_PATTERN);
-  return `rate:${hashTag(ip)}:${route}`;
+  return `rate:${hashTag(subject)}:${route}`;
 }
