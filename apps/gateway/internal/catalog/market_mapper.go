@@ -66,12 +66,17 @@ func toNearbyMarketList(markets []*catalogv1.NearbyMarket, images ImageResolver)
 	// Bos liste JSON'da [] olmali, null DEGIL (bkz. toCategoryList).
 	items := make([]NearbyMarket, 0, len(markets))
 	for _, nearby := range markets {
-		items = append(items, NearbyMarket{
-			Market:         toMarket(nearby.GetMarket(), images),
-			DistanceMeters: nearby.GetDistanceMeters(),
-		})
+		items = append(items, toNearbyMarket(nearby, images))
 	}
 	return NearbyMarketList{Items: items}
+}
+
+// toNearbyMarket, liste satiri; genel arama sonucu da ayni satirla baslar.
+func toNearbyMarket(nearby *catalogv1.NearbyMarket, images ImageResolver) NearbyMarket {
+	return NearbyMarket{
+		Market:         toMarket(nearby.GetMarket(), images),
+		DistanceMeters: nearby.GetDistanceMeters(),
+	}
 }
 
 func toMarket(market *catalogv1.Market, images ImageResolver) Market {

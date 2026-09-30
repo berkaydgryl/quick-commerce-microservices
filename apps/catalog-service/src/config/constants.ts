@@ -3,6 +3,8 @@
  * Koda ciplak sayi/metin yazilmaz; is sabitleri burada isimlendirilir.
  */
 
+import { SEARCH_RESULT_PRODUCTS_MAX } from '@getir/contracts';
+
 /** Gunlukte ve acilis kaydinda gorunen kisa ad. */
 export const SERVICE_NAME = 'catalog';
 
@@ -34,9 +36,10 @@ export const MARKET_CANDIDATE_LIMIT = 20;
 /**
  * Genel aramada (T9.6) market basina gosterilen en fazla teklif. Fazlasi
  * sayilir (toplam eslesme); istemci "+N urun daha" ile market sayfasina,
- * ayni aramayla gecer (30 Eylul karari).
+ * ayni aramayla gecer (30 Eylul karari). Deger REST sozlesmesindedir: istemci
+ * de ayni siniri gorur (searchResultSchema.products).
  */
-export const MAX_SEARCH_OFFERS_PER_MARKET = 3;
+export const MAX_SEARCH_OFFERS_PER_MARKET = SEARCH_RESULT_PRODUCTS_MAX;
 
 /**
  * Kategori listelerinin ust siniri (D6). Kategori taksonomisi SINIRLI bir

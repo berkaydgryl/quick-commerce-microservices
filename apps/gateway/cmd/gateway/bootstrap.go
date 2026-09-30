@@ -114,13 +114,11 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (*fi
 		assets.NewResolver(cfg.AssetBaseURL),
 	)
 
-	// Urun listesi katalog + stoktur (T8.4, B27): stok sorgusunun kendi, kisa
-	// siniri var; stok gelmezse liste stoksuz doner.
-	products := storefront.NewProducts(
-		catalogService,
-		inventory.New(inventoryv1.NewInventoryServiceClient(inventoryConn), cfg.StockTimeout),
-		logger,
-	)
+	// Urun listesi ve genel arama katalog + stoktur (T8.4, B27; T9.6): stok
+	// sorgusunun kendi, kisa siniri var; stok gelmezse urunler stoksuz doner.
+	stock := inventory.New(inventoryv1.NewInventoryServiceClient(inventoryConn), cfg.StockTimeout)
+	products := storefront.NewProducts(catalogService, stock, logger)
+	search := storefront.NewSearch(catalogService, stock, logger)
 
 	// Tek siparis adaptoru dort siparis ucunu karsilar (T7.5).
 	orderService := order.New(orderv1.NewOrderServiceClient(orderConn), cfg.RequestTimeout)
@@ -132,6 +130,7 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (*fi
 		Market:           catalogService,
 		MarketCategories: catalogService,
 		MarketProducts:   products,
+		NearbySearch:     search,
 		CartReserver:     orderService,
 		OrderPlacer:      orderService,
 		ThreeDSConfirmer: orderService,

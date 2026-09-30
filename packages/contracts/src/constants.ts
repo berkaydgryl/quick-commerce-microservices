@@ -35,6 +35,13 @@ export const SEARCH_QUERY_MIN_LENGTH = 2;
 export const SEARCH_QUERY_MAX_LENGTH = 64;
 
 /**
+ * Genel aramada (T9.6) market basina donen en fazla urun. Fazlasi sayilir
+ * (totalProductMatches); istemci "+N urun daha" ile market sayfasina gecer.
+ * catalog-service bu sabitle keser (MAX_SEARCH_OFFERS_PER_MARKET).
+ */
+export const SEARCH_RESULT_PRODUCTS_MAX = 3;
+
+/**
  * WGS84 koordinat sinirlari (derece). openapi.yaml GeoPoint ve nearby sorgusu
  * ayni araligi yazar; mesajlar da bu sabitlerden uretilir, sayi iki kez yazilmaz.
  */

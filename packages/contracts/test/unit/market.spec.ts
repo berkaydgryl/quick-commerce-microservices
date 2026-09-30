@@ -1,5 +1,6 @@
 /**
- * Pazaryeri sozlesmesi (ADR-15): market, yakindaki market listesi ve kimlikler.
+ * Pazaryeri sozlesmesi (ADR-15): market, yakindaki market listesi, genel arama
+ * (T9.6) ve kimlikler.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -12,6 +13,10 @@ import {
   nearbyMarketsQuerySchema,
   offerIdSchema,
   productIdSchema,
+  SEARCH_QUERY_MAX_LENGTH,
+  SEARCH_RESULT_PRODUCTS_MAX,
+  searchQuerySchema,
+  searchResultListSchema,
 } from '../../src/index.js';
 
 const TRY = (amountMinor: number) => ({ amountMinor, currency: 'TRY' as const });
@@ -117,6 +122,116 @@ describe('nearbyMarketListSchema', () => {
     });
 
     expect(parsed.items[0]?.distanceMeters).toBe(228);
+  });
+});
+
+describe('searchQuerySchema (T9.6 genel arama)', () => {
+  it('konum sayiya cevrilir, arama kirpilir', () => {
+    expect(searchQuerySchema.parse({ lat: '40.9885', lng: '29.0262', q: ' süt ' })).toEqual({
+      lat: 40.9885,
+      lng: 29.0262,
+      q: 'süt',
+    });
+  });
+
+  it('arama en fazla 64 karakter; sinir dahil (market ici aramayla ayni)', () => {
+    const atLimit = 'a'.repeat(SEARCH_QUERY_MAX_LENGTH);
+
+    expect(searchQuerySchema.safeParse({ lat: '41', lng: '29', q: atLimit }).success).toBe(true);
+  });
+
+  // Mesajlar catalog-service'in SearchNearby semasiyla ayni sema (D6).
+  it.each([
+    [{ lat: '41', lng: '29' }, 'q', 'zorunlu'],
+    [{ lat: '41', lng: '29', q: '   ' }, 'q', 'zorunlu'],
+    [{ lat: '41', lng: '29', q: ' s ' }, 'q', 'en az 2 karakter olmali'],
+    [{ lat: '41', lng: '29', q: 'a'.repeat(65) }, 'q', 'en fazla 64 karakter olmali'],
+    [{ lng: '29', q: 'süt' }, 'lat', 'zorunlu'],
+  ])('Turkce sebep: %o', (query, field, message) => {
+    const issues = searchQuerySchema.safeParse(query).error?.issues ?? [];
+
+    expect(issues.map((issue) => [issue.path.join('.'), issue.message])).toEqual([
+      [field, message],
+    ]);
+  });
+});
+
+describe('searchResultListSchema', () => {
+  const SUT = {
+    id: 'prd_sut-1l',
+    offerId: 'ofr_migros-jet-moda-sut-1l',
+    marketId: MIGROS_MODA.id,
+    sku: 'SUT-1L',
+    name: 'Süt 1 L',
+    categoryId: 'cat_sut-kahvaltilik',
+    price: TRY(3490),
+    isActive: true,
+    availableQuantity: 24,
+  };
+  const result = (overrides: Record<string, unknown> = {}) => ({
+    market: MIGROS_MODA,
+    distanceMeters: 405,
+    marketNameMatched: false,
+    products: [SUT],
+    totalProductMatches: 2,
+    ...overrides,
+  });
+
+  it('yakindaki market satiri + arama bilgisi: ilk urunler ve toplam', () => {
+    const parsed = searchResultListSchema.parse({ items: [result()] });
+
+    expect(parsed.items[0]?.distanceMeters).toBe(405);
+    expect(parsed.items[0]?.products[0]?.availableQuantity).toBe(24);
+    expect(parsed.items[0]?.totalProductMatches).toBe(2);
+  });
+
+  it('yalnizca adi eslesen market: urun listesi bos, toplam 0', () => {
+    const parsed = searchResultListSchema.parse({
+      items: [result({ marketNameMatched: true, products: [], totalProductMatches: 0 })],
+    });
+
+    expect(parsed.items[0]?.products).toEqual([]);
+  });
+
+  it('stok bilgisi olmayan urun gecerli (stok servisi cevap vermedi)', () => {
+    const { availableQuantity: _omitted, ...withoutStock } = SUT;
+
+    expect(
+      searchResultListSchema.safeParse({ items: [result({ products: [withoutStock] })] }).success,
+    ).toBe(true);
+  });
+
+  it('market basina en fazla SEARCH_RESULT_PRODUCTS_MAX urun', () => {
+    const products = (count: number) => Array.from({ length: count }, () => SUT);
+
+    expect(
+      searchResultListSchema.safeParse({
+        items: [result({ products: products(SEARCH_RESULT_PRODUCTS_MAX) })],
+      }).success,
+    ).toBe(true);
+    expect(
+      searchResultListSchema.safeParse({
+        items: [result({ products: products(SEARCH_RESULT_PRODUCTS_MAX + 1) })],
+      }).success,
+    ).toBe(false);
+  });
+
+  // Her alan TEK TEK zorunlu: biri istege bagli olsa istemci "yok"u "false"
+  // ya da "0" sanardi (ters kanitla goruldu: uc alan birlikte eksikken test
+  // digerleri yuzunden kirmiziydi, marketNameMatched'i ayrica yakalamiyordu).
+  it.each(['marketNameMatched', 'products', 'totalProductMatches'])(
+    'arama bilgisi ZORUNLU: %s eksikse gecersiz',
+    (field) => {
+      const withoutField = Object.fromEntries(
+        Object.entries(result()).filter(([key]) => key !== field),
+      );
+
+      expect(searchResultListSchema.safeParse({ items: [withoutField] }).success).toBe(false);
+    },
+  );
+
+  it('bos liste gecerli: eslesme yok bir hata degil', () => {
+    expect(searchResultListSchema.parse({ items: [] }).items).toEqual([]);
   });
 });
 

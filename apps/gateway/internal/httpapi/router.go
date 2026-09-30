@@ -5,6 +5,7 @@ package httpapi
 //   health.go     - /healthz
 //   categories.go - /v1/categories
 //   markets.go    - /v1/markets ve alt uclari (pazaryeri)
+//   search.go     - /v1/search (genel arama, T9.6)
 //   orders.go     - /v1/cart/reserve ve /v1/orders uclari (T7.5)
 //   order_body.go - siparis uclarinin istek govdeleri ve bicim dogrulamasi
 //   auth.go       - /v1/auth ve /v1/me uclari (T8.1)
@@ -66,6 +67,11 @@ type MarketCategoryLister interface {
 // MarketProductLister, GET /v1/markets/{marketId}/products.
 type MarketProductLister interface {
 	MarketProducts(ctx context.Context, query catalog.ProductQuery) (catalog.ProductPage, error)
+}
+
+// NearbySearcher, GET /v1/search (genel arama, T9.6).
+type NearbySearcher interface {
+	Search(ctx context.Context, query catalog.SearchQuery) (catalog.SearchResultList, error)
 }
 
 // CartReserver, POST /v1/cart/reserve.
@@ -137,6 +143,7 @@ type Deps struct {
 	Market           MarketGetter
 	MarketCategories MarketCategoryLister
 	MarketProducts   MarketProductLister
+	NearbySearch     NearbySearcher
 	CartReserver     CartReserver
 	OrderPlacer      OrderPlacer
 	ThreeDSConfirmer ThreeDSConfirmer
@@ -196,6 +203,7 @@ func New(deps Deps) *fiber.App {
 	v1.Get("/markets/:marketId", generalByIP, getMarketHandler(deps.Market))
 	v1.Get("/markets/:marketId/categories", generalByIP, listMarketCategoriesHandler(deps.MarketCategories))
 	v1.Get("/markets/:marketId/products", generalByIP, listMarketProductsHandler(deps.MarketProducts))
+	v1.Get("/search", generalByIP, searchNearbyHandler(deps.NearbySearch))
 
 	// Kimlik uclari (T8.1): kayit, giris, yenileme ve cikis kimliksizdir.
 	devices := deviceCookies{secure: deps.SecureCookies}

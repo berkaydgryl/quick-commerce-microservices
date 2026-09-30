@@ -23,6 +23,7 @@ import {
   categoryIdSchema,
   geoPointSchema,
   marketIdSchema,
+  requiredSearchTextSchema,
   SEARCH_QUERY_MAX_LENGTH,
   SEARCH_QUERY_MIN_LENGTH,
 } from '@getir/contracts';
@@ -110,15 +111,11 @@ export const listNearbyMarketsRequestSchema = z.object({ location: geoPointSchem
  * SearchNearby (T9.6): konum ListNearbyMarkets'teki gibi ZORUNLU; sorgu da
  * ZORUNLU ve ListProducts aramasiyla ayni uzunluk kurallarinda (kirpildiktan
  * sonra 2-64). Bos sorgu "zorunlu" olarak raporlanir, uzunluk hatasi olarak degil.
+ * Kural REST'in GET /v1/search sorgusuyla AYNI semadir (requiredSearchTextSchema).
  */
 export const searchNearbyRequestSchema = z.object({
   location: geoPointSchema,
-  query: requiredText.pipe(
-    z
-      .string()
-      .min(SEARCH_QUERY_MIN_LENGTH, `en az ${SEARCH_QUERY_MIN_LENGTH} karakter olmali`)
-      .max(SEARCH_QUERY_MAX_LENGTH, `en fazla ${SEARCH_QUERY_MAX_LENGTH} karakter olmali`),
-  ),
+  query: requiredSearchTextSchema,
 });
 
 export const getMarketRequestSchema = z.object({ marketId: requiredCatalogId(marketIdSchema) });
