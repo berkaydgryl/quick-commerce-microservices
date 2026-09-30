@@ -44,6 +44,7 @@ try {
   const counters = await createSeedCounters({
     levels: stores.repository,
     counters: stores.counters,
+    marker: stores.marker,
   })('overwrite');
   logger.info({ db: env.mongo.MONGO_DB, ...stock, counters }, 'stok seed tamamlandi');
 } catch (error: unknown) {

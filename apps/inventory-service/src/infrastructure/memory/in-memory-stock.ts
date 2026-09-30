@@ -13,6 +13,8 @@ import { InMemoryStockCounters } from './in-memory-stock-counters.js';
 export interface InMemoryStock {
   readonly counters: InMemoryStockCounters;
   readonly reservations: InMemoryReservationStore;
+  /** Bellek bosalmaz: bulunamayan sayac gercekten yoktur. */
+  readonly recoverCounters: () => Promise<boolean>;
 }
 
 export function createInMemoryStock(levels: readonly StockLevel[]): InMemoryStock {
@@ -22,5 +24,6 @@ export function createInMemoryStock(levels: readonly StockLevel[]): InMemoryStoc
     reservations: new InMemoryReservationStore(shared, {
       holdAfterExpiryMs: RESERVATION_HOLD_AFTER_EXPIRY_MS,
     }),
+    recoverCounters: () => Promise.resolve(false),
   };
 }

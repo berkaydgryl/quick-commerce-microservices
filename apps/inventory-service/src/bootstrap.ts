@@ -31,9 +31,13 @@ export function buildInventoryService(options: BootstrapOptions = {}): GrpcServi
   const stock = options.stock ?? createInMemoryStock(STOCK_LEVELS);
 
   const implementation = createInventoryImplementation({
-    checkAvailability: createCheckAvailability({ counters: stock.counters }),
+    checkAvailability: createCheckAvailability({
+      counters: stock.counters,
+      recoverCounters: stock.recoverCounters,
+    }),
     reserveStock: createReserveStock({
       reservations: stock.reservations,
+      recoverCounters: stock.recoverCounters,
       clock: options.clock ?? systemClock,
       logger: options.logger ?? silentLogger,
     }),

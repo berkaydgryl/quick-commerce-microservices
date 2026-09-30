@@ -8,14 +8,23 @@
  *     bastan yazilir. Bilincli bir komuttur (reseed.ts).
  *
  * Kayitlar kacar kacar okunur ve yazilir: butun koleksiyon bellege alinmaz.
+ *
+ * Sayac kumesinin isareti (ADR-17) EN SON yazilir: yarida kalan seed isaretsiz
+ * kalir ve bir sonraki bulunamayan sayacta kume yeniden kurulur (counter-recovery).
  */
 
 import { COUNTER_SEED_BATCH_SIZE } from '../config/constants.js';
-import type { CounterSeedMode, StockCounterWriter, StockLevelSource } from '../domain/stock.js';
+import type {
+  CounterSeedMode,
+  CounterSetMarker,
+  StockCounterWriter,
+  StockLevelSource,
+} from '../domain/stock.js';
 
 export interface SeedCountersDeps {
   readonly levels: StockLevelSource;
   readonly counters: StockCounterWriter;
+  readonly marker: CounterSetMarker;
   readonly batchSize?: number;
 }
 
@@ -37,6 +46,7 @@ export function createSeedCounters(deps: SeedCountersDeps): SeedCounters {
       scanned += batch.length;
       written += await deps.counters.write(batch, mode);
     }
+    await deps.marker.markPresent();
     return { scanned, written };
   };
 }

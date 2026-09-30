@@ -12,6 +12,7 @@ import type { RedisConnection } from '@getir/redis-kit';
 
 import type { StockStoresEnv } from '../config/env.js';
 import { assertNoEviction } from './redis/eviction-policy.js';
+import { RedisCounterSetMarker } from './redis/redis-counter-set-marker.js';
 import { RedisStockCounters } from './redis/redis-stock-counters.js';
 import { StockRepository } from './mongo/stock-repository.js';
 
@@ -20,6 +21,8 @@ export interface StockStores {
   readonly redis: RedisConnection;
   readonly repository: StockRepository;
   readonly counters: RedisStockCounters;
+  /** Sayac kumesinin isareti (ADR-17); seed en son bunu yazar. */
+  readonly marker: RedisCounterSetMarker;
   /** Once Redis, sonra Mongo (proje kurali: once cagrilar, en son veritabani). */
   close(): Promise<void>;
 }
@@ -56,6 +59,7 @@ export async function openStockStores(
       redis: opened,
       repository,
       counters: new RedisStockCounters(opened.redis, logger),
+      marker: new RedisCounterSetMarker(opened.redis),
       close: async () => {
         await opened.close();
         await mongo.close();

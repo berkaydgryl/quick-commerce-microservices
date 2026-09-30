@@ -10,9 +10,11 @@
 
 import type { Logger } from '@getir/core';
 
+import { createCounterRecovery } from '../application/counter-recovery.js';
 import type { SeedCountersResult } from '../application/seed-counters.js';
 import { createSeedCounters } from '../application/seed-counters.js';
 import {
+  COUNTER_RECOVERY_TIMEOUT_MS,
   LUA_SCRIPTS,
   RESERVATION_HOLD_AFTER_EXPIRY_MS,
   SERVICE_NAME,
@@ -43,6 +45,7 @@ export async function openStockSource(
     return {
       counters: memory.counters,
       reservations: memory.reservations,
+      recoverCounters: memory.recoverCounters,
       name: 'bellek (MOCK)',
       seeded: undefined,
       close: () => Promise.resolve(),
@@ -51,15 +54,24 @@ export async function openStockSource(
 
   const opened = await openStockStores(stores, logger, SERVICE_NAME);
   try {
-    const seeded = await createSeedCounters({
+    const seedCounters = createSeedCounters({
       levels: opened.repository,
       counters: opened.counters,
-    })('missing');
+      marker: opened.marker,
+    });
+    const seeded = await seedCounters('missing');
     const scripts = await loadInventoryScripts(opened.redis.redis, logger);
     return {
       counters: opened.counters,
       reservations: new RedisReservationStore(scripts.get(LUA_SCRIPTS.RESERVE), {
         holdAfterExpiryMs: RESERVATION_HOLD_AFTER_EXPIRY_MS,
+      }),
+      // Redis bosalirsa: acilistaki yolla, yalnizca eksik sayaclar (T10.1 PR 2).
+      recoverCounters: createCounterRecovery({
+        marker: opened.marker,
+        reseed: () => seedCounters('missing'),
+        logger,
+        timeoutMs: COUNTER_RECOVERY_TIMEOUT_MS,
       }),
       name: 'mongo + redis',
       seeded,

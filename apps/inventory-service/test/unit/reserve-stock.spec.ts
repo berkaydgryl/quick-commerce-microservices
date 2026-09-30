@@ -6,7 +6,7 @@
 import { AppError, ERROR_CODES, fixedClock } from '@getir/core';
 import { recordingLogger } from '@getir/core/testing';
 import type { LogLine } from '@getir/core/testing';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createReserveStock } from '../../src/application/reserve-stock.js';
 import type { ReserveCommand, ReserveOutcome } from '../../src/domain/reservation.js';
@@ -20,20 +20,23 @@ const INPUT = {
   ttlSeconds: 120,
 };
 
-function useCase(outcome: ReserveOutcome) {
+function useCase(outcome: ReserveOutcome, ...later: ReserveOutcome[]) {
   const commands: ReserveCommand[] = [];
   const lines: LogLine[] = [];
+  const outcomes = [outcome, ...later];
+  const recoverCounters = vi.fn(() => Promise.resolve(false));
   const reserveStock = createReserveStock({
     reservations: {
       reserve: (command) => {
         commands.push(command);
-        return Promise.resolve(outcome);
+        return Promise.resolve(outcomes[Math.min(commands.length, outcomes.length) - 1] ?? outcome);
       },
     },
+    recoverCounters,
     clock: fixedClock(NOW),
     logger: recordingLogger(lines),
   });
-  return { reserveStock, commands, lines };
+  return { reserveStock, commands, lines, recoverCounters };
 }
 
 async function errorOf(promise: Promise<unknown>): Promise<AppError> {
@@ -142,5 +145,54 @@ describe('reserveStock', () => {
 
     expect(error.code).toBe(ERROR_CODES.RESERVATION_ACTIVE);
     expect(error.details).toEqual({ activeOrderId: active });
+  });
+});
+
+describe('reserveStock: Redis bosalinca (T10.1 PR 2, ADR-17)', () => {
+  const missing: ReserveOutcome = {
+    status: 'insufficient',
+    sku: 'SUT-1L',
+    requested: 2,
+    counter: 0,
+    counterMissing: true,
+  };
+
+  it('sayac yok + kume yeniden kuruldu: rezervasyon AYNI komutla bir kez tekrarlanir', async () => {
+    const { reserveStock, commands, recoverCounters } = useCase(missing, {
+      status: 'reserved',
+      expiresAt: NOW + 120_000,
+    });
+    recoverCounters.mockResolvedValueOnce(true);
+
+    expect(await reserveStock(INPUT)).toEqual({
+      expiresAt: new Date(NOW + 120_000),
+      alreadyReserved: false,
+    });
+    expect(commands).toHaveLength(2);
+    expect(commands[1]).toEqual(commands[0]);
+  });
+
+  it('Redis bosalmamissa tekrar yok: sayaci gercekten olmayan SKU yetersiz (counterMissing)', async () => {
+    const { reserveStock, commands, recoverCounters } = useCase(missing);
+
+    const error = await errorOf(reserveStock(INPUT));
+
+    expect(recoverCounters).toHaveBeenCalledOnce();
+    expect(commands).toHaveLength(1);
+    expect(error.details).toMatchObject({ counterMissing: true });
+  });
+
+  it('sayac VAR ama yetmiyor: kurtarma sorulmaz', async () => {
+    const { reserveStock, recoverCounters } = useCase({
+      status: 'insufficient',
+      sku: 'SUT-1L',
+      requested: 2,
+      counter: 1,
+      counterMissing: false,
+    });
+
+    await errorOf(reserveStock(INPUT));
+
+    expect(recoverCounters).not.toHaveBeenCalled();
   });
 });

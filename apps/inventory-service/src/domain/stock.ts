@@ -41,6 +41,22 @@ export interface StockLevelSource {
   batches(batchSize: number): AsyncIterable<readonly StockLevel[]>;
 }
 
+/**
+ * Sayac kumesinin Redis'te yerinde olup olmadigi (T10.1 PR 2, ADR-17). Isaret
+ * sayaclar Mongo'dan yazildiktan SONRA konur; yoksa Redis bosalmistir.
+ */
+export interface CounterSetMarker {
+  isPresent(): Promise<boolean>;
+  markPresent(): Promise<void>;
+}
+
+/**
+ * Bir sayac bulunamadiginda cagrilir: Redis bosalmissa sayaclari yeniden kurar
+ * ve true doner (okuma BIR KEZ tekrarlanmali); bosalmamissa false (SKU
+ * gercekten bu markette yok).
+ */
+export type CounterRecovery = () => Promise<boolean>;
+
 /** Seed'in ihtiyaci: kalici stogu bastan yazmak. */
 export interface StockSeedWriter {
   replaceAll(levels: readonly StockLevel[]): Promise<void>;

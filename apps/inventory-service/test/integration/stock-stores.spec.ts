@@ -11,8 +11,10 @@
  */
 
 import { ERROR_CODES, silentLogger } from '@getir/core';
+import { recordingLogger } from '@getir/core/testing';
+import type { LogLine } from '@getir/core/testing';
 import { inventoryV1 } from '@getir/proto';
-import { stockAvailKey } from '@getir/redis-kit';
+import { STOCK_SEEDED_MARKER_KEY, stockAvailKey } from '@getir/redis-kit';
 import { startTestGrpcServer } from '@getir/service-kit/testing';
 import { MongoDBContainer } from '@testcontainers/mongodb';
 import type { StartedMongoDBContainer } from '@testcontainers/mongodb';
@@ -134,7 +136,11 @@ describe('acilis ve reseed (T9.2)', () => {
   });
 
   it('T9.2 olcutu: Redis silinip yeniden kurulur (FLUSHALL -> reseed)', async () => {
-    const reseed = createSeedCounters({ levels: stores.repository, counters: stores.counters });
+    const reseed = createSeedCounters({
+      levels: stores.repository,
+      counters: stores.counters,
+      marker: stores.marker,
+    });
     await reseed('overwrite');
     await stores.redis.redis.flushall();
     expect((await stores.counters.available(MIGROS, ['SUT-1L'])).size).toBe(0);
@@ -148,7 +154,11 @@ describe('acilis ve reseed (T9.2)', () => {
   });
 
   it('CheckAvailability gercek gRPC ve Redis sayaclariyla', async () => {
-    await createSeedCounters({ levels: stores.repository, counters: stores.counters })('overwrite');
+    await createSeedCounters({
+      levels: stores.repository,
+      counters: stores.counters,
+      marker: stores.marker,
+    })('overwrite');
     const source = await openStockSource(env, silentLogger);
     const server = await startTestGrpcServer({
       serviceName: 'inventory-it',
@@ -173,6 +183,137 @@ describe('acilis ve reseed (T9.2)', () => {
     } finally {
       await server.stop();
       await source.close();
+    }
+  });
+});
+
+describe('Redis bosalinca kendiliginden kurulum (T10.1 PR 2, ADR-17)', () => {
+  const service = inventoryV1.InventoryServiceService;
+  const rebuildWarnings = (lines: readonly LogLine[]) =>
+    lines.filter((line) => line.level === 'warn' && line.message.includes('yeniden yaziliyor'));
+
+  async function running() {
+    const lines: LogLine[] = [];
+    const source = await openStockSource(env, recordingLogger(lines));
+    const server = await startTestGrpcServer({
+      serviceName: 'inventory-onarim-it',
+      services: [buildInventoryService({ stock: source })],
+    });
+    return {
+      lines,
+      server,
+      close: async () => {
+        await server.stop();
+        await source.close();
+      },
+    };
+  }
+
+  beforeEach(async () => {
+    await stores.redis.redis.flushall();
+  });
+
+  it('acilis, seed ve reseed sayaclardan SONRA isareti koyar', async () => {
+    const source = await openStockSource(env, silentLogger);
+    await source.close();
+    expect(await stores.redis.redis.exists(STOCK_SEEDED_MARKER_KEY)).toBe(1);
+
+    await stores.redis.redis.flushall();
+    await createSeedCounters({
+      levels: stores.repository,
+      counters: stores.counters,
+      marker: stores.marker,
+    })('overwrite');
+    expect(await stores.redis.redis.exists(STOCK_SEEDED_MARKER_KEY)).toBe(1);
+  });
+
+  it('FLUSHALL sonrasi CheckAvailability dogru adetleri verir: sayaclar kendiliginden kurulur', async () => {
+    const inventory = await running();
+    try {
+      await stores.redis.redis.flushall();
+
+      const { error, response } = await inventory.server.call(service.checkAvailability, {
+        darkStoreId: '',
+        marketId: MIGROS,
+        skus: ['SUT-1L', 'PEYNIR-500', 'YOK-1'],
+      });
+
+      expect(error).toBeUndefined();
+      expect(response?.items).toEqual([
+        { sku: 'SUT-1L', availableQuantity: onHandOf('SUT-1L') },
+        { sku: 'PEYNIR-500', availableQuantity: onHandOf('PEYNIR-500') },
+      ]);
+      expect(response?.unknownSkus).toEqual(['YOK-1']);
+      expect(await stores.redis.redis.exists(STOCK_SEEDED_MARKER_KEY)).toBe(1);
+      expect(rebuildWarnings(inventory.lines)).toHaveLength(1);
+    } finally {
+      await inventory.close();
+    }
+  });
+
+  it('FLUSHALL sonrasi Reserve calisir: sayac eldeki adetten duser', async () => {
+    const inventory = await running();
+    try {
+      await stores.redis.redis.flushall();
+
+      const { error, response } = await inventory.server.call(
+        service.reserve,
+        inventoryV1.ReserveRequest.fromPartial({
+          orderId: 'ord_00000000000000000000000000000077',
+          marketId: MIGROS,
+          userId: 'usr_00000000000000000000000000000077',
+          items: [{ sku: 'SUT-1L', quantity: 2 }],
+          ttlSeconds: 600,
+        }),
+      );
+
+      expect(error).toBeUndefined();
+      expect(response?.alreadyReserved).toBe(false);
+      expect(await stores.redis.redis.get(stockAvailKey(MIGROS, 'SUT-1L'))).toBe(
+        String(onHandOf('SUT-1L') - 2),
+      );
+    } finally {
+      await inventory.close();
+    }
+  });
+
+  it('isaret yerindeyken gercekten bilinmeyen SKU kurulum TETIKLEMEZ', async () => {
+    const inventory = await running();
+    try {
+      const { response } = await inventory.server.call(service.checkAvailability, {
+        darkStoreId: '',
+        marketId: MIGROS,
+        skus: ['YOK-1'],
+      });
+
+      expect(response?.unknownSkus).toEqual(['YOK-1']);
+      expect(rebuildWarnings(inventory.lines)).toEqual([]);
+    } finally {
+      await inventory.close();
+    }
+  });
+
+  it('es zamanli 10 istek tek kurulumu bekler; hepsi dogru adedi alir', async () => {
+    const inventory = await running();
+    try {
+      await stores.redis.redis.flushall();
+
+      const answers = await Promise.all(
+        Array.from({ length: 10 }, () =>
+          inventory.server.call(service.checkAvailability, {
+            darkStoreId: '',
+            marketId: MIGROS,
+            skus: ['SUT-1L'],
+          }),
+        ),
+      );
+
+      expect(answers.map((answer) => answer.response?.items[0]?.availableQuantity)).toEqual(
+        Array.from({ length: 10 }, () => onHandOf('SUT-1L')),
+      );
+      expect(rebuildWarnings(inventory.lines)).toHaveLength(1);
+    } finally {
+      await inventory.close();
     }
   });
 });

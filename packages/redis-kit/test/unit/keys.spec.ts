@@ -20,6 +20,7 @@ import {
   reservationIndexKey,
   reservationKey,
   sameHashTag,
+  STOCK_SEEDED_MARKER_KEY,
   stockAvailKey,
   userReservationKey,
 } from '../../src/keys.js';
@@ -50,6 +51,9 @@ describe('anahtar bicimleri', () => {
     expect(EVENTS_STREAM_KEY).toBe('stream:events');
     expect(EVENTS_DEAD_LETTER_STREAM_KEY).toBe('stream:events:dead');
     expect(RECONCILE_LOCK_KEY).toBe('lock:reconcile');
+    // Sayac kumesinin isareti (ADR-17): market basina degil, tek ve hash-tag'siz.
+    expect(STOCK_SEEDED_MARKER_KEY).toBe('stock:seeded');
+    expect(hashTagOf(STOCK_SEEDED_MARKER_KEY)).toBeUndefined();
   });
 
   it('bir depoya ait tum anahtarlar ayni hash-tag altindadir', () => {

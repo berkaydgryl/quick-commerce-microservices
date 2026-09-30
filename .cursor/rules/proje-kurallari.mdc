@@ -158,7 +158,8 @@ Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicid
 - TTL kuraldir: her anahtara mantikli bir omur verilir. ISTISNALAR yalnizca sunlardir:
   `stock:{store}:avail:{sku}` (stok sayaci) ve `resv:index:{store}` (rezervasyon indeksi) -
   gerekcesi ADR-03: sure dolunca silinirlerse stok gercegi kaybolur ve supurucu suresi dolmus
-  rezervasyonu bulamaz. `stream:events` ve `stream:events:dead` (olay akislari) - gerekcesi
+  rezervasyonu bulamaz. `stock:seeded` (sayac kumesinin isareti) - gerekcesi ADR-17: yoklugu
+  "Redis bosaldi" demektir ve sayaclarin yeniden kurulmasini tetikler. `stream:events` ve `stream:events:dead` (olay akislari) - gerekcesi
   ADR-16: TTL akisla birlikte tuketici gruplarini ve bekleyen kayitlari da siler; bu yuzden
   her yazimda `MAXLEN ~` ile sinirlanirlar. Yeni bir TTL'siz anahtar ancak yeni bir ADR ile eklenir.
 - Ayni anda dolan populer onbellek icin TTL'e rastgelelik (jitter) eklenir; gerekiyorsa

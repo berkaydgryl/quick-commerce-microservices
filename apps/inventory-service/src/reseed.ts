@@ -34,6 +34,7 @@ try {
   const counters = await createSeedCounters({
     levels: stores.repository,
     counters: stores.counters,
+    marker: stores.marker,
   })('overwrite');
   logger.info({ ...counters }, 'stok sayaclari yeniden kuruldu');
 } catch (error: unknown) {

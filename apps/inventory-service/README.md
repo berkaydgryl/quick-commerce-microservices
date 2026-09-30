@@ -8,7 +8,7 @@ hareket eder.
 Bu serviste **olmayanlar**, bilinçli: ürün adı, fiyatı ve kategorisi `catalog-service`'in;
 sipariş durumu ve rezervasyon süresinin **ne kadar** olacağı `order-service`'in işidir.
 
-## Bugünkü durum (T9.1 + T9.2 + T10.1)
+## Bugünkü durum (T9.1 + T9.2 + T10.1 PR 1-2)
 
 | RPC                 | Durum                                                                                                             |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------- |
@@ -78,8 +78,27 @@ giremez: kısmi rezervasyon imkânsızdır. Rezervasyonun kimliği siparişin ki
   - Onay ve bırakma (`commit.lua`, `release.lua`, `stock_ledger`) T10.2'de.
   - Süresi dolan rezervasyonun stoğunu geri veren süpürücü T10.3'te; o gelene kadar süresi dolan
     rezervasyonun stoğu geri gelmez.
-  - Redis boşalınca bunu kendiliğinden fark edip sayaçları yeniden yazmak (#36'nın ikinci yarısı) T10.1 PR 2'de.
   - Order'ın `Reserve`'ü çağırması T11.2'de.
+
+## Redis boşalınca (T10.1 PR 2, ADR-17)
+
+Redis boşalırsa (FLUSHALL, kalıcılık olmadan yeniden başlatma) sayaçların tamamı gider. Servis bunu
+**kendiliğinden** fark eder ve sayaçları Mongo'dan yeniden yazar; `reseed` ya da yeniden başlatma gerekmez.
+
+- **İşaret:** sayaçlar her yazıldığında (açılış, `seed`, `reseed`) en son `stock:seeded` konur. TTL'sizdir
+  (ADR-17), market başına değil tektir.
+- **Ne zaman bakılır:** yalnızca bir sayaç **bulunamadığında** (`CheckAvailability`'de bilinmeyen SKU,
+  `Reserve`'de sayaçsız kalem). Normal istekte ek maliyet yoktur.
+  - İşaret yerindeyse Redis boşalmamıştır; SKU gerçekten bu markette yoktur (`unknown_skus`, `counterMissing`).
+  - İşaret yoksa sayaçlar Mongo'dan yazılır (yalnızca eksikler, `SET NX`), işaret yeniden konur ve istek
+    **bir kez** tekrarlanır. Kullanıcı fark etmez.
+- **Tek uçuş:** aynı anda gelen istekler aynı kurulumu bekler. Bekleme en fazla 5 sn; aşılırsa ya da kurulum
+  düşerse `SERVICE_UNAVAILABLE` (tekrar denenebilir), kurulum arka planda sürer. Günlükte bir uyarı ("stok
+  sayaclari Redis'te yok ... yeniden yaziliyor") ve bir bilgi satırı (okunan ve yazılan sayaç) kalır.
+- **Kaybolanlar:** Redis ile birlikte aktif rezervasyonlar da gider; sayaçlar eldeki adetten yazılır.
+  Kaybolan rezervasyonun siparişi onayda "bulunamadı" alır (T10.2, B20). Onay ve defter gelince formül B24'e
+  göre genişler.
+- Birden çok servis örneği aynı anda fark ederse ikisi de yalnızca eksik sayaçları yazar; zararsızdır.
 
 ## Açılış (T9.2)
 
@@ -87,7 +106,8 @@ giremez: kısmi rezervasyon imkânsızdır. Rezervasyonun kimliği siparişin ki
 2. **Redis tahliye politikası** (`maxmemory-policy`) okunur: `noeviction` değilse ya da okunamıyorsa
    servis **açılmaz** (roadmap P1). Bellek dolunca sayacı silen bir Redis fazla satış demektir.
 3. Sayaçlar Mongo'dan yazılır, **yalnızca olmayanlar** (`SET NX`): var olan sayaç rezervasyonları
-   yansıtır (T10); ezilseydi ayrılmış stok yeniden satılırdı.
+   yansıtır (T10); ezilseydi ayrılmış stok yeniden satılırdı. En son sayaç kümesinin işareti
+   (`stock:seeded`, ADR-17) konur.
 4. Lua script'leri (`lua/`) Redis'e yüklenir (T10.1): klasör eksikse servis açılmaz, ilk rezervasyonda
    patlamaz. Redis yeniden başlayıp script'i unutursa ilk çağrı yeniden yükler (redis-kit, `NOSCRIPT`).
 5. gRPC portu **ancak bundan sonra** açılır: sayaçlar yazılmadan servis hazır görünmez.
@@ -115,8 +135,8 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/inventory/v1/i
 - **`seed`** kalıcı stoğu tek transaction'da baştan yazar ve sayaçları ondan yeniden kurar (seed stok
   gerçeğini topluca değiştirir; sayaçlar yenilenmezse Redis eski stoğu gösterirdi). `NODE_ENV=production`
   iken reddeder.
-- **`reseed`** Redis boşaltıldığında ya da kaybedildiğinde kullanılır: "Redis silinip yeniden kurulur"
-  (ADR-03: Redis kaybı veri kaybı değil, yeniden ısınma maliyetidir). **T10'dan sonra dikkat:** aktif
+- **`reseed`** bütün sayaçları Mongo'dan **baştan** yazar (bilinçli komut). Redis boşaldığında artık gerekmez:
+  servis boşalmayı kendiliğinden fark edip eksik sayaçları yazar (yukarıda, T10.1 PR 2). **Dikkat:** aktif
   rezervasyon varken çalıştırılırsa ayrılmış stok geri satışa çıkar; Redis boşken ya da rezervasyon
   yokken koşulur.
 
@@ -134,10 +154,10 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/inventory/v1/i
 ```text
 lua/               reserve.lua (T10.1); imaja package.json "files" ile girer
 src/
-  application/     check-availability, reserve-stock, seed-stock, seed-counters (use-case'ler)
+  application/     check-availability, reserve-stock, seed-stock, seed-counters, counter-recovery
   domain/          stock.ts, reservation.ts, stock-ports.ts: kavramlar ve portlar (depo yok)
   infrastructure/  fixtures, memory (MOCK: sayaçlar + rezervasyon), mongo (stock),
-                   redis (sayaçlar, rezervasyon, Lua yükleyici, tahliye denetimi),
+                   redis (sayaçlar, işaret, rezervasyon, Lua yükleyici, tahliye denetimi),
                    stock-stores (bağlantılar), stock-source (açılış)
   interfaces/grpc/ handler, şema (Zod), eşleyici
   main.ts · seed.ts · reseed.ts · healthcheck.ts
