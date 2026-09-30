@@ -13,10 +13,15 @@ interface MarketSearchBoxProps {
   readonly query: string | undefined;
   /** Yeni arama ya da aramanin kalkmasi; sayfa adrese yazar. */
   readonly onSearch: (query: string | undefined) => void;
+  /** Ekran okuyucunun okudugu ad; varsayilan market ici arama. */
+  readonly label?: string;
+  /** Kutudaki ipucu metni; varsayilan market ici arama. */
+  readonly placeholder?: string;
 }
 
 /**
- * Market ici urun aramasi (T9.5) - TASARIMSIZ KABUK. Kutu yazilani hemen
+ * Arama kutusu - TASARIMSIZ KABUK: market ici urun aramasi (T9.5) ve ana
+ * sayfadaki genel arama (T9.6, "Market ya da Urun ara"). Kutu yazilani hemen
  * gosterir; arama ancak yazim SEARCH_DEBOUNCE_MS durunca yayilir: hizli yazimda
  * tek istek gider, yeni arama gelince eskisini TanStack Query iptal eder. Hangi
  * metnin arama oldugu searchQueryFrom'dadir.
@@ -25,7 +30,12 @@ interface MarketSearchBoxProps {
  * tusu): kutu adresi izler, ama kendi yaydigi aramaya donen adres yazilani
  * EZMEZ (kullanici o arada yazmaya devam etmis olabilir).
  */
-export function MarketSearchBox({ query, onSearch }: MarketSearchBoxProps) {
+export function MarketSearchBox({
+  query,
+  onSearch,
+  label = 'Ürün ara',
+  placeholder = 'Ürün ara…',
+}: MarketSearchBoxProps) {
   const [text, setText] = useState(query ?? '');
   const [debouncer] = useState(() => createDebouncer(SEARCH_DEBOUNCE_MS));
   const emitted = useRef(query);
@@ -71,8 +81,8 @@ export function MarketSearchBox({ query, onSearch }: MarketSearchBoxProps) {
       <input
         type="search"
         className={styles['c-search-box__input']}
-        aria-label="Ürün ara"
-        placeholder="Ürün ara…"
+        aria-label={label}
+        placeholder={placeholder}
         enterKeyHint="search"
         autoComplete="off"
         maxLength={SEARCH_QUERY_MAX_LENGTH}

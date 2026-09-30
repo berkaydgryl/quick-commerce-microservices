@@ -32,19 +32,6 @@
   color: var(--text-muted);
 }
 
-.c-market-list__link {
-  display: inline-flex;
-  gap: var(--space-2);
-  align-items: center;
-  font-weight: var(--font-weight-bold);
-  color: var(--color-brand-primary);
-}
-
-.c-market-list__meta {
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
-}
-
 /* Market sayfasi basligi: bugun liste basligiyla ayni gorunum, ayri blok (D11). */
 .c-market-summary__title {
   display: flex;
