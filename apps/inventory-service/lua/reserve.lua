@@ -3,6 +3,7 @@
 -- is parcaciginda calistirdigi icin kontrol ile dusum arasina baska istek
 -- giremez: ya sepetin tamami rezerve edilir ya hicbiri.
 --
+-- KEYS[1..n]  stok sayaclari       stock:{market}:avail:{sku}  (B15)
 -- KEYS[n+1]   rezervasyon hash'i   resv:{market}:{orderId}
 -- KEYS[n+2]   sure indeksi (zset)  resv:index:{market}
 -- KEYS[n+3]   kullanici kilidi     resv:user:{userId}          (B22; ayri slot, bkz. redis-kit keys.ts)
