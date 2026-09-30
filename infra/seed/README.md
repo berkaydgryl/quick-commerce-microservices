@@ -36,7 +36,7 @@ roadmap'in adres tablosunu izler:
 | Yazlık | Şile           | Boş liste: "bölgende market yok"                                                 |
 
 `users` koleksiyonu gateway'e aittir (T8.1): adresler persona hesaplarının `addresses[]`
-alanına yüklenir; okuyan uç web'in adres seçimiyle (T9.5) gelir. Dosya ayrıca gerçek
+alanına yüklenir; `GET /v1/me/addresses` okur (T9.5), web ana sayfadaki adres seçicide gösterir. Dosya ayrıca gerçek
 `ListNearbyMarkets` use-case'ine seed edilmiş Mongo üzerinden sınanır
 (`apps/catalog-service/test/integration/mongo-catalog.spec.ts`, T4.8): konum verisinde bir kayma
 olursa demo senaryosu bozulmadan önce test kırmızı olur.

@@ -110,9 +110,14 @@ describe('searchKeys', () => {
     expect(searchKeys.nearby(EV, 'sut')).toEqual(searchKeys.nearby({ ...EV }, 'sut'));
   });
 
-  it('konum anahtarda: adres degisince (T9.5 PR 2) arama yeniden yapilir', () => {
+  it('konum anahtarda: adres degisince (T9.5 PR 3) arama yeniden yapilir', () => {
     expect(searchKeys.nearby(EV, 'sut')).not.toEqual(
       searchKeys.nearby({ lat: 41.0431, lng: 29.0071 }, 'sut'),
     );
+  });
+
+  it('konum yokken (adres cozuluyor) anahtarda konum null: hicbir konumun verisi gosterilmez', () => {
+    expect(searchKeys.nearby(undefined, 'sut')).toEqual(['search', 'nearby', null, null, 'sut']);
+    expect(searchKeys.nearby(EV, 'sut')).toEqual(['search', 'nearby', 40.9885, 29.0262, 'sut']);
   });
 });
