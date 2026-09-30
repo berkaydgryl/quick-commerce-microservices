@@ -1,6 +1,6 @@
 import type { Product } from '@getir/contracts';
 
-import { canAdd, quantityOf } from '../services/cart-state';
+import { canAdd, isSoldOut, quantityOf } from '../services/cart-state';
 import { useCartStore } from '../stores/useCartStore';
 
 import styles from './Cart.module.css';
@@ -12,9 +12,10 @@ interface ProductCartActionProps {
 
 /**
  * Urunun sepet dugmesi - TASARIMSIZ KABUK (T6.4). Sepette yoksa "Ekle", varsa
- * "- adet +"; satista olmayan teklifte basilamayan "Satista degil" (T7.6).
- * "Eklenebilir mi" kararini bilesen VERMEZ, canAdd'e sorar (D11): stok ve
- * satis kurallari tek yerde. Tasarim degisince bilesen yeniden yazilabilir.
+ * "- adet +"; satista olmayan teklifte basilamayan "Satista degil" (T7.6),
+ * stogu biten teklifte "Tukendi" (T8.4). "Eklenebilir mi" ve "tukendi mi"
+ * kararlarini bilesen VERMEZ, cart-state'e sorar (D11): stok ve satis kurallari
+ * tek yerde. Tasarim degisince bilesen yeniden yazilabilir.
  */
 export function ProductCartAction({ product, onAdd }: ProductCartActionProps) {
   const quantity = useCartStore((cart) => quantityOf(cart, product.offerId));
@@ -25,6 +26,12 @@ export function ProductCartAction({ product, onAdd }: ProductCartActionProps) {
   // kullanici azaltip cikarabilsin; "+" canAdd geregi kapali.
   if (quantity === 0 && !product.isActive) {
     return <span className={styles['c-cart-action__unavailable']}>Satışta değil</span>;
+  }
+
+  // Sepette zaten varsa (stok sonradan bittiyse) yukaridaki gibi adet
+  // dugmeleri kalir, "+" kapali; rezervasyonun cevabi T11.5'te gosterilir.
+  if (quantity === 0 && isSoldOut(product)) {
+    return <span className={styles['c-cart-action__unavailable']}>Tükendi</span>;
   }
 
   if (quantity === 0) {

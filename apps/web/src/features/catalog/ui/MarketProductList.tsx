@@ -7,9 +7,9 @@ import styles from './MarketCatalog.module.css';
 
 /**
  * Urun listesi - TASARIMSIZ KABUK (T5.4): ad ve BU MARKETIN fiyati (ADR-15).
- * Stok rozeti yok: availableQuantity bugun gelmiyor ("stok bilgisi yok");
- * "Son N adet" rozeti stok gelince tasarimla (T16.3) eklenir. Satista olmayan
- * teklif de listelenir; "Satista degil" durumunu sepet eylemi cizer (T7.6).
+ * Stok rozeti yok: "Son N adet" rozeti tasarimla (T16.3) eklenir. Satista
+ * olmayan ve stogu biten teklif de listelenir; "Satista degil" (T7.6) ve
+ * "Tukendi" (T8.4) durumlarini sepet eylemi cizer.
  * Sepet dugmeleri T6.4 ile, kart tasarimi T16.2 ile gelir.
  */
 interface MarketProductListProps {

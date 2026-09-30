@@ -95,9 +95,11 @@ katmanındadır.
 - **Sekmeler arası (T7.6):** bir sekme sepeti değiştirince diğerleri `storage` olayıyla kaydı yeniden
   okur; iki sekme birbirinin eklediğini silmez.
 - **Stok sınırı (T7.6):** "eklenebilir mi" sorusunun tek cevabı `canAdd`: stok bilgisi varsa
-  `min(99, stok)`, yoksa 99. Stok T8.4'ten beri geliyor (gateway, B27): stoğu 0 olan üründe "Ekle"
-  basılamaz. Stok servisi cevap vermezse alan gelmez ve sınır 99'a döner. "Tükendi" yazısı sıradaki
-  küçük web PR'ında; "Son N adet" rozeti tasarımda (T16.3).
+  `min(99, stok)`, yoksa 99. Stok T8.4'ten beri geliyor (gateway, B27). Stok servisi cevap vermezse
+  alan gelmez ve sınır 99'a döner. "Son N adet" rozeti tasarımda (T16.3).
+- **Tükendi (T8.4):** stoğu 0 olan teklifte "Ekle" yerine basılamayan "Tükendi" yazısı görünür
+  ("Satışta değil" ile aynı kalıp ve stil). Karar `cart-state`'tedir (`isSoldOut`). Pasif teklif her
+  zaman "Satışta değil" gösterir. Sepette zaten varsa adet düğmeleri kalır, "+" kapalı.
 - **Satışta değil (T7.6):** pasif teklif (`isActive: false`) listede kalır, "Ekle" yerine basılamayan
   "Satışta değil" yazısı görünür ve sepete eklenemez. Sepette zaten varsa adet düğmeleri kalır, "+" kapalı.
 - **Henüz yok:** iyimser güncellemenin geri alınması (rezervasyon "stok yetersiz / satışta değil"
