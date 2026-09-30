@@ -1,0 +1,21 @@
+/*
+ * Yakindaki market satiri (T5.4 kabugu; T9.6'da listeden ayrildi). Kok kutu
+ * uretmez: satirin parcalari onu saran liste ogesinin ya da kartin duzenine
+ * girer, ayrilmadan onceki gorunum aynen korunur.
+ */
+.c-market-line {
+  display: contents;
+}
+
+.c-market-line__link {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+}
+
+.c-market-line__meta {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}

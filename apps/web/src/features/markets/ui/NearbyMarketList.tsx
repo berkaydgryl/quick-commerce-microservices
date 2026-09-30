@@ -1,15 +1,7 @@
 import type { NearbyMarket } from '@getir/contracts';
-import { Link } from 'react-router-dom';
-
-import {
-  formatDeliveryTime,
-  formatDistance,
-  formatMoney,
-  formatRating,
-} from '../../../shared/services/format';
-import { Badge } from '../../../shared/ui/badge/Badge';
 
 import styles from './Markets.module.css';
+import { NearbyMarketLine } from './NearbyMarketLine';
 
 /**
  * Yakindaki marketler listesi - TASARIMSIZ KABUK (T5.4). Yalnizca veriyi
@@ -18,23 +10,12 @@ import styles from './Markets.module.css';
 export function NearbyMarketList({ markets }: { readonly markets: readonly NearbyMarket[] }) {
   return (
     <ul className={styles['c-market-list']} role="list">
-      {markets.map(({ market, distanceMeters }) => (
+      {markets.map((nearby) => (
         <li
-          key={market.id}
-          className={`${styles['c-market-list__item']} ${market.isOpen ? '' : styles['is-closed']}`}
+          key={nearby.market.id}
+          className={`${styles['c-market-list__item']} ${nearby.market.isOpen ? '' : styles['is-closed']}`}
         >
-          <Link
-            to={`/markets/${encodeURIComponent(market.id)}`}
-            className={styles['c-market-list__link']}
-          >
-            <span>{market.name}</span>
-            {!market.isOpen && <Badge>Kapalı</Badge>}
-          </Link>
-          <p className={styles['c-market-list__meta']}>
-            ⭐ {formatRating(market.rating.average)} ({market.rating.count} değerlendirme) ·{' '}
-            {formatDistance(distanceMeters)} · {formatDeliveryTime(market.deliveryTime)} · Min.{' '}
-            {formatMoney(market.pricingRules.minBasket)}
-          </p>
+          <NearbyMarketLine nearby={nearby} />
         </li>
       ))}
     </ul>

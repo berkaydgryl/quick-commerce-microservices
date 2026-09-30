@@ -2,20 +2,20 @@
 
 Müşteri arayüzü: React 18 + Vite + TypeScript. Tarayıcı yalnızca gateway ile konuşur (`/v1/*`).
 
-## Bugünkü durum (T8.5 — kimlik akışı; T7.6 — kalıcı sepet, stok sınırı, satışta olmayan teklif; T6.4 — sepet kabuğu)
+## Bugünkü durum (T9.6 — genel arama; T8.5 — kimlik akışı; T7.6 — kalıcı sepet, stok sınırı, satışta olmayan teklif; T6.4 — sepet kabuğu)
 
-| Parça                   | Durum                                                                                            |
-| ----------------------- | ------------------------------------------------------------------------------------------------ |
-| Vite + React + router   | ✅ `/` ilk ekran · `/markets` yakındaki marketler · `/markets/:id` market sayfası                |
-| TanStack Query          | ✅ Yalnızca geçici hata (`SERVICE_UNAVAILABLE`) yeniden denenir; mutasyon denenmez               |
-| HTTP istemcisi          | ✅ Zarf açıcı → `AppError`; mutasyon `Idempotency-Key`'siz derlenmez (ADR-08)                    |
-| Idempotency key         | ✅ `crypto.randomUUID()`, sözleşmedeki uzunluk sınırıyla                                         |
-| Design token'lar        | ✅ `tokens.css`: marka paleti, Nunito, `clamp()` ölçeği, kapsayıcı, bileşen ölçüleri (D11)       |
-| Kırılımlar              | ✅ `@custom-media` (48rem / 64rem), JS karşılığı `shared/config/breakpoints.ts`                  |
-| Market veri hook'ları   | ✅ `useNearbyMarkets`, `useMarket`, `useMarketCategories`, `useMarketProducts` (imleçle sayfalı) |
-| Ortak durumlar          | ✅ `QueryStatus`: yükleniyor / hata / boş; \"Tekrar dene\" yalnızca geçici hatada                |
-| Zustand (sepet, oturum) | ✅ Sepet (`useCartStore`, T6.4; `getir.cart`'ta kalıcı); oturum (`useSessionStore`, bellekte)    |
-| Kimlik (T8.5)           | ✅ `/giris`, `/kayit`, `/hesabim` (korumalı); sessiz yenileme, sekmeler arası kilit (aşağıda)    |
+| Parça                   | Durum                                                                                                                      |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Vite + React + router   | ✅ `/` ilk ekran + genel arama (`?ara=`) · `/markets` yakındaki marketler · `/markets/:id` market sayfası                  |
+| TanStack Query          | ✅ Yalnızca geçici hata (`SERVICE_UNAVAILABLE`) yeniden denenir; mutasyon denenmez                                         |
+| HTTP istemcisi          | ✅ Zarf açıcı → `AppError`; mutasyon `Idempotency-Key`'siz derlenmez (ADR-08)                                              |
+| Idempotency key         | ✅ `crypto.randomUUID()`, sözleşmedeki uzunluk sınırıyla                                                                   |
+| Design token'lar        | ✅ `tokens.css`: marka paleti, Nunito, `clamp()` ölçeği, kapsayıcı, bileşen ölçüleri (D11)                                 |
+| Kırılımlar              | ✅ `@custom-media` (48rem / 64rem), JS karşılığı `shared/config/breakpoints.ts`                                            |
+| Market veri hook'ları   | ✅ `useNearbyMarkets`, `useMarket`, `useMarketCategories`, `useMarketProducts` (imleçle sayfalı), `useNearbySearch` (T9.6) |
+| Ortak durumlar          | ✅ `QueryStatus`: yükleniyor / hata / boş; \"Tekrar dene\" yalnızca geçici hatada                                          |
+| Zustand (sepet, oturum) | ✅ Sepet (`useCartStore`, T6.4; `getir.cart`'ta kalıcı); oturum (`useSessionStore`, bellekte)                              |
+| Kimlik (T8.5)           | ✅ `/giris`, `/kayit`, `/hesabim` (korumalı); sessiz yenileme, sekmeler arası kilit (aşağıda)                              |
 
 ## Kimlik akışı (T8.5)
 
@@ -105,7 +105,20 @@ katmanındadır.
   2 harften kısa metin arama sayılmaz, istek gitmez (`searchQueryFrom`). Arama bütün markette yapılır:
   başlayınca kategori "Tümü"ne döner, kategori seçimi aramayı kaldırır. Arama adreste durur
   (`?ara=`): yenileme ve geri tuşu korur. Eşleşme sunucuda: harf ve Türkçe karakter duyarsız, çok
-  kelimede her kelime (T9.4). Markete girmeden yakındaki marketlerde arama T9.6'da.
+  kelimede her kelime (T9.4).
+- **Genel arama (T9.6):** ana sayfada kategori şeridinin üstünde "Market ya da Ürün ara…" kutusu (aynı
+  bileşen, `MarketSearchBox`; bekleme, 2 harf kuralı ve iptal market içi aramayla aynı). Arama varken
+  şeridin yerinde sonuçlar durur, temizlenince şerit döner; arama adreste (`/?ara=`). İstek
+  `GET /v1/search` (`features/search`), konum adres seçimine (T9.5 PR 2) kadar sabit "Ev".
+  - **Kart** (`SearchResultCard`): yakındaki market satırı (`NearbyMarketLine`, `/markets` listesiyle
+    aynı: ad, "Kapalı" rozeti, puan, mesafe, süre, min. sepet), en fazla 3 ürün satırı (market
+    sayfasındaki satır ve düğme: "Ekle", adet, "Tükendi") ve fazlası için "+N ürün daha" (market sayfası
+    aynı aramayla, `marketPath(id, arama)`). Yalnızca adı eşleşen markette ürün satırı yoktur.
+  - **Sepet:** sonuçtan eklenir. Sepet tek markettir: başka marketin ürünü eklenince onay sorusu o
+    kartın içinde çıkar (`useAddToCart` kart başına). Kapalı market listede kalır, düğmeler market
+    sayfasındaki gibi (bağlayıcı kontrol rezervasyonda, T11.4).
+  - **Birleştirme sayfada:** arama kartı market satırını ve sepeti tanımaz; `HomePage` kartı market
+    satırı (markets), ürünler ve sepet düğmeleri (catalog + cart, `SearchResultProducts`) ile kurar.
 - **Satışta değil (T7.6):** pasif teklif (`isActive: false`) listede kalır, "Ekle" yerine basılamayan
   "Satışta değil" yazısı görünür ve sepete eklenemez. Sepette zaten varsa adet düğmeleri kalır, "+" kapalı.
 - **Henüz yok:** iyimser güncellemenin geri alınması (rezervasyon "stok yetersiz / satışta değil"
@@ -131,7 +144,9 @@ Ekranların **görsel tasarımı kullanıcının kararıdır** ve zamanı gelinc
 yalnızca veri katmanını ve okunur bir kabuğu kurar; yeni görsel karar yoktur, mevcut token'lar kullanılır.
 
 - **Konum:** adres seçimi (T9.5) gelene kadar sabit "Ev" adresi (`features/markets/constants.ts`).
-- **Ana sayfa değişmedi:** marketlere bağlantı bir tasarım kararı; şimdilik `/markets` adresiyle açılır.
+- **Ana sayfa:** logo, genel arama kutusu (T9.6) ve kategori şeridi; marketler listesine bağlantı bir
+  tasarım kararı, şimdilik `/markets` adresiyle açılır. Market sayfası adresi ve parametreleri
+  (`?kategori=`, `?ara=`) `features/markets/routes.ts`'te tek yerde.
 - **Seçili kategori adreste** (`?kategori=`): yenileme ve paylaşma seçimi korur.
 - **Stok gösterilmez:** `availableQuantity` bugün gelmiyor ("stok bilgisi yok"); sepet düğmeleri T6.4'te,
   "Satışta değil" durumu T7.6'da.
@@ -167,7 +182,7 @@ Giriş için gateway yeterlidir: `MOCK=true` iken demo personaları açılışta
 src/
   app/        router, QueryClient, sağlayıcılar
   pages/      rota başına sayfa kabuğu
-  features/   özellik başına api + hook + ui (catalog, markets, cart, auth)
+  features/   özellik başına api + hook + ui (catalog, markets, cart, auth, search)
   shared/
     api/      http-client (gönder), envelope (zarf aç), idempotency-key, client (örnek)
     session/  oturum deposu, kilit, yenileyici, yetkili istemci (T8.5)

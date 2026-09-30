@@ -8,14 +8,11 @@ import { searchQueryFrom } from '../../features/catalog/services/search-query';
 import { MarketCatalogSection } from '../../features/catalog/ui/MarketCatalogSection';
 import { MarketSearchBox } from '../../features/catalog/ui/MarketSearchBox';
 import { useMarket } from '../../features/markets/hooks/useMarket';
+import { MARKET_PARAMS } from '../../features/markets/routes';
 import { MarketSummarySection } from '../../features/markets/ui/MarketSummarySection';
 import { PageLayout } from '../../shared/ui/page-layout/PageLayout';
 
 import styles from './MarketPage.module.css';
-
-/** Secili kategori ve arama adreste durur: yenileme ve paylasma secimi korur. */
-const CATEGORY_PARAM = 'kategori';
-const SEARCH_PARAM = 'ara';
 
 /**
  * /markets/:marketId - arama, market basligi, katalogu ve sepet (T6.4). Sayfa
@@ -23,14 +20,15 @@ const SEARCH_PARAM = 'ara';
  *
  * Arama BUTUN markette yapilir (T9.5): arama baslayinca kategori "Tumu"ne
  * doner, kategori secilince arama kalkar. Adreste ikisi birden varsa arama
- * gecerlidir.
+ * gecerlidir. Secili kategori ve arama adreste durur (MARKET_PARAMS):
+ * yenileme ve paylasma secimi korur.
  */
 export function MarketPage() {
   const { marketId = '' } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const query = searchQueryFrom(searchParams.get(SEARCH_PARAM) ?? '');
+  const query = searchQueryFrom(searchParams.get(MARKET_PARAMS.search) ?? '');
   const categoryId =
-    query === undefined ? (searchParams.get(CATEGORY_PARAM) ?? undefined) : undefined;
+    query === undefined ? (searchParams.get(MARKET_PARAMS.category) ?? undefined) : undefined;
 
   // Ayni sorgu anahtari: ek istek yok, basligin sorgusunu paylasir. Market
   // bulunamazsa hata YALNIZCA baslikta gorunur.
@@ -40,11 +38,13 @@ export function MarketPage() {
   const cart = useAddToCart(cartMarket);
 
   const selectCategory = (next: string | undefined): void => {
-    setSearchParams(next === undefined ? {} : { [CATEGORY_PARAM]: next }, { replace: true });
+    setSearchParams(next === undefined ? {} : { [MARKET_PARAMS.category]: next }, {
+      replace: true,
+    });
   };
 
   const search = (next: string | undefined): void => {
-    setSearchParams(next === undefined ? {} : { [SEARCH_PARAM]: next }, { replace: true });
+    setSearchParams(next === undefined ? {} : { [MARKET_PARAMS.search]: next }, { replace: true });
   };
 
   return (

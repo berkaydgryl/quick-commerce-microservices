@@ -1,0 +1,38 @@
+/* Tasarimsiz kabuk (T9.6): yalnizca okunur yerlesim. Sonuc karti tasarimi T16.2'de. */
+.c-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-search-results__title {
+  font-size: var(--font-size-lg);
+}
+
+.c-search-results__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.c-search-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-block-end: var(--space-3);
+  border-block-end: var(--border-width-thin) solid var(--border-subtle);
+}
+
+.c-search-result.is-closed {
+  color: var(--text-muted);
+}
+
+.c-search-result__more {
+  align-self: flex-start;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+}
