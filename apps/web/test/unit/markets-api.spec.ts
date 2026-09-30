@@ -105,6 +105,17 @@ describe('market catalog api', () => {
     );
   });
 
+  it('arama q parametresiyle gider (T9.5); Turkce harf ve bosluk kodlanir', async () => {
+    const { client, fetchMock } = clientReturning({
+      items: [product],
+      page: { nextPageToken: '', totalSize: 0 },
+    });
+
+    await fetchMarketProducts(client, { marketId: 'mkt_x', query: 'beyaz peynir', pageSize: 20 });
+
+    expect(calledUrl(fetchMock)).toBe('/v1/markets/mkt_x/products?pageSize=20&q=beyaz+peynir');
+  });
+
   it('stok bilgisi olmayan urun sozlesmeye uyar (availableQuantity istege bagli)', async () => {
     const { client } = clientReturning({
       items: [product],
@@ -126,6 +137,15 @@ describe('sorgu anahtarlari', () => {
   it('"tum urunler" ile kategorili liste ayri onbellek girdisidir', () => {
     expect(catalogKeys.marketProducts('mkt_x', undefined)).not.toEqual(
       catalogKeys.marketProducts('mkt_x', 'cat_a'),
+    );
+  });
+
+  it('her arama ayri onbellek girdisidir; arama degisince eski sorgu iptal edilebilir (T9.5)', () => {
+    expect(catalogKeys.marketProducts('mkt_x', undefined, 'sut')).not.toEqual(
+      catalogKeys.marketProducts('mkt_x', undefined, 'su'),
+    );
+    expect(catalogKeys.marketProducts('mkt_x', undefined, 'sut')).not.toEqual(
+      catalogKeys.marketProducts('mkt_x', undefined),
     );
   });
 

@@ -30,6 +30,8 @@ type MarketProductsQueryInput = z.input<typeof marketProductsQuerySchema>;
 export interface MarketProductsRequest {
   readonly marketId: MarketId;
   readonly categoryId?: MarketProductsQueryInput['categoryId'];
+  /** Arama (T9.5): sunucuda ad ve aciklamada, harf ve Turkce karakter duyarsiz (T9.4). */
+  readonly query?: MarketProductsQueryInput['q'];
   readonly pageToken?: MarketProductsQueryInput['pageToken'];
   readonly pageSize: NonNullable<MarketProductsQueryInput['pageSize']>;
 }
@@ -49,16 +51,17 @@ export function fetchMarketCategories(
 
 export function fetchMarketProducts(
   client: HttpClient,
-  { marketId, categoryId, pageToken, pageSize }: MarketProductsRequest,
+  { marketId, categoryId, query, pageToken, pageSize }: MarketProductsRequest,
   signal?: AbortSignal,
 ): Promise<ProductPage> {
   // Yalnizca DOLU filtreler gonderilir: bos deger sunucuda zaten "filtre yok"
   // sayilir; gondermemek adresi ve istek gunlugunu sade tutar.
-  const query = new URLSearchParams({ pageSize: String(pageSize) });
-  if (categoryId !== undefined) query.set('categoryId', categoryId);
-  if (pageToken !== undefined) query.set('pageToken', pageToken);
+  const params = new URLSearchParams({ pageSize: String(pageSize) });
+  if (categoryId !== undefined) params.set('categoryId', categoryId);
+  if (query !== undefined) params.set('q', query);
+  if (pageToken !== undefined) params.set('pageToken', pageToken);
 
-  return client.request(`${marketPath(marketId)}/products?${query.toString()}`, {
+  return client.request(`${marketPath(marketId)}/products?${params.toString()}`, {
     schema: productPageSchema,
     signal,
   });

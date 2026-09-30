@@ -100,6 +100,12 @@ katmanındadır.
 - **Tükendi (T8.4):** stoğu 0 olan teklifte "Ekle" yerine basılamayan "Tükendi" yazısı görünür
   ("Satışta değil" ile aynı kalıp ve stil). Karar `cart-state`'tedir (`isSoldOut`). Pasif teklif her
   zaman "Satışta değil" gösterir. Sepette zaten varsa adet düğmeleri kalır, "+" kapalı.
+- **Market içi arama (T9.5):** market sayfasının üstündeki "Ürün ara…" kutusu. Yazım 300 ms durunca
+  istek gider (`createDebouncer`), yeni arama eskisinin isteğini iptal eder (TanStack Query `signal`).
+  2 harften kısa metin arama sayılmaz, istek gitmez (`searchQueryFrom`). Arama bütün markette yapılır:
+  başlayınca kategori "Tümü"ne döner, kategori seçimi aramayı kaldırır. Arama adreste durur
+  (`?ara=`): yenileme ve geri tuşu korur. Eşleşme sunucuda: harf ve Türkçe karakter duyarsız, çok
+  kelimede her kelime (T9.4). Markete girmeden yakındaki marketlerde arama T9.6'da.
 - **Satışta değil (T7.6):** pasif teklif (`isActive: false`) listede kalır, "Ekle" yerine basılamayan
   "Satışta değil" yazısı görünür ve sepete eklenemez. Sepette zaten varsa adet düğmeleri kalır, "+" kapalı.
 - **Henüz yok:** iyimser güncellemenin geri alınması (rezervasyon "stok yetersiz / satışta değil"

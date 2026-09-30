@@ -1,0 +1,62 @@
+/*
+ * Market ici arama kutusu (T9.5). Kimlik formu alaniyla ayni cerceve ve olculer
+ * (AuthField): ikon solda, temizleme dugmesi sagda, input onlara yer acar.
+ */
+.c-search-box {
+  position: relative;
+}
+
+.c-search-box__input {
+  width: 100%;
+  min-height: var(--size-field-min-height);
+  padding-block: var(--space-2);
+  padding-inline: calc(var(--space-3) * 2 + var(--size-field-icon));
+  font-size: var(--font-size-md);
+  background: var(--bg-surface);
+  border: var(--border-width-thin) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition: border-color var(--duration-fast) var(--easing-standard);
+}
+
+.c-search-box__input::placeholder {
+  color: var(--text-muted);
+}
+
+.c-search-box__input:focus {
+  border-color: var(--color-brand-primary);
+}
+
+/* Tarayicinin kendi temizleme carpisi: kendi dugmemiz var, ikisi birden gorunmesin. */
+.c-search-box__input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.c-search-box__icon {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: var(--space-3);
+  display: flex;
+  align-items: center;
+  width: var(--size-field-icon);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.c-search-box__clear {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--size-field-icon) + var(--space-2));
+  padding: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.c-search-box__clear:hover {
+  color: var(--text-default);
+}

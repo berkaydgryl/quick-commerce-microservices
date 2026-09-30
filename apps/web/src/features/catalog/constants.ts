@@ -8,3 +8,9 @@ export const CATEGORY_SKELETON_COUNT = 5;
 
 /** Market urun listesinde bir sayfada istenen urun sayisi (sunucu sinirlar icinde kirpar). */
 export const MARKET_PRODUCTS_PAGE_SIZE = 20;
+
+/**
+ * Market ici aramada yazim bu kadar durunca istek gider (T9.5): hizli yazimda
+ * ara metinler icin istek atilmaz.
+ */
+export const SEARCH_DEBOUNCE_MS = 300;
