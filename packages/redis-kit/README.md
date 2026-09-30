@@ -22,6 +22,7 @@ Tek doğru kaynak `src/keys.ts`.
 | `rateLimitKey(subject, route)`     | `rate:{10.0.0.1}:POST_/v1/orders` | zset   |
 | `EVENTS_STREAM_KEY`                | `stream:events`                   | stream |
 | `RECONCILE_LOCK_KEY`               | `lock:reconcile`                  | string |
+| `STOCK_SEEDED_MARKER_KEY`          | `stock:seeded` (ADR-17, TTL'siz)  | string |
 
 ### Hash-tag kuralı
 

@@ -11,14 +11,18 @@
  *    servisi o markette sayac bulamaz, SKU'lar `unknownSkus`'a duser.
  *  - Tekrarlanan SKU tek sayilir; cevap istek sirasini korur.
  *  - Bu bir REZERVASYON DEGILDIR: okundugu an dogrudur (inventory.proto).
+ *  - Sayaci bulunamayan SKU varsa once Redis bosalmis mi diye bakilir (T10.1
+ *    PR 2, ADR-17): bosalmissa sayaclar yeniden kurulur ve okuma BIR KEZ
+ *    tekrarlanir; "bilinmiyor" ancak bundan sonra doner.
  */
 
 import { isSku } from '@getir/core';
 
-import type { StockCounterReader } from '../domain/stock.js';
+import type { CounterRecovery, StockCounterReader } from '../domain/stock.js';
 
 export interface CheckAvailabilityDeps {
   readonly counters: StockCounterReader;
+  readonly recoverCounters: CounterRecovery;
 }
 
 export interface CheckAvailabilityInput {
@@ -45,10 +49,15 @@ export function createCheckAvailability(deps: CheckAvailabilityDeps): CheckAvail
   return async ({ marketId, skus }) => {
     const unique = [...new Set(skus)];
     const readable = unique.filter(isSku);
-    const counts =
+    const read = () =>
       readable.length === 0
-        ? new Map<string, number>()
-        : await deps.counters.available(marketId, readable);
+        ? Promise.resolve(new Map<string, number>())
+        : deps.counters.available(marketId, readable);
+
+    let counts = await read();
+    if (readable.some((sku) => !counts.has(sku)) && (await deps.recoverCounters())) {
+      counts = await read();
+    }
 
     const items: SkuAvailability[] = [];
     const unknownSkus: string[] = [];

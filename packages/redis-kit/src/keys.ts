@@ -58,6 +58,15 @@ export const EVENTS_DEAD_LETTER_STREAM_KEY = 'stream:events:dead';
 /** Supurucu/reconcile liderligi (ADR-01: Redlock yalnizca burada). */
 export const RECONCILE_LOCK_KEY = 'lock:reconcile';
 
+/**
+ * Stok sayac kumesinin isareti (T10.1 PR 2, ADR-17): sayaclar Mongo'dan her
+ * yazildiginda (acilis, seed, reseed) EN SON konur. Yoklugu "Redis bosaldi,
+ * sayaclarin tamami gitti" demektir; stok servisi bir sayac bulamadiginda ona
+ * bakar ve sayaclari kendiliginden yeniden kurar. Market basina degil TEKTIR:
+ * hic sayaci olmayan market "bosalmis" sanilmasin. TTL'sizdir (ADR-17).
+ */
+export const STOCK_SEEDED_MARKER_KEY = 'stock:seeded';
+
 /** Bir degeri hash-tag haline getirir: ds_1 -> {ds_1} */
 export function hashTag(value: string): string {
   return `{${value}}`;

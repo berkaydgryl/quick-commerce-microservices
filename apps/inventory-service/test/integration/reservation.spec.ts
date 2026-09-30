@@ -262,7 +262,11 @@ describe('Reserve gercek gRPC ve Redis ile', () => {
     await seed({ 'SUT-1L': 5, 'KOLA-1L': 1 });
     const server = await startTestGrpcServer({
       serviceName: 'inventory-resv-it',
-      services: [buildInventoryService({ stock: { counters, reservations } })],
+      services: [
+        buildInventoryService({
+          stock: { counters, reservations, recoverCounters: () => Promise.resolve(false) },
+        }),
+      ],
     });
     const service = inventoryV1.InventoryServiceService;
     const request = (order: number, items: readonly ReservationLine[]) =>

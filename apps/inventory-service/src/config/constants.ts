@@ -55,3 +55,10 @@ export const RESERVATION_HOLD_AFTER_EXPIRY_MS = 60_000;
 export const LUA_SCRIPTS = {
   RESERVE: 'reserve',
 } as const;
+
+/**
+ * Redis bosalinca bir istegin sayaclarin yeniden kurulmasini en fazla bekledigi
+ * sure (T10.1 PR 2). Demo verisi milisaniyeler surer; asilirsa istek
+ * SERVICE_UNAVAILABLE alir (tekrar denenebilir), kurulum arka planda surer.
+ */
+export const COUNTER_RECOVERY_TIMEOUT_MS = 5_000;

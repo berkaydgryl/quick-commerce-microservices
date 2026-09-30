@@ -61,3 +61,10 @@ Ustteki karar degismez; "sayac acilista Mongo'dan seed edilir" cumlesini netlest
   P1): tahliye eden bir Redis sayaci silebilir; bu fazla satistir.
 - Kayitlar Mongo'dan kacar kacar (500) okunur ve tek boru hattinda yazilir; butun koleksiyon
   bellege alinmaz.
+
+## Ek (T10.1 PR 2, 2026-09-30): Redis bosalinca
+
+Ustteki karar degismez. "Redis kaybi veri kaybi degil, yeniden isinma maliyetidir" cumlesi artik
+kendiliginden isler: sayaclar yazildiktan sonra konan bir isaret (stock:seeded) sayesinde servis,
+bulunamayan bir sayacin "bu markette yok" mu yoksa "Redis bosaldi" mi oldugunu ayirir ve ikincisinde
+sayaclari Mongo'dan yeniden yazar. Isaret TTL'sizdir; gerekcesi ve kurallari ADR-17'de.

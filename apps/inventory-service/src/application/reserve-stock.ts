@@ -5,9 +5,10 @@
  *  - Ya butun kalemler ya hicbiri: yetmeyen ilk kalem STOCK_INSUFFICIENT
  *    (FAILED_PRECONDITION) doner, ayrintida sku, istenen ve mevcut adet
  *    (inventory.proto ReserveRequest). Hicbir sayac dusmemistir.
- *  - Sayaci olmayan SKU yetersiz sayilir, mevcut 0 (bekleyen #36; 30 Eylul
- *    karari (a)): ayrintida `counterMissing` ve bir UYARI gunlugu. Bu markette
- *    satilmiyor ya da Redis bosaldi; ikisi de satilamaz.
+ *  - Sayaci olmayan SKU once Redis bosalmis mi diye sorulur (T10.1 PR 2,
+ *    ADR-17): bosalmissa sayaclar yeniden kurulur ve rezervasyon BIR KEZ
+ *    tekrarlanir. Gercekten sayaci yoksa yetersiz sayilir, mevcut 0 (bekleyen
+ *    #36; 30 Eylul karari (a)): ayrintida `counterMissing` ve bir UYARI gunlugu.
  *  - Ayni siparis ikinci kez gelirse sayaclar tekrar dusmez: ilk bitis anini
  *    `alreadyReserved` ile dondurur (ADR-08'in stok tarafi).
  *  - Kullanicinin baska aktif rezervasyonu varsa RESERVATION_ACTIVE
@@ -22,11 +23,13 @@ import { AppError, ERROR_CODES } from '@getir/core';
 import type { Clock, Logger } from '@getir/core';
 
 import type { ReservationLine, ReservationStore } from '../domain/reservation.js';
+import type { CounterRecovery } from '../domain/stock.js';
 
 const MS_PER_SECOND = 1000;
 
 export interface ReserveStockDeps {
   readonly reservations: ReservationStore;
+  readonly recoverCounters: CounterRecovery;
   readonly clock: Clock;
   readonly logger: Logger;
 }
@@ -50,14 +53,22 @@ export type ReserveStock = (input: ReserveStockInput) => Promise<ReserveStockRes
 
 export function createReserveStock(deps: ReserveStockDeps): ReserveStock {
   return async ({ orderId, marketId, userId, items, ttlSeconds }) => {
-    const outcome = await deps.reservations.reserve({
+    const command = {
       orderId,
       marketId,
       userId,
       lines: items,
       nowMs: deps.clock.now(),
       ttlMs: ttlSeconds * MS_PER_SECOND,
-    });
+    };
+    let outcome = await deps.reservations.reserve(command);
+    if (
+      outcome.status === 'insufficient' &&
+      outcome.counterMissing &&
+      (await deps.recoverCounters())
+    ) {
+      outcome = await deps.reservations.reserve(command);
+    }
 
     switch (outcome.status) {
       case 'reserved':
