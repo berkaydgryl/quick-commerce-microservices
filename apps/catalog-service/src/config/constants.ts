@@ -32,6 +32,13 @@ export const MAX_BATCH_OFFER_IDS = 100;
 export const MARKET_CANDIDATE_LIMIT = 20;
 
 /**
+ * Genel aramada (T9.6) market basina gosterilen en fazla teklif. Fazlasi
+ * sayilir (toplam eslesme); istemci "+N urun daha" ile market sayfasina,
+ * ayni aramayla gecer (30 Eylul karari).
+ */
+export const MAX_SEARCH_OFFERS_PER_MARKET = 3;
+
+/**
  * Kategori listelerinin ust siniri (D6). Kategori taksonomisi SINIRLI bir
  * listedir: seed yazar, kullanici uretmez. Bu yuzden ListCategories ve
  * ListMarketCategories sayfalanmaz (proje-kurallari.mdc "Sinirli listeler"

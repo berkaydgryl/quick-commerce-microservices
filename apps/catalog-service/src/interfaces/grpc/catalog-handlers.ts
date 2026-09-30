@@ -18,9 +18,11 @@ import type { ListCategories } from '../../application/list-categories.js';
 import type { ListMarketCategories } from '../../application/list-market-categories.js';
 import type { ListNearbyMarkets } from '../../application/list-nearby-markets.js';
 import type { ListProducts } from '../../application/list-products.js';
+import type { SearchNearby } from '../../application/search-nearby.js';
 import {
   toListProductsResponse,
   toProtoCategory,
+  toProtoMarketSearchResult,
   toProtoMarket,
   toProtoNearbyMarket,
   toProtoOffer,
@@ -32,6 +34,7 @@ import {
   listMarketCategoriesRequestSchema,
   listNearbyMarketsRequestSchema,
   listProductsRequestSchema,
+  searchNearbyRequestSchema,
 } from './schemas.js';
 
 export interface CatalogHandlerDeps {
@@ -41,6 +44,7 @@ export interface CatalogHandlerDeps {
   readonly listMarketCategories: ListMarketCategories;
   readonly listProducts: ListProducts;
   readonly batchGetOffers: BatchGetOffers;
+  readonly searchNearby: SearchNearby;
   readonly logger?: Logger;
 }
 
@@ -112,6 +116,15 @@ export function createCatalogImplementation(
       'kullanan yok - BatchGetOffers kullanin',
       deps.logger,
     ),
+
+    searchNearby: unaryHandler({
+      name: 'SearchNearby',
+      schema: searchNearbyRequestSchema,
+      ...logger,
+      handle: async (input): Promise<catalogV1.SearchNearbyResponse> => ({
+        results: (await deps.searchNearby(input)).map(toProtoMarketSearchResult),
+      }),
+    }),
 
     batchGetOffers: unaryHandler({
       name: 'BatchGetOffers',

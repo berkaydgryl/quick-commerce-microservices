@@ -106,6 +106,21 @@ export const listProductsRequestSchema = z
  */
 export const listNearbyMarketsRequestSchema = z.object({ location: geoPointSchema });
 
+/**
+ * SearchNearby (T9.6): konum ListNearbyMarkets'teki gibi ZORUNLU; sorgu da
+ * ZORUNLU ve ListProducts aramasiyla ayni uzunluk kurallarinda (kirpildiktan
+ * sonra 2-64). Bos sorgu "zorunlu" olarak raporlanir, uzunluk hatasi olarak degil.
+ */
+export const searchNearbyRequestSchema = z.object({
+  location: geoPointSchema,
+  query: requiredText.pipe(
+    z
+      .string()
+      .min(SEARCH_QUERY_MIN_LENGTH, `en az ${SEARCH_QUERY_MIN_LENGTH} karakter olmali`)
+      .max(SEARCH_QUERY_MAX_LENGTH, `en fazla ${SEARCH_QUERY_MAX_LENGTH} karakter olmali`),
+  ),
+});
+
 export const getMarketRequestSchema = z.object({ marketId: requiredCatalogId(marketIdSchema) });
 
 export const listMarketCategoriesRequestSchema = z.object({

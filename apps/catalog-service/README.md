@@ -15,7 +15,7 @@ Kullanıcı konumuna hizmet veren marketleri görür ve **birini seçer**; siste
 market kendi kurallarını taşır: minimum sepet, teslimat ücreti, ücretsiz teslimat eşiği,
 teslimat süresi ve puan. Market paneli kapsam dışıdır; değerler seed'dendir.
 
-## Bugünkü durum (T9.3 — T7.2 öncesi öne alındı)
+## Bugünkü durum (T9.6 — genel arama)
 
 | RPC                    | Durum                                                                                                                                             |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -27,6 +27,7 @@ teslimat süresi ve puan. Market paneli kapsam dışıdır; değerler seed'dendi
 | `ResolveDarkStore`     | ⛔ Deprecated (ADR-15): `NOT_IMPLEMENTED` (gRPC `UNIMPLEMENTED`, HTTP 501), mesaj `ListNearbyMarkets`'i gösterir                                  |
 | `GetProduct`           | ⏳ `NOT_IMPLEMENTED` (gRPC `UNIMPLEMENTED`, HTTP 501) — T8.4                                                                                      |
 | `BatchGetOffers`       | ✅ Marketin satılabilir teklifleri, **tek sorguda** (en fazla 100 kimlik); pasif / başka marketin / olmayan → `missing`; market yoksa `NOT_FOUND` |
+| `SearchNearby`         | ✅ Genel arama (T9.6): konumu kapsayan marketlerde ürün ya da market adı; açıklar yakından uzağa, kapalılar sonda; market başına ilk 3 + toplam   |
 | `BatchGetProducts`     | ⛔ Deprecated (proto'da işaretli): `NOT_IMPLEMENTED` — kullanan yok; fiyat teklife ait olduğu için sepet doğrulaması `BatchGetOffers` ile         |
 
 T4.2'nin "yarıçap içinde ama kapalı → `STORE_CLOSED`, yarıçap dışı → `OUT_OF_RANGE`" kuralı
@@ -38,13 +39,14 @@ rezervasyon (T11.4) seçilen marketin hâlâ hizmet verip vermediğini buna sora
 Gateway yalnızca **biçimi** doğrular ("sayı mı?"); kuralın kendisi burada, `interfaces/grpc/schemas.ts`'te.
 Kurallar REST'in kullandığı **aynı** `@getir/contracts` şemalarıdır; burada tekrar yazılmaz.
 
-| Alan                           | Kural (kaynak)                                                   | İhlal                                            |
-| ------------------------------ | ---------------------------------------------------------------- | ------------------------------------------------ |
-| `market_id` (4 RPC)            | `mkt_` + okunabilir gövde, en fazla 64 (`marketIdSchema`)        | `VALIDATION_FAILED` → 400 (404 değil)            |
-| `category_id` (ListProducts)   | Boşsa filtre yok; doluysa `cat_` biçimi (`categoryIdSchema`)     | `VALIDATION_FAILED` → 400 (boş liste değil)      |
-| `query` (ListProducts)         | Kırpıldıktan sonra 2-64 karakter (`SEARCH_QUERY_MIN/MAX_LENGTH`) | `VALIDATION_FAILED` → 400                        |
-| `location` (ListNearbyMarkets) | Zorunlu; WGS84, sonlu sayı (`geoPointSchema`)                    | Türkçe sebep: `enlem -90 ile 90 arasinda olmali` |
-| `product_ids` (BatchGetOffers) | En fazla 100, boş olamaz; **biçimi bilerek esnek**               | Bozuk kimlik hata değil, `missing`               |
+| Alan                                         | Kural (kaynak)                                                   | İhlal                                            |
+| -------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------ |
+| `market_id` (4 RPC)                          | `mkt_` + okunabilir gövde, en fazla 64 (`marketIdSchema`)        | `VALIDATION_FAILED` → 400 (404 değil)            |
+| `category_id` (ListProducts)                 | Boşsa filtre yok; doluysa `cat_` biçimi (`categoryIdSchema`)     | `VALIDATION_FAILED` → 400 (boş liste değil)      |
+| `query` (ListProducts)                       | Kırpıldıktan sonra 2-64 karakter (`SEARCH_QUERY_MIN/MAX_LENGTH`) | `VALIDATION_FAILED` → 400                        |
+| `query` (SearchNearby)                       | **Zorunlu**; kırpıldıktan sonra 2-64 karakter (aynı sınırlar)    | Boşsa `zorunlu`, kısa/uzunsa uzunluk sebebi      |
+| `location` (ListNearbyMarkets, SearchNearby) | Zorunlu; WGS84, sonlu sayı (`geoPointSchema`)                    | Türkçe sebep: `enlem -90 ile 90 arasinda olmali` |
+| `product_ids` (BatchGetOffers)               | En fazla 100, boş olamaz; **biçimi bilerek esnek**               | Bozuk kimlik hata değil, `missing`               |
 
 Boş zorunlu alan biçim hatası gibi değil `zorunlu` diye raporlanır. Sebepler `details`'te alan adıyla
 döner; gateway proto adını REST adına çevirir (`query` → `q`, `location.lat` → `lat`).
@@ -79,6 +81,33 @@ Sipariş fiyat doğrulamasının (T7.2) kaynağı: sepetteki her kalemin **o mar
 - **Ölçüt testleri:** 50 kalemlik sepet tek çağrıda (gRPC, şemadan geçerek); use-case'te okuyucuya tam bir
   çağrı; tam 100 kimlik geçer, 101 reddedilir.
 
+## Genel arama: SearchNearby (T9.6)
+
+Markete girmeden arama ("Market ya da Ürün ara…"): konumu kapsayan marketlerde (`ListNearbyMarkets` ile
+aynı kural, kapalılar dahil) ürün **ya da** market adı. Market içi arama (T9.5) `ListProducts`'ın `query`
+alanıdır; iki arama aynı eşleşme kuralını kullanır (T9.4: harf ve Türkçe karakter duyarsız, her kelime).
+
+| Kural                    | Davranış                                                                                                                     |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| Listelenen market        | Adı sorguyla eşleşen **ya da** en az bir aktif teklifi eşleşen; ikisi de yoksa listede yok                                   |
+| Sıra                     | **Mesafe**, fiyat değil (farklı ürünlerde gramaj farkı yanıltır): açıklar önce, kapalılar sonda; her grup yakından uzağa     |
+| Market başına teklif     | İlk 3 (market sayfasıyla aynı sıra) + `total_offer_matches`; istemci "+N ürün daha" ile market sayfasına aynı aramayla geçer |
+| Pasif teklif             | Sayılmaz, dönmez (market sayfasında "Satışta değil" olarak görünmeye devam eder)                                             |
+| Ad eşleşmesi             | "MİGROS", "migros moda", "abbasaga" → ilgili market; ürünü eşleşmese de listelenir, teklif listesi boş                       |
+| Market yok / eşleşme yok | Boş liste, hata değil                                                                                                        |
+
+- **İki sorgu, market sayısından bağımsız (N+1 yok):** `listMarketsByDistance` (en fazla
+  `MARKET_CANDIDATE_LIMIT`) ve `OfferReader.searchActiveOffers`. Mongo'da ikincisi tek toplama sorgusudur:
+  `$match { marketId: $in, isActive, kelimeler }` → `$sort { _id }` → `$group` (`$sum` + `$firstN`,
+  Mongo 5.2+). Boru hattı `searchActiveOffersPipeline`'da; depo ve plan testi aynı fonksiyonu kullanır.
+- **Yeni indeks yok:** `marketId` ile başlayan bir indeksten yalnızca kapsayan marketlerin teklifleri
+  okunur. Plan testi koleksiyon taraması olmadığını ve incelenen belgenin o marketlerin teklifleriyle
+  sınırlı kaldığını ölçer; üç `marketId` önekli indeksten hangisinin seçildiği planlayıcıya kalır.
+- **Dahil etme ve sıralama domain'de** (`domain/nearby-search.ts`, saf). Demo verisinde kapalı market zaten
+  en uzakta olduğu için "kapalılar sonda" kuralı sentetik marketlerle ayrıca sınanır.
+- **Bilinen sınır:** ad ve ürün kelimeleri birleşmez; "migros süt" ne Migros'un adıyla ne bir ürünle
+  eşleşir. Stok bu serviste yoktur (B27); genel aramada nasıl gösterileceği gateway işinde (T9.6 PR 2).
+
 ## Veri kaynağı: Mongo ya da MOCK
 
 | `MOCK` | Kaynak                                                                | Mongo gerekir mi          |
@@ -93,11 +122,11 @@ testinde gerçek Mongo. Veri kaynağını seçip açan tek yer `infrastructure/c
 
 ### Üç port, her use-case yalnızca ihtiyacını alır
 
-| Port             | Metotlar                                                            | Kullanan use-case                                        |
-| ---------------- | ------------------------------------------------------------------- | -------------------------------------------------------- |
-| `CategoryReader` | `listCategories(limit)`                                             | `ListCategories`, `ListMarketCategories`                 |
-| `MarketReader`   | `getMarket`, `marketExists`, `listMarketsByDistance`                | `ListNearbyMarkets`, `GetMarket`, varlık kontrolleri     |
-| `OfferReader`    | `listOffers`, `listCategoryIdsWithOffers`, `findOffersByProductIds` | `ListProducts`, `ListMarketCategories`, `BatchGetOffers` |
+| Port             | Metotlar                                                                                  | Kullanan use-case                                                        |
+| ---------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `CategoryReader` | `listCategories(limit)`                                                                   | `ListCategories`, `ListMarketCategories`                                 |
+| `MarketReader`   | `getMarket`, `marketExists`, `listMarketsByDistance`                                      | `ListNearbyMarkets`, `GetMarket`, `SearchNearby`, varlık kontrolleri     |
+| `OfferReader`    | `listOffers`, `listCategoryIdsWithOffers`, `findOffersByProductIds`, `searchActiveOffers` | `ListProducts`, `ListMarketCategories`, `BatchGetOffers`, `SearchNearby` |
 
 ### Belge şekli ve indeksler
 
@@ -143,6 +172,7 @@ src/
 ├── domain/                # saf iş kuralı — mongodb/grpc/proto importu YOK
 │   ├── catalog.ts             # Category, Product, Market, Offer + sıralama/arama/kimlik kuralları
 │   ├── market-coverage.ts     # hangi market hizmet verir (kapsama, kapalı/yarıçap dışı)
+│   ├── nearby-search.ts       # genel arama: hangi market listelenir, hangi sırada (T9.6)
 │   ├── geo.ts                 # mesafe (haversine, MongoDB yarıçapı)
 │   ├── pagination.ts          # sayfa boyutu (sınırlar contracts'tan) + imleçle dilimleme
 │   ├── category-reader.ts     # okuma portları: kategori,
@@ -153,6 +183,7 @@ src/
 │   ├── list-categories.ts, list-nearby-markets.ts, get-market.ts
 │   ├── list-market-categories.ts, list-products.ts, seed-catalog.ts
 │   ├── batch-get-offers.ts       # T9.3: sepet fiyatlaması için toplu teklif okuma
+│   ├── search-nearby.ts          # T9.6: genel arama (markete girmeden)
 ├── infrastructure/
 │   ├── fixtures.ts + fixtures/   # demo verisi: katalog, marketler, teklifler (MOCK + seed tek kaynak)
 │   ├── catalog-source.ts         # MOCK ya da Mongo: kaynağı açar, kapanışı verir
@@ -188,10 +219,13 @@ $G -d '{"market_id":"mkt_a101-caferaga","query":"süt"}' \
 
 $G -d '{"market_id":"mkt_kardesler-manavi"}' \
   localhost:50051 getir.catalog.v1.CatalogService/ListMarketCategories  # yalnizca meyve-sebze
+
+$G -d '{"location":{"lat":40.9885,"lng":29.0262},"query":"süt"}' \
+  localhost:50051 getir.catalog.v1.CatalogService/SearchNearby          # Ev -> A101 ve Migros Moda
 ```
 
 Aynı akışın otomatik karşılığı `test/unit/grpc/*.spec.ts` (kategoriler, marketler, ürünler, toplu
-teklif, uygulanmamış RPC'ler): gerçek sunucu, gerçek istemci, dış bağımlılık yok. Düzenek
+teklif, genel arama, uygulanmamış RPC'ler): gerçek sunucu, gerçek istemci, dış bağımlılık yok. Düzenek
 `test/support/catalog-grpc-harness.ts` (sunucu ve çağrı `@getir/service-kit/testing`'ten, D5); hata
 metadata'sı ortak `appErrorOf` ile Zod'dan geçerek okunur.
 
@@ -215,4 +249,5 @@ iken bilerek çalışmaz; geliştirme verisi için `-e NODE_ENV=development` ver
 
 Testler: `pnpm test:unit` (bellek, sözleşmeler, use-case'ler, veri bütünlüğü, gRPC) ve
 `pnpm test:int` (gerçek Mongo: sözleşmeler, seed sayıları ve tekrarı, indeksler, transaction
-geri alma, 3 demo adresinin 2dsphere'e karşı doğru marketleri listelemesi).
+geri alma, 3 demo adresinin 2dsphere'e karşı doğru marketleri listelemesi, sorgu planları ve genel
+aramanın bellek uygulamasıyla aynı sonucu vermesi).
