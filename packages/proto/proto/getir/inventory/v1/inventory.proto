@@ -178,6 +178,16 @@ message CheckAvailabilityResponse {
 // Yetersiz stokta BOS CEVAP DONMEZ, gRPC hatasi doner: FAILED_PRECONDITION +
 // ErrorDetail.code = "STOCK_INSUFFICIENT". Hangi kalemin yetmedigi
 // ErrorDetail.metadata icinde ("sku", "requested", "available") tasinir.
+// Bu markette sayaci OLMAYAN SKU da yetersiz sayilir: "available" 0 ve
+// "counterMissing" true (bu markette satilmiyor ya da Redis bosaldi).
+//
+// Kullanicinin BASKA bir siparis icin aktif rezervasyonu varsa yenisi acilmaz
+// (B22): ALREADY_EXISTS + ErrorDetail.code = "RESERVATION_ACTIVE", metadata
+// "activeOrderId". Eskisini birakip yenisini almak cagiranin (order-svc)
+// kararidir.
+//
+// Ayni SKU iki kalemde gelirse VALIDATION_FAILED: ikisi de ayri ayri yeterli
+// gorunur ve sayac iki kez dusurulurdu.
 message ReserveRequest {
   // Taslak siparisin kimligi. Ayni order_id ile ikinci cagri sayaclari TEKRAR
   // dusurmez (reserve.lua ilk satirda EXISTS ile doner); bu davranis
@@ -197,7 +207,8 @@ message ReserveRequest {
   //
   // Degeri order-svc verir cunku sure risk bandindan turer (dusuk bant 10 dk,
   // orta bant 2 dk). Bandi burada okumak, "karari risk onerir, order uygular"
-  // ayrimini bozardi.
+  // ayrimini bozardi. 30-900 disi VALIDATION_FAILED: bu bir karar degil
+  // korumadir (0 stogu aninda birakir, gunlerce suren sure kilitler).
   int32 ttl_seconds = 5;
 }
 

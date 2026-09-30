@@ -6,7 +6,8 @@
   "description": "Stok servisi: market x SKU stok gercegi (Mongo) ve hizli sayac (Redis); musaitlik ucu (gRPC)",
   "main": "./dist/main.js",
   "files": [
-    "dist"
+    "dist",
+    "lua"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

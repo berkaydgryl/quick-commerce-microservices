@@ -43,6 +43,20 @@ export interface LuaScriptRegistry {
 /** Redis'in yuklu olmayan SHA icin dondurdugu hata isareti. */
 const NOSCRIPT_MARKER = 'NOSCRIPT';
 
+export interface LoadLuaScriptsOptions {
+  /**
+   * Farkli hash-tag'lere BILINCLI olarak dokunan script'lerin adlari (orn.
+   * inventory'nin reserve script'i: stok anahtarlari {market}, kullanici kilidi
+   * resv:user:{userId}; T10.1 karari, bkz. keys.ts userReservationKey).
+   *
+   * Bunlar icin her cagridaki uyari yazilmaz: bilinen ve kabul edilmis bir
+   * durumu her istekte tekrarlamak gunlugu gurultuye bogar, gercek uyarilari
+   * gizler. Yerine yukleme aninda bir kez bilgi satiri yazilir. Tek dugumlu
+   * Redis'te calisir; Cluster'da CROSSSLOT hatasi verir.
+   */
+  readonly crossSlot?: readonly string[];
+}
+
 /**
  * Klasordeki tum .lua dosyalarini Redis'e yukler.
  *
@@ -53,14 +67,34 @@ export async function loadLuaScripts(
   redis: Redis,
   directory: string,
   logger: Logger = silentLogger,
+  options: LoadLuaScriptsOptions = {},
 ): Promise<LuaScriptRegistry> {
-  const scripts = new Map<string, LuaScript>();
+  const sources = readLuaDirectory(directory);
+  const crossSlot = new Set(options.crossSlot ?? []);
+  // Beyan edilip klasorde olmayan ad (yazim hatasi) sessiz kalmasin: o script'in
+  // uyarisi kapanmis sanilir ama beyan hicbir seye uygulanmaz.
+  const missing = [...crossSlot].filter((name) => !sources.some((source) => source.name === name));
+  if (missing.length > 0) {
+    throw AppError.internal('crossSlot icin klasorde olmayan script adi', {
+      details: { missing, directory },
+    });
+  }
 
-  for (const { name, source } of readLuaDirectory(directory)) {
-    scripts.set(name, await register(redis, name, source, logger));
+  const scripts = new Map<string, LuaScript>();
+  for (const { name, source } of sources) {
+    scripts.set(
+      name,
+      await register(redis, { name, source, crossSlot: crossSlot.has(name) }, logger),
+    );
   }
 
   logger.info({ directory, count: scripts.size }, 'lua script yuklendi');
+  for (const name of crossSlot) {
+    logger.info(
+      { script: name },
+      "script bilincli olarak farkli hash-tag'lere dokunur (tek dugumlu Redis)",
+    );
+  }
 
   return {
     names: [...scripts.keys()],
@@ -76,12 +110,19 @@ export async function loadLuaScripts(
   };
 }
 
+interface ScriptDefinition {
+  readonly name: string;
+  readonly source: string;
+  /** Farkli hash-tag'lere dokunmasi beyan edildi mi (LoadLuaScriptsOptions.crossSlot)? */
+  readonly crossSlot: boolean;
+}
+
 async function register(
   redis: Redis,
-  name: string,
-  source: string,
+  definition: ScriptDefinition,
   logger: Logger,
 ): Promise<LuaScript> {
+  const { name, source, crossSlot } = definition;
   let sha = await load(redis, source);
 
   const script: LuaScript = {
@@ -91,8 +132,9 @@ async function register(
     },
     run: async (keys: readonly string[], args: readonly LuaArgument[] = []): Promise<unknown> => {
       // Cluster kurali: tek script'in dokundugu anahtarlar ayni slot'ta olmali.
-      // Tek dugumde calistigi icin ENGELLEMIYORUZ, yalnizca gorunur kiliyoruz.
-      if (!sameHashTag(keys)) {
+      // Tek dugumde calistigi icin ENGELLEMIYORUZ, yalnizca gorunur kiliyoruz
+      // (beyan edilen script'te yukleme aninda bir kez).
+      if (!crossSlot && !sameHashTag(keys)) {
         logger.warn({ script: name, keys }, "script farkli hash-tag'lere dokunuyor");
       }
 

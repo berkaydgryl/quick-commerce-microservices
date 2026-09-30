@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import { MAX_AVAILABILITY_SKUS } from '../../src/config/constants.js';
-import { checkAvailabilityRequestSchema } from '../../src/interfaces/grpc/schemas.js';
+import { CART_ITEM_MAX_QUANTITY, CART_MAX_ITEMS } from '@getir/contracts';
+
+import {
+  MAX_AVAILABILITY_SKUS,
+  RESERVATION_TTL_MAX_SECONDS,
+  RESERVATION_TTL_MIN_SECONDS,
+} from '../../src/config/constants.js';
+import {
+  checkAvailabilityRequestSchema,
+  reserveRequestSchema,
+} from '../../src/interfaces/grpc/schemas.js';
 
 function problems(input: unknown): Record<string, string[] | undefined> {
   const result = checkAvailabilityRequestSchema.safeParse(input);
@@ -52,5 +61,89 @@ describe('CheckAvailability istek semasi', () => {
   it('bos SKU reddedilir; bicimi bozuk ama dolu SKU gecer (unknownSkus a duser)', () => {
     expect(problems({ marketId: 'mkt_a101-caferaga', skus: [''] }).skus).toBeDefined();
     expect(problems({ marketId: 'mkt_a101-caferaga', skus: ['sut 1l'] })).toEqual({});
+  });
+});
+
+describe('Reserve istek semasi (T10.1)', () => {
+  const valid = {
+    orderId: 'ord_00000000000000000000000000000001',
+    darkStoreId: '',
+    marketId: 'mkt_migros-jet-moda',
+    userId: 'usr_00000000000000000000000000000001',
+    items: [
+      { sku: 'SUT-1L', quantity: 2 },
+      { sku: 'KOLA-1L', quantity: 1 },
+    ],
+    ttlSeconds: 600,
+  };
+
+  function reserveProblems(overrides: Record<string, unknown>) {
+    const result = reserveRequestSchema.safeParse({ ...valid, ...overrides });
+    return result.success ? {} : result.error.flatten().fieldErrors;
+  }
+
+  it('gecerli istek; deprecated dark_store_id ciktiya girmez', () => {
+    const parsed = reserveRequestSchema.parse(valid);
+
+    expect(parsed).toEqual({
+      orderId: valid.orderId,
+      marketId: valid.marketId,
+      userId: valid.userId,
+      items: valid.items,
+      ttlSeconds: 600,
+    });
+  });
+
+  it('siparis ve kullanici kimligi BICIMIYLE: ikisi de Redis anahtarina girer', () => {
+    expect(reserveProblems({ orderId: '' }).orderId).toEqual(['zorunlu']);
+    expect(reserveProblems({ orderId: 'ord_1' }).orderId).toEqual([
+      'ord_ onekli kimlik bekleniyor',
+    ]);
+    expect(reserveProblems({ orderId: valid.userId }).orderId).toBeDefined();
+    expect(reserveProblems({ userId: 'usr_x:y' }).userId).toEqual([
+      'usr_ onekli kimlik bekleniyor',
+    ]);
+    expect(reserveProblems({ marketId: 'migros' }).marketId).toBeDefined();
+  });
+
+  it(`kalem: en az 1, en fazla ${CART_MAX_ITEMS}; ayni SKU iki kez reddedilir`, () => {
+    const item = (index: number) => ({ sku: `SKU-${index}`, quantity: 1 });
+    expect(reserveProblems({ items: [] }).items).toEqual(['en az 1 kalem']);
+    expect(
+      reserveProblems({ items: Array.from({ length: CART_MAX_ITEMS }, (_, i) => item(i)) }),
+    ).toEqual({});
+    expect(
+      reserveProblems({ items: Array.from({ length: CART_MAX_ITEMS + 1 }, (_, i) => item(i)) })
+        .items,
+    ).toEqual([`en fazla ${CART_MAX_ITEMS} kalem`]);
+    expect(
+      reserveProblems({
+        items: [
+          { sku: 'SUT-1L', quantity: 1 },
+          { sku: 'SUT-1L', quantity: 2 },
+        ],
+      }).items,
+    ).toEqual(['ayni sku iki kez: SUT-1L']);
+  });
+
+  it(`adet tam sayi 1..${CART_ITEM_MAX_QUANTITY}; SKU bicimi kesin (okumadaki esneklik yok)`, () => {
+    const withItem = (sku: string, quantity: number) =>
+      reserveProblems({ items: [{ sku, quantity }] });
+    expect(withItem('SUT-1L', 0)).not.toEqual({});
+    expect(withItem('SUT-1L', CART_ITEM_MAX_QUANTITY + 1)).not.toEqual({});
+    expect(withItem('SUT-1L', 1.5)).not.toEqual({});
+    expect(withItem('SUT-1L', CART_ITEM_MAX_QUANTITY)).toEqual({});
+    expect(withItem('sut 1l', 1)).not.toEqual({});
+  });
+
+  it(`sure ${RESERVATION_TTL_MIN_SECONDS}..${RESERVATION_TTL_MAX_SECONDS} saniye (koruma; karari order verir)`, () => {
+    expect(reserveProblems({ ttlSeconds: 0 }).ttlSeconds).toEqual([
+      `en az ${RESERVATION_TTL_MIN_SECONDS} saniye`,
+    ]);
+    expect(reserveProblems({ ttlSeconds: RESERVATION_TTL_MAX_SECONDS + 1 }).ttlSeconds).toEqual([
+      `en fazla ${RESERVATION_TTL_MAX_SECONDS} saniye`,
+    ]);
+    expect(reserveProblems({ ttlSeconds: RESERVATION_TTL_MIN_SECONDS })).toEqual({});
+    expect(reserveProblems({ ttlSeconds: 120 })).toEqual({});
   });
 });

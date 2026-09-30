@@ -137,8 +137,10 @@ export function reservationIndexKey(storeId: string): string {
  * Cluster'a gecilirse ayni script iki ayri slot'a dokunur ve CROSSSLOT hatasi
  * alir. O gun icin secenek, kullanici anahtarini da store hash-tag'i altina
  * almak (resv:{store}:user:{userId}) - ama o zaman ayni kullanicinin FARKLI
- * depolardaki ikinci rezervasyonu engellenemez. Karar, Cluster gercekten
- * gerektiginde verilecek; bugun tek dugum kullaniliyor.
+ * depolardaki ikinci rezervasyonu engellenemez. 30 Eylul (T10.1) karari:
+ * kullanici basina TEK anahtar; reserve script'i bunu loadLuaScripts'e
+ * `crossSlot` olarak beyan eder (cagri basina uyari yazilmaz). Cluster'a
+ * gecilirse karar yeniden verilir; bugun tek dugum kullaniliyor.
  */
 export function userReservationKey(userId: string): string {
   requireComponent('userId', userId);

@@ -11,13 +11,20 @@ import { fileURLToPath } from 'node:url';
 
 import { AppError, silentLogger } from '@getir/core';
 import type { Logger } from '@getir/core';
+import { recordingLogger } from '@getir/core/testing';
+import type { LogLine } from '@getir/core/testing';
 import { RedisContainer } from '@testcontainers/redis';
 import type { StartedRedisContainer } from '@testcontainers/redis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { connectRedis } from '../../src/client.js';
 import type { RedisConnection } from '../../src/client.js';
-import { reservationIndexKey, reservationKey, stockAvailKey } from '../../src/keys.js';
+import {
+  reservationIndexKey,
+  reservationKey,
+  stockAvailKey,
+  userReservationKey,
+} from '../../src/keys.js';
 import { loadLuaScripts } from '../../src/scripts/registry.js';
 import type { LuaScriptRegistry } from '../../src/scripts/registry.js';
 
@@ -158,5 +165,42 @@ describe('Lua yukleyici', () => {
     await connection.redis.script('FLUSH');
 
     await expect(scripts.get('decr-if-enough').run([availKey], [1])).resolves.toEqual([1, 2]);
+  });
+});
+
+describe("farkli hash-tag'lere dokunan script (T10.1)", () => {
+  // Stok anahtari {ds_kadikoy}, kullanici kilidi {usr_1}: iki ayri slot.
+  const crossKeys = [stockAvailKey(STORE, SKU), userReservationKey('usr_1')];
+  const warnings = (lines: readonly LogLine[]) => lines.filter((line) => line.level === 'warn');
+
+  it('beyan edilmeyen script her cagrida uyari yazar', async () => {
+    const lines: LogLine[] = [];
+    const registry = await loadLuaScripts(connection.redis, LUA_DIR, recordingLogger(lines));
+
+    await registry.get('count-keys').run(crossKeys);
+    await registry.get('count-keys').run(crossKeys);
+
+    expect(warnings(lines)).toHaveLength(2);
+  });
+
+  it('crossSlot ile beyan edilen script uyarmaz; yuklemede bir kez bilgi satiri yazilir', async () => {
+    const lines: LogLine[] = [];
+    const registry = await loadLuaScripts(connection.redis, LUA_DIR, recordingLogger(lines), {
+      crossSlot: ['count-keys'],
+    });
+
+    await expect(registry.get('count-keys').run(crossKeys)).resolves.toBe(2);
+    await registry.get('count-keys').run(crossKeys);
+
+    expect(warnings(lines)).toEqual([]);
+    expect(
+      lines.filter((line) => line.level === 'info' && line.fields['script'] === 'count-keys'),
+    ).toHaveLength(1);
+  });
+
+  it('beyan edilen ad klasorde yoksa acilista AppError (yazim hatasi sessiz kalmaz)', async () => {
+    await expect(
+      loadLuaScripts(connection.redis, LUA_DIR, silentLogger, { crossSlot: ['resrve'] }),
+    ).rejects.toThrow(AppError);
   });
 });
