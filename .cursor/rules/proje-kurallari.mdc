@@ -139,12 +139,14 @@ Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicid
 - Liste donen her uc sayfalidir. Imlec (cursor) tercih edilir: katalog siralamasi degistigi
   icin offset ile ayni kayit iki kez gorunebilir (`catalog-service/src/domain/pagination.ts`).
   - Sinirli listeler istisnasi: ust siniri KODDA SABIT olan liste sayfalanmaz, sinir okumada
-    uygulanir ve sabitin yorumunda gerekcesi yazar. Bugun dort tane: kategori taksonomisi
+    uygulanir ve sabitin yorumunda gerekcesi yazar. Bugun bes tane: kategori taksonomisi
     (`MAX_CATEGORY_COUNT` = 100; seed fazlasini yazmaz), yakindaki marketler
     (`MARKET_CANDIDATE_LIMIT` = 20), toplu teklif okumasi (`MAX_BATCH_OFFER_IDS` = 100
-    kimlik) ve genel arama (T9.6: en fazla `MARKET_CANDIDATE_LIMIT` market, market basina
-    `SEARCH_RESULT_PRODUCTS_MAX` = 3 urun). Siniri olmayan ya da kullanicinin uretebildigi
-    liste (urunler, siparisler) bu istisnaya giremez.
+    kimlik), genel arama (T9.6: en fazla `MARKET_CANDIDATE_LIMIT` market, market basina
+    `SEARCH_RESULT_PRODUCTS_MAX` = 3 urun) ve adres defteri (T9.5: `SAVED_ADDRESSES_MAX` = 10).
+    Siniri olmayan liste (urunler, siparisler) bu istisnaya giremez. Kullanicinin urettigi
+    liste ancak sinir YAZIMDA da uygulaniyorsa girer: yazan her yol siniri asan kaydi
+    reddeder (adres defteri: persona seed'i; ileride adres ekleme ucu).
 - Proto geriye donuk uyumlu kalir: alan numarasi degistirilmez, silinen alan `reserved`.
 - Hata cevabi tek bicimdedir: `code`, `message`, `details`, `requestId`. gRPC tarafinda
   `x-app-error` metadata'si ayni yuku tasir.

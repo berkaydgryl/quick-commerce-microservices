@@ -8,7 +8,7 @@ package httpapi
 //   search.go     - /v1/search (genel arama, T9.6)
 //   orders.go     - /v1/cart/reserve ve /v1/orders uclari (T7.5)
 //   order_body.go - siparis uclarinin istek govdeleri ve bicim dogrulamasi
-//   auth.go       - /v1/auth ve /v1/me uclari (T8.1)
+//   auth.go       - /v1/auth, /v1/me ve /v1/me/addresses uclari (T8.1, T9.5)
 //   auth_body.go  - kimlik uclarinin istek govdeleri
 //   identity.go   - kullanici kimligi (Bearer erisim jetonu, T8.1)
 //   device.go     - cihaz cerezi (risk sinyali, T8.1)
@@ -119,6 +119,11 @@ type ProfileGetter interface {
 	Profile(ctx context.Context, userID string) (auth.Profile, error)
 }
 
+// AddressBookGetter, GET /v1/me/addresses (adres defteri, T9.5).
+type AddressBookGetter interface {
+	Addresses(ctx context.Context, userID string) (auth.AddressBook, error)
+}
+
 // CheckoutSignalReader, POST /v1/orders'in risk sinyalleri (T8.1): oturum ve
 // kullanici kaydindan; gercegi auth.Service.
 type CheckoutSignalReader interface {
@@ -154,6 +159,7 @@ type Deps struct {
 	SessionRefresher  SessionRefresher
 	SessionRevoker    SessionRevoker
 	ProfileGetter     ProfileGetter
+	AddressBook       AddressBookGetter
 	CheckoutSignals   CheckoutSignalReader
 	// AccessTokens, korumali uclarin jeton dogrulayicisi.
 	AccessTokens AccessTokenVerifier
@@ -225,6 +231,7 @@ func New(deps Deps) *fiber.App {
 	// /v1 grubuna Use ile verilseydi katalog ve giris uclari da kimlik isterdi.
 	user := requireUser(deps.AccessTokens)
 	v1.Get("/me", user, generalByUser, meHandler(deps.ProfileGetter))
+	v1.Get("/me/addresses", user, generalByUser, addressesHandler(deps.AddressBook))
 	v1.Post("/cart/reserve", user, orderByUser, mutation, reserveCartHandler(deps.CartReserver))
 	v1.Post("/orders", user, orderByUser, checkout, placeOrderHandler(deps.OrderPlacer, deps.CheckoutSignals))
 	v1.Post("/orders/:"+orderIDParam+"/3ds", user, orderByUser, checkout, confirmThreeDSHandler(deps.ThreeDSConfirmer))

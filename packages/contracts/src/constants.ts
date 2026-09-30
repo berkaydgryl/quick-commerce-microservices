@@ -61,6 +61,15 @@ export const ADDRESS_LINE_MAX_LENGTH = 240;
 export const ADDRESS_NOTE_MAX_LENGTH = 240;
 
 /**
+ * Adres defterinin ust siniri (T9.5). Adres defteri kullanicinin urettigi bir
+ * listedir; sayfalanmaz, SINIRLIDIR (proje kurallari, "Sinirli listeler
+ * istisnasi"): yazan her yol (persona seed'i; ileride adres ekleme ucu) siniri
+ * asan kaydi reddeder, okuma da siniri uygular. Gateway'deki karsiligi
+ * auth.MaxSavedAddresses (rules_contract_test esitligini denetler).
+ */
+export const SAVED_ADDRESSES_MAX = 10;
+
+/**
  * Kupon kodunun en uzun hali (ornek: ILK10). Bilinmeyen kod zaten
  * COUPON_INVALID alir; sinir, sinirsiz metnin kapidan gecmemesi icindir.
  * REST rezervasyon govdesi ve order-service'in gRPC semasi ayni degeri

@@ -230,6 +230,19 @@ func (s *Service) Profile(ctx context.Context, userID string) (Profile, error) {
 	return user.Profile(), nil
 }
 
+// Addresses, oturumdaki kullanicinin adres defteri (T9.5): web'in adres
+// secimi buradan okur. Kullanici silinmisse UNAUTHORIZED (Profile gibi).
+func (s *Service) Addresses(ctx context.Context, userID string) (AddressBook, error) {
+	user, err := s.deps.Users.ByID(ctx, userID)
+	if errors.Is(err, ErrUserNotFound) {
+		return AddressBook{}, apperror.New(apperror.CodeUnauthorized, nil)
+	}
+	if err != nil {
+		return AddressBook{}, fmt.Errorf("kullanici okunamadi: %w", err)
+	}
+	return user.AddressBook(), nil
+}
+
 // sessionStart, yeni oturumun sinyal alanlari.
 type sessionStart struct {
 	deviceID          string

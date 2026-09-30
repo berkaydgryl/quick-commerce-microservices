@@ -161,6 +161,11 @@ func (s Set) validate() error {
 	if len(s.Addresses) == 0 {
 		problems = append(problems, errors.New("hazir adres yok"))
 	}
+	// Adres defteri sinirlidir (auth.MaxSavedAddresses): seed siniri asan
+	// defteri yazmaz, okuma kesmesi sessiz veri kaybina donusmesin.
+	if len(s.Addresses) > auth.MaxSavedAddresses {
+		problems = append(problems, fmt.Errorf("hazir adres en fazla %d olmali: %d", auth.MaxSavedAddresses, len(s.Addresses)))
+	}
 	return errors.Join(problems...)
 }
 

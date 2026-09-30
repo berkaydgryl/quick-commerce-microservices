@@ -413,6 +413,59 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /v1/me/addresses:
+    get:
+      tags: [auth]
+      operationId: listSavedAddresses
+      summary: Oturumdaki kullanıcının adres defteri (T9.5)
+      description: |
+        Kayıtlı adresler, kayıt sırasında. Web'in adres seçimi buradan okur;
+        seçilen adres yakındaki marketleri ve genel aramayı besler. Demo
+        personalarında hazır üç adres vardır (Ev, İş, Yazlık); adresi olmayan
+        hesapta BOŞ liste döner — hata değil.
+
+        Sayfasız SINIRLI liste: en fazla 10 adres (`SAVED_ADDRESSES_MAX`; proje
+        kuralları, "Sınırlı listeler istisnası"). Yazan her yol sınırı aşan
+        kaydı reddeder. Kişisel veridir: önbelleğe alınmaz.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Adres defteri
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            maxItems: 10
+                            items:
+                              $ref: "#/components/schemas/SavedAddress"
+        "400":
+          description: Bilinmeyen sorgu parametresi (VALIDATION_FAILED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /v1/categories:
     get:
       tags: [catalog]
@@ -2330,6 +2383,28 @@ components:
           description: Serbest metin adres; yalnızca gösterim içindir.
         location:
           $ref: "#/components/schemas/GeoPoint"
+
+    SavedAddress:
+      type: object
+      description: |
+        Kayıtlı adres (adres defteri, T8.1 users.addresses[]): teslimat adresi +
+        etiket + isteğe bağlı not. Siparişe giderken yalnızca `line` ve
+        `location` taşınır (`DeliveryAddress`).
+      required: [title, line, location]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          description: Kullanıcının verdiği ad ("Ev", "İş").
+        line:
+          type: string
+          minLength: 1
+          maxLength: 240
+        location:
+          $ref: "#/components/schemas/GeoPoint"
+        note:
+          type: string
+          maxLength: 240
 
     CreateOrderRequest:
       type: object

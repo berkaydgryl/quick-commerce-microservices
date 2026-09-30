@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,9 +15,10 @@ import (
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rest"
 )
 
-// fakeProfiles, /v1/me'nin arkasindaki servisin yerine gecer.
+// fakeProfiles, /v1/me ve /v1/me/addresses'in arkasindaki servisin yerine gecer.
 type fakeProfiles struct {
 	userID string
 	called bool
@@ -25,6 +27,11 @@ type fakeProfiles struct {
 func (f *fakeProfiles) Profile(_ context.Context, userID string) (auth.Profile, error) {
 	f.called, f.userID = true, userID
 	return auth.Profile{ID: userID, Phone: "+905321234567", FullName: "Test Kullanici"}, nil
+}
+
+func (f *fakeProfiles) Addresses(_ context.Context, userID string) (auth.AddressBook, error) {
+	f.called, f.userID = true, userID
+	return auth.AddressBook{Items: []auth.AddressEntry{{Title: "Ev", Line: "Moda Cad. 12", Location: rest.GeoPoint{Lat: 40.9885, Lng: 29.0262}}}}, nil
 }
 
 // protectedApp, korumali uclarin hepsini (siparis + /v1/me) tasiyan uygulama.
@@ -36,6 +43,7 @@ func protectedApp(orders *fakeOrders, profiles *fakeProfiles, logger *slog.Logge
 		ThreeDSConfirmer: orders,
 		OrderGetter:      orders,
 		ProfileGetter:    profiles,
+		AddressBook:      profiles,
 		CheckoutSignals:  &fakeSignals{},
 		AccessTokens:     testTokens(),
 		Idempotency:      testIdempotency(),
@@ -46,6 +54,7 @@ func protectedApp(orders *fakeOrders, profiles *fakeProfiles, logger *slog.Logge
 // protectedRoutes, erisim jetonu isteyen uclar. T8.1 kabul olcutu: jetonsuz 401.
 var protectedRoutes = []struct{ method, path, body string }{
 	{http.MethodGet, "/v1/me", ""},
+	{http.MethodGet, "/v1/me/addresses", ""},
 	{http.MethodPost, "/v1/cart/reserve", validReserveBody},
 	{http.MethodPost, "/v1/orders", validPlaceBody},
 	{http.MethodPost, "/v1/orders/" + testOrderID + "/3ds", `{"challengeId":"tds_1","otp":"123456"}`},
@@ -146,6 +155,57 @@ func TestMeReceivesUserFromToken(t *testing.T) {
 	}
 	if got := response.Header.Get(fiber.HeaderCacheControl); got != noStore {
 		t.Errorf("profil onbelleklenmemeli: Cache-Control %q", got)
+	}
+}
+
+func TestAddressBookReceivesUserFromToken(t *testing.T) {
+	profiles := &fakeProfiles{}
+	app := protectedApp(&fakeOrders{}, profiles, silentLogger())
+
+	response, err := app.Test(orderRequest(t, http.MethodGet, "/v1/me/addresses", "", nil))
+	if err != nil {
+		t.Fatalf("istek basarisiz: %v", err)
+	}
+	envelope := decode(t, response)
+
+	if response.StatusCode != http.StatusOK || profiles.userID != testUserID {
+		t.Fatalf("200 ve jetondaki kullanici bekleniyordu: %d %q %+v", response.StatusCode, profiles.userID, envelope)
+	}
+	// Adres kisisel veridir: profil gibi onbelleklenmez.
+	if got := response.Header.Get(fiber.HeaderCacheControl); got != noStore {
+		t.Errorf("adres defteri onbelleklenmemeli: Cache-Control %q", got)
+	}
+	// JSON nesnesi cozulup yeniden yazilinca anahtarlar alfabetik siralanir.
+	data, err := json.Marshal(envelope.Data)
+	if err != nil {
+		t.Fatalf("data yeniden yazilamadi: %v", err)
+	}
+	if want := `{"items":[{"line":"Moda Cad. 12","location":{"lat":40.9885,"lng":29.0262},"title":"Ev"}]}`; string(data) != want {
+		t.Errorf("zarfin data alani adres defteri olmali:\n got %s\nwant %s", data, want)
+	}
+}
+
+func TestAddressBookRejectsUnknownQuery(t *testing.T) {
+	profiles := &fakeProfiles{}
+	app := protectedApp(&fakeOrders{}, profiles, silentLogger())
+
+	status, envelope := send(t, app, orderRequest(t, http.MethodGet, "/v1/me/addresses?sayfa=2", "", nil))
+
+	if status != http.StatusBadRequest || detailsOf(t, envelope)["sayfa"] != unknownQueryReason || profiles.called {
+		t.Errorf("bilinmeyen parametre 400 donmeli, servis cagrilmamali: %d %+v", status, envelope)
+	}
+}
+
+func TestAddressBookCountsTowardsTheGeneralUserLimit(t *testing.T) {
+	// Kimlikli uc: /v1/me gibi KULLANICI basina genel sinira tabidir.
+	app := limitedApp(t, memoryLimits(newTestClock(), 1, 10, 10), &fakeOrders{}, silentLogger())
+	headers := bearerFor(t, testUserID)
+
+	if status, _, _ := getStatus(t, app, "/v1/me/addresses", headers); status != http.StatusOK {
+		t.Fatalf("ilk istek 200 donmeli: %d", status)
+	}
+	if status, _, _ := getStatus(t, app, "/v1/me/addresses", headers); status != http.StatusTooManyRequests {
+		t.Errorf("ikinci istek sinira takilmali (429): %d", status)
 	}
 }
 

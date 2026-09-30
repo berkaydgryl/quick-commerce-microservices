@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/ids"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rest"
 )
 
 // User, kullanici kaydi (users koleksiyonu; sahibi gateway, ADR-05).
@@ -25,8 +26,8 @@ type User struct {
 	// LastLocation, son bilinen oturum konumu. IP bir konuma cozulemezse yeni
 	// oturum bunu devralir; hic bilinmiyorsa nil.
 	LastLocation *GeoPoint
-	// Addresses, kayitli adresler (adres defteri). Demo adresleri persona
-	// seed'iyle gelir; okuyan uc web'in adres secimiyle (T9.5) gelir.
+	// Addresses, kayitli adresler (adres defteri), en fazla MaxSavedAddresses.
+	// Demo adresleri persona seed'iyle gelir; GET /v1/me/addresses okur (T9.5).
 	Addresses []SavedAddress
 }
 
@@ -55,6 +56,48 @@ type Profile struct {
 // Profile, kaydin istemciye gidebilen kismi.
 func (u User) Profile() Profile {
 	return Profile{ID: u.ID, Phone: u.Phone, FullName: u.FullName}
+}
+
+// MaxSavedAddresses, adres defterinin ust siniri (@getir/contracts
+// SAVED_ADDRESSES_MAX; rules_contract_test esitligini denetler).
+//
+// Adres defteri kullanicinin urettigi bir listedir; sayfalanmaz, SINIRLIDIR
+// (proje kurallari, "Sinirli listeler istisnasi"): yazan her yol siniri asan
+// kaydi reddeder (persona seed'i; ileride adres ekleme ucu), okuma da siniri
+// uygular. Demoda 3 adres var; 10, bir kisinin adres defteri icin cok genis.
+const MaxSavedAddresses = 10
+
+// AddressBook, istemciye giden adres defteri (@getir/contracts
+// savedAddressListSchema). Bos defter JSON'da [] olur, null DEGIL.
+type AddressBook struct {
+	Items []AddressEntry `json:"items"`
+}
+
+// AddressEntry, istemciye giden kayitli adres (@getir/contracts savedAddressSchema).
+type AddressEntry struct {
+	Title    string        `json:"title"`
+	Line     string        `json:"line"`
+	Location rest.GeoPoint `json:"location"`
+	// Note istege baglidir: bossa alan hic yazilmaz.
+	Note string `json:"note,omitempty"`
+}
+
+// AddressBook, kaydin adres defteri: kayit sirasinda, en fazla MaxSavedAddresses.
+func (u User) AddressBook() AddressBook {
+	addresses := u.Addresses
+	if len(addresses) > MaxSavedAddresses {
+		addresses = addresses[:MaxSavedAddresses]
+	}
+	items := make([]AddressEntry, 0, len(addresses))
+	for _, address := range addresses {
+		items = append(items, AddressEntry{
+			Title:    address.Title,
+			Line:     address.Line,
+			Location: rest.GeoPoint{Lat: address.Location.Lat, Lng: address.Location.Lng},
+			Note:     address.Note,
+		})
+	}
+	return AddressBook{Items: items}
 }
 
 // Session, bir girisin sunucudaki kaydi (sessions koleksiyonu).

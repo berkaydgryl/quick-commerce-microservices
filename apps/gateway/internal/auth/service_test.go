@@ -2,7 +2,9 @@ package auth_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -308,6 +310,71 @@ func TestProfile(t *testing.T) {
 		t.Errorf("profil donmeli: %+v %v", profile, err)
 	}
 	if _, err := f.service.Profile(context.Background(), ids.New(ids.User)); codeOf(err) != apperror.CodeUnauthorized {
+		t.Errorf("olmayan kullanici UNAUTHORIZED donmeli: %v", err)
+	}
+}
+
+func TestAddressBook(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	home := auth.SavedAddress{Title: "Ev", Line: "Moda Cad. 12", Location: auth.GeoPoint{Lat: 40.9885, Lng: 29.0262}, Note: "Zil bozuk"}
+	work := auth.SavedAddress{Title: "İş", Line: "Barbaros Blv. 40", Location: auth.GeoPoint{Lat: 41.0431, Lng: 29.0071}}
+	user := auth.User{ID: ids.New(ids.User), Phone: "+905551112299", FullName: "Adres Sahibi", Addresses: []auth.SavedAddress{home, work}}
+	if err := f.users.Create(ctx, user); err != nil {
+		t.Fatalf("kullanici yazilamadi: %v", err)
+	}
+
+	book, err := f.service.Addresses(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("adres defteri donmeli: %v", err)
+	}
+
+	// Kayit sirasinda, sozlesmenin bicimiyle; bos not yazilmaz.
+	encoded, err := json.Marshal(book)
+	if err != nil {
+		t.Fatalf("JSON: %v", err)
+	}
+	want := `{"items":[{"title":"Ev","line":"Moda Cad. 12","location":{"lat":40.9885,"lng":29.0262},"note":"Zil bozuk"},` +
+		`{"title":"İş","line":"Barbaros Blv. 40","location":{"lat":41.0431,"lng":29.0071}}]}`
+	if string(encoded) != want {
+		t.Errorf("JSON:\n got %s\nwant %s", encoded, want)
+	}
+}
+
+func TestAddressBookOfAccountWithoutAddressesIsEmptyArray(t *testing.T) {
+	f := newFixture(t)
+	registered := f.register(t)
+
+	book, err := f.service.Addresses(context.Background(), registered.User.ID)
+	if err != nil {
+		t.Fatalf("hata beklenmiyordu: %v", err)
+	}
+	encoded, err := json.Marshal(book)
+	if err != nil {
+		t.Fatalf("JSON: %v", err)
+	}
+	if string(encoded) != `{"items":[]}` {
+		t.Errorf("adresi olmayan hesap bos liste donmeli ([] - null degil): %s", encoded)
+	}
+}
+
+func TestAddressBookIsBoundedAndDeletedUserIsUnauthorized(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	many := make([]auth.SavedAddress, 0, auth.MaxSavedAddresses+2)
+	for i := range auth.MaxSavedAddresses + 2 {
+		many = append(many, auth.SavedAddress{Title: fmt.Sprintf("Adres %d", i), Line: "Sokak", Location: auth.GeoPoint{Lat: 41, Lng: 29}})
+	}
+	user := auth.User{ID: ids.New(ids.User), Phone: "+905551112298", FullName: "Cok Adres", Addresses: many}
+	if err := f.users.Create(ctx, user); err != nil {
+		t.Fatalf("kullanici yazilamadi: %v", err)
+	}
+
+	book, err := f.service.Addresses(ctx, user.ID)
+	if err != nil || len(book.Items) != auth.MaxSavedAddresses || book.Items[0].Title != "Adres 0" {
+		t.Errorf("okuma siniri uygulamali (ilk %d, kayit sirasinda): %d kalem, %v", auth.MaxSavedAddresses, len(book.Items), err)
+	}
+	if _, err := f.service.Addresses(ctx, ids.New(ids.User)); codeOf(err) != apperror.CodeUnauthorized {
 		t.Errorf("olmayan kullanici UNAUTHORIZED donmeli: %v", err)
 	}
 }

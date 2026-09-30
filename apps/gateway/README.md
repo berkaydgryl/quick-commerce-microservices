@@ -7,7 +7,7 @@ Pnpm workspace'inin parçası değildir: kendi Go modülüdür (`go.mod`). `pnpm
 kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go mod tidy -diff`,
 `-race` testleri, Mongo ve Redis entegrasyon testleri, statik derleme).
 
-## Bugünkü durum (D8 — Go kuralları CI'da; T7.5 — sipariş uçları; T8.1 — kimlik; T8.2 — tekrar koruması ve hız sınırı; T8.3 — panik kurtarma ve zarf taraması; T8.4 — ürün listesinde stok; T9.6 — genel arama; pazaryeri uçları T8.4'ten öne alındı)
+## Bugünkü durum (D8 — Go kuralları CI'da; T7.5 — sipariş uçları; T8.1 — kimlik; T8.2 — tekrar koruması ve hız sınırı; T8.3 — panik kurtarma ve zarf taraması; T8.4 — ürün listesinde stok; T9.6 — genel arama; T9.5 — adres defteri; pazaryeri uçları T8.4'ten öne alındı)
 
 | Parça                | Durum                                                           |
 | -------------------- | --------------------------------------------------------------- |
@@ -33,6 +33,7 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `POST /v1/auth/refresh` | ✅ Yenileme jetonu her kullanımda değişir; eskisi bir daha geçmez |
 | `POST /v1/auth/logout` | ✅ Yenileme jetonunu iptal eder; tekrarı zararsız (`revoked:false`) |
 | `GET /v1/me`         | ✅ Jetondaki kullanıcının profili |
+| `GET /v1/me/addresses` | ✅ Adres defteri (T9.5): kayıtlı adresler, kayıt sırasında; en fazla 10 (sınırlı liste); önbelleğe alınmaz |
 | Kullanıcı kimliği    | ✅ `Authorization: Bearer` JWT (HS256); `X-User-Id` kalktı (T8.1) |
 | Kimlik deposu        | ✅ Mongo `users` + `sessions` (TTL indeksi); MOCK'ta bellek |
 | Sipariş risk sinyalleri | ✅ `CheckoutSignals`'ın 7 alanı oturum ve kullanıcı kaydından (T8.1); cihaz çerezi `getir_device` |
@@ -256,7 +257,7 @@ bellek içi sayaç sınırı örnek sayısı kadar gevşetirdi (proje kuralları
 | `POST /v1/auth/refresh`, `/v1/auth/logout` (T8.5)         | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
 | `POST /v1/cart/reserve`, `/v1/orders`, `/v1/orders/{id}/3ds` | `RATE_LIMIT_ORDER_MAX_REQUESTS` (20) | kullanıcı   |
 | Katalog, market ve genel arama uçları                     | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
-| `GET /v1/me`, `GET /v1/orders/{id}`                       | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
+| `GET /v1/me`, `/v1/me/addresses`, `GET /v1/orders/{id}`   | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
 | `/healthz`                                                | sınırsız                         | —           |
 
 - **Anahtar:** `rate:{ozne}:POST_/v1/orders/id/3ds` (`@getir/redis-kit` `rateLimitKey`;
