@@ -34,7 +34,8 @@ export interface CatalogSource {
 
 /**
  * Mongo modunda indeksler acilista olusturulur: sorgular (ozellikle
- * 2dsphere) indekse dayanir ve indeks yoksa ilk istek hata ile doner.
+ * 2dsphere) indekse dayanir ve indeks yoksa ilk istek hata ile doner. Saklanan
+ * arama terimlerinin bicimi de denetlenir (T9.4): eskiyse uyari, acilis durmaz.
  */
 export async function openCatalogSource(
   mongo: MongoEnv | undefined,
@@ -59,6 +60,14 @@ export async function openCatalogSource(
   const repositories = createMongoCatalogRepositories(connection.db);
   try {
     await ensureCatalogIndexes(repositories);
+    // Arama terimleri seed'de yazilir (T9.4: Turkce karakter katlama). Eski
+    // bicimde kalmislarsa arama sessizce eksik sonuc verir: uyari yazilir.
+    if (await repositories.offers.hasStaleSearchTerms()) {
+      logger.warn(
+        {},
+        'arama terimleri eski bicimde (Turkce karakterler katlanmamis); aramanin dogru calismasi icin pnpm seed calistirin',
+      );
+    }
   } catch (error: unknown) {
     // Baglanti acik kalirsa process kapanmaz ve hata gizlenir.
     await connection.close();

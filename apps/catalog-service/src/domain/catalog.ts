@@ -147,14 +147,43 @@ function compareIds(left: string, right: string): number {
 }
 
 /**
- * Aramada karsilastirilacak bicim: Turkce kurallariyla kucuk harf.
+ * Aramada karsilastirilacak bicim: Turkce kurallariyla kucuk harf, sonra
+ * Turkce karakterler KATLANIR (T9.4): "Süt" -> "sut", "ÇİKOLATA" -> "cikolata",
+ * "Işık" -> "isik". Klavyesinde Turkce karakter olmayan kullanici "sut" yazarak
+ * "Süt"u bulur; "süt" yazan da ayni sonucu alir.
  *
  * Bellek ve Mongo uygulamasi AYNI normalizasyonu kullanir. Mongo'nun regex
  * "i" bayragi Turkce'yi bilmez ("İ" ile "i" eslesmez); bu yuzden Mongo tarafi
- * bu fonksiyonun ciktisini YAZIM ANINDA saklar (offers.searchTerms).
+ * bu fonksiyonun ciktisini YAZIM ANINDA saklar (offers.searchTerms). Fonksiyon
+ * degisirse saklanan terimler eskir: pnpm seed yeniden yazar, acilis denetimi
+ * eskisini uyari olarak bildirir.
  */
 export function searchKey(text: string): string {
-  return text.trim().toLocaleLowerCase('tr');
+  return (
+    text
+      .trim()
+      .toLocaleLowerCase('tr')
+      // Birlesik isaretler ayrilip atilir: ç ş ğ ö ü (ve â î û).
+      .normalize('NFD')
+      .replace(/\p{M}/gu, '')
+      // Noktasiz i ayrismaz; elle katlanir.
+      .replace(/ı/g, 'i')
+  );
+}
+
+/**
+ * Sorgunun kelimeleri (T9.4): bosluklarla ayrilir, her biri searchKey'den
+ * gecer, tekrar eden kelime tek sayilir. Urun, kelimelerin HEPSI adinda ya da
+ * aciklamasinda geciyorsa eslesir; kelimelerin sirasi onemsizdir.
+ */
+export function searchWords(query: string): readonly string[] {
+  return [
+    ...new Set(
+      searchKey(query)
+        .split(/\s+/)
+        .filter((word) => word !== ''),
+    ),
+  ];
 }
 
 /** Bir urunun aranan metinleri: ad ve aciklama, normalize edilmis. */
@@ -162,8 +191,12 @@ export function searchTermsOf(product: Product): readonly string[] {
   return [searchKey(product.name), searchKey(product.description)];
 }
 
-/** Serbest metin aramasi: ad ve aciklamada, buyuk/kucuk harf duyarsiz. */
+/**
+ * Serbest metin aramasi: her kelime ad ya da aciklamada gecmeli (sira
+ * onemsiz), buyuk/kucuk harf ve Turkce karakter duyarsiz. Kelime icinde de
+ * eslesir: "çik" -> "Çikolata" (yazarken arama, T9.5).
+ */
 export function matchesQuery(product: Product, query: string): boolean {
-  const needle = searchKey(query);
-  return searchTermsOf(product).some((term) => term.includes(needle));
+  const terms = searchTermsOf(product);
+  return searchWords(query).every((word) => terms.some((term) => term.includes(word)));
 }

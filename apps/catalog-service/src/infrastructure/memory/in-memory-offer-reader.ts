@@ -1,7 +1,7 @@
 /**
  * Teklif okuyucunun BELLEK uygulamasi. Mongo'daki karsiliklari birebir:
  *   - market + kategori  -> { marketId, categoryId }
- *   - metin aramasi      -> searchTerms uzerinde regex (searchKey ile normalize)
+ *   - metin aramasi      -> kelime basina searchTerms regex'i, $and (searchWords ile normalize)
  *   - imlecli sayfalama  -> { _id: { $gt: token } } + sort({ _id: 1 }) + limit
  */
 

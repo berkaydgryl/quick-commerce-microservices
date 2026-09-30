@@ -53,8 +53,8 @@ describe('mongo mappers', () => {
 
     expect(document._id).toBe('ofr_a101-caferaga-cikolata-80');
     expect(document.categoryId).toBe(chocolate.categoryId);
-    // Turkce kucuk harf: "Çikolata 80 g" -> "çikolata 80 g"
-    expect(document.searchTerms).toEqual(['çikolata 80 g', 'sütlü çikolata']);
+    // Turkce kucuk harf ve katlama (T9.4): "Çikolata 80 g" -> "cikolata 80 g"
+    expect(document.searchTerms).toEqual(['cikolata 80 g', 'sutlu cikolata']);
     expect(document.productId).toBe(chocolate.id);
     expect(fromOfferDocument(document)).toEqual(offer);
   });

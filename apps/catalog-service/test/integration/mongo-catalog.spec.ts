@@ -30,7 +30,10 @@ import {
   ensureCatalogIndexes,
 } from '../../src/infrastructure/mongo/mongo-catalog.js';
 import { MongoCatalogSeeder } from '../../src/infrastructure/mongo/mongo-catalog-seeder.js';
-import { offersByProductIdsFilter } from '../../src/infrastructure/mongo/offer-repository.js';
+import {
+  listOffersFilter,
+  offersByProductIdsFilter,
+} from '../../src/infrastructure/mongo/offer-repository.js';
 import { describeCategoryReaderContract } from '../support/category-reader-contract.js';
 import { DEMO_ADDRESSES, demoLocation, EXPECTED_NEARBY } from '../support/demo-addresses.js';
 import { describeMarketReaderContract } from '../support/market-reader-contract.js';
@@ -225,6 +228,56 @@ function planStages(
   }
   return found;
 }
+
+/** executionStats: kac belge incelendi, kac belge dondu. */
+const executionSchema = z.object({
+  queryPlanner: z.object({ winningPlan: z.unknown() }),
+  executionStats: z.object({ nReturned: z.number(), totalDocsExamined: z.number() }),
+});
+
+describe('arama - gercek Mongo (T9.4)', () => {
+  const MODA = 'mkt_migros-jet-moda';
+
+  it('cok kelimeli arama market indeksinden okunur: koleksiyon taramasi yok, inceleme o marketin teklifleriyle sinirli', async () => {
+    const offers = connection.db.collection<OfferDocument>(COLLECTIONS.OFFERS);
+    const marketOffers = await offers.countDocuments({ marketId: MODA });
+    // Deponun GERCEK filtresi ve siralamasi (listOffers ile ayni).
+    const plan: unknown = await offers
+      .find(listOffersFilter({ marketId: MODA, query: 'peynir beyaz' }))
+      .sort({ _id: 1 })
+      .limit(51)
+      .explain('executionStats');
+
+    const { queryPlanner, executionStats } = executionSchema.parse(plan);
+    const { stages } = planStages(queryPlanner.winningPlan);
+    expect(stages).toContain('IXSCAN');
+    expect(stages).not.toContain('COLLSCAN');
+    expect(executionStats.nReturned).toBe(1);
+    expect(executionStats.totalDocsExamined).toBeLessThanOrEqual(marketOffers);
+  });
+
+  it('eski bicimdeki arama terimi acilis denetimine yakalanir; katlanmis sorgu onu bulamaz', async () => {
+    expect(await repositories.offers.hasStaleSearchTerms()).toBe(false);
+    await connection.db
+      .collection<OfferDocument>(COLLECTIONS.OFFERS)
+      .updateOne(
+        { _id: 'ofr_migros-jet-moda-sut-1l' },
+        { $set: { searchTerms: ['süt 1 l', 'günlük pastörize tam yağlı süt'] } },
+      );
+    try {
+      expect(await repositories.offers.hasStaleSearchTerms()).toBe(true);
+      const found = await repositories.offers.listOffers(
+        { marketId: MODA, query: 'süt 1' },
+        { size: 50, token: '' },
+      );
+      expect(found.items.map((offer) => offer.product.sku)).not.toContain('SUT-1L');
+    } finally {
+      // pnpm seed'in yaptigi: terimler yeniden yazilir.
+      await seed();
+    }
+    expect(await repositories.offers.hasStaleSearchTerms()).toBe(false);
+  });
+});
 
 describe('BatchGetOffers - gercek Mongo (T9.3)', () => {
   it('deponun GERCEK filtresi market_product_unique ile okunur; kazanan planda koleksiyon taramasi yok', async () => {

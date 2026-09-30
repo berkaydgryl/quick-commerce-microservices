@@ -5,6 +5,8 @@ import {
   matchesQuery,
   offerIdFor,
   PRODUCT_UNIT,
+  searchKey,
+  searchWords,
   sortCategories,
   sortOffers,
 } from '../../src/domain/catalog.js';
@@ -87,6 +89,28 @@ describe('offerIdFor', () => {
   });
 });
 
+describe('searchKey (T9.4)', () => {
+  it.each([
+    ['Süt', 'sut'],
+    ['ÇİKOLATA', 'cikolata'],
+    ['IŞIK', 'isik'],
+    ['İthal muz', 'ithal muz'],
+    ['Çengelköy', 'cengelkoy'],
+    ['  Tereyağı ', 'tereyagi'],
+    ['hâlâ', 'hala'],
+    ['%100 portakal', '%100 portakal'],
+  ])('%s -> %s: Turkce kurallarla kucuk harf, Turkce karakterler katlanir', (text, key) => {
+    expect(searchKey(text)).toBe(key);
+  });
+});
+
+describe('searchWords (T9.4)', () => {
+  it('bosluklarla ayrilir, normalize edilir, tekrar eden tek sayilir', () => {
+    expect(searchWords('  Beyaz   PEYNİR ')).toEqual(['beyaz', 'peynir']);
+    expect(searchWords('süt SÜT sut')).toEqual(['sut']);
+  });
+});
+
 describe('matchesQuery', () => {
   it('ad ve aciklamada arar', () => {
     expect(matchesQuery(product, 'süt')).toBe(true);
@@ -95,6 +119,21 @@ describe('matchesQuery', () => {
 
   it('buyuk/kucuk harf duyarsizdir', () => {
     expect(matchesQuery(product, 'SÜT')).toBe(true);
+  });
+
+  it('Turkce karakter duyarsizdir: "sut" da "Süt"u bulur (T9.4)', () => {
+    expect(matchesQuery(product, 'sut')).toBe(true);
+    expect(matchesQuery(product, 'pastorize tam yagli')).toBe(true);
+  });
+
+  it('kelime icinde de eslesir: yazarken arama (T9.4)', () => {
+    expect(matchesQuery(product, 'pastö')).toBe(true);
+  });
+
+  it('cok kelimede her kelime gecmeli, sira onemsiz; kelimeler ad ve aciklamaya dagilabilir (T9.4)', () => {
+    expect(matchesQuery(product, '1 süt')).toBe(true);
+    expect(matchesQuery(product, 'süt günlük')).toBe(true);
+    expect(matchesQuery(product, 'süt kola')).toBe(false);
   });
 
   it('eslesmeyen sorguda false doner', () => {

@@ -1,7 +1,7 @@
 import type { Db, Filter, IndexDescription } from 'mongodb';
 
 import type { Offer } from '../../domain/catalog.js';
-import { searchKey } from '../../domain/catalog.js';
+import { searchWords } from '../../domain/catalog.js';
 import type { OfferFilter, OfferPage, OfferReader, PageQuery } from '../../domain/offer-reader.js';
 import type { OfferDocument } from './documents.js';
 import { COLLECTIONS } from './documents.js';
@@ -12,6 +12,12 @@ import { ReplaceableRepository } from './replaceable-repository.js';
 function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+/**
+ * Katlanmamis (T9.4 oncesi bicimdeki) arama terimini ele veren harfler:
+ * searchKey bunlari hic uretmez. Saklanan terimde goruluyorsa terimler eskidir.
+ */
+const UNFOLDED_SEARCH_TERM = '[çğıöşüâîû]';
 
 export class OfferRepository extends ReplaceableRepository<OfferDocument> implements OfferReader {
   constructor(db: Db) {
@@ -24,8 +30,12 @@ export class OfferRepository extends ReplaceableRepository<OfferDocument> implem
    *                                    BatchGetOffers (T9.3) bu indeksten okur.
    *   - marketId + categoryId + _id  : market sayfasi kategori filtresi + imlec.
    *   - marketId + _id               : filtresiz market sayfasi + imlec.
-   * Metin aramasi (searchTerms uzerinde basi acik regex) indeks KULLANAMAZ;
-   * market basina teklif sayisi kucuk oldugu icin bilincli olarak kabul edildi.
+   * Metin aramasi (searchTerms uzerinde basi acik regex) arama indeksi
+   * KULLANAMAZ: market indeksinden (market_cursor) o marketin teklifleri okunur,
+   * kelimeler onlarin uzerinde suzulur. Market basina teklif sayisi kucuk
+   * oldugu icin bilincli olarak kabul edildi (T9.4; entegrasyon testi plani
+   * dogrular). Mongo metin indeksi ($text) yalnizca tam kelime eslestirir:
+   * "çik" -> "Çikolata" (yazarken arama) onunla yapilamaz.
    */
   protected override indexes(): readonly IndexDescription[] {
     return [
@@ -41,7 +51,7 @@ export class OfferRepository extends ReplaceableRepository<OfferDocument> implem
    * gelirse devam var demektir.
    */
   async listOffers(filter: OfferFilter, page: PageQuery): Promise<OfferPage> {
-    const base = toMongoFilter(filter);
+    const base = listOffersFilter(filter);
     const paged: Filter<OfferDocument> =
       page.token === '' ? base : { ...base, _id: { $gt: page.token } };
 
@@ -61,6 +71,21 @@ export class OfferRepository extends ReplaceableRepository<OfferDocument> implem
     const last = items.at(-1);
 
     return { items, nextPageToken: hasMore && last !== undefined ? last.id : '', totalSize };
+  }
+
+  /**
+   * Eski bicimde (Turkce karakterleri katlanmamis) arama terimi tasiyan teklif
+   * var mi? searchKey degisince saklanan terimler eskir ve katlanmis sorgu
+   * onlari bulamaz; pnpm seed yeniden yazar. Acilista bir kez sorulur.
+   */
+  async hasStaleSearchTerms(): Promise<boolean> {
+    const count = await this.run('hasStaleSearchTerms', () =>
+      this.collection.countDocuments(
+        { searchTerms: { $regex: UNFOLDED_SEARCH_TERM } },
+        { limit: 1 },
+      ),
+    );
+    return count > 0;
   }
 
   async listCategoryIdsWithOffers(marketId: string): Promise<readonly string[]> {
@@ -100,15 +125,21 @@ export function offersByProductIdsFilter(
   return { marketId, productId: { $in: [...productIds] } };
 }
 
-function toMongoFilter(filter: OfferFilter): Filter<OfferDocument> {
+/**
+ * ListProducts'in Mongo filtresi. Ayri ve disa acik: depo ve sorgu plani testi
+ * AYNI filtreyi kullanir (offersByProductIdsFilter gibi).
+ */
+export function listOffersFilter(filter: OfferFilter): Filter<OfferDocument> {
   const query: Filter<OfferDocument> = { marketId: filter.marketId };
   if (filter.categoryId !== undefined) {
     query.categoryId = filter.categoryId;
   }
-  if (filter.query !== undefined) {
-    // Dizi alanda regex: elemanlardan BIRI eslesirse belge eslesir - bellek
-    // uygulamasindaki "ad ya da aciklama" ile ayni anlam.
-    query.searchTerms = { $regex: escapeRegex(searchKey(filter.query)) };
+  const words = filter.query === undefined ? [] : searchWords(filter.query);
+  if (words.length > 0) {
+    // Kelime basina bir kosul. Dizi alanda regex: elemanlardan BIRI eslesirse
+    // kosul saglanir ("ad ya da aciklama"); $and kelimelerin HEPSINI ister.
+    // Bellek uygulamasindaki matchesQuery ile ayni anlam.
+    query.$and = words.map((word) => ({ searchTerms: { $regex: escapeRegex(word) } }));
   }
   return query;
 }

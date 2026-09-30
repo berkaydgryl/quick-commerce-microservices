@@ -163,7 +163,9 @@ message ListProductsRequest {
   string dark_store_id = 2 [deprecated = true];
 
   // Serbest metin aramasi: 2-64 karakter (bas/son bosluk kirpildiktan sonra).
-  // Bos query arama yapmaz, tum listeyi dondurur.
+  // Bos query arama yapmaz, tum listeyi dondurur. Ad ve aciklamada, buyuk/kucuk
+  // harf ve Turkce karakter duyarsiz ("sut" -> "Süt"), kelime icinde de eslesir;
+  // bosluklu sorguda kelimelerin HEPSI gecmeli, sira onemsiz (T9.4).
   string query = 3;
 
   getir.common.v1.PageRequest page = 4;
