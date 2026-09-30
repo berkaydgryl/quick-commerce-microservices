@@ -12,6 +12,8 @@ import { MarketProductList } from './MarketProductList';
 interface MarketCatalogSectionProps {
   readonly marketId: string;
   readonly categoryId: string | undefined;
+  /** Market ici arama (T9.5); varken kategori secili degildir (sayfa kurali). */
+  readonly query?: string | undefined;
   readonly onCategoryChange: (categoryId: string | undefined) => void;
   /** Urun satirindaki eylem; sayfa verir (bkz. MarketProductList). */
   readonly renderProductAction?: (product: Product) => ReactNode;
@@ -19,17 +21,18 @@ interface MarketCatalogSectionProps {
 
 /**
  * Marketin katalogu: kategori filtresi + urunler (imlecle "daha fazla").
- * Secili kategori sayfanin adres durumudur (URL); bu bolum onu yalnizca okur
- * ve degisikligi yukari bildirir.
+ * Secili kategori ve arama sayfanin adres durumudur (URL); bu bolum onlari
+ * yalnizca okur ve kategori degisikligini yukari bildirir.
  */
 export function MarketCatalogSection({
   marketId,
   categoryId,
+  query,
   onCategoryChange,
   renderProductAction,
 }: MarketCatalogSectionProps) {
   const categories = useMarketCategories(marketId);
-  const products = useMarketProducts(marketId, categoryId);
+  const products = useMarketProducts(marketId, categoryId, query);
   const items = products.data;
 
   return (
@@ -58,7 +61,9 @@ export function MarketCatalogSection({
         <QueryError error={products.error} onRetry={() => void products.refetch()} />
       )}
       {items !== undefined && items.length === 0 && (
-        <QueryEmpty>Bu kategoride ürün yok.</QueryEmpty>
+        <QueryEmpty>
+          {query === undefined ? 'Bu kategoride ürün yok.' : `“${query}” için ürün bulunamadı.`}
+        </QueryEmpty>
       )}
       {items !== undefined && items.length > 0 && (
         <MarketProductList

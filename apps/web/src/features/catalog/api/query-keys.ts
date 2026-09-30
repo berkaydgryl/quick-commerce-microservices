@@ -4,7 +4,17 @@ export const catalogKeys = {
   categories: () => [...catalogKeys.all, 'categories'] as const,
   marketCategories: (marketId: string) =>
     [...catalogKeys.all, 'market', marketId, 'categories'] as const,
-  /** Kategori yoksa null: "tum urunler" ile "kategori X" ayri onbellek girdileridir. */
-  marketProducts: (marketId: string, categoryId: string | undefined) =>
-    [...catalogKeys.all, 'market', marketId, 'products', categoryId ?? null] as const,
+  /**
+   * Kategori ya da arama yoksa null: "tum urunler", "kategori X" ve "arama Y"
+   * ayri onbellek girdileridir (T9.5).
+   */
+  marketProducts: (marketId: string, categoryId: string | undefined, query?: string) =>
+    [
+      ...catalogKeys.all,
+      'market',
+      marketId,
+      'products',
+      categoryId ?? null,
+      query ?? null,
+    ] as const,
 };

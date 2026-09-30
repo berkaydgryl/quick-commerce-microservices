@@ -1,19 +1,9 @@
 /**
- * Kimlik ekranlarinin ikonlari: cizgi ikon, renk cevreden (currentColor),
- * boyut kapsayicidan gelir. Hepsi suslemedir (aria-hidden); anlam yanlarindaki
- * metinde ya da dugmenin aria-label'indadir.
+ * Kimlik ekranlarinin ikonlari. Ortak SVG ayarlari shared'da (arama kutusu da
+ * ayni cizgi ikonlari kullanir, T9.5).
  */
 
-const STROKE_PROPS = {
-  viewBox: '0 0 24 24',
-  fill: 'none',
-  stroke: 'currentColor',
-  strokeWidth: 2,
-  strokeLinecap: 'round',
-  strokeLinejoin: 'round',
-  'aria-hidden': true,
-  focusable: false,
-} as const;
+import { STROKE_PROPS } from '../../../shared/ui/icons/stroke-props';
 
 export function LockIcon() {
   return (
