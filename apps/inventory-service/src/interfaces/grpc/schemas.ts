@@ -10,7 +10,13 @@
  * dark_store_id (ADR-15 oncesi alan) okunmaz: servis yeni, eski istemcisi yok.
  */
 
-import { CART_ITEM_MAX_QUANTITY, CART_MAX_ITEMS, marketIdSchema } from '@getir/contracts';
+import {
+  CART_ITEM_MAX_QUANTITY,
+  CART_MAX_ITEMS,
+  marketIdSchema,
+  RELEASE_REASON_MAX_LENGTH,
+  RELEASE_REASON_PATTERN,
+} from '@getir/contracts';
 import { ID_PREFIX, isId, isSku } from '@getir/core';
 import { z } from 'zod';
 
@@ -73,4 +79,20 @@ export const reserveRequestSchema = z.object({
     .int('tam sayi olmali')
     .min(RESERVATION_TTL_MIN_SECONDS, `en az ${RESERVATION_TTL_MIN_SECONDS} saniye`)
     .max(RESERVATION_TTL_MAX_SECONDS, `en fazla ${RESERVATION_TTL_MAX_SECONDS} saniye`),
+});
+
+/**
+ * Release (T10.2). Siparis kimligi bicimiyle dogrulanir (Redis anahtarina
+ * girer). Gerekce serbest metin DEGIL, kisa anahtardir (iade gerekcesiyle ayni
+ * kural): stok defterine oldugu gibi yazilir.
+ */
+const releaseReasonSchema = z
+  .string()
+  .max(RELEASE_REASON_MAX_LENGTH, `en fazla ${RELEASE_REASON_MAX_LENGTH} karakter`)
+  .regex(RELEASE_REASON_PATTERN, 'kucuk harf, rakam ve alt cizgiden olusan bir anahtar olmali');
+
+export const releaseRequestSchema = z.object({
+  orderId: requiredText.pipe(orderIdSchema),
+  marketId: requiredText.pipe(marketIdSchema),
+  reason: requiredText.pipe(releaseReasonSchema),
 });

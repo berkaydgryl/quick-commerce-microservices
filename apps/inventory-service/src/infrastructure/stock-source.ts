@@ -18,6 +18,7 @@ import {
   LUA_SCRIPTS,
   RESERVATION_HOLD_AFTER_EXPIRY_MS,
   SERVICE_NAME,
+  SETTLED_RESERVATION_TTL_MS,
 } from '../config/constants.js';
 import type { StockStoresEnv } from '../config/env.js';
 import type { StockPorts } from '../domain/stock-ports.js';
@@ -45,6 +46,7 @@ export async function openStockSource(
     return {
       counters: memory.counters,
       reservations: memory.reservations,
+      ledger: memory.ledger,
       recoverCounters: memory.recoverCounters,
       name: 'bellek (MOCK)',
       seeded: undefined,
@@ -63,9 +65,15 @@ export async function openStockSource(
     const scripts = await loadInventoryScripts(opened.redis.redis, logger);
     return {
       counters: opened.counters,
-      reservations: new RedisReservationStore(scripts.get(LUA_SCRIPTS.RESERVE), {
-        holdAfterExpiryMs: RESERVATION_HOLD_AFTER_EXPIRY_MS,
-      }),
+      reservations: new RedisReservationStore(
+        opened.redis.redis,
+        { reserve: scripts.get(LUA_SCRIPTS.RESERVE), release: scripts.get(LUA_SCRIPTS.RELEASE) },
+        {
+          holdAfterExpiryMs: RESERVATION_HOLD_AFTER_EXPIRY_MS,
+          settledTtlMs: SETTLED_RESERVATION_TTL_MS,
+        },
+      ),
+      ledger: opened.ledger,
       // Redis bosalirsa: acilistaki yolla, yalnizca eksik sayaclar (T10.1 PR 2).
       recoverCounters: createCounterRecovery({
         marker: opened.marker,

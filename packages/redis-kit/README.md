@@ -35,7 +35,7 @@ Tablodaki `{sku}`, `{orderId}` gibi gösterimler **yer tutucudur**; gerçek anah
 parantez yalnızca hash-tag olan parçada bulunur.
 
 > **Bilinen sınır:** `resv:user:{userId}` hash-tag'i userId'dir, stok anahtarlarınınki
-> storeId. `reserve.lua` ikisine birden dokunuyor (B22). Tek düğümlü Redis'te sorun değil;
+> storeId. `reserve.lua` ve `release.lua` (T10.2) ikisine birden dokunuyor (B22). Tek düğümlü Redis'te sorun değil;
 > Cluster'a geçilirse `CROSSSLOT` hatası verir. 30 Eylül (T10.1) kararı: kullanıcı başına **tek**
 > anahtar kalır (seçenek, kullanıcı anahtarını da store hash-tag'i altına almaktı; o zaman aynı
 > kullanıcının **farklı depolardaki** ikinci rezervasyonu engellenemezdi). Cluster'a geçişte karar

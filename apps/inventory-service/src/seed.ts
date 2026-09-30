@@ -1,6 +1,7 @@
 /**
- * Seed giris noktasi: kalici stogu demo verisiyle bastan yazar, sonra Redis
- * sayaclarini ondan yeniden kurar (overwrite).
+ * Seed giris noktasi: kalici stogu ve stok defterini (acilis kayitlari, T10.2)
+ * demo verisiyle bastan yazar, sonra Redis sayaclarini ondan yeniden kurar
+ * (overwrite).
  *
  *   pnpm seed                                     (kokten; once derler)
  *   pnpm --filter @getir/inventory-service seed   (derlenmis dist'ten)
@@ -37,7 +38,7 @@ const stores = await startOrExit(() => openStockStores(env, logger, appName), {
 
 try {
   const stock = await createSeedStock({
-    writer: new MongoStockSeedWriter(stores.mongo, stores.repository),
+    writer: new MongoStockSeedWriter(stores.mongo, stores.repository, stores.ledger),
     levels: STOCK_LEVELS,
     isProduction: env.NODE_ENV === 'production',
   })();

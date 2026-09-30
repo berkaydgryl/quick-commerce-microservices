@@ -14,12 +14,15 @@ import type { StockStoresEnv } from '../config/env.js';
 import { assertNoEviction } from './redis/eviction-policy.js';
 import { RedisCounterSetMarker } from './redis/redis-counter-set-marker.js';
 import { RedisStockCounters } from './redis/redis-stock-counters.js';
+import { StockLedgerRepository } from './mongo/stock-ledger-repository.js';
 import { StockRepository } from './mongo/stock-repository.js';
 
 export interface StockStores {
   readonly mongo: MongoConnection;
   readonly redis: RedisConnection;
   readonly repository: StockRepository;
+  /** Stok defteri (T10.2, ADR-18). */
+  readonly ledger: StockLedgerRepository;
   readonly counters: RedisStockCounters;
   /** Sayac kumesinin isareti (ADR-17); seed en son bunu yazar. */
   readonly marker: RedisCounterSetMarker;
@@ -43,7 +46,9 @@ export async function openStockStores(
   let redis: RedisConnection | undefined;
   try {
     const repository = new StockRepository(mongo.db);
+    const ledger = new StockLedgerRepository(mongo.db);
     await repository.ensureIndexes();
+    await ledger.ensureIndexes();
     redis = await connectRedis({
       url: stores.redis.REDIS_URL,
       connectTimeoutMs: stores.redis.REDIS_CONNECT_TIMEOUT_MS,
@@ -58,6 +63,7 @@ export async function openStockStores(
       mongo,
       redis: opened,
       repository,
+      ledger,
       counters: new RedisStockCounters(opened.redis, logger),
       marker: new RedisCounterSetMarker(opened.redis),
       close: async () => {

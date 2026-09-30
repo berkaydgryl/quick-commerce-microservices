@@ -8,13 +8,14 @@ hareket eder.
 Bu serviste **olmayanlar**, bilinçli: ürün adı, fiyatı ve kategorisi `catalog-service`'in;
 sipariş durumu ve rezervasyon süresinin **ne kadar** olacağı `order-service`'in işidir.
 
-## Bugünkü durum (T9.1 + T9.2 + T10.1 PR 1-2)
+## Bugünkü durum (T9.1 + T9.2 + T10.1 PR 1-2 + T10.2 PR 1)
 
 | RPC                 | Durum                                                                                                             |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `CheckAvailability` | ✅ Toplu (en fazla 100 SKU, B27): satılabilir adetler + `unknown_skus` (bu markette kaydı olmayan ya da biçimsiz) |
 | `Reserve`           | ✅ Sepetin tamamı tek atomik adımda ya da hiç (`reserve.lua`, T10.1); aşağıda                                     |
-| `Commit`, `Release` | ⏳ `NOT_IMPLEMENTED` — T10.2 (`commit.lua`, `release.lua`, `stock_ledger`)                                        |
+| `Release`           | ✅ Rezervasyonu bırakır, adetler sayaca döner; stok defterine yazar (`release.lua`, T10.2 PR 1); aşağıda          |
+| `Commit`            | ⏳ `NOT_IMPLEMENTED` — T10.2 PR 2 (`commit.lua`, eldeki adedin düşümü)                                            |
 | `ExtendReservation` | ⏳ `NOT_IMPLEMENTED` — T10                                                                                        |
 | `GetReservation`    | ⏳ `NOT_IMPLEMENTED` — T10                                                                                        |
 
@@ -23,6 +24,7 @@ sipariş durumu ve rezervasyon süresinin **ne kadar** olacağı `order-service`
 | Depo  | Anahtar / koleksiyon                   | İş                                                                  |
 | ----- | -------------------------------------- | ------------------------------------------------------------------- |
 | Mongo | `stock` (`marketId`+`sku` benzersiz)   | Kalıcı gerçek: eldeki adet, `version` (iyimser kilit, T10.2)        |
+| Mongo | `stock_ledger` (T10.2, ADR-18)         | Her stok hareketinin değişmez kaydı; toplamı eldeki adede eşittir   |
 | Redis | `stock:{market}:avail:{sku}` (TTL'siz) | Sıcak yolun karar mercii; `CheckAvailability` yalnızca buradan okur |
 
 - **Toplu okuma:** bir marketin bütün sayaçları aynı hash-tag'dedir (`{market}`); istek tek `MGET`.
@@ -75,10 +77,55 @@ giremez: kısmi rezervasyon imkânsızdır. Rezervasyonun kimliği siparişin ki
 - **MOCK** (B16): bellekte aynı kurallar; sayaçlar ve rezervasyonlar aynı haritayı paylaşır, rezervasyon
   müsaitlikte hemen görünür. İki uygulama da `test/support/reservation-store-contract.ts` senaryolarından geçer.
 - **Henüz yok:**
-  - Onay ve bırakma (`commit.lua`, `release.lua`, `stock_ledger`) T10.2'de.
+  - Onay (`commit.lua`, eldeki adedin düşümü) T10.2 PR 2'de. Bırakma geldi (aşağıda).
   - Süresi dolan rezervasyonun stoğunu geri veren süpürücü T10.3'te; o gelene kadar süresi dolan
     rezervasyonun stoğu geri gelmez.
   - Order'ın `Reserve`'ü çağırması T11.2'de.
+
+## Bırakma ve stok defteri (T10.2 PR 1, ADR-18)
+
+`Release` rezervasyonu bırakır: adetler sayaçlara döner, kullanıcı kilidi kalkar ve stok defterine
+(`stock_ledger`) kalem başına bir kayıt düşer. Kullanıcı iptali, ödeme hatası ve süpürücü (T10.3) aynı
+rezervasyonu aynı anda bırakmak isteyebilir; stok **tam bir kez** döner.
+
+**Sıra (ADR-18):**
+
+1. **Sahiplik (Redis, `lua/release.lua`):** script süre indeksindeki üyeyi siler (`ZREM`); silen çağrı işi
+   yapar, diğerleri çekilir (B3, B4). Önce bütün sayaçlar **yazmadan** denetlenir (tam sayı olmayan sayaçta
+   hiçbir şey yazılmaz), sonra adetler geri eklenir. Kullanıcı kilidi yalnızca bu siparişinse silinir.
+2. **Kayıt silinmez, işaretlenir:** hash'e `state: released`, `reason`, `settledAt` yazılır, adetler kalır;
+   ömrü en fazla 24 saattir (`SETTLED_RESERVATION_TTL_MS`).
+3. **Defter (Mongo):** servis kayıtları yazar, **başarılı olunca** izi siler.
+4. **Yarıda kalırsa:** defter yazılamazsa (Mongo erişilemez) istek `UNAVAILABLE` alır ama sayaçlar zaten
+   dönmüştür. Aynı isteğin tekrarı izi bulur, defteri ilk gerekçe ve anla tamamlar, `ALREADY_APPLIED` alır.
+
+Script'in dokunduğu bütün anahtarlar `KEYS`'te bildirilir (Redis Cluster kuralı): servis önce hash'i okur
+(`HGETALL`), sayaçları ve kullanıcıyı oradan bilir; okuma ile script arasında kayıt değiştiyse bir kez daha
+dener, yine değiştiyse `CONFLICT` (tekrar denenebilir).
+
+| Sonuç (`ReservationOutcome`) | Ne zaman                                                                     |
+| ---------------------------- | ---------------------------------------------------------------------------- |
+| `APPLIED`                    | Sahiplik bu çağrının; adetler sayaçlara döndü                                |
+| `ALREADY_APPLIED`            | Daha önce bırakılmıştı (iz ya da defter söyler); sayaçlar tekrar artmadı     |
+| `NOT_FOUND`                  | Bırakılacak rezervasyon yok (hiç olmamış, başka markette ya da kaydı düşmüş) |
+
+- **Stok defteri** eldeki adedin hesabıdır: bir market × SKU için `delta` toplamı `stock.onHand`'e eşittir.
+  - `opening`: seed'in açılış kaydı, `delta = +onHand` (seed defteri stokla aynı transaction'da baştan yazar).
+  - `release`: bırakma. Eldeki adet değişmez (`delta: 0`), adet `quantity`'de, çağıranın gerekçesi `reason`'da.
+  - Onay (`commit`, `delta = -adet`) T10.2 PR 2'de, süre dolumu (`expire`) T10.3'te.
+- **Çift kayıt yok (B14):** kaydın `_id`'si doğal anahtardır (`sipariş/sku/tür`); aynı hareket ikinci kez
+  yazılırsa değişmez. İndeksler: `orderId` (kısmi) ve `marketId + sku + createdAt`.
+- **Gerekçe** serbest metin değil, kısa anahtardır: küçük harf, rakam, alt çizgi, en fazla 64
+  (`@getir/contracts` `RELEASE_REASON_PATTERN`). Tekrar gelen istekte ilk gerekçe kalır.
+- **Sayacı olmayan kalem** atlanır, sayaç yaratılmaz (yalnızca bu adetle başlardı); uyarı yazılır. Eksik
+  sayacı eldeki adetten yazmak sayaç kurtarmasının işidir (ADR-17).
+- **İndekste olup kaydı düşmüş rezervasyon** (normal akışta olmaz): indeksten silinir, uyarı yazılır, stok
+  geri verilemez; sonuç defterden okunur.
+- **Bilinen:** iz dururken (normalde milisaniyeler) aynı sipariş kimliğiyle gelen `Reserve` "zaten rezerve"
+  alır; order bırakılmış siparişi yeniden rezerve etmez (T11.2).
+- **MOCK** (B16): bırakma bellekte aynı kurallarla; defter de bellektedir (Mongo'ya yazılmaz). Bellek ve
+  Redis `test/support/reservation-store-contract.ts` senaryolarından birlikte geçer.
+- **Olay yok:** `stock.released` olayını bugün dinleyen yok; gövdesi dinleyen gelince yazılır (T10.3, T12).
 
 ## Redis boşalınca (T10.1 PR 2, ADR-17)
 
@@ -102,7 +149,7 @@ Redis boşalırsa (FLUSHALL, kalıcılık olmadan yeniden başlatma) sayaçları
 
 ## Açılış (T9.2)
 
-1. Mongo'ya bağlanır, `stock` indeksini kurar; Redis'e bağlanır.
+1. Mongo'ya bağlanır, `stock` ve `stock_ledger` indekslerini kurar; Redis'e bağlanır.
 2. **Redis tahliye politikası** (`maxmemory-policy`) okunur: `noeviction` değilse ya da okunamıyorsa
    servis **açılmaz** (roadmap P1). Bellek dolunca sayacı silen bir Redis fazla satış demektir.
 3. Sayaçlar Mongo'dan yazılır, **yalnızca olmayanlar** (`SET NX`): var olan sayaç rezervasyonları
@@ -117,7 +164,7 @@ Redis boşalırsa (FLUSHALL, kalıcılık olmadan yeniden başlatma) sayaçları
 ## Komutlar
 
 ```bash
-pnpm seed                                            # kokten: katalog + stok (Mongo), sayaçlar (Redis) baştan
+pnpm seed                                            # kokten: katalog + stok ve defter (Mongo), sayaçlar (Redis) baştan
 pnpm --filter @getir/inventory-service reseed         # Redis sayaçlarını Mongo'dan BAŞTAN yazar
 pnpm --filter @getir/inventory-service build && MOCK=true pnpm --filter @getir/inventory-service start  # :50052
 
@@ -130,11 +177,17 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/inventory/v1/i
        "user_id":"usr_00000000000000000000000000000001","ttl_seconds":600,
        "items":[{"sku":"SUT-1L","quantity":2},{"sku":"CIKOLATA-80","quantity":1}]}' \
   localhost:50052 getir.inventory.v1.InventoryService/Reserve
+
+grpcurl -plaintext -import-path packages/proto/proto -proto getir/inventory/v1/inventory.proto \
+  -d '{"order_id":"ord_00000000000000000000000000000001","market_id":"mkt_migros-jet-moda",
+       "reason":"user_cancelled"}' \
+  localhost:50052 getir.inventory.v1.InventoryService/Release
 ```
 
-- **`seed`** kalıcı stoğu tek transaction'da baştan yazar ve sayaçları ondan yeniden kurar (seed stok
-  gerçeğini topluca değiştirir; sayaçlar yenilenmezse Redis eski stoğu gösterirdi). `NODE_ENV=production`
-  iken reddeder.
+- **`seed`** kalıcı stoğu ve stok defterini (açılış kayıtları) tek transaction'da baştan yazar ve sayaçları
+  ondan yeniden kurar (seed stok gerçeğini topluca değiştirir; sayaçlar yenilenmezse Redis eski stoğu
+  gösterirdi). `NODE_ENV=production` iken reddeder. T10.2'den önce seed edilmiş veritabanında defter boştur;
+  `pnpm seed` bir kez koşulur.
 - **`reseed`** bütün sayaçları Mongo'dan **baştan** yazar (bilinçli komut). Redis boşaldığında artık gerekmez:
   servis boşalmayı kendiliğinden fark edip eksik sayaçları yazar (yukarıda, T10.1 PR 2). **Dikkat:** aktif
   rezervasyon varken çalıştırılırsa ayrılmış stok geri satışa çıkar; Redis boşken ya da rezervasyon
@@ -152,12 +205,13 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/inventory/v1/i
 ## Klasörler
 
 ```text
-lua/               reserve.lua (T10.1); imaja package.json "files" ile girer
+lua/               reserve.lua (T10.1), release.lua (T10.2); imaja package.json "files" ile girer
 src/
-  application/     check-availability, reserve-stock, seed-stock, seed-counters, counter-recovery
-  domain/          stock.ts, reservation.ts, stock-ports.ts: kavramlar ve portlar (depo yok)
-  infrastructure/  fixtures, memory (MOCK: sayaçlar + rezervasyon), mongo (stock),
-                   redis (sayaçlar, işaret, rezervasyon, Lua yükleyici, tahliye denetimi),
+  application/     check-availability, reserve-stock, release-reservation, seed-stock, seed-counters,
+                   counter-recovery
+  domain/          stock.ts, reservation.ts, stock-ledger.ts, stock-ports.ts: kavramlar ve portlar (depo yok)
+  infrastructure/  fixtures, memory (MOCK: sayaçlar + rezervasyon + defter), mongo (stock, stock_ledger),
+                   redis (sayaçlar, işaret, rezervasyon + hash ön okuması, Lua yükleyici, tahliye denetimi),
                    stock-stores (bağlantılar), stock-source (açılış)
   interfaces/grpc/ handler, şema (Zod), eşleyici
   main.ts · seed.ts · reseed.ts · healthcheck.ts

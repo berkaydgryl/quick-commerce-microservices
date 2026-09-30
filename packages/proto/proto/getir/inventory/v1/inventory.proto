@@ -17,7 +17,9 @@ syntax = "proto3";
 // ATOMIKLIK: Reserve/Commit/Release/ExtendReservation islemlerinin tamami tek
 // bir Redis Lua script'i icinde kosar (ADR-01). Redlock veya cok adimli
 // istemci tarafi kilit YOKTUR. Bu yuzden kismi rezervasyon imkansizdir:
-// ya sepetin tamami rezerve edilir ya hicbiri.
+// ya sepetin tamami rezerve edilir ya hicbiri. Commit ve Release'in stok
+// defteri (Mongo) kaydi script'ten SONRA yazilir; yarida kalirsa ayni istegin
+// tekrari tamamlar (ADR-18).
 
 package getir.inventory.v1;
 
@@ -48,7 +50,14 @@ service InventoryService {
   // Rezerve edilmis adedi kalici dususe cevirir (odeme onaylandiktan sonra).
   rpc Commit(CommitRequest) returns (CommitResponse);
 
-  // Rezervasyonu serbest birakir ve sayaclari geri artirir.
+  // Rezervasyonu serbest birakir ve sayaclari geri artirir; stok defterine
+  // kalem basina bir birakma kaydi yazar (eldeki adet degismez).
+  //
+  // Sonuc hata degil ReservationOutcome'dur: APPLIED (bu cagri birakti),
+  // ALREADY_APPLIED (daha once birakilmisti; tekrar guvenlidir), NOT_FOUND
+  // (birakilacak rezervasyon yok). Defter yazilamazsa (Mongo erisilemez)
+  // UNAVAILABLE doner ama sayaclar ZATEN geri artmistir; ayni istegin tekrari
+  // defteri tamamlar ve ALREADY_APPLIED alir.
   rpc Release(ReleaseRequest) returns (ReleaseResponse);
 
   // Rezervasyon suresini bir kez uzatir (odeme adimina girerken).
@@ -245,10 +254,12 @@ message ReleaseRequest {
   // Pazaryerinde siparisin/stogun ait oldugu market (ADR-15): mkt_ onekli kimlik.
   string market_id = 4;
 
-  // Serbest birakma gerekcesi; stock.released olayina ve ledger kaydina
-  // oldugu gibi yazilir (ornegin "user_cancelled", "risk_rejected",
-  // "payment_failed"). Serbest metin DEGIL, cagiran taraflarin uzerinde
-  // anlastigi kisa bir anahtar beklenir.
+  // Serbest birakma gerekcesi; stok defteri kaydina (ve stock.released olayi
+  // geldiginde olaya) oldugu gibi yazilir (ornegin "user_cancelled",
+  // "risk_rejected", "payment_failed"). Serbest metin DEGIL, cagiran
+  // taraflarin uzerinde anlastigi kisa bir anahtar beklenir: kucuk harf, rakam
+  // ve alt cizgi, en fazla 64 karakter (@getir/contracts RELEASE_REASON_PATTERN);
+  // disi VALIDATION_FAILED. Tekrar gelen istekte ILK gerekce kalir.
   string reason = 3;
 }
 

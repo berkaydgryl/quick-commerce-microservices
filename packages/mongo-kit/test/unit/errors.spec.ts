@@ -1,5 +1,6 @@
 import { AppError, ERROR_CODES } from '@getir/core';
-import { MongoErrorLabel, MongoNetworkError, MongoServerError } from 'mongodb';
+import { MongoBulkWriteError, MongoErrorLabel, MongoNetworkError, MongoServerError } from 'mongodb';
+import type { BulkWriteResult } from 'mongodb';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -74,6 +75,32 @@ describe('toMongoAppError', () => {
     const conflict = toMongoAppError(duplicateKeyError(), { operation: 'insertOne' });
 
     expect(toMongoAppError(conflict, { operation: 'withTransaction' })).toBe(conflict);
+  });
+});
+
+describe('toplu yazim hatasi (bulkWrite, insertMany; T10.2)', () => {
+  /** Surucu yazim DISI hatayi boyle sarar (bulk/common.js: "driver related error"). */
+  const bulkResult = {} as unknown as BulkWriteResult;
+
+  it('sarilmis ag / sunucu secimi hatasi SERVICE_UNAVAILABLE: INTERNAL degil, tekrar denenebilir', () => {
+    const wrapped = new MongoBulkWriteError(
+      new MongoNetworkError('connect ECONNREFUSED 127.0.0.1:27017'),
+      bulkResult,
+    );
+
+    const error = toMongoAppError(wrapped, { operation: 'record', collection: 'stock_ledger' });
+
+    expect(error.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+    expect(error.details).toEqual({ operation: 'record', collection: 'stock_ledger' });
+  });
+
+  it('toplu yazimdaki benzersiz indeks ihlali yine CONFLICT (sunucu cevabi Error degil)', () => {
+    const duplicate = new MongoBulkWriteError(
+      { message: 'E11000 duplicate key error', code: 11000, writeErrors: [] },
+      bulkResult,
+    );
+
+    expect(toMongoAppError(duplicate).code).toBe(ERROR_CODES.CONFLICT);
   });
 });
 

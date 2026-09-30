@@ -52,13 +52,12 @@ describe('CheckAvailability (T9.1, B27)', () => {
   });
 });
 
-describe('onay, birakma, uzatma ve okuma henuz yok (T10.2+)', () => {
+describe('onay, uzatma ve okuma henuz yok (T10.2 PR 2+)', () => {
   // Her cagri kendi mesajiyla (bos istek): yanlis mesaj istemci tarafinda
-  // kodlanamaz ve INTERNAL doner, sinanan sey sunucu olmazdi. Reserve T10.1'de
-  // geldi (test/unit/grpc/reserve.spec.ts).
+  // kodlanamaz ve INTERNAL doner, sinanan sey sunucu olmazdi. Reserve T10.1'de,
+  // Release T10.2'de geldi (test/unit/grpc/reserve.spec.ts, release.spec.ts).
   const cases = [
     ['Commit', () => call(service.commit, inventoryV1.CommitRequest.fromPartial({}))],
-    ['Release', () => call(service.release, inventoryV1.ReleaseRequest.fromPartial({}))],
     [
       'ExtendReservation',
       () => call(service.extendReservation, inventoryV1.ExtendReservationRequest.fromPartial({})),
