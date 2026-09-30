@@ -690,6 +690,84 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /v1/search:
+    get:
+      tags: [catalog]
+      operationId: searchNearby
+      summary: Genel arama — markete girmeden, yakındaki marketlerde (T9.6)
+      description: |
+        "Market ya da Ürün ara…": konuma hizmet veren marketlerde (yakındaki
+        marketlerle aynı kural, kapalılar dahil) ürün YA DA market adı. Eşleşme
+        market içi aramayla aynıdır (T9.4: harf ve Türkçe karakter duyarsız,
+        boşluklu sorguda her kelime geçmeli).
+
+        Sonuç MARKET MARKET döner; SIRA MESAFEDİR (fiyat değil: farklı ürünlerde
+        gramaj farkı yanıltır): açık marketler yakından uzağa, kapalı marketler
+        en sonda. Adı eşleşen market, ürün eşleşmesi olmasa da listelenir
+        (`marketNameMatched: true`, `products: []`). Market başına eşleşen
+        ürünlerin ilk 3'ü (market sayfasıyla aynı sıra) ve toplam sayı döner;
+        istemci fazlası için "+N ürün daha" gösterir. Satıştan kaldırılmış
+        (pasif) ürün genel aramada yoktur.
+
+        STOK (T8.4 kurallarıyla): ürünü olan her market için inventory-svc'ye
+        BİR `CheckAvailability`, hepsi paralel (stok sayaçları market bazında
+        tutulur). Bir marketin stoğu gelmezse yalnızca o marketin ürünlerinde
+        `availableQuantity` olmaz.
+
+        Sayfasız SINIRLI liste: en fazla 20 market, market başına en fazla 3 ürün
+        (proje kuralları, "Sınırlı listeler istisnası"). Eşleşme yoksa ya da
+        bölgede market yoksa BOŞ liste döner — hata değil.
+      security: []
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema: { type: number, minimum: -90, maximum: 90 }
+        - name: lng
+          in: query
+          required: true
+          schema: { type: number, minimum: -180, maximum: 180 }
+        - name: q
+          in: query
+          required: true
+          description: |
+            Arama metni. Baş/son boşluk kırpılır; boşsa `zorunlu`, kırpılmış
+            metin 2-64 karakter (`details.q`).
+          schema: { type: string, minLength: 2, maxLength: 64 }
+      responses:
+        "200":
+          description: Eşleşen marketler, mesafe sırasında
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/SearchResult"
+        "400":
+          description: |
+            Konum eksik, sayı değil ya da WGS84 dışında; arama eksik ya da 2-64
+            karakter dışında. Sebep `details` alanında Türkçedir, örn.
+            `{"q": "en az 2 karakter olmali"}`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /v1/cart/reserve:
     post:
       tags: [cart]
@@ -2075,6 +2153,35 @@ components:
           type: integer
           minimum: 0
           description: Her zaman `market.deliveryRadiusMeters`'tan küçük veya eşittir.
+
+    SearchResult:
+      description: |
+        Genel aramada bir market (T9.6): yakındaki market satırı (`NearbyMarket`)
+        + arama bilgisi. İstemci aynı market kartını ve ürün satırını kullanır.
+      allOf:
+        - $ref: "#/components/schemas/NearbyMarket"
+        - type: object
+          required: [marketNameMatched, products, totalProductMatches]
+          properties:
+            marketNameMatched:
+              type: boolean
+              description: |
+                Market adı sorguyla eşleşti; eşleştiyse market ürünsüz de
+                listelenir ve `products` boştur.
+            products:
+              type: array
+              maxItems: 3
+              description: |
+                Eşleşen AKTİF ürünlerin ilkleri, market sayfasıyla aynı sırada.
+                Stok market sayfasındaki kuralla (`Product.availableQuantity`).
+              items:
+                $ref: "#/components/schemas/Product"
+            totalProductMatches:
+              type: integer
+              minimum: 0
+              description: |
+                Bu marketteki toplam eşleşen ürün; `products`'tan fazlaysa
+                istemci "+N ürün daha" gösterir.
 
     # --- Kimlikler (ADR-15) -------------------------------------------------
     RuntimeId:

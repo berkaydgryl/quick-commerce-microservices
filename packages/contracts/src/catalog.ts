@@ -34,6 +34,7 @@ import {
   RATING_MIN,
   SEARCH_QUERY_MAX_LENGTH,
   SEARCH_QUERY_MIN_LENGTH,
+  SEARCH_RESULT_PRODUCTS_MAX,
 } from './constants.js';
 
 /**
@@ -201,6 +202,70 @@ export const productPageSchema = z.object({
   page: pageSchema,
 });
 
+// ---------------------------------------------------------------------------
+// Genel arama (T9.6): markete girmeden, yakindaki marketlerde
+// ---------------------------------------------------------------------------
+
+/**
+ * Genel aramanin arama metni: ZORUNLU. Bas ve son bosluk kirpilir; bos metin
+ * "zorunlu", kirpilmis metin 2-64 karakter. REST sorgusu (searchQuerySchema)
+ * ve catalog-service'in SearchNearby semasi AYNI kurali kullanir (D6).
+ */
+export const requiredSearchTextSchema = z
+  .string({ required_error: 'zorunlu' })
+  .trim()
+  .min(1, 'zorunlu')
+  .pipe(
+    z
+      .string()
+      .min(SEARCH_QUERY_MIN_LENGTH, `en az ${SEARCH_QUERY_MIN_LENGTH} karakter olmali`)
+      .max(SEARCH_QUERY_MAX_LENGTH, `en fazla ${SEARCH_QUERY_MAX_LENGTH} karakter olmali`),
+  );
+
+/**
+ * GET /v1/search?lat&lng&q. Konum yakindaki marketlerle ayni kural (zorunlu,
+ * WGS84); arama market ici aramayla ayni eslesme kuralinda (T9.4: harf ve
+ * Turkce karakter duyarsiz, bosluklu sorguda her kelime) ama ZORUNLU.
+ */
+export const searchQuerySchema = nearbyMarketsQuerySchema.extend({
+  q: requiredSearchTextSchema,
+});
+
+/**
+ * Genel aramada bir market: yakindaki market satiri + arama bilgisi. market ve
+ * products mevcut semalardir; istemci ayni market kartini ve urun satirini
+ * kullanir.
+ */
+export const searchResultSchema = nearbyMarketSchema.extend({
+  /**
+   * Market adi sorguyla eslesti ("Market ya da Urun ara"). Eslestiyse market,
+   * urun eslesmesi olmasa da listelenir; o zaman products bostur.
+   */
+  marketNameMatched: z.boolean(),
+  /**
+   * Eslesen urunlerin ilkleri, market sayfasiyla ayni sirada. Yalnizca AKTIF
+   * teklifler: satistan kaldirilmis urun genel aramada yoktur. Stok market
+   * sayfasindaki kuralla gelir (availableQuantity, T8.4).
+   */
+  products: z.array(productSchema).max(SEARCH_RESULT_PRODUCTS_MAX),
+  /**
+   * Bu marketteki toplam eslesen urun. products'tan fazlaysa istemci
+   * "+N urun daha" gosterir ve market sayfasini ayni aramayla acar.
+   */
+  totalProductMatches: z.number().int().min(0),
+});
+
+/**
+ * GET /v1/search cevabi. SIRA MESAFEDIR (fiyat degil: farkli urunlerde gramaj
+ * farki yaniltir): acik marketler yakindan uzaga, kapali marketler en sonda.
+ * Sayfasiz SINIRLI liste: en fazla 20 market, market basina en fazla 3 urun
+ * (proje kurallari, "Sinirli listeler istisnasi"). Bos liste = eslesme yok ya
+ * da bolgede market yok; hata degil.
+ */
+export const searchResultListSchema = z.object({
+  items: z.array(searchResultSchema),
+});
+
 export type Sku = z.infer<typeof skuSchema>;
 export type Unit = z.infer<typeof unitSchema>;
 export type Category = z.infer<typeof categorySchema>;
@@ -213,5 +278,8 @@ export type NearbyMarketsQuery = z.infer<typeof nearbyMarketsQuerySchema>;
 export type NearbyMarketList = z.infer<typeof nearbyMarketListSchema>;
 export type Product = z.infer<typeof productSchema>;
 export type MarketProductsQuery = z.infer<typeof marketProductsQuerySchema>;
+export type SearchQuery = z.infer<typeof searchQuerySchema>;
+export type SearchResult = z.infer<typeof searchResultSchema>;
+export type SearchResultList = z.infer<typeof searchResultListSchema>;
 export type CategoryList = z.infer<typeof categoryListSchema>;
 export type ProductPage = z.infer<typeof productPageSchema>;

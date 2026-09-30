@@ -46,6 +46,7 @@ func limitedApp(t *testing.T, limits RateLimit, orders *fakeOrders, logger *slog
 		Market:            markets,
 		MarketCategories:  markets,
 		MarketProducts:    markets,
+		NearbySearch:      &fakeSearcher{},
 		CartReserver:      orders,
 		OrderPlacer:       orders,
 		ThreeDSConfirmer:  orders,

@@ -79,6 +79,15 @@ func migrosJet() *catalogv1.Market {
 	}
 }
 
+// migrosJetJSON, migrosJet()'in REST bicimi: puan onda birden ondaliga
+// (47 -> 4.7), bos para birimi TRY'ye, goreli logo mutlak URL'ye cevrilir;
+// alan adlari sozlesmedeki camelCase.
+const migrosJetJSON = `{"id":"mkt_migros-jet-moda","name":"Migros Jet Moda","brand":"Migros Jet",` +
+	`"logoUrl":"https://cdn.example/img/market/migros-jet.png","location":{"lat":40.98,"lng":29.03},` +
+	`"deliveryRadiusMeters":2500,"isOpen":true,"deliveryTime":{"minMinutes":15,"maxMinutes":25},` +
+	`"rating":{"average":4.7,"count":1200},"pricingRules":{"minBasket":{"amountMinor":4000,"currency":"TRY"},` +
+	`"deliveryFee":{"amountMinor":1999,"currency":"TRY"},"freeDeliveryThreshold":{"amountMinor":25000,"currency":"TRY"}}}`
+
 func TestNearbyMarketsMapsContractShape(t *testing.T) {
 	stub := &marketStub{nearby: []*catalogv1.NearbyMarket{{Market: migrosJet(), DistanceMeters: 500}}}
 	service := startStub(t, stub)
@@ -88,15 +97,8 @@ func TestNearbyMarketsMapsContractShape(t *testing.T) {
 		t.Fatalf("hata beklenmiyordu: %v", err)
 	}
 
-	// Puan onda birden ondaliga (47 -> 4.7), bos para birimi TRY'ye, goreli
-	// logo mutlak URL'ye cevrilir; alan adlari sozlesmedeki camelCase.
 	encoded := testkit.JSON(t, list)
-	want := `{"items":[{"market":{"id":"mkt_migros-jet-moda","name":"Migros Jet Moda","brand":"Migros Jet",` +
-		`"logoUrl":"https://cdn.example/img/market/migros-jet.png","location":{"lat":40.98,"lng":29.03},` +
-		`"deliveryRadiusMeters":2500,"isOpen":true,"deliveryTime":{"minMinutes":15,"maxMinutes":25},` +
-		`"rating":{"average":4.7,"count":1200},"pricingRules":{"minBasket":{"amountMinor":4000,"currency":"TRY"},` +
-		`"deliveryFee":{"amountMinor":1999,"currency":"TRY"},"freeDeliveryThreshold":{"amountMinor":25000,"currency":"TRY"}}},` +
-		`"distanceMeters":500}]}`
+	want := `{"items":[{"market":` + migrosJetJSON + `,"distanceMeters":500}]}`
 	if encoded != want {
 		t.Errorf("JSON:\n got %s\nwant %s", encoded, want)
 	}

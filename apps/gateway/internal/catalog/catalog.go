@@ -24,6 +24,7 @@ type RPC interface {
 	GetMarket(ctx context.Context, in *catalogv1.GetMarketRequest, opts ...grpc.CallOption) (*catalogv1.GetMarketResponse, error)
 	ListMarketCategories(ctx context.Context, in *catalogv1.ListMarketCategoriesRequest, opts ...grpc.CallOption) (*catalogv1.ListMarketCategoriesResponse, error)
 	ListProducts(ctx context.Context, in *catalogv1.ListProductsRequest, opts ...grpc.CallOption) (*catalogv1.ListProductsResponse, error)
+	SearchNearby(ctx context.Context, in *catalogv1.SearchNearbyRequest, opts ...grpc.CallOption) (*catalogv1.SearchNearbyResponse, error)
 }
 
 // ImageResolver, verideki goreli gorsel yolunu mutlak URL'ye cevirir

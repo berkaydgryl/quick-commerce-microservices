@@ -54,18 +54,22 @@ type ProductPage struct {
 }
 
 func toProductPage(response *catalogv1.ListProductsResponse, images ImageResolver) ProductPage {
-	offers := response.GetOffers()
-	items := make([]Product, 0, len(offers))
-	for _, offer := range offers {
-		items = append(items, toProduct(offer, images))
-	}
 	return ProductPage{
-		Items: items,
+		Items: toProducts(response.GetOffers(), images),
 		Page: Page{
 			NextPageToken: response.GetPage().GetNextPageToken(),
 			TotalSize:     response.GetPage().GetTotalSize(),
 		},
 	}
+}
+
+// toProducts, teklifleri urunlere cevirir. Bos liste JSON'da [] olur, null DEGIL.
+func toProducts(offers []*catalogv1.Offer, images ImageResolver) []Product {
+	products := make([]Product, 0, len(offers))
+	for _, offer := range offers {
+		products = append(products, toProduct(offer, images))
+	}
+	return products
 }
 
 func toProduct(offer *catalogv1.Offer, images ImageResolver) Product {

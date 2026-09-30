@@ -87,14 +87,14 @@ Markete girmeden arama ("Market ya da Ürün ara…"): konumu kapsayan marketler
 aynı kural, kapalılar dahil) ürün **ya da** market adı. Market içi arama (T9.5) `ListProducts`'ın `query`
 alanıdır; iki arama aynı eşleşme kuralını kullanır (T9.4: harf ve Türkçe karakter duyarsız, her kelime).
 
-| Kural                    | Davranış                                                                                                                     |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| Listelenen market        | Adı sorguyla eşleşen **ya da** en az bir aktif teklifi eşleşen; ikisi de yoksa listede yok                                   |
-| Sıra                     | **Mesafe**, fiyat değil (farklı ürünlerde gramaj farkı yanıltır): açıklar önce, kapalılar sonda; her grup yakından uzağa     |
-| Market başına teklif     | İlk 3 (market sayfasıyla aynı sıra) + `total_offer_matches`; istemci "+N ürün daha" ile market sayfasına aynı aramayla geçer |
-| Pasif teklif             | Sayılmaz, dönmez (market sayfasında "Satışta değil" olarak görünmeye devam eder)                                             |
-| Ad eşleşmesi             | "MİGROS", "migros moda", "abbasaga" → ilgili market; ürünü eşleşmese de listelenir, teklif listesi boş                       |
-| Market yok / eşleşme yok | Boş liste, hata değil                                                                                                        |
+| Kural                    | Davranış                                                                                                                                                                     |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Listelenen market        | Adı sorguyla eşleşen **ya da** en az bir aktif teklifi eşleşen; ikisi de yoksa listede yok                                                                                   |
+| Sıra                     | **Mesafe**, fiyat değil (farklı ürünlerde gramaj farkı yanıltır): açıklar önce, kapalılar sonda; her grup yakından uzağa                                                     |
+| Market başına teklif     | İlk 3 (market sayfasıyla aynı sıra; sınır sözleşmede: `SEARCH_RESULT_PRODUCTS_MAX`) + `total_offer_matches`; istemci "+N ürün daha" ile market sayfasına aynı aramayla geçer |
+| Pasif teklif             | Sayılmaz, dönmez (market sayfasında "Satışta değil" olarak görünmeye devam eder)                                                                                             |
+| Ad eşleşmesi             | "MİGROS", "migros moda", "abbasaga" → ilgili market; ürünü eşleşmese de listelenir, teklif listesi boş                                                                       |
+| Market yok / eşleşme yok | Boş liste, hata değil                                                                                                                                                        |
 
 - **İki sorgu, market sayısından bağımsız (N+1 yok):** `listMarketsByDistance` (en fazla
   `MARKET_CANDIDATE_LIMIT`) ve `OfferReader.searchActiveOffers`. Mongo'da ikincisi tek toplama sorgusudur:
@@ -106,7 +106,9 @@ alanıdır; iki arama aynı eşleşme kuralını kullanır (T9.4: harf ve Türk�
 - **Dahil etme ve sıralama domain'de** (`domain/nearby-search.ts`, saf). Demo verisinde kapalı market zaten
   en uzakta olduğu için "kapalılar sonda" kuralı sentetik marketlerle ayrıca sınanır.
 - **Bilinen sınır:** ad ve ürün kelimeleri birleşmez; "migros süt" ne Migros'un adıyla ne bir ürünle
-  eşleşir. Stok bu serviste yoktur (B27); genel aramada nasıl gösterileceği gateway işinde (T9.6 PR 2).
+  eşleşir. Stok bu serviste yoktur (B27): gateway `GET /v1/search`'te market başına ekler (T9.6 PR 2).
+- **Arama metni kuralı REST ile ortak:** `query` şeması `@getir/contracts`'taki `requiredSearchTextSchema`'dır
+  (zorunlu, kırpılmış 2-64); gateway'in `GET /v1/search` sorgusu aynı şemayı kullanır (D6).
 
 ## Veri kaynağı: Mongo ya da MOCK
 

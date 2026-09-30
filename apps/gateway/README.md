@@ -7,7 +7,7 @@ Pnpm workspace'inin parçası değildir: kendi Go modülüdür (`go.mod`). `pnpm
 kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go mod tidy -diff`,
 `-race` testleri, Mongo ve Redis entegrasyon testleri, statik derleme).
 
-## Bugünkü durum (D8 — Go kuralları CI'da; T7.5 — sipariş uçları; T8.1 — kimlik; T8.2 — tekrar koruması ve hız sınırı; T8.3 — panik kurtarma ve zarf taraması; T8.4 — ürün listesinde stok; pazaryeri uçları T8.4'ten öne alındı)
+## Bugünkü durum (D8 — Go kuralları CI'da; T7.5 — sipariş uçları; T8.1 — kimlik; T8.2 — tekrar koruması ve hız sınırı; T8.3 — panik kurtarma ve zarf taraması; T8.4 — ürün listesinde stok; T9.6 — genel arama; pazaryeri uçları T8.4'ten öne alındı)
 
 | Parça                | Durum                                                           |
 | -------------------- | --------------------------------------------------------------- |
@@ -23,6 +23,7 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `GET /v1/markets/{id}` | ✅ Market sayfası başlığı; puan onda birden ondalığa (`47` → `4.7`) |
 | `GET /v1/markets/{id}/categories` | ✅ Marketin teklifi olan kategoriler |
 | `GET /v1/markets/{id}/products` | ✅ `categoryId`, `q`, `pageToken`, `pageSize`; her üründe `availableQuantity` (T8.4, aşağıda); `isActive` (T7.6) |
+| `GET /v1/search?lat&lng&q` | ✅ Genel arama (T9.6): yakındaki marketlerde ürün ya da market adı; mesafe sırası, kapalılar sonda; market başına ilk 3 ürün + toplam; stok market başına, paralel |
 | `POST /v1/cart/reserve` | ✅ order `CreateDraftOrder` (T7.5): taslak, fiyat sunucuda; **stok kilidi yok** (T11.2) |
 | `POST /v1/orders`    | ✅ order `CreateOrder` (saga): 201 `PAID` ya da `AWAITING_PAYMENT` + `threeDs` |
 | `POST /v1/orders/{id}/3ds` | ✅ order `ConfirmPayment`; yanlış kod 402 + kalan hak |
@@ -39,7 +40,7 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | Idempotency-Key      | ✅ Zorunlu; tekrar koruması (T8.2): aynı anahtar ilk cevabı alır, eş zamanlısı 409; Redis, MOCK'ta bellek |
 | gRPC hata çevirisi   | ✅ `x-app-error` trailer'ı, yoksa durum kodu (`apperror`)       |
 | Görsel adresleri     | ✅ Göreli yol → mutlak URL (`ASSET_BASE_URL`, `internal/assets`) |
-| Stok birleştirmesi (B27) | ✅ Sayfa başına tek `CheckAvailability` (T8.4); stok servisi 300 ms'de cevap vermezse liste stoksuz döner |
+| Stok birleştirmesi (B27) | ✅ Sayfa başına tek `CheckAvailability` (T8.4); genel aramada market başına bir, hepsi paralel (T9.6); stok servisi 300 ms'de cevap vermezse ürünler stoksuz döner |
 | Rate limit           | ✅ Kayan pencere, Redis'te (T8.2); uç başına; IP ya da kullanıcı; 429 + `Retry-After` |
 | Go kuralları         | ✅ CI'da golangci-lint: `errcheck`, `noctx`, `bodyclose` (D8)    |
 
@@ -254,7 +255,7 @@ bellek içi sayaç sınırı örnek sayısı kadar gevşetirdi (proje kuralları
 | `POST /v1/auth/register`, `/v1/auth/login`               | `RATE_LIMIT_AUTH_MAX_REQUESTS` (10) | IP          |
 | `POST /v1/auth/refresh`, `/v1/auth/logout` (T8.5)         | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
 | `POST /v1/cart/reserve`, `/v1/orders`, `/v1/orders/{id}/3ds` | `RATE_LIMIT_ORDER_MAX_REQUESTS` (20) | kullanıcı   |
-| Katalog ve market uçları                                  | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
+| Katalog, market ve genel arama uçları                     | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
 | `GET /v1/me`, `GET /v1/orders/{id}`                       | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
 | `/healthz`                                                | sınırsız                         | —           |
 
@@ -390,11 +391,25 @@ curl -s localhost:8080/v1/orders/<taslak> -H "Authorization: Bearer $TOKEN" | jq
     Katalog stok yüzünden düşmez; bağlayıcı kontrol rezervasyondadır.
 - **Satış durumu (T7.6):** `isActive` her üründe yazılır (`omitempty` yok): liste pasif teklifi de
   döndürür (catalog tasarımı), `false` "satışta değil" demektir; web onu sepete eklemez.
+- **Genel arama (T9.6, `GET /v1/search`):** catalog'un `SearchNearby`'si. Dahil etme ve sıra catalog'da
+  (açık marketler yakından uzağa, kapalılar sonda; adı eşleşen market ürünsüz de listelenir, pasif teklif
+  yok). Gateway sonucu REST'e çevirir: her sonuç yakındaki market satırıdır (`market`, `distanceMeters`)
+  + `marketNameMatched`, `products` (en fazla 3) ve `totalProductMatches`; teklif REST'te "ürün"dür.
+  - **Stok market başına:** ürünü olan her market için bir `CheckAvailability`, **hepsi paralel**
+    (`internal/storefront/search.go`). Neden tek çağrı değil: stok sayaçları market bazında tutulur (Redis
+    anahtarında `{market}` hash-tag'i); çok marketi tek okumada okuyan sorgu yok, stok servisi de market
+    başına ayrı okurdu. Süre tek çağrınınki kadardır; market sayısı sınırlıdır (en fazla 20).
+  - **Bir marketin stoğu gelmezse** yalnızca o marketin ürünleri stoksuz döner, diğerleri etkilenmez
+    (aynı `WARN` satırları, `marketId` ile). Kurallar ürün listesiyle ortak (`internal/storefront/stock.go`).
+  - `q`'nun kuralı (zorunlu, kırpılmış 2-64) catalog'dadır; gateway yalnızca konumun biçimini doğrular,
+    hata `details.q` ile döner.
 
 ```bash
 curl -s "localhost:8080/v1/markets?lat=40.9885&lng=29.0262" | jq '.data.items[].market.name'   # Ev: 3 market
 curl -s "localhost:8080/v1/markets?lat=41.1363&lng=29.8539" | jq '.data.items'                 # Yazlik: []
 curl -s "localhost:8080/v1/markets/mkt_migros-jet-moda/products?q=s%C3%BCt" | jq '.data.items[].name'
+curl -s "localhost:8080/v1/search?lat=40.9885&lng=29.0262&q=s%C3%BCt" \
+  | jq '.data.items[] | {market: .market.name, m: .distanceMeters, urunler: [.products[].name], toplam: .totalProductMatches}'
 ```
 
 ## Ortam değişkenleri
@@ -404,10 +419,10 @@ curl -s "localhost:8080/v1/markets/mkt_migros-jet-moda/products?q=s%C3%BCt" | jq
 | `ASSET_BASE_URL`             | **yok — zorunlu** | Görsel adreslerinin kökü (aşağıda)              |
 | `GATEWAY_PORT`               | `8080`            | Dinlenen HTTP portu                             |
 | `CATALOG_GRPC_ADDR`          | `localhost:50051` | catalog-service adresi (`host:port`)            |
-| `INVENTORY_GRPC_ADDR`        | `localhost:50052` | inventory-service adresi (ürün listesindeki stok, T8.4) |
+| `INVENTORY_GRPC_ADDR`        | `localhost:50052` | inventory-service adresi (ürün listesi ve genel aramadaki stok, T8.4, T9.6) |
 | `ORDER_GRPC_ADDR`            | `localhost:50053` | order-service adresi                            |
 | `GATEWAY_REQUEST_TIMEOUT_MS` | `5000`            | Tek bir servis çağrısının üst sınırı            |
-| `GATEWAY_STOCK_TIMEOUT_MS`   | `300`             | Ürün listesindeki stok sorgusunun üst sınırı; aşılırsa liste stoksuz döner (T8.4) |
+| `GATEWAY_STOCK_TIMEOUT_MS`   | `300`             | Stok sorgusunun üst sınırı (genel aramada market başına, paralel); aşılırsa ürünler stoksuz döner (T8.4, T9.6) |
 | `GRPC_SHUTDOWN_TIMEOUT_MS`   | `10000`           | Kapanışta devam eden istekler için bekleme      |
 | `LOG_LEVEL`                  | `info`            | `trace/debug/info/warn/error/fatal` (Node ile ortak) |
 | `MOCK`                       | `false`           | `/healthz`'de bildirilir (B16); `true` ise hesaplar bellekte, Mongo'ya gidilmez |
@@ -462,7 +477,7 @@ ortam degiskenleri gecersiz: ASSET_BASE_URL: zorunlu, ornek: http://localhost:51
 
 `mongo` (T8.1) ve `redis` (T8.2) kalemleri yalnızca `MOCK=false` iken vardır; MOCK'ta hesaplar
 ve tekrar kayıtları bellekte tutulur. `inventory` T8.4'ten beri listede ve diğer servislerle aynı
-kurala tabidir: kapalıysa `/healthz` 503 döner. Ürün listesi o sırada da stoksuz çalışır.
+kurala tabidir: kapalıysa `/healthz` 503 döner. Ürün listesi ve genel arama o sırada da stoksuz çalışır.
 
 Bir servis düşükse **503** ve hata zarfı döner; rapor `error.details` içindedir. Servis
 durumu üç değerlidir: `SERVING`, `NOT_SERVING` (servis kendini hasta bildirdi) ve
