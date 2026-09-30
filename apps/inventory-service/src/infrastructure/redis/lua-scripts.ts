@@ -20,7 +20,9 @@ export function loadInventoryScripts(
   redis: RedisConnection['redis'],
   logger: Logger,
 ): Promise<LuaScriptRegistry> {
-  // reserve kullanici kilidine de dokunur (resv:user:{userId}): stok anahtarlarindan
-  // ayri slot, bilincli (T10.1 karari; redis-kit keys.ts userReservationKey).
-  return loadLuaScripts(redis, LUA_DIRECTORY, logger, { crossSlot: [LUA_SCRIPTS.RESERVE] });
+  // reserve ve release kullanici kilidine de dokunur (resv:user:{userId}): stok
+  // anahtarlarindan ayri slot, bilincli (T10.1 karari; redis-kit keys.ts userReservationKey).
+  return loadLuaScripts(redis, LUA_DIRECTORY, logger, {
+    crossSlot: [LUA_SCRIPTS.RESERVE, LUA_SCRIPTS.RELEASE],
+  });
 }

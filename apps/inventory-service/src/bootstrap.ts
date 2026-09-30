@@ -11,6 +11,7 @@ import { inventoryV1 } from '@getir/proto';
 import type { GrpcServiceRegistration } from '@getir/service-kit';
 
 import { createCheckAvailability } from './application/check-availability.js';
+import { createReleaseReservation } from './application/release-reservation.js';
 import { createReserveStock } from './application/reserve-stock.js';
 import { INVENTORY_SERVICE_FULL_NAME } from './config/constants.js';
 import type { StockPorts } from './domain/stock-ports.js';
@@ -20,7 +21,7 @@ import { createInventoryImplementation } from './interfaces/grpc/inventory-handl
 
 export interface BootstrapOptions {
   readonly logger?: Logger;
-  /** Sayaclar ve rezervasyon. Verilmezse bellekteki demo stogu (MOCK modu). */
+  /** Sayaclar, rezervasyon ve defter. Verilmezse bellekteki demo stogu (MOCK modu). */
   readonly stock?: StockPorts;
   /** Rezervasyonun "simdi"si; verilmezse sistem saati (testler sabit saat verir). */
   readonly clock?: Clock;
@@ -29,6 +30,8 @@ export interface BootstrapOptions {
 /** Servisin gRPC'ye kayitli hali; startGrpcServer bunu oldugu gibi alir. */
 export function buildInventoryService(options: BootstrapOptions = {}): GrpcServiceRegistration {
   const stock = options.stock ?? createInMemoryStock(STOCK_LEVELS);
+  const clock = options.clock ?? systemClock;
+  const logger = options.logger ?? silentLogger;
 
   const implementation = createInventoryImplementation({
     checkAvailability: createCheckAvailability({
@@ -38,8 +41,14 @@ export function buildInventoryService(options: BootstrapOptions = {}): GrpcServi
     reserveStock: createReserveStock({
       reservations: stock.reservations,
       recoverCounters: stock.recoverCounters,
-      clock: options.clock ?? systemClock,
-      logger: options.logger ?? silentLogger,
+      clock,
+      logger,
+    }),
+    releaseReservation: createReleaseReservation({
+      reservations: stock.reservations,
+      ledger: stock.ledger,
+      clock,
+      logger,
     }),
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });

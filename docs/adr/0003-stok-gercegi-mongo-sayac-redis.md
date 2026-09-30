@@ -68,3 +68,9 @@ Ustteki karar degismez. "Redis kaybi veri kaybi degil, yeniden isinma maliyetidi
 kendiliginden isler: sayaclar yazildiktan sonra konan bir isaret (stock:seeded) sayesinde servis,
 bulunamayan bir sayacin "bu markette yok" mu yoksa "Redis bosaldi" mi oldugunu ayirir ve ikincisinde
 sayaclari Mongo'dan yeniden yazar. Isaret TTL'sizdir; gerekcesi ve kurallari ADR-17'de.
+
+## Ek (T10.2, 2026-10-01): rezervasyonun sonuclanmasi ve stok defteri
+
+Ustteki karar degismez. Rezervasyon birakilinca (T10.2 PR 1; onay PR 2'de) sayaclar Redis'te
+hareket eder, kalici kayit Mongo'daki stok defterine (`stock_ledger`) duser. Iki deponun sirasi,
+yarida kalan kaydin tamamlanmasi ve defterin eldeki adetle (onHand) tutmasi ADR-18'de.

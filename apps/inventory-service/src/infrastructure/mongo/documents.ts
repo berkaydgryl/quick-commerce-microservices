@@ -4,8 +4,11 @@
 
 import type { BaseDocument } from '@getir/mongo-kit';
 
+import type { LedgerKind } from '../../domain/stock-ledger.js';
+
 export const COLLECTIONS = {
   STOCK: 'stock',
+  STOCK_LEDGER: 'stock_ledger',
 } as const;
 
 /**
@@ -26,4 +29,25 @@ export interface StockDocument extends BaseDocument {
 
 export function stockDocumentId(marketId: string, sku: string): string {
   return `${marketId}/${sku}`;
+}
+
+/**
+ * `stock_ledger`: her stok hareketinin degismez kaydi (T10.2, ADR-18; alanlar
+ * domain/stock-ledger.ts LedgerEntry).
+ *
+ * `_id` DOGAL ANAHTARDIR (domain/stock-ledger.ts ledgerEntryId): siparis
+ * hareketinde "siparis/sku/tur", acilista "opening/market/sku". Ayni hareket
+ * ikinci kez yazilirsa ayni `_id`'ye duser ve yazilmaz (B14: cift kayit
+ * olusmaz); ayri bir benzersiz indeks gerekmez.
+ */
+export interface StockLedgerDocument extends BaseDocument {
+  marketId: string;
+  sku: string;
+  kind: LedgerKind;
+  delta: number;
+  quantity: number;
+  reason: string;
+  /** Siparis hareketlerinde; acilis kaydinda yok. */
+  orderId?: string;
+  createdAt: Date;
 }

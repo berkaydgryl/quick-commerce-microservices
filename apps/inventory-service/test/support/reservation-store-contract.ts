@@ -1,7 +1,7 @@
 /**
- * Rezervasyon sozlesmesi (T10.1): bellek (MOCK) ve Redis (reserve.lua)
- * uygulamalari AYNI senaryolardan gecer. Bellekteki birim testinde, Redis
- * entegrasyon testinde kosar.
+ * Rezervasyon sozlesmesi (T10.1, birakma T10.2): bellek (MOCK) ve Redis
+ * (reserve.lua, release.lua) uygulamalari AYNI senaryolardan gecer.
+ * Bellekteki birim testinde, Redis entegrasyon testinde kosar.
  *
  * Saat GERCEKTIR: Redis'te kullanici kilidi ve kayit gercek sureyle (PX,
  * PEXPIRE) doldugu icin sure senaryolari kisa sure + gercek bekleme kullanir.
@@ -202,6 +202,91 @@ export function describeReservationStoreContract(
         counterMissing: false,
       });
       expect(await counts(MARKET, ['CIKOLATA-80'])).toEqual({ 'CIKOLATA-80': 0 });
+    });
+
+    const release = (order: number, reason = 'user_cancelled', marketId = MARKET) =>
+      stock.reservations.release({
+        orderId: orderId(order),
+        marketId,
+        reason,
+        nowMs: systemClock.now(),
+      });
+
+    it('birakma: adetler sayaclara doner, kullanici kilidi kalkar; kalemler SKU sirasinda', async () => {
+      await reserve(1, 1, [
+        { sku: 'SUT-1L', quantity: 2 },
+        { sku: 'KOLA-1L', quantity: 1 },
+      ]);
+
+      const outcome = await release(1);
+
+      expect(outcome).toEqual({
+        status: 'released',
+        skippedCounters: 0,
+        lines: [
+          { sku: 'KOLA-1L', quantity: 1 },
+          { sku: 'SUT-1L', quantity: 2 },
+        ],
+      });
+      expect(await counts(MARKET, ['SUT-1L', 'KOLA-1L'])).toEqual({ 'SUT-1L': 5, 'KOLA-1L': 3 });
+      // Kilit kalkti: ayni kullanici yeni siparisi hemen acar.
+      expect((await reserve(2, 1, [{ sku: 'SUT-1L', quantity: 1 }])).status).toBe('reserved');
+    });
+
+    it('ikinci birakma sayaclari TEKRAR artirmaz: iz (settled) ilk gerekce ve adetlerle doner', async () => {
+      await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 2 }]);
+      const before = systemClock.now();
+      await release(1, 'user_cancelled');
+
+      const again = await release(1, 'payment_failed');
+
+      expect(again).toMatchObject({
+        status: 'settled',
+        settlement: 'released',
+        reason: 'user_cancelled',
+        lines: [{ sku: 'SUT-1L', quantity: 2 }],
+      });
+      expect(again.status === 'settled' ? again.settledAt : -1).toBeGreaterThanOrEqual(before);
+      expect(await counts(MARKET, ['SUT-1L'])).toEqual({ 'SUT-1L': 5 });
+    });
+
+    it('iz silinince (forgetSettled) birakma absent; hic olmamis rezervasyon da absent', async () => {
+      await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 2 }]);
+      await release(1);
+
+      await stock.reservations.forgetSettled(MARKET, orderId(1));
+
+      expect(await release(1)).toEqual({ status: 'absent' });
+      expect(await release(9)).toEqual({ status: 'absent' });
+      expect(await counts(MARKET, ['SUT-1L'])).toEqual({ 'SUT-1L': 5 });
+    });
+
+    it('birakma market basinadir: baska marketteki ayni siparis kimligi absent', async () => {
+      await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 2 }]);
+
+      expect(await release(1, 'user_cancelled', OTHER_MARKET)).toEqual({ status: 'absent' });
+      expect(await counts(MARKET, ['SUT-1L'])).toEqual({ 'SUT-1L': 3 });
+    });
+
+    it('birakilan stok baskasina satilabilir: son kutu geri doner', async () => {
+      await reserve(1, 1, [{ sku: 'CIKOLATA-80', quantity: 1 }]);
+      await release(1);
+
+      expect((await reserve(2, 2, [{ sku: 'CIKOLATA-80', quantity: 1 }])).status).toBe('reserved');
+    });
+
+    it('kullanici kilidi yalnizca BU siparisinse silinir: sonraki siparisin kilidi kalir', async () => {
+      await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 1 }], { ttlMs: SHORT_TTL_MS });
+      await sleep(AFTER_SHORT_TTL_MS);
+      await reserve(2, 1, [{ sku: 'KOLA-1L', quantity: 1 }]);
+
+      // Suresi dolmus ama supurulmemis ilk siparis birakilir (kaydi pay icinde).
+      expect((await release(1)).status).toBe('released');
+
+      expect(await reserve(3, 1, [{ sku: 'CIPS-150', quantity: 1 }])).toEqual({
+        status: 'user-has-active',
+        activeOrderId: orderId(2),
+      });
     });
 
     it('tekrar eden SKU depoya ulasirsa INTERNAL; hicbir sey yazilmaz (fazla satis olurdu)', async () => {

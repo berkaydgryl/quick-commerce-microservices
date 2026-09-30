@@ -52,9 +52,63 @@ export type ReserveOutcome =
       readonly counterMissing: boolean;
     };
 
-/** Rezervasyonun yazilmasi: Redis'te reserve.lua, MOCK'ta bellek. */
+/**
+ * Rezervasyonun nasil sonuclandigi (T10.2, ADR-18). Bu PR'da yalnizca birakma;
+ * onay (PR 2) ve sure dolumu (supurucu, T10.3) buraya eklenir.
+ */
+export type ReservationSettlement = 'released';
+
+/** Birakma komutu (T10.2). */
+export interface ReleaseCommand {
+  readonly orderId: string;
+  readonly marketId: string;
+  /** Kisa anahtar (RELEASE_REASON_PATTERN); defter kaydina oldugu gibi yazilir. */
+  readonly reason: string;
+  /** Istek ani (ms, servisin saati): sonuclanma ani olarak Redis izine yazilir. */
+  readonly nowMs: number;
+}
+
+/**
+ * Deponun birakma cevabi. Hata degil SONUC (B3, B4): supurucu, kullanici ve
+ * odeme ayni rezervasyonu yaris halinde isleyebilir; sahipligi yalnizca biri
+ * alir (resv:index'ten ZREM).
+ */
+export type ReleaseOutcome =
+  /**
+   * Sahiplik bu cagrinin: sayaclar geri artti. Kaydin izi durur; defter
+   * yazilinca silinir (forgetSettled). `skippedCounters`: sayaci olmayan
+   * kalem sayisi (sayac YARATILMAZ; bkz. release.lua).
+   */
+  | {
+      readonly status: 'released';
+      readonly lines: readonly ReservationLine[];
+      readonly skippedCounters: number;
+    }
+  /**
+   * Daha once sonuclanmis, izi hala duruyor: onceki cagrinin defter kaydi
+   * yarida kalmis olabilir (ADR-18). Sayaclar TEKRAR hareket etmedi.
+   */
+  | {
+      readonly status: 'settled';
+      readonly settlement: ReservationSettlement;
+      readonly reason: string;
+      readonly settledAt: number;
+      readonly lines: readonly ReservationLine[];
+    }
+  /** Ne aktif rezervasyon ne iz var: hic olmamis ya da coktan sonuclanmis. */
+  | { readonly status: 'absent' }
+  /**
+   * Indekste vardi ama kaydi yoktu (adetler bilinmiyor): indeksten silindi,
+   * stok GERI VERILEMEDI. Normal akista olmaz; kayit indeksten once dusmez.
+   */
+  | { readonly status: 'orphaned' };
+
+/** Rezervasyonun yazilmasi: Redis'te reserve.lua ve release.lua, MOCK'ta bellek. */
 export interface ReservationStore {
   reserve(command: ReserveCommand): Promise<ReserveOutcome>;
+  release(command: ReleaseCommand): Promise<ReleaseOutcome>;
+  /** Defter yazildiktan sonra sonuclanan rezervasyonun izini siler (ADR-18). */
+  forgetSettled(marketId: string, orderId: string): Promise<void>;
 }
 
 /**

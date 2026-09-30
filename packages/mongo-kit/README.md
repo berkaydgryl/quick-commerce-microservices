@@ -68,6 +68,11 @@ ObjectId değil — kimliğin türü log satırında ve Redis anahtarında çıp
 Çakışan **değer** dışarı verilmez, yalnızca alan adı: `keyValue` müşteri verisi
 taşıyabilir (telefon, adres) ve hata zarfı istemciye gider.
 
+**Toplu yazım** (`bulkWrite`, `insertMany`) yazım dışı bir hatayı (ağ, sunucu seçimi)
+`MongoBulkWriteError`'a sarar; asıl hata `errorResponse`'tadır ve o çevrilir. Tanınmasaydı Mongo
+kapalıyken her toplu yazım tekrar denenebilir `SERVICE_UNAVAILABLE` yerine `INTERNAL` dönerdi
+(T10.2 canlı testinde bulundu). Toplu yazımdaki benzersiz indeks ihlali yine `CONFLICT`'tir.
+
 ## Test
 
 `test/integration` gerçek Mongo ile koşar (Testcontainers, tek düğümlü replica set):

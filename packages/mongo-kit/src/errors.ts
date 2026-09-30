@@ -8,6 +8,7 @@
 
 import { AppError, ERROR_CODES } from '@getir/core';
 import {
+  MongoBulkWriteError,
   MongoError,
   MongoErrorLabel,
   MongoNetworkError,
@@ -49,6 +50,15 @@ export function toMongoAppError(error: unknown, context: MongoErrorContext = {})
     return error;
   }
 
+  // Toplu yazim (bulkWrite, insertMany) yazim DISI bir hatayi (sunucu secimi,
+  // ag) MongoBulkWriteError'a sarar; asil hata errorResponse'tadir. Taninmasaydi
+  // Mongo kapaliyken her toplu yazim tekrar denenebilir SERVICE_UNAVAILABLE
+  // yerine INTERNAL donerdi (T10.2 canli testinde bulundu). Asil hata cevrilir.
+  const wrapped = wrappedBulkCause(error);
+  if (wrapped !== undefined) {
+    return toMongoAppError(wrapped, context);
+  }
+
   const details: Record<string, string> = {};
   if (context.operation !== undefined) {
     details.operation = context.operation;
@@ -87,6 +97,18 @@ export function toMongoAppError(error: unknown, context: MongoErrorContext = {})
   }
 
   return AppError.internal('Veritabani islemi basarisiz', { details, cause: error });
+}
+
+/**
+ * Toplu yazimin sardigi asil (yazim disi) hata; yoksa undefined. Yazim hatasinda
+ * (benzersiz indeks) errorResponse duz bir sunucu cevabidir, Error degildir.
+ */
+function wrappedBulkCause(error: unknown): MongoError | undefined {
+  if (!(error instanceof MongoBulkWriteError)) {
+    return undefined;
+  }
+  const inner: unknown = error.errorResponse;
+  return inner instanceof MongoError && inner !== error ? inner : undefined;
 }
 
 /** Deger, benzersiz indeks ihlali mi? (upsert yerine "varsa gec" akislari icin.) */

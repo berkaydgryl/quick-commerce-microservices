@@ -28,7 +28,8 @@ import type { CounterRecovery } from '../domain/stock.js';
 const MS_PER_SECOND = 1000;
 
 export interface ReserveStockDeps {
-  readonly reservations: ReservationStore;
+  /** Yalnizca rezervasyon yazimi (birakma bu use-case'in isi degil). */
+  readonly reservations: Pick<ReservationStore, 'reserve'>;
   readonly recoverCounters: CounterRecovery;
   readonly clock: Clock;
   readonly logger: Logger;

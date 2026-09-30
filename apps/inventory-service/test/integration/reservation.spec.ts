@@ -10,13 +10,15 @@
  *   5. NOSCRIPT sonrasi toparlanma; bozuk ve negatif sayac.
  *   6. Kullanici kilidi ayri slot'ta: beyan edildigi icin cagri basina uyari yok.
  *   7. Gercek gRPC uzerinden: STOCK_INSUFFICIENT ayrintisi, dusumun musaitlikte gorunmesi.
+ *   8. Birakma (release.lua, T10.2): iz, sahiplik yarisi, bozuk / eksik sayac,
+ *      kaydi dusmus indeks uyesi, eskimis on okuma.
  */
 
 import { ERROR_CODES, GRPC_STATUS, silentLogger, systemClock } from '@getir/core';
 import { recordingLogger } from '@getir/core/testing';
 import type { LogLine } from '@getir/core/testing';
 import { inventoryV1 } from '@getir/proto';
-import type { RedisConnection } from '@getir/redis-kit';
+import type { LuaScript, RedisConnection } from '@getir/redis-kit';
 import {
   connectRedis,
   reservationIndexKey,
@@ -30,8 +32,13 @@ import type { StartedRedisContainer } from '@testcontainers/redis';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { buildInventoryService } from '../../src/bootstrap.js';
-import { LUA_SCRIPTS, RESERVATION_HOLD_AFTER_EXPIRY_MS } from '../../src/config/constants.js';
+import {
+  LUA_SCRIPTS,
+  RESERVATION_HOLD_AFTER_EXPIRY_MS,
+  SETTLED_RESERVATION_TTL_MS,
+} from '../../src/config/constants.js';
 import type { ReservationLine } from '../../src/domain/reservation.js';
+import { InMemoryStockLedger } from '../../src/infrastructure/memory/in-memory-stock-ledger.js';
 import { loadInventoryScripts } from '../../src/infrastructure/redis/lua-scripts.js';
 import { RedisReservationStore } from '../../src/infrastructure/redis/redis-reservation-store.js';
 import { RedisStockCounters } from '../../src/infrastructure/redis/redis-stock-counters.js';
@@ -52,6 +59,7 @@ let container: StartedRedisContainer;
 let connection: RedisConnection;
 let counters: RedisStockCounters;
 let reservations: RedisReservationStore;
+let releaseScript: LuaScript;
 const loadLines: LogLine[] = [];
 
 beforeAll(async () => {
@@ -62,9 +70,15 @@ beforeAll(async () => {
   });
   counters = new RedisStockCounters(connection.redis, silentLogger);
   const scripts = await loadInventoryScripts(connection.redis, recordingLogger(loadLines));
-  reservations = new RedisReservationStore(scripts.get(LUA_SCRIPTS.RESERVE), {
-    holdAfterExpiryMs: RESERVATION_HOLD_AFTER_EXPIRY_MS,
-  });
+  releaseScript = scripts.get(LUA_SCRIPTS.RELEASE);
+  reservations = new RedisReservationStore(
+    connection.redis,
+    { reserve: scripts.get(LUA_SCRIPTS.RESERVE), release: scripts.get(LUA_SCRIPTS.RELEASE) },
+    {
+      holdAfterExpiryMs: RESERVATION_HOLD_AFTER_EXPIRY_MS,
+      settledTtlMs: SETTLED_RESERVATION_TTL_MS,
+    },
+  );
 });
 
 afterAll(async () => {
@@ -257,6 +271,142 @@ describe('dayaniklilik', () => {
   });
 });
 
+describe('birakma (release.lua, T10.2)', () => {
+  beforeEach(() => seed({ 'SUT-1L': 5, 'KOLA-1L': 3 }));
+
+  const release = (order: number, reason = 'user_cancelled') =>
+    reservations.release({
+      orderId: orderId(order),
+      marketId: MARKET,
+      reason,
+      nowMs: systemClock.now(),
+    });
+
+  const counterValues = () =>
+    connection.redis.mget(stockAvailKey(MARKET, 'SUT-1L'), stockAvailKey(MARKET, 'KOLA-1L'));
+
+  it('iz: kayit silinmez, state/gerekce/an eklenir ve iz omru kadar yasar; indeks uyesi ve kilit gider', async () => {
+    await reserve(1, 1, [
+      { sku: 'SUT-1L', quantity: 2 },
+      { sku: 'KOLA-1L', quantity: 1 },
+    ]);
+    const nowMs = systemClock.now();
+
+    await reservations.release({
+      orderId: orderId(1),
+      marketId: MARKET,
+      reason: 'risk_rejected',
+      nowMs,
+    });
+
+    const key = reservationKey(MARKET, orderId(1));
+    expect(await connection.redis.hgetall(key)).toMatchObject({
+      'qty:SUT-1L': '2',
+      'qty:KOLA-1L': '1',
+      state: 'released',
+      reason: 'risk_rejected',
+      settledAt: String(nowMs),
+    });
+    const ttl = await connection.redis.pttl(key);
+    expect(ttl).toBeGreaterThan(SETTLED_RESERVATION_TTL_MS - TTL_TOLERANCE_MS);
+    expect(ttl).toBeLessThanOrEqual(SETTLED_RESERVATION_TTL_MS);
+    expect(await connection.redis.zscore(reservationIndexKey(MARKET), orderId(1))).toBeNull();
+    expect(await connection.redis.exists(userReservationKey(userId(1)))).toBe(0);
+    expect(await counterValues()).toEqual(['5', '3']);
+  });
+
+  it('forgetSettled izi siler', async () => {
+    await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 2 }]);
+    await release(1);
+
+    await reservations.forgetSettled(MARKET, orderId(1));
+
+    expect(await connection.redis.exists(reservationKey(MARKET, orderId(1)))).toBe(0);
+  });
+
+  it('ayni rezervasyonu 10 cagri ayni anda birakirsa sahipligi TEK cagri alir; stok bir kez doner', async () => {
+    await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 2 }]);
+
+    const outcomes = await Promise.all(Array.from({ length: 10 }, () => release(1)));
+
+    expect(outcomes.filter((outcome) => outcome.status === 'released')).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome.status === 'settled')).toHaveLength(9);
+    expect(await counterValues()).toEqual(['5', '3']);
+  });
+
+  it('tam sayi olmayan sayac INTERNAL; HICBIR sey yazilmaz (diger kalem de artmaz)', async () => {
+    await reserve(1, 1, [
+      { sku: 'SUT-1L', quantity: 2 },
+      { sku: 'KOLA-1L', quantity: 1 },
+    ]);
+    await connection.redis.set(stockAvailKey(MARKET, 'SUT-1L'), '3.5');
+
+    await expect(release(1)).rejects.toMatchObject({ code: ERROR_CODES.INTERNAL });
+    expect(await counterValues()).toEqual(['3.5', '2']);
+    expect(await connection.redis.zscore(reservationIndexKey(MARKET), orderId(1))).not.toBeNull();
+    expect(await connection.redis.hget(reservationKey(MARKET, orderId(1)), 'state')).toBeNull();
+  });
+
+  it('sayaci OLMAYAN kalem atlanir, sayac yaratilmaz; digeri doner (skippedCounters)', async () => {
+    await reserve(1, 1, [
+      { sku: 'SUT-1L', quantity: 2 },
+      { sku: 'KOLA-1L', quantity: 1 },
+    ]);
+    await connection.redis.del(stockAvailKey(MARKET, 'KOLA-1L'));
+
+    const outcome = await release(1);
+
+    expect(outcome).toMatchObject({ status: 'released', skippedCounters: 1 });
+    expect(await counterValues()).toEqual(['5', null]);
+  });
+
+  it('indekste olup kaydi dusmus rezervasyon: orphaned, indeks temizlenir, sayaclara dokunulmaz', async () => {
+    await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 2 }]);
+    await connection.redis.del(reservationKey(MARKET, orderId(1)));
+
+    expect(await release(1)).toEqual({ status: 'orphaned' });
+    expect(await connection.redis.zscore(reservationIndexKey(MARKET), orderId(1))).toBeNull();
+    expect(await counterValues()).toEqual(['3', '3']);
+  });
+
+  it('eskimis on okuma (kalemler farkli) stale: HICBIR sey yazilmaz', async () => {
+    await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 2 }]);
+
+    const reply = await releaseScript.run(
+      [
+        reservationKey(MARKET, orderId(1)),
+        reservationIndexKey(MARKET),
+        stockAvailKey(MARKET, 'KOLA-1L'),
+        userReservationKey(userId(1)),
+      ],
+      [orderId(1), userId(1), 'user_cancelled', systemClock.now(), 60_000, 'KOLA-1L'],
+    );
+
+    expect(reply).toEqual(['stale']);
+    expect(await counterValues()).toEqual(['3', '3']);
+    expect(await connection.redis.zscore(reservationIndexKey(MARKET), orderId(1))).not.toBeNull();
+    expect(await connection.redis.get(userReservationKey(userId(1)))).toBe(orderId(1));
+  });
+
+  it('SCRIPT FLUSH sonrasi birakma calisir (NOSCRIPT -> yeniden yukleme)', async () => {
+    await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 2 }]);
+    await connection.redis.script('FLUSH');
+
+    expect((await release(1)).status).toBe('released');
+  });
+
+  it('kullanici kilidi ayri slot ama BEYANLI: birakmada da yuklemede bir kez bilgi', () => {
+    expect(
+      loadLines.filter(
+        (line) => line.level === 'info' && line.fields['script'] === LUA_SCRIPTS.RELEASE,
+      ),
+    ).toHaveLength(1);
+    expect(
+      loadLines.filter((line) => line.level === 'warn' && line.message.includes('hash-tag')),
+    ).toEqual([]);
+  });
+});
+
 describe('Reserve gercek gRPC ve Redis ile', () => {
   it('rezervasyon musaitlikte hemen gorunur; yetmeyen kalem ayrintiyla doner, hicbiri dusmez', async () => {
     await seed({ 'SUT-1L': 5, 'KOLA-1L': 1 });
@@ -264,7 +414,12 @@ describe('Reserve gercek gRPC ve Redis ile', () => {
       serviceName: 'inventory-resv-it',
       services: [
         buildInventoryService({
-          stock: { counters, reservations, recoverCounters: () => Promise.resolve(false) },
+          stock: {
+            counters,
+            reservations,
+            ledger: new InMemoryStockLedger(),
+            recoverCounters: () => Promise.resolve(false),
+          },
         }),
       ],
     });

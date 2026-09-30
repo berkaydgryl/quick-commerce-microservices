@@ -98,6 +98,16 @@ export const REFUND_REASON_MAX_LENGTH = 64;
 export const REFUND_REASON_PATTERN = /^[a-z0-9_]+$/;
 
 /**
+ * Rezervasyonu birakma gerekcesi ANAHTARI (T10.2; inventory.proto
+ * ReleaseRequest.reason): ornek "user_cancelled", "risk_rejected",
+ * "payment_failed". Iade gerekcesiyle ayni kural; stok defterine oldugu gibi
+ * yazilir, gosterimde cevrilir. Kapali liste degil: yeni gerekce stok
+ * servisini degistirmeden eklenebilir.
+ */
+export const RELEASE_REASON_MAX_LENGTH = 64;
+export const RELEASE_REASON_PATTERN = /^[a-z0-9_]+$/;
+
+/**
  * Sayfalama.
  *
  * Sinir disi pageSize REDDEDILMEZ, ust sinira KIRPILIR. Gerekce: ayni davranis

@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { CART_ITEM_MAX_QUANTITY, CART_MAX_ITEMS } from '@getir/contracts';
+import {
+  CART_ITEM_MAX_QUANTITY,
+  CART_MAX_ITEMS,
+  RELEASE_REASON_MAX_LENGTH,
+} from '@getir/contracts';
 
 import {
   MAX_AVAILABILITY_SKUS,
@@ -9,6 +13,7 @@ import {
 } from '../../src/config/constants.js';
 import {
   checkAvailabilityRequestSchema,
+  releaseRequestSchema,
   reserveRequestSchema,
 } from '../../src/interfaces/grpc/schemas.js';
 
@@ -145,5 +150,48 @@ describe('Reserve istek semasi (T10.1)', () => {
     ]);
     expect(reserveProblems({ ttlSeconds: RESERVATION_TTL_MIN_SECONDS })).toEqual({});
     expect(reserveProblems({ ttlSeconds: 120 })).toEqual({});
+  });
+});
+
+describe('Release istek semasi (T10.2)', () => {
+  const valid = {
+    orderId: 'ord_00000000000000000000000000000001',
+    darkStoreId: '',
+    marketId: 'mkt_migros-jet-moda',
+    reason: 'user_cancelled',
+  };
+
+  function releaseProblems(overrides: Record<string, unknown>) {
+    const result = releaseRequestSchema.safeParse({ ...valid, ...overrides });
+    return result.success ? {} : result.error.flatten().fieldErrors;
+  }
+
+  it('gecerli istek; deprecated dark_store_id ciktiya girmez', () => {
+    expect(releaseRequestSchema.parse(valid)).toEqual({
+      orderId: valid.orderId,
+      marketId: valid.marketId,
+      reason: 'user_cancelled',
+    });
+  });
+
+  it('siparis ve market zorunlu ve biciminde (Redis anahtarina girer)', () => {
+    expect(releaseProblems({ orderId: '' }).orderId).toEqual(['zorunlu']);
+    expect(releaseProblems({ orderId: 'ord_1' }).orderId).toEqual([
+      'ord_ onekli kimlik bekleniyor',
+    ]);
+    expect(releaseProblems({ marketId: '' }).marketId).toEqual(['zorunlu']);
+  });
+
+  it(`gerekce kisa anahtar: kucuk harf, rakam, alt cizgi; en fazla ${RELEASE_REASON_MAX_LENGTH}`, () => {
+    expect(releaseProblems({ reason: '' }).reason).toEqual(['zorunlu']);
+    expect(releaseProblems({ reason: 'Kullanici iptal etti' }).reason).toEqual([
+      'kucuk harf, rakam ve alt cizgiden olusan bir anahtar olmali',
+    ]);
+    expect(releaseProblems({ reason: 'user-cancelled' })).not.toEqual({});
+    expect(releaseProblems({ reason: 'a'.repeat(RELEASE_REASON_MAX_LENGTH + 1) }).reason).toEqual([
+      `en fazla ${RELEASE_REASON_MAX_LENGTH} karakter`,
+    ]);
+    expect(releaseProblems({ reason: 'a'.repeat(RELEASE_REASON_MAX_LENGTH) })).toEqual({});
+    expect(releaseProblems({ reason: 'payment_failed_3ds' })).toEqual({});
   });
 });

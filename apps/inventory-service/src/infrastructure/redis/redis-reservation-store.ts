@@ -1,5 +1,6 @@
 /**
- * Rezervasyonun Redis uygulamasi: lua/reserve.lua (T10.1, ADR-01).
+ * Rezervasyonun Redis uygulamasi: lua/reserve.lua (T10.1) ve lua/release.lua
+ * (T10.2; ADR-01, ADR-18).
  *
  * Anahtarlar redis-kit'in ureticilerinden gelir (bicim tek kaynakta); script'in
  * bekledigi sira B15'tedir: once stok sayaclari, sonra rezervasyon hash'i,
@@ -11,7 +12,7 @@
  */
 
 import { AppError } from '@getir/core';
-import type { LuaScript } from '@getir/redis-kit';
+import type { LuaScript, RedisConnection } from '@getir/redis-kit';
 import {
   reservationIndexKey,
   reservationKey,
@@ -21,7 +22,16 @@ import {
 import { z } from 'zod';
 
 import { duplicateSku } from '../../domain/reservation.js';
-import type { ReservationStore, ReserveCommand, ReserveOutcome } from '../../domain/reservation.js';
+import type {
+  ReleaseCommand,
+  ReleaseOutcome,
+  ReservationLine,
+  ReservationStore,
+  ReserveCommand,
+  ReserveOutcome,
+} from '../../domain/reservation.js';
+import { readReservationHash } from './reservation-hash.js';
+import type { ReservationHash } from './reservation-hash.js';
 
 /** Lua tam sayisi ioredis'ten sayi, hash alani metin olarak gelir. */
 const integerReply = z.union([
@@ -35,7 +45,7 @@ const integerReply = z.union([
 /** Kalemin script'teki 1 tabanli sirasi. */
 const lineIndex = integerReply.pipe(z.number().int().min(1));
 
-const replySchema = z.union([
+const reserveReplySchema = z.union([
   z.tuple([z.literal('reserved'), integerReply]),
   z.tuple([z.literal('already'), integerReply]),
   z.tuple([z.literal('user-active'), z.string().min(1)]),
@@ -44,14 +54,38 @@ const replySchema = z.union([
   z.tuple([z.literal('corrupt'), lineIndex]),
 ]);
 
+const quantityReply = integerReply.pipe(z.number().int().min(1));
+
+const releaseReplySchema = z.union([
+  z.tuple([z.literal('released'), integerReply.pipe(z.number().int().min(0))]).rest(quantityReply),
+  z
+    .tuple([z.literal('settled'), z.literal('released'), z.string().min(1), integerReply])
+    .rest(z.union([z.string().min(1), z.number()])),
+  z.tuple([z.literal('absent')]),
+  z.tuple([z.literal('orphaned')]),
+  z.tuple([z.literal('stale')]),
+  z.tuple([z.literal('corrupt'), lineIndex]),
+]);
+
+/** On okuma ile script arasinda kayit degisirse (on okuma eskidiyse) kac kez denenir. */
+const RELEASE_ATTEMPTS = 2;
+
+export interface RedisReservationScripts {
+  readonly reserve: LuaScript;
+  readonly release: LuaScript;
+}
+
 export interface RedisReservationStoreOptions {
   /** Hash'in bitisten sonra kalma payi (ms): supurucu gecikmeli tick'te okuyabilsin. */
   readonly holdAfterExpiryMs: number;
+  /** Sonuclanan kaydin izinin en uzun omru (ms; ADR-18). */
+  readonly settledTtlMs: number;
 }
 
 export class RedisReservationStore implements ReservationStore {
   constructor(
-    private readonly script: LuaScript,
+    private readonly redis: RedisConnection['redis'],
+    private readonly scripts: RedisReservationScripts,
     private readonly options: RedisReservationStoreOptions,
   ) {}
 
@@ -79,7 +113,7 @@ export class RedisReservationStore implements ReservationStore {
       ...lines.map(({ quantity }) => quantity),
     ];
 
-    const parsed = replySchema.safeParse(await this.script.run(keys, args));
+    const parsed = reserveReplySchema.safeParse(await this.scripts.reserve.run(keys, args));
     if (!parsed.success) {
       throw AppError.internal('reserve script beklenmeyen cevap verdi', {
         cause: parsed.error,
@@ -122,6 +156,95 @@ export class RedisReservationStore implements ReservationStore {
     }
   }
 
+  /**
+   * Once hash okunur: script'in dokunacagi sayaclar ve kullanici kilidi
+   * KEYS'te bildirilmelidir. Okuma ile script arasinda kayit degistiyse
+   * ('stale') bir kez daha okunup denenir; yine degistiyse CONFLICT.
+   */
+  async release(command: ReleaseCommand): Promise<ReleaseOutcome> {
+    for (let attempt = 1; attempt <= RELEASE_ATTEMPTS; attempt += 1) {
+      const hash = readReservationHash(
+        await this.redis.hgetall(reservationKey(command.marketId, command.orderId)),
+        command,
+      );
+      const outcome = await this.releaseOnce(command, hash);
+      if (outcome !== 'stale') {
+        return outcome;
+      }
+    }
+    throw AppError.conflict('Rezervasyon ayni anda degisti, tekrar deneyin', {
+      details: { orderId: command.orderId, marketId: command.marketId },
+    });
+  }
+
+  /**
+   * Izi siler. Guvenli: iz dururken reserve.lua ayni siparisi yeniden acmaz
+   * (EXISTS), dolayisiyla bu anahtar ancak sonuclanmis kaydi tasiyabilir.
+   */
+  async forgetSettled(marketId: string, orderId: string): Promise<void> {
+    await this.redis.del(reservationKey(marketId, orderId));
+  }
+
+  private async releaseOnce(
+    command: ReleaseCommand,
+    hash: ReservationHash | undefined,
+  ): Promise<ReleaseOutcome | 'stale'> {
+    const { orderId, marketId, reason, nowMs } = command;
+    const skus = hash?.lines.map(({ sku }) => sku) ?? [];
+    const keys = [
+      reservationKey(marketId, orderId),
+      reservationIndexKey(marketId),
+      ...skus.map((sku) => stockAvailKey(marketId, sku)),
+      ...(hash === undefined ? [] : [userReservationKey(hash.userId)]),
+    ];
+    const args = [orderId, hash?.userId ?? '', reason, nowMs, this.options.settledTtlMs, ...skus];
+
+    const parsed = releaseReplySchema.safeParse(await this.scripts.release.run(keys, args));
+    if (!parsed.success) {
+      throw AppError.internal('release script beklenmeyen cevap verdi', {
+        cause: parsed.error,
+        details: { orderId, marketId },
+      });
+    }
+
+    const reply = parsed.data;
+    switch (reply[0]) {
+      case 'released': {
+        const [, skippedCounters, ...quantities] = reply;
+        const lines = skus.flatMap((sku, index) => {
+          const quantity = quantities[index];
+          return quantity === undefined ? [] : [{ sku, quantity }];
+        });
+        if (lines.length !== skus.length || quantities.length !== skus.length) {
+          throw AppError.internal('release script adetleri eksik dondurdu', {
+            details: { orderId, marketId, expected: skus.length, received: quantities.length },
+          });
+        }
+        return { status: 'released', skippedCounters, lines };
+      }
+      case 'settled': {
+        const [, settlement, settledReason, settledAt, ...pairs] = reply;
+        return {
+          status: 'settled',
+          settlement,
+          reason: settledReason,
+          settledAt,
+          lines: linesOf(pairs, command),
+        };
+      }
+      case 'absent':
+        return { status: 'absent' };
+      case 'orphaned':
+        return { status: 'orphaned' };
+      case 'stale':
+        return 'stale';
+      case 'corrupt':
+        throw AppError.internal('stok sayaci bozuk', {
+          details: { marketId, sku: skus[reply[1] - 1] ?? `#${reply[1]}` },
+        });
+    }
+  }
+
   /** Script'in 1 tabanli kalem sirasi -> kalem; aralik disi INTERNAL. */
   private lineAt(command: ReserveCommand, index: number) {
     const line = command.lines[index - 1];
@@ -132,4 +255,24 @@ export class RedisReservationStore implements ReservationStore {
     }
     return line;
   }
+}
+
+/** 'settled' cevabindaki [sku, adet, sku, adet, ...] -> kalemler (sku sirasinda). */
+function linesOf(pairs: readonly (string | number)[], command: ReleaseCommand): ReservationLine[] {
+  const parsed = z
+    .array(z.tuple([z.string().min(1), quantityReply]))
+    .safeParse(
+      Array.from({ length: Math.ceil(pairs.length / 2) }, (_, index) =>
+        pairs.slice(index * 2, index * 2 + 2),
+      ),
+    );
+  if (!parsed.success) {
+    throw AppError.internal('release script bozuk iz dondurdu', {
+      cause: parsed.error,
+      details: { orderId: command.orderId, marketId: command.marketId },
+    });
+  }
+  return parsed.data
+    .map(([sku, quantity]) => ({ sku, quantity }))
+    .sort((left, right) => left.sku.localeCompare(right.sku));
 }
