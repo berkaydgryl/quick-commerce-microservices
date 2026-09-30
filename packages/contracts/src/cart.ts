@@ -29,6 +29,7 @@ import {
   CART_MAX_ITEMS,
   CART_MIN_ITEMS,
   COUPON_CODE_MAX_LENGTH,
+  SAVED_ADDRESSES_MAX,
 } from './constants.js';
 import { orderStatusSchema } from './order-status.js';
 
@@ -78,6 +79,15 @@ export const savedAddressSchema = deliveryAddressSchema.extend({
   /** Kullanicinin verdigi ad ("Ev", "Is"). */
   title: z.string().trim().min(1),
   note: z.string().max(ADDRESS_NOTE_MAX_LENGTH).optional(),
+});
+
+/**
+ * GET /v1/me/addresses (T9.5): oturumdaki kullanicinin adres defteri, kayit
+ * sirasinda. Sayfasiz SINIRLI liste: en fazla SAVED_ADDRESSES_MAX. Adresi
+ * olmayan hesapta bos liste (hata degil).
+ */
+export const savedAddressListSchema = z.object({
+  items: z.array(savedAddressSchema).max(SAVED_ADDRESSES_MAX),
 });
 
 /**
@@ -146,6 +156,7 @@ export const reservationReleaseSchema = z.object({
 export type CartItemInput = z.infer<typeof cartItemInputSchema>;
 export type DeliveryAddress = z.infer<typeof deliveryAddressSchema>;
 export type SavedAddress = z.infer<typeof savedAddressSchema>;
+export type SavedAddressList = z.infer<typeof savedAddressListSchema>;
 export type ReserveCartRequest = z.infer<typeof reserveCartRequestSchema>;
 export type ReservationLine = z.infer<typeof reservationLineSchema>;
 export type Reservation = z.infer<typeof reservationSchema>;

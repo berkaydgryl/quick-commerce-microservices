@@ -13,6 +13,8 @@ import {
   reservationSchema,
   reserveCartRequestSchema,
   deliveryAddressSchema,
+  SAVED_ADDRESSES_MAX,
+  savedAddressListSchema,
   savedAddressSchema,
   threeDsRequestSchema,
 } from '../../src/index.js';
@@ -172,6 +174,24 @@ describe('savedAddressSchema (kayitli adres) ve deliveryAddressSchema (siparis)'
 
   it('siparise giderken yalnizca line ve location tasinir (etiket ve not proto da yok)', () => {
     expect(deliveryAddressSchema.parse(saved)).toEqual(VALID_ADDRESS);
+  });
+});
+
+describe('savedAddressListSchema (adres defteri, T9.5)', () => {
+  const address = { ...VALID_ADDRESS, title: 'Ev' };
+  const book = (count: number) => ({ items: Array.from({ length: count }, () => address) });
+
+  it('adresi olmayan hesap: bos liste gecerli, hata degil', () => {
+    expect(savedAddressListSchema.parse(book(0)).items).toEqual([]);
+  });
+
+  it('sinirli liste: tam SAVED_ADDRESSES_MAX gecer, bir fazlasi reddedilir', () => {
+    expect(savedAddressListSchema.safeParse(book(SAVED_ADDRESSES_MAX)).success).toBe(true);
+    expect(savedAddressListSchema.safeParse(book(SAVED_ADDRESSES_MAX + 1)).success).toBe(false);
+  });
+
+  it('her kalem kayitli adres bicimindedir: etiketsiz adres gecersiz', () => {
+    expect(savedAddressListSchema.safeParse({ items: [VALID_ADDRESS] }).success).toBe(false);
   });
 });
 

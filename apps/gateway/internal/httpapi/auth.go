@@ -141,6 +141,21 @@ func meHandler(profiles ProfileGetter) fiber.Handler {
 	}
 }
 
+// addressesHandler, GET /v1/me/addresses: oturumdaki kullanicinin adres
+// defteri (T9.5). Kisisel veri: profil gibi onbelleklenmez.
+func addressesHandler(addresses AddressBookGetter) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if err := rejectUnknownQuery(c); err != nil {
+			return err
+		}
+		book, err := addresses.Addresses(c.Context(), userIDOf(c))
+		if err != nil {
+			return err
+		}
+		return private(c, http.StatusOK, book)
+	}
+}
+
 // session, oturumu baslatan ya da yenileyen cevabi yazar: yenileme jetonu
 // cereze, gerisi (erisim jetonu, sureler, profil) onbelleklenmeyen govdeye.
 func session(c fiber.Ctx, status int, grant auth.Grant, sessions refreshCookies) error {

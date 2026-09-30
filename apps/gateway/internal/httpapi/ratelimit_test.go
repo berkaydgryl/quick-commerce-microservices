@@ -56,6 +56,7 @@ func limitedApp(t *testing.T, limits RateLimit, orders *fakeOrders, logger *slog
 		SessionRefresher:  service,
 		SessionRevoker:    service,
 		ProfileGetter:     &fakeProfiles{},
+		AddressBook:       &fakeProfiles{},
 		CheckoutSignals:   &fakeSignals{},
 		AccessTokens:      testTokens(),
 		Idempotency:       testIdempotency(),

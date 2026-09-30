@@ -53,6 +53,7 @@ func TestRulesMatchContractConstants(t *testing.T) {
 		"PASSWORD_MAX_LENGTH":  passwordMaxBytes,
 		"FULL_NAME_MIN_LENGTH": fullNameMinLength,
 		"FULL_NAME_MAX_LENGTH": fullNameMaxLength,
+		"SAVED_ADDRESSES_MAX":  MaxSavedAddresses,
 	} {
 		if contractValue := numberConstant(t, source, name); contractValue != goValue {
 			t.Errorf("%s: sozlesme %d, gateway %d", name, contractValue, goValue)

@@ -141,6 +141,19 @@ func TestDemoAddressesMatchTheRoadmapTable(t *testing.T) {
 	}
 }
 
+func TestAddressBookLimitIsEnforcedAtLoad(t *testing.T) {
+	// Adres defteri sinirlidir (auth.MaxSavedAddresses): seed siniri asan
+	// defteri yazmaz; okumadaki kesme sessiz veri kaybina donusmesin.
+	set := loadSet(t)
+	for len(set.Addresses) <= auth.MaxSavedAddresses {
+		set.Addresses = append(set.Addresses, set.Addresses[0])
+	}
+
+	if err := set.validate(); err == nil || !strings.Contains(err.Error(), "hazir adres en fazla") {
+		t.Errorf("siniri asan hazir adres reddedilmeli: %v", err)
+	}
+}
+
 func TestPersonasNeverLoadInProduction(t *testing.T) {
 	if err := Allowed("production"); !errors.Is(err, ErrProduction) {
 		t.Errorf("production reddedilmeli: %v", err)

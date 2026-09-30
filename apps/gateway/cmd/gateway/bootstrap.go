@@ -141,6 +141,7 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (*fi
 		SessionRefresher:  identity.service,
 		SessionRevoker:    identity.service,
 		ProfileGetter:     identity.service,
+		AddressBook:       identity.service,
 		CheckoutSignals:   identity.service,
 		AccessTokens:      identity.tokens,
 		// Tekrar korumasi ve hiz siniri (T8.2): Redis ya da MOCK'ta bellek.

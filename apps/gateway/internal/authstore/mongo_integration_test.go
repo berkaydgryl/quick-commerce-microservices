@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/authstore"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/ids"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/mongodb"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/persona"
 )
 
 const (
@@ -484,5 +486,40 @@ func TestReplaceUsersIsRepeatableAndClearsOldSessions(t *testing.T) {
 	}
 	if left, err := db.Collection(authstore.SessionsCollection).CountDocuments(t.Context(), bson.D{}); err != nil || left != 0 {
 		t.Errorf("silinen hesabin oturumu da silinmeli: %d %v", left, err)
+	}
+}
+
+func TestAddressBookOnMongoFollowsThePersonaSeed(t *testing.T) {
+	// GET /v1/me/addresses'in Mongo yolu: persona seed'i (ReplaceUsers) ile
+	// yazilan uc hazir adres, servisten kayit sirasinda ve sozlesme bicimiyle doner.
+	db := testDatabase(t)
+	set, err := persona.Load()
+	if err != nil {
+		t.Fatalf("persona dosyasi gecersiz: %v", err)
+	}
+	seeded := set.Users(time.Now(), "$2a$04$ozet")
+	if err := authstore.ReplaceUsers(t.Context(), db, seeded); err != nil {
+		t.Fatalf("seed basarisiz: %v", err)
+	}
+	service := auth.NewService(auth.Deps{
+		Users: authstore.NewMongoUsers(db), Sessions: authstore.NewMongoSessions(db),
+		Tokens: auth.NewTokens([]byte("yalnizca-test-icin-imza-sirri-32-bayttan-uzun"), time.Hour, time.Now),
+		Now:    time.Now,
+	})
+
+	book, err := service.Addresses(t.Context(), seeded[0].ID)
+	if err != nil {
+		t.Fatalf("adres defteri okunamadi: %v", err)
+	}
+
+	titles := make([]string, 0, len(book.Items))
+	for _, entry := range book.Items {
+		titles = append(titles, entry.Title)
+	}
+	if strings.Join(titles, ",") != "Ev,İş,Yazlık" {
+		t.Errorf("hazir adresler seed sirasinda donmeli: %v", titles)
+	}
+	if first := book.Items[0]; first.Location.Lat != 40.9885 || first.Location.Lng != 29.0262 || first.Line == "" {
+		t.Errorf("konum ve adres satiri Mongo'dan aynen donmeli: %+v", first)
 	}
 }
