@@ -18,6 +18,15 @@ export interface PageQuery {
   readonly token: string;
 }
 
+/** Bir marketteki arama eslesmeleri (T9.6): ilk birkaci + toplam sayi. */
+export interface MarketOfferMatches {
+  readonly marketId: string;
+  /** Eslesen aktif teklifler, market sayfasiyla ayni sirada (_id), en fazla perMarket. */
+  readonly offers: readonly Offer[];
+  /** Bu marketteki toplam eslesen aktif teklif; offers'tan fazla olabilir. */
+  readonly totalMatches: number;
+}
+
 /** Sayfa + toplam sayim. */
 export interface OfferPage extends PageSlice<Offer> {
   /** Filtreye uyan toplam kayit sayisi. */
@@ -38,4 +47,15 @@ export interface OfferReader {
     marketId: string,
     productIds: readonly string[],
   ): Promise<readonly Offer[]>;
+  /**
+   * Genel arama (T9.6): verilen marketlerin sorguyla eslesen AKTIF teklifleri,
+   * TEK sorguda (market sayisindan bagimsiz). Eslesme kurali market ici
+   * aramayla ayni (searchWords). Eslesmesi olmayan market listede yoktur;
+   * sira garantisi yoktur (siralama use-case'in isidir).
+   */
+  searchActiveOffers(
+    marketIds: readonly string[],
+    query: string,
+    perMarket: number,
+  ): Promise<readonly MarketOfferMatches[]>;
 }

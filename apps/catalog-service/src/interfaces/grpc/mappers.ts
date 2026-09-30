@@ -13,6 +13,7 @@ import type { catalogV1 } from '@getir/proto';
 import type { Category, Market, Offer, ProductUnit } from '../../domain/catalog.js';
 import { PRODUCT_UNIT } from '../../domain/catalog.js';
 import type { MarketDistance } from '../../domain/market-coverage.js';
+import type { NearbySearchResult } from '../../domain/nearby-search.js';
 import type { OfferPage } from '../../domain/offer-reader.js';
 
 /** Domain birimi -> proto enum. Eksik esleme derlemede yakalanir (Record). */
@@ -97,5 +98,17 @@ export function toListProductsResponse(page: OfferPage): catalogV1.ListProductsR
     products: [],
     offers: page.items.map(toProtoOffer),
     page: { nextPageToken: page.nextPageToken, totalSize: page.totalSize },
+  };
+}
+
+/** Genel arama sonucu (T9.6): market ve mesafe, ad eslesmesi, ilk teklifler, toplam. */
+export function toProtoMarketSearchResult(
+  result: NearbySearchResult,
+): catalogV1.MarketSearchResult {
+  return {
+    market: toProtoNearbyMarket(result.market),
+    marketNameMatched: result.marketNameMatched,
+    offers: result.offers.map(toProtoOffer),
+    totalOfferMatches: result.totalOfferMatches,
   };
 }

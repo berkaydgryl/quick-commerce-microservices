@@ -1,8 +1,14 @@
-import type { Db, Filter, IndexDescription } from 'mongodb';
+import type { Db, Document, Filter, IndexDescription } from 'mongodb';
 
 import type { Offer } from '../../domain/catalog.js';
 import { searchWords } from '../../domain/catalog.js';
-import type { OfferFilter, OfferPage, OfferReader, PageQuery } from '../../domain/offer-reader.js';
+import type {
+  MarketOfferMatches,
+  OfferFilter,
+  OfferPage,
+  OfferReader,
+  PageQuery,
+} from '../../domain/offer-reader.js';
 import type { OfferDocument } from './documents.js';
 import { COLLECTIONS } from './documents.js';
 import { fromOfferDocument } from './mappers.js';
@@ -36,6 +42,9 @@ export class OfferRepository extends ReplaceableRepository<OfferDocument> implem
    * oldugu icin bilincli olarak kabul edildi (T9.4; entegrasyon testi plani
    * dogrular). Mongo metin indeksi ($text) yalnizca tam kelime eslestirir:
    * "çik" -> "Çikolata" (yazarken arama) onunla yapilamaz.
+   * Genel arama (T9.6) ayni yoldan gider: yeni indeks yok; marketId ile
+   * baslayan bir indeksten YALNIZCA kapsayan marketlerin (en fazla
+   * MARKET_CANDIDATE_LIMIT) teklifleri okunur, kelimeler onlarin uzerinde suzulur.
    */
   protected override indexes(): readonly IndexDescription[] {
     return [
@@ -88,6 +97,30 @@ export class OfferRepository extends ReplaceableRepository<OfferDocument> implem
     return count > 0;
   }
 
+  /**
+   * Genel arama (T9.6): TEK toplama sorgusu (searchActiveOffersPipeline).
+   * Entegrasyon testi AYNI boru hattiyla plani dogrular.
+   */
+  async searchActiveOffers(
+    marketIds: readonly string[],
+    query: string,
+    perMarket: number,
+  ): Promise<readonly MarketOfferMatches[]> {
+    if (marketIds.length === 0 || searchWords(query).length === 0) {
+      return [];
+    }
+    const groups = await this.run('searchActiveOffers', () =>
+      this.collection
+        .aggregate<SearchGroup>(searchActiveOffersPipeline(marketIds, query, perMarket))
+        .toArray(),
+    );
+    return groups.map((group) => ({
+      marketId: group._id,
+      offers: group.offers.map(fromOfferDocument),
+      totalMatches: group.total,
+    }));
+  }
+
   async listCategoryIdsWithOffers(marketId: string): Promise<readonly string[]> {
     return this.run('listCategoryIdsWithOffers', () =>
       this.collection.distinct('categoryId', { marketId, isActive: true }),
@@ -130,16 +163,53 @@ export function offersByProductIdsFilter(
  * AYNI filtreyi kullanir (offersByProductIdsFilter gibi).
  */
 export function listOffersFilter(filter: OfferFilter): Filter<OfferDocument> {
-  const query: Filter<OfferDocument> = { marketId: filter.marketId };
-  if (filter.categoryId !== undefined) {
-    query.categoryId = filter.categoryId;
-  }
-  const words = filter.query === undefined ? [] : searchWords(filter.query);
-  if (words.length > 0) {
-    // Kelime basina bir kosul. Dizi alanda regex: elemanlardan BIRI eslesirse
-    // kosul saglanir ("ad ya da aciklama"); $and kelimelerin HEPSINI ister.
-    // Bellek uygulamasindaki matchesQuery ile ayni anlam.
-    query.$and = words.map((word) => ({ searchTerms: { $regex: escapeRegex(word) } }));
-  }
-  return query;
+  return {
+    marketId: filter.marketId,
+    ...(filter.categoryId === undefined ? {} : { categoryId: filter.categoryId }),
+    ...(filter.query === undefined ? {} : searchWordsFilter(filter.query)),
+  };
+}
+
+/** Genel aramanin (T9.6) grubu: market, toplam, ilk N teklif belgesi. */
+interface SearchGroup {
+  readonly _id: string;
+  readonly total: number;
+  readonly offers: OfferDocument[];
+}
+
+/**
+ * Genel aramanin boru hatti (T9.6). Ayri ve disa acik: depo ve sorgu plani
+ * testi AYNI boru hattini kullanir. Marketler + aktiflik + kelimeler ile
+ * suzulur, market sayfasiyla ayni sirada (_id) dizilir, market basina ilk
+ * perMarket teklif ve toplam sayi toplanir ($firstN, Mongo 5.2+).
+ */
+export function searchActiveOffersPipeline(
+  marketIds: readonly string[],
+  query: string,
+  perMarket: number,
+): Document[] {
+  return [
+    { $match: { marketId: { $in: [...marketIds] }, isActive: true, ...searchWordsFilter(query) } },
+    { $sort: { _id: 1 } },
+    {
+      $group: {
+        _id: '$marketId',
+        total: { $sum: 1 },
+        offers: { $firstN: { input: '$$ROOT', n: perMarket } },
+      },
+    },
+  ];
+}
+
+/**
+ * Sorgunun kelime kosullari: kelime basina bir kosul. Dizi alanda regex:
+ * elemanlardan BIRI eslesirse kosul saglanir ("ad ya da aciklama"); $and
+ * kelimelerin HEPSINI ister. Bellek uygulamasindaki matchesQuery ile ayni
+ * anlam. Kelime yoksa kosul yok.
+ */
+function searchWordsFilter(query: string): Filter<OfferDocument> {
+  const words = searchWords(query);
+  return words.length === 0
+    ? {}
+    : { $and: words.map((word) => ({ searchTerms: { $regex: escapeRegex(word) } })) };
 }

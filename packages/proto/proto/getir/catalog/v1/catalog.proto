@@ -67,6 +67,14 @@ service CatalogService {
   // urun sessizce atlanmaz, missing listesinde doner.
   rpc BatchGetOffers(BatchGetOffersRequest) returns (BatchGetOffersResponse);
 
+  // Genel arama (T9.6): markete girmeden, konuma hizmet veren marketlerde
+  // urun ya da market adi. Eslesme T9.4 kurallariyla (harf ve Turkce karakter
+  // duyarsiz, bosluklu sorguda her kelime gecmeli). Sonuc market market:
+  // ACIK marketler yakindan uzaga, KAPALI marketler en sonda. Pasif teklif
+  // donmez. Market basina en fazla 3 teklif + toplam eslesme sayisi. Iki sorgu,
+  // market sayisindan bagimsiz (N+1 yok): marketler ve onlarin teklifleri.
+  rpc SearchNearby(SearchNearbyRequest) returns (SearchNearbyResponse);
+
   // DEPRECATED (ADR-15): fiyatsiz toplu urun okumasi. Pazaryerinde fiyat
   // teklife aittir; sepet ve siparis dogrulamasi (T7.2) BatchGetOffers ile
   // yapilir. Bu RPC'yi cagiran yok ve UYGULANMADI: sunucu UNIMPLEMENTED doner.
@@ -398,4 +406,35 @@ message BatchGetOffersResponse {
 
   // Bu marketin satmadigi (ya da hic olmayan) urun kimlikleri.
   repeated string missing = 2;
+}
+
+message SearchNearbyRequest {
+  // Musterinin teslimat konumu. ZORUNLU (ListNearbyMarkets ile ayni kural).
+  getir.common.v1.GeoPoint location = 1;
+
+  // ZORUNLU, 2-64 karakter (bas/son bosluk kirpildiktan sonra); ListProducts
+  // aramasiyla ayni kurallar.
+  string query = 2;
+}
+
+// Bir marketteki eslesmeler (T9.6).
+message MarketSearchResult {
+  NearbyMarket market = 1;
+
+  // Market adi sorguyla eslesti mi. Eslestiyse market, urun eslesmesi
+  // olmasa da listelenir ("Market ya da Urun ara").
+  bool market_name_matched = 2;
+
+  // Eslesen AKTIF teklifler, market sayfasiyla ayni sirada, en fazla 3.
+  repeated Offer offers = 3;
+
+  // Bu marketteki toplam eslesen aktif teklif sayisi; offers'tan fazla
+  // olabilir (istemci "+N urun daha" gosterir).
+  int32 total_offer_matches = 4;
+}
+
+message SearchNearbyResponse {
+  // Acik marketler yakindan uzaga, kapali marketler en sonda. Hicbir market
+  // eslesmezse BOS liste - hata degil.
+  repeated MarketSearchResult results = 1;
 }

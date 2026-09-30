@@ -8,6 +8,7 @@ import {
   listMarketCategoriesRequestSchema,
   listNearbyMarketsRequestSchema,
   listProductsRequestSchema,
+  searchNearbyRequestSchema,
 } from '../../src/interfaces/grpc/schemas.js';
 
 /** Hatalari [alan, mesaj] ciftleri olarak okur: servis details'i bu bicimde doner. */
@@ -150,6 +151,47 @@ describe('listNearbyMarketsRequestSchema', () => {
         location: { lat: Number.POSITIVE_INFINITY, lng: 29 },
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('searchNearbyRequestSchema (T9.6 genel arama)', () => {
+  const EV = { lat: 40.98, lng: 29.03 };
+
+  it('konum ve sorgu ZORUNLU; eksik sorgu uzunluk hatasi gibi raporlanmaz', () => {
+    expect(issuesOf(searchNearbyRequestSchema, {})).toEqual([
+      ['location', 'zorunlu'],
+      ['query', 'zorunlu'],
+    ]);
+    expect(issuesOf(searchNearbyRequestSchema, { location: EV, query: '   ' })).toEqual([
+      ['query', 'zorunlu'],
+    ]);
+  });
+
+  it('sorgu kirpilarak alinir; kirpildiktan sonra en az 2 karakter', () => {
+    expect(searchNearbyRequestSchema.parse({ location: EV, query: ' süt ' })).toEqual({
+      location: EV,
+      query: 'süt',
+    });
+    expect(issuesOf(searchNearbyRequestSchema, { location: EV, query: ' s ' })).toEqual([
+      ['query', 'en az 2 karakter olmali'],
+    ]);
+  });
+
+  it('sorgu en fazla 64 karakter; sinir dahil (ListProducts aramasiyla ayni kural)', () => {
+    const atLimit = 'a'.repeat(SEARCH_QUERY_MAX_LENGTH);
+
+    expect(searchNearbyRequestSchema.safeParse({ location: EV, query: atLimit }).success).toBe(
+      true,
+    );
+    expect(issuesOf(searchNearbyRequestSchema, { location: EV, query: `${atLimit}a` })).toEqual([
+      ['query', 'en fazla 64 karakter olmali'],
+    ]);
+  });
+
+  it('WGS84 disi konum reddedilir, mesaj Turkce', () => {
+    expect(
+      issuesOf(searchNearbyRequestSchema, { location: { lat: 95, lng: 29 }, query: 'süt' }),
+    ).toEqual([['location.lat', 'enlem -90 ile 90 arasinda olmali']]);
   });
 });
 

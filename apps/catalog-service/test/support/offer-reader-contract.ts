@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import type { OfferReader, PageQuery } from '../../src/domain/offer-reader.js';
+import type { MarketOfferMatches, OfferReader, PageQuery } from '../../src/domain/offer-reader.js';
 
 const FIRST_PAGE: PageQuery = { size: 50, token: '' };
 const MIGROS_MODA = 'mkt_migros-jet-moda';
@@ -156,6 +156,71 @@ export function describeOfferReaderContract(name: string, getReader: () => Offer
         'cat_temizlik',
       ]);
       expect(await reader.listCategoryIdsWithOffers('mkt_yok')).toEqual([]);
+    });
+  });
+
+  describe(`OfferReader.searchActiveOffers sozlesmesi (T9.6): ${name}`, () => {
+    /** Gruplarin sirasi sozlesmede YOK (siralama use-case'te): market kimligine gore dizilir. */
+    const summary = (groups: readonly MarketOfferMatches[]) =>
+      [...groups]
+        .sort((left, right) => (left.marketId < right.marketId ? -1 : 1))
+        .map((group) => ({
+          marketId: group.marketId,
+          skus: group.offers.map((offer) => offer.product.sku),
+          total: group.totalMatches,
+        }));
+
+    it('market basina ilk N teklif market sayfasi sirasinda (_id); toplam ayrica sayilir', async () => {
+      // "su": Su 5 L, Süt 1 L, Sütlü çikolata, Portakal Suyu, Çamaşır Suyu. Manav hicbirini satmaz.
+      const groups = await getReader().searchActiveOffers([A101, MANAV, MIGROS_MODA], 'su', 3);
+
+      expect(summary(groups)).toEqual([
+        { marketId: A101, skus: ['CAMASIR-SUYU', 'CIKOLATA-80', 'SU-5L'], total: 4 },
+        { marketId: MIGROS_MODA, skus: ['CIKOLATA-80', 'PORTAKAL-SUYU-1L', 'SU-5L'], total: 4 },
+      ]);
+    });
+
+    it('PASIF teklif sayilmaz: Migros Moda camasir suyunu satistan kaldirmis, A101 satiyor', async () => {
+      const groups = await getReader().searchActiveOffers([A101, MIGROS_MODA], 'çamaşır', 3);
+
+      expect(summary(groups)).toEqual([{ marketId: A101, skus: ['CAMASIR-SUYU'], total: 1 }]);
+    });
+
+    it('teklif eksiksiz doner: fiyat o marketin (ADR-15)', async () => {
+      const [group] = await getReader().searchActiveOffers([MIGROS_MODA], 'süt 1', 3);
+
+      expect(group?.offers).toHaveLength(1);
+      expect(group?.offers[0]).toMatchObject({
+        marketId: MIGROS_MODA,
+        priceMinor: 3490,
+        isActive: true,
+        product: { sku: 'SUT-1L', name: 'Süt 1 L' },
+      });
+    });
+
+    it('kelime kurali market ici aramayla ayni: Turkce karakter duyarsiz, her kelime, duz metin', async () => {
+      const reader = getReader();
+      const skus = async (query: string): Promise<string[]> =>
+        (await reader.searchActiveOffers([MIGROS_MODA], query, 20)).flatMap((group) =>
+          group.offers.map((offer) => offer.product.sku),
+        );
+
+      expect(await skus('TAM YAGLI')).toEqual(['PEYNIR-500', 'SUT-1L']);
+      expect(await skus('cengelkoy')).toEqual(['SALATALIK-1K']);
+      expect(await skus('süt elma')).toEqual([]);
+      expect(await skus('%100')).toEqual(['PORTAKAL-SUYU-1L']);
+      expect(await skus('.*')).toEqual([]);
+    });
+
+    it('eslesmesi olmayan, bilinmeyen ya da hic verilmeyen market icin grup yok', async () => {
+      const reader = getReader();
+
+      expect(await reader.searchActiveOffers([MANAV, 'mkt_yok'], 'süt', 3)).toEqual([]);
+      expect(await reader.searchActiveOffers([], 'süt', 3)).toEqual([]);
+    });
+
+    it('kelimesiz sorgu (yalnizca bosluk) HICBIR teklifle eslesmez, hepsiyle degil', async () => {
+      expect(await getReader().searchActiveOffers([MIGROS_MODA], '   ', 3)).toEqual([]);
     });
   });
 

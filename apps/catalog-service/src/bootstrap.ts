@@ -16,6 +16,7 @@ import { createListCategories } from './application/list-categories.js';
 import { createListMarketCategories } from './application/list-market-categories.js';
 import { createListNearbyMarkets } from './application/list-nearby-markets.js';
 import { createListProducts } from './application/list-products.js';
+import { createSearchNearby } from './application/search-nearby.js';
 import { CATALOG_SERVICE_FULL_NAME } from './config/constants.js';
 import type { CatalogReaders } from './infrastructure/catalog-source.js';
 import { createInMemoryReaders } from './infrastructure/memory/in-memory-catalog.js';
@@ -39,6 +40,7 @@ export function buildCatalogService(options: BootstrapOptions = {}): GrpcService
     listMarketCategories: createListMarketCategories({ categories, markets, offers }),
     listProducts: createListProducts({ offers, markets }),
     batchGetOffers: createBatchGetOffers({ offers, markets }),
+    searchNearby: createSearchNearby({ markets, offers }),
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
 

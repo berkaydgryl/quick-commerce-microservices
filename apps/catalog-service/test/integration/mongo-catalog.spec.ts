@@ -7,6 +7,7 @@
  *   2. Seed: sayilar, tekrar kosunun kopya uretmemesi, indeksler, tek transaction.
  *   3. Pazaryeri: 3 demo adresi 2dsphere uzerinden beklenen marketleri listeler,
  *      kapali market listede kalir.
+ *   4. Sorgu planlari: arama, genel arama ve toplu okuma indeksten okunur.
  */
 
 import { AppError, ERROR_CODES } from '@getir/core';
@@ -19,9 +20,12 @@ import { z } from 'zod';
 
 import { createBatchGetOffers } from '../../src/application/batch-get-offers.js';
 import { createListNearbyMarkets } from '../../src/application/list-nearby-markets.js';
+import { createSearchNearby } from '../../src/application/search-nearby.js';
 import { createSeedCatalog } from '../../src/application/seed-catalog.js';
 import type { CatalogSnapshot } from '../../src/domain/catalog-snapshot.js';
+import type { NearbySearchResult } from '../../src/domain/nearby-search.js';
 import { CATALOG_SNAPSHOT } from '../../src/infrastructure/fixtures.js';
+import { createInMemoryReaders } from '../../src/infrastructure/memory/in-memory-catalog.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
 import type { OfferDocument } from '../../src/infrastructure/mongo/documents.js';
 import type { MongoCatalogRepositories } from '../../src/infrastructure/mongo/mongo-catalog.js';
@@ -33,6 +37,7 @@ import { MongoCatalogSeeder } from '../../src/infrastructure/mongo/mongo-catalog
 import {
   listOffersFilter,
   offersByProductIdsFilter,
+  searchActiveOffersPipeline,
 } from '../../src/infrastructure/mongo/offer-repository.js';
 import { describeCategoryReaderContract } from '../support/category-reader-contract.js';
 import { DEMO_ADDRESSES, demoLocation, EXPECTED_NEARBY } from '../support/demo-addresses.js';
@@ -276,6 +281,73 @@ describe('arama - gercek Mongo (T9.4)', () => {
       await seed();
     }
     expect(await repositories.offers.hasStaleSearchTerms()).toBe(false);
+  });
+});
+
+/**
+ * Toplama sorgusunun (aggregate) explain ciktisi. Kazanan plan surume ve
+ * motora gore iki yerde durur: boru hatti sorgu katmanina tumuyle itilirse en
+ * ustte, degilse ilk asamanin ($cursor) icinde. Ikisi de ayni semadan gecer.
+ */
+const aggregateExecutionSchema = z.union([
+  executionSchema,
+  z
+    .object({ stages: z.tuple([z.object({ $cursor: executionSchema })]).rest(z.unknown()) })
+    .transform(({ stages: [first] }) => first.$cursor),
+]);
+
+describe('genel arama - gercek Mongo (T9.6)', () => {
+  /** offers koleksiyonunda marketId ile baslayan indeksler (OfferRepository.indexes). */
+  const MARKET_PREFIXED_INDEXES = [
+    'market_product_unique',
+    'market_category_cursor',
+    'market_cursor',
+  ];
+
+  it('boru hatti market indeksinden okunur: koleksiyon taramasi yok, inceleme o marketlerin teklifleriyle sinirli', async () => {
+    const offers = connection.db.collection<OfferDocument>(COLLECTIONS.OFFERS);
+    const marketIds = EXPECTED_NEARBY.Ev.map((entry) => entry.marketId);
+    const marketOffers = await offers.countDocuments({ marketId: { $in: marketIds } });
+    // Deponun GERCEK boru hatti (searchActiveOffers ile ayni).
+    const plan: unknown = await offers
+      .aggregate(searchActiveOffersPipeline(marketIds, 'süt', 3))
+      .explain('executionStats');
+
+    const { queryPlanner, executionStats } = aggregateExecutionSchema.parse(plan);
+    const { stages, indexes } = planStages(queryPlanner.winningPlan);
+    expect(stages).toContain('IXSCAN');
+    expect(stages).not.toContain('COLLSCAN');
+    // marketId ile baslayan uc indeksin maliyeti burada esit; planlayici birini
+    // secer (mongo:7'de market_product_unique + kucuk SORT). Olculen ozellik
+    // hangisi oldugu degil: yalnizca verilen marketlerin teklifleri okunur.
+    expect(indexes.length).toBeGreaterThan(0);
+    expect(indexes.every((index) => MARKET_PREFIXED_INDEXES.includes(index))).toBe(true);
+    expect(executionStats.totalDocsExamined).toBeLessThanOrEqual(marketOffers);
+    expect(marketOffers).toBeLessThan(await offers.countDocuments());
+  });
+
+  it.each([
+    ['Ev', 'süt'],
+    ['Ev', 'su'],
+    ['Ev', 'camasir'],
+    ['Ev', 'migros'],
+    ['İş', 'cips'],
+    ['İş', 'a101'],
+    ['Yazlık', 'süt'],
+  ] as const)('%s "%s": bellek uygulamasiyla AYNI sonuc', async (title, query) => {
+    const summary = (result: NearbySearchResult) => ({
+      marketId: result.market.market.id,
+      meters: Math.round(result.market.distanceMeters),
+      nameMatched: result.marketNameMatched,
+      offerIds: result.offers.map((offer) => offer.id),
+      total: result.totalOfferMatches,
+    });
+    const input = { location: demoLocation(title), query };
+
+    const fromMongo = await createSearchNearby(repositories)(input);
+    const fromMemory = await createSearchNearby(createInMemoryReaders())(input);
+
+    expect(fromMongo.map(summary)).toEqual(fromMemory.map(summary));
   });
 });
 
