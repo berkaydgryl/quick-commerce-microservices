@@ -112,6 +112,25 @@ export function describeOfferReaderContract(name: string, getReader: () => Offer
       ).toEqual(['CIKOLATA-80', 'SUT-1L']);
     });
 
+    it('arama Turkce karakter duyarsiz ve cok kelimede her kelimeyi ister (T9.4)', async () => {
+      const reader = getReader();
+      const skus = async (query: string): Promise<string[]> =>
+        (await reader.listOffers({ marketId: MIGROS_MODA, query }, FIRST_PAGE)).items
+          .map((offer) => offer.product.sku)
+          .sort();
+
+      // Turkce karaktersiz yazim: "sut" hem "Süt 1 L"yi hem "Sütlü çikolata"yi bulur.
+      expect(await skus('sut')).toEqual(['CIKOLATA-80', 'SUT-1L']);
+      expect(await skus('cengelkoy')).toEqual(['SALATALIK-1K']);
+      // Her kelime gecmeli, sira onemsiz; kelimeler ad ve aciklamaya dagilabilir.
+      expect(await skus('peynir beyaz')).toEqual(['PEYNIR-500']);
+      expect(await skus('TAM YAGLI')).toEqual(['PEYNIR-500', 'SUT-1L']);
+      expect(await skus('süt 1')).toEqual(['SUT-1L']);
+      expect(await skus('süt elma')).toEqual([]);
+      // Kelime icinde eslesme: "kola" "Çikolata"nin da icinde gecer (T9.4 oncesi de boyleydi).
+      expect(await skus('kola')).toEqual(['CIKOLATA-80', 'KOLA-1L']);
+    });
+
     it('arama metni desen degil duz metindir', async () => {
       const reader = getReader();
 

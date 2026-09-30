@@ -184,7 +184,11 @@ export const productSchema = z.object({
  */
 export const marketProductsQuerySchema = pageQuerySchema.extend({
   categoryId: categoryIdSchema.optional(),
-  /** Tek karakterlik sorgu tum katalogu tarardi; en az iki karakter. */
+  /**
+   * Arama: tek karakterlik sorgu tum katalogu tarardi; en az iki karakter.
+   * Sunucu ad ve aciklamada, harf ve Turkce karakter duyarsiz arar ("sut" ->
+   * "Süt"); bosluklu sorguda kelimelerin hepsi gecmeli, sira onemsiz (T9.4).
+   */
   q: z.string().min(SEARCH_QUERY_MIN_LENGTH).max(SEARCH_QUERY_MAX_LENGTH).optional(),
 });
 

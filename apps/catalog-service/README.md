@@ -110,8 +110,16 @@ testinde gerçek Mongo. Veri kaynağını seçip açan tek yer `infrastructure/c
 
 - **Kopyalar:** teklif, listeleme alanlarını üründen kopyalar; market sayfası tek sorguda,
   `$lookup` ve N+1 olmadan listelenir. Kopyaları yalnızca catalog'un seeder'ı yazar.
-- **`searchTerms`:** ad ve açıklamanın Türkçe küçük harfli hali. Mongo'nun regex `i` bayrağı
-  `İ → i` eşlemesini bilmez; normalizasyon `domain/searchKey` ile, bellek uygulamasıyla aynı.
+- **`searchTerms`:** ad ve açıklamanın normalize hali: Türkçe küçük harf ve Türkçe karakter katlama
+  (T9.4: "Süt" → `sut`, "ÇİKOLATA" → `cikolata`). Mongo'nun regex `i` bayrağı `İ → i` eşlemesini
+  bilmez; normalizasyon `domain/searchKey` ile, bellek uygulamasıyla aynı. Terimleri seed yazar:
+  `searchKey` değişirse `pnpm seed`; açılış eski biçimdeki terimi görürse uyarı yazar.
+- **Arama (T9.4):** sorgu kelimelere ayrılır (`searchWords`), her kelime `searchTerms` içinde
+  kelime içi aranır ve **hepsi** geçmeli (sıra önemsiz; biri adda, biri açıklamada olabilir).
+  "sut" → Süt ve Sütlü çikolata; "peynir beyaz" → Beyaz Peynir. Kelime içi eşleşmenin sonucu:
+  "kola" Çikolata'yı da bulur. Mongo metin indeksi (`$text`) bilerek kullanılmadı: yalnızca tam
+  kelime eşleştirir, yazarken arama (T9.5) onunla olmaz. Sorgu market indeksinden (`market_cursor`)
+  o marketin teklifleri üzerinde süzülür; entegrasyon testi planı ve incelenen belge sayısını doğrular.
 - **Kimlikler** okunabilir ve önekli (`mkt_migros-jet-moda`, `prd_sut-1l`); teklif kimliği
   market ve üründen **türetilir** (`ofr_migros-jet-moda-sut-1l`) — seed tekrarında değişmez.
 - **Görseller ve logolar göreli yol**; mutlak URL'yi gateway (BFF) `ASSET_BASE_URL` ile kurar.

@@ -640,6 +640,12 @@ paths:
         - name: q
           in: query
           required: false
+          description: |
+            Arama (T9.4): ad ve açıklamada, büyük/küçük harf ve Türkçe karakter
+            duyarsız ("sut" → "Süt"), kelime içinde de ("çik" → "Çikolata").
+            Boşluklu sorguda kelimelerin HEPSİ geçmeli, sıra önemsiz
+            ("peynir beyaz" → "Beyaz Peynir"). Baş/son boşluk kırpılır; tek
+            harf `VALIDATION_FAILED` (`details.q`).
           schema: { type: string, minLength: 2, maxLength: 64 }
         - $ref: "#/components/parameters/PageTokenParam"
         - $ref: "#/components/parameters/PageSizeParam"
