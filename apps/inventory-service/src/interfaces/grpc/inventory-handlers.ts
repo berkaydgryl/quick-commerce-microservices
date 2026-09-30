@@ -12,11 +12,13 @@ import { unaryHandler, unimplemented } from '@getir/service-kit';
 import type { UntypedServiceImplementation } from '@grpc/grpc-js';
 
 import type { CheckAvailability } from '../../application/check-availability.js';
-import { toCheckAvailabilityResponse } from './mappers.js';
-import { checkAvailabilityRequestSchema } from './schemas.js';
+import type { ReserveStock } from '../../application/reserve-stock.js';
+import { toCheckAvailabilityResponse, toReserveResponse } from './mappers.js';
+import { checkAvailabilityRequestSchema, reserveRequestSchema } from './schemas.js';
 
 export interface InventoryHandlerDeps {
   readonly checkAvailability: CheckAvailability;
+  readonly reserveStock: ReserveStock;
   readonly logger?: Logger;
 }
 
@@ -34,9 +36,16 @@ export function createInventoryImplementation(
         toCheckAvailabilityResponse(await deps.checkAvailability(input)),
     }),
 
+    reserve: unaryHandler({
+      name: 'Reserve',
+      schema: reserveRequestSchema,
+      ...logger,
+      handle: async (input): Promise<inventoryV1.ReserveResponse> =>
+        toReserveResponse(await deps.reserveStock(input)),
+    }),
+
     // Sozlesmede tanimli ama HENUZ UYGULANMAMIS RPC'ler: NOT_IMPLEMENTED (501),
-    // gerekce @getir/service-kit grpc/unimplemented.ts'te. Rezervasyon Gun 10'da.
-    reserve: unimplemented('Reserve', 'T10.1', deps.logger),
+    // gerekce @getir/service-kit grpc/unimplemented.ts'te. Onay, birakma T10.2'de.
     commit: unimplemented('Commit', 'T10.2', deps.logger),
     release: unimplemented('Release', 'T10.2', deps.logger),
     extendReservation: unimplemented('ExtendReservation', 'T10', deps.logger),

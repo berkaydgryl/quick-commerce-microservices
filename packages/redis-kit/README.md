@@ -35,10 +35,10 @@ parantez yalnızca hash-tag olan parçada bulunur.
 
 > **Bilinen sınır:** `resv:user:{userId}` hash-tag'i userId'dir, stok anahtarlarınınki
 > storeId. `reserve.lua` ikisine birden dokunuyor (B22). Tek düğümlü Redis'te sorun değil;
-> Cluster'a geçilirse `CROSSSLOT` hatası verir. Karar o gün verilecek — seçenek, kullanıcı
-> anahtarını da store hash-tag'i altına almak, ama o zaman aynı kullanıcının **farklı
-> depolardaki** ikinci rezervasyonu engellenemez. `test/unit/keys.spec.ts` bu gerçeği
-> sabitler.
+> Cluster'a geçilirse `CROSSSLOT` hatası verir. 30 Eylül (T10.1) kararı: kullanıcı başına **tek**
+> anahtar kalır (seçenek, kullanıcı anahtarını da store hash-tag'i altına almaktı; o zaman aynı
+> kullanıcının **farklı depolardaki** ikinci rezervasyonu engellenemezdi). Cluster'a geçişte karar
+> yeniden verilir. `test/unit/keys.spec.ts` bu gerçeği sabitler.
 
 Anahtar parçaları doğrulanır: `:` ve `{}` ayırıcı olduğu için parçaların içinde
 bulunamaz, geçersiz değer `AppError` (VALIDATION_FAILED) ile reddedilir.
@@ -61,7 +61,11 @@ yakalar, script'i yeniden yükler ve çağrıyı bir kez daha dener. Servis bunu
 yalnızca bir uyarı günlüğü kalır. (`test/integration` içinde `SCRIPT FLUSH` ile kanıtlanır.)
 
 Script'in dokunduğu anahtarlar farklı hash-tag taşıyorsa **uyarı yazılır ama çağrı
-engellenmez** — tek düğümde bu geçerli bir kullanım, Cluster'da değil.
+engellenmez** — tek düğümde bu geçerli bir kullanım, Cluster'da değil. Bunu **bilerek** yapan
+script yüklemede beyan edilir: `loadLuaScripts(redis, dir, logger, { crossSlot: ['reserve'] })`.
+Beyanlı script için çağrı başına uyarı yazılmaz (bilinen bir durumu her istekte tekrarlamak
+gerçek uyarıları gizlerdi), yüklemede bir kez bilgi satırı yazılır. Klasörde olmayan bir ad
+beyan edilirse yükleme `AppError` ile durur: yazım hatası sessiz kalmaz.
 
 ## Bağlantı
 

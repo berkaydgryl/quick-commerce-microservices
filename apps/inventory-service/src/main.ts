@@ -42,7 +42,7 @@ const { handle, source } = await startOrExit(
       port: env.INVENTORY_GRPC_PORT,
       shutdownTimeoutMs: env.GRPC_SHUTDOWN_TIMEOUT_MS,
       logger,
-      services: [buildInventoryService({ logger, counters: opened.counters })],
+      services: [buildInventoryService({ logger, stock: opened })],
       // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti kesilmesin.
       onShutdown: () => opened.close(),
     });

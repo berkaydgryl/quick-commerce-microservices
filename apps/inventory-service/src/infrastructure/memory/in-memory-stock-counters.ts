@@ -1,7 +1,8 @@
 /**
  * Bellekteki sayaclar (MOCK=true): Mongo ve Redis olmadan ayni sozlesme.
  * Testler de ayni sinifi kullanir; Redis uygulamasi ayni senaryolardan gecer
- * (test/support/stock-counter-contract.ts).
+ * (test/support/stock-counter-contract.ts). Rezervasyon deposu ayni haritayi
+ * paylasir (in-memory-stock.ts).
  */
 
 import type {
@@ -11,19 +12,23 @@ import type {
   StockLevel,
 } from '../../domain/stock.js';
 
-export class InMemoryStockCounters implements StockCounterReader, StockCounterWriter {
-  private readonly counters = new Map<string, number>();
+import { counterKey } from './in-memory-counter-key.js';
 
-  constructor(levels: readonly StockLevel[] = []) {
+export class InMemoryStockCounters implements StockCounterReader, StockCounterWriter {
+  /** @param counters Paylasilan harita (rezervasyon deposu da buna yazar). */
+  constructor(
+    levels: readonly StockLevel[] = [],
+    private readonly counters = new Map<string, number>(),
+  ) {
     for (const level of levels) {
-      this.counters.set(keyOf(level.marketId, level.sku), level.onHand);
+      this.counters.set(counterKey(level.marketId, level.sku), level.onHand);
     }
   }
 
   available(marketId: string, skus: readonly string[]): Promise<ReadonlyMap<string, number>> {
     const found = new Map<string, number>();
     for (const sku of skus) {
-      const count = this.counters.get(keyOf(marketId, sku));
+      const count = this.counters.get(counterKey(marketId, sku));
       if (count !== undefined) {
         found.set(sku, count);
       }
@@ -34,7 +39,7 @@ export class InMemoryStockCounters implements StockCounterReader, StockCounterWr
   write(levels: readonly StockLevel[], mode: CounterSeedMode): Promise<number> {
     let written = 0;
     for (const level of levels) {
-      const key = keyOf(level.marketId, level.sku);
+      const key = counterKey(level.marketId, level.sku);
       if (mode === 'missing' && this.counters.has(key)) {
         continue;
       }
@@ -43,8 +48,4 @@ export class InMemoryStockCounters implements StockCounterReader, StockCounterWr
     }
     return Promise.resolve(written);
   }
-}
-
-function keyOf(marketId: string, sku: string): string {
-  return `${marketId}/${sku}`;
 }

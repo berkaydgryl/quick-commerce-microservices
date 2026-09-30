@@ -34,3 +34,24 @@ export const REQUIRED_EVICTION_POLICY = 'noeviction';
  * alinmaz.
  */
 export const COUNTER_SEED_BATCH_SIZE = 500;
+
+/**
+ * Rezervasyon suresi siniri (saniye, T10.1). Sureyi order verir (risk bandindan
+ * turer: dusuk 600, orta 120; inventory.proto ReserveRequest.ttl_seconds); bu
+ * sinir karar degil KORUMADIR: 0, negatif ya da gunlerce suren bir sure stogu
+ * aninda birakir ya da kilitler. Disi VALIDATION_FAILED.
+ */
+export const RESERVATION_TTL_MIN_SECONDS = 30;
+export const RESERVATION_TTL_MAX_SECONDS = 900;
+
+/**
+ * Rezervasyon hash'inin sure dolduktan SONRA Redis'te kalma payi (inventory.proto
+ * Reservation.expires_at: "Redis hash'i bundan 60 saniye SONRA silinir"):
+ * supurucu gecikmeli tick'inde kaydi (adetleri) hala okuyabilsin (T10.3).
+ */
+export const RESERVATION_HOLD_AFTER_EXPIRY_MS = 60_000;
+
+/** Lua script'lerinin adlari: lua/ klasorundeki dosya adi (uzantisiz). */
+export const LUA_SCRIPTS = {
+  RESERVE: 'reserve',
+} as const;

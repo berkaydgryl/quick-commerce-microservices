@@ -149,9 +149,10 @@ describe('acilis ve reseed (T9.2)', () => {
 
   it('CheckAvailability gercek gRPC ve Redis sayaclariyla', async () => {
     await createSeedCounters({ levels: stores.repository, counters: stores.counters })('overwrite');
+    const source = await openStockSource(env, silentLogger);
     const server = await startTestGrpcServer({
       serviceName: 'inventory-it',
-      services: [buildInventoryService({ counters: stores.counters })],
+      services: [buildInventoryService({ stock: source })],
     });
     try {
       const { error, response } = await server.call(
@@ -171,6 +172,7 @@ describe('acilis ve reseed (T9.2)', () => {
       expect(response?.unknownSkus).toEqual(['YOK-1']);
     } finally {
       await server.stop();
+      await source.close();
     }
   });
 });
