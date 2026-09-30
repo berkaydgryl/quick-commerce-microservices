@@ -154,4 +154,14 @@ describe('sorgu anahtarlari', () => {
       marketKeys.nearby({ lat: 1, lng: 3 }),
     );
   });
+
+  it('konum yokken (adres cozuluyor, T9.5) anahtarda konum null: hicbir konumun verisi gosterilmez', () => {
+    expect(marketKeys.nearby(undefined)).toEqual(['markets', 'nearby', null, null]);
+    expect(marketKeys.nearby({ lat: 40.9885, lng: 29.0262 })).toEqual([
+      'markets',
+      'nearby',
+      40.9885,
+      29.0262,
+    ]);
+  });
 });

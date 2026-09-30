@@ -165,7 +165,7 @@ describe('reserveCartRequestSchema', () => {
 });
 
 describe('savedAddressSchema (kayitli adres) ve deliveryAddressSchema (siparis)', () => {
-  const saved = { ...VALID_ADDRESS, title: 'Ev', note: 'Kadikoy deposuna duser' };
+  const saved = { ...VALID_ADDRESS, title: 'Ev', note: 'Zil calismiyor, gelince arayin' };
 
   it('kayitli adres etiket ister; not istege bagli', () => {
     expect(savedAddressSchema.safeParse(saved).success).toBe(true);

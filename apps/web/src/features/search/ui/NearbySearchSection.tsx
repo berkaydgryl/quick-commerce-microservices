@@ -7,7 +7,8 @@ import { useNearbySearch } from '../hooks/useNearbySearch';
 import styles from './Search.module.css';
 
 interface NearbySearchSectionProps {
-  readonly location: GeoPoint;
+  /** Teslimat konumu; henuz yoksa (adres cozuluyor) bolum "araniyor" gosterir. */
+  readonly location: GeoPoint | undefined;
   /** Gecerli arama (searchQueryFrom'dan gecmis): kirpilmis, en az 2 karakter. */
   readonly query: string;
   /**

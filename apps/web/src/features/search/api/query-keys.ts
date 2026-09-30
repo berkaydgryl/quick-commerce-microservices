@@ -6,6 +6,7 @@ import type { GeoPoint } from '@getir/contracts';
  */
 export const searchKeys = {
   all: ['search'] as const,
-  nearby: (location: GeoPoint, query: string) =>
-    [...searchKeys.all, 'nearby', location.lat, location.lng, query] as const,
+  /** Konum yoksa null (teslimat adresi cozuluyor, T9.5): hicbir konumun girdisiyle karismaz. */
+  nearby: (location: GeoPoint | undefined, query: string) =>
+    [...searchKeys.all, 'nearby', location?.lat ?? null, location?.lng ?? null, query] as const,
 };

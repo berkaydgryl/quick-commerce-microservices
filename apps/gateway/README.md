@@ -327,6 +327,14 @@ order-service'te (ADR-05); iki taraf aynı kimlikleri kullanır ve bir test kar�
 | Ali | `+905550000004` | CRITICAL → 403 | Hesabının açıldığı cihazdan 4 hesap (veto), İzmir'den oturum |
 | Komşu | `+905550000005` | LOW → kart | 90 günlük, 12 teslimat; stok yarışında ikinci tarayıcı |
 
+**Hazır adresler** (`addresses.json`; adres defteri, T9.5): yukarıdaki beş personaya yüklenir; Ali'nin
+cihazındaki diğer üç hesapta adres yoktur (boş defter: web'de "Kayıtlı adresin yok."). Her adresin demodaki
+işlevi (hangi marketler hizmet verir, hangisi kapalı, hangisi boş bölge) tek yerde:
+[`infra/seed/README.md`](../../infra/seed/README.md#adresler). Adresin `note` alanı kullanıcının **kurye
+notudur** ("Zil çalışmıyor, gelince arayın."). Notlar 30 Eylül'e kadar demo açıklamalarını taşıyordu; adres
+defteri ucu kullanıcıya açılınca (T9.5) kurye notuna çevrildi. Mongo'daki eski notlar `pnpm seed:personas`
+ile yenilenir.
+
 Demo şifresi hepsinde `Demo-Persona-2026` (herkese açık; gizli değil). Ali'nin cihazındaki diğer
 üç hesap `+905550000014/24/34`. Zeynep ve Can "24 saatten yeni" olduğu için seed'den 24 saat
 sonra bantları kayar: demo öncesi seed yeniden çalıştırılır (tekrarı güvenli). Ali'nin "hızlı
