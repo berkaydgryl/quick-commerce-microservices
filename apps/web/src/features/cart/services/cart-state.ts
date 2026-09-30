@@ -9,8 +9,9 @@
  *  - Urun basina en fazla CART_ITEM_MAX_QUANTITY, sepette en fazla
  *    CART_MAX_ITEMS kalem (rezervasyon semasiyla ayni sinirlar). Stok bilgisi
  *    geldiyse (availableQuantity) sinir stoktur (T7.6, stok siniri on
- *    kontrolu). Bugun gelmiyor; inventory baglaninca kural kendiliginden
- *    devreye girer.
+ *    kontrolu). Stok T8.4'ten beri gelir; stok servisi cevap vermezse alan
+ *    gelmez ve sinir yine platform sinirdir. Stogu 0 olan teklif "tukendi"dir
+ *    (isSoldOut).
  *  - Satista olmayan teklif (isActive false) EKLENMEZ (T7.6). Baglayici karar
  *    yine rezervasyondadir; bu kural kullaniciyi bosuna ugrastirmamak icindir.
  *  - "Eklenebilir mi" sorusunun TEK cevabi canAdd'dir: arayuz dugmeyi buna gore
@@ -103,6 +104,16 @@ function blockerOf(state: CartState, product: Product): AddOutcome | undefined {
 /** Baska marketin dolu sepeti varken ekleme onay ister (tek market kurali). */
 function isSwitching(state: CartState, market: CartMarket): boolean {
   return state.market !== null && state.market.id !== market.id && state.items.length > 0;
+}
+
+/**
+ * Teklif tukendi mi (T8.4)? Stok bilgisi GELDIYSE ve 0 ise. Stok bilgisi yoksa
+ * ("stok bilgisi yok") tukenmis SAYILMAZ: sinir platform siniridir, baglayici
+ * kontrol rezervasyondadir. Pasif teklif tukendi degil "satista degil"dir
+ * (isActive): ikisi birlikteyse arayuz "Satista degil" gosterir.
+ */
+export function isSoldOut(product: Product): boolean {
+  return product.isActive && product.availableQuantity === 0;
 }
 
 /**

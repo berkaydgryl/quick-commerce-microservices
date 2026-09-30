@@ -23,7 +23,7 @@
   opacity: 0.5;
 }
 
-/* Satista olmayan teklif (T7.6): basilamayan metin, dugme degil. */
+/* Satista olmayan (T7.6) ya da stogu biten (T8.4) teklif: basilamayan metin, dugme degil. */
 .c-cart-action__unavailable {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);

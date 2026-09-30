@@ -12,6 +12,7 @@ import {
   canAdd,
   decrementItem,
   EMPTY_CART,
+  isSoldOut,
   itemCount,
   quantityOf,
   removeItem,
@@ -207,10 +208,26 @@ describe('stok siniri on kontrolu (T7.6)', () => {
     });
   });
 
-  it('stok bilgisi YOKSA (bugun) yalnizca platform siniri: stok 0 sanilmaz', () => {
+  it('stok bilgisi YOKSA (stok servisi cevap vermedi) yalnizca platform siniri: stok 0 sanilmaz', () => {
     expect(SUT.availableQuantity).toBeUndefined();
     expect(canAdd(addMany(EMPTY_CART, SUT, CART_ITEM_MAX_QUANTITY - 1), SUT)).toBe(true);
     expect(canAdd(addMany(EMPTY_CART, SUT, CART_ITEM_MAX_QUANTITY), SUT)).toBe(false);
+  });
+});
+
+describe('tukendi (T8.4)', () => {
+  it('stok bilgisi geldiyse ve 0 ise tukendi', () => {
+    expect(isSoldOut({ ...SUT, availableQuantity: 0 })).toBe(true);
+  });
+
+  it('stok varsa ya da stok bilgisi yoksa tukenmis sayilmaz', () => {
+    expect(isSoldOut({ ...SUT, availableQuantity: 2 })).toBe(false);
+    expect(SUT.availableQuantity).toBeUndefined();
+    expect(isSoldOut(SUT)).toBe(false);
+  });
+
+  it('pasif teklif tukendi degil "satista degil"dir: ikisi birlikteyse satis durumu kazanir', () => {
+    expect(isSoldOut({ ...SUT, isActive: false, availableQuantity: 0 })).toBe(false);
   });
 });
 
