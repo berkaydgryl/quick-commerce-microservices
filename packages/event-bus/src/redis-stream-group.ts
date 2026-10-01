@@ -30,6 +30,22 @@ const readReplySchema = z.array(z.tuple([z.string(), z.array(entrySchema)])).nul
 /** XPENDING (genis bicim): [[kimlik, tuketici, bosta gecen ms, teslim sayisi], ...]. */
 const pendingReplySchema = z.array(z.tuple([z.string(), z.string(), z.number(), z.number()]));
 const claimReplySchema = z.array(entrySchema);
+/** XINFO GROUPS: grup basina duz alan listesi [ad, deger, ad, deger, ...]. */
+const groupsInfoReplySchema = z.array(z.array(z.union([z.string(), z.number(), z.null()])));
+/** Bir grubun kullanilan alanlari; lag hesaplanamazsa (akistan silme sonrasi) nil gelir. */
+const groupInfoSchema = z.object({
+  name: z.string(),
+  pending: z.number().int().nonnegative(),
+  lag: z.number().int().nonnegative().nullable().optional(),
+});
+
+/** Grubun anlik durumu (T10.5 metrikleri). */
+export interface GroupStats {
+  /** Gruba HIC teslim edilmemis kayit; Redis hesaplayamazsa undefined. */
+  readonly lag: number | undefined;
+  /** Teslim edilmis ama onaylanmamis kayit (isleniyor ya da takildi). */
+  readonly pending: number;
+}
 
 export interface PendingEntry {
   readonly id: string;
@@ -55,6 +71,8 @@ export interface StreamGroup {
   deadLetter(entry: StreamEntry, details: DeadLetterDetails): Promise<void>;
   /** Bekleyeni kalmadiysa tuketiciyi gruptan siler; kaldiysa dokunmaz (kayit kaybolmasin). */
   release(): Promise<boolean>;
+  /** Grubun gecikmesi ve bekleyen sayisi (XINFO GROUPS); grup yoksa undefined. */
+  stats(): Promise<GroupStats | undefined>;
 }
 
 export interface StreamGroupSettings {
@@ -153,6 +171,27 @@ export class RedisStreamGroup implements StreamGroup {
     await this.redis.xgroup('DELCONSUMER', streamKey, group, consumer);
     return true;
   }
+
+  async stats(): Promise<GroupStats | undefined> {
+    const { streamKey, group } = this.settings;
+    const reply = await this.redis.xinfo('GROUPS', streamKey);
+    for (const fields of parseReply(groupsInfoReplySchema, reply, 'XINFO GROUPS')) {
+      const info = groupInfoSchema.safeParse(fieldsToRecord(fields));
+      if (info.success && info.data.name === group) {
+        return { lag: info.data.lag ?? undefined, pending: info.data.pending };
+      }
+    }
+    return undefined;
+  }
+}
+
+/** Duz alan listesini ([ad, deger, ...]) nesneye cevirir; semadan gecmeden kullanilmaz. */
+function fieldsToRecord(fields: readonly (string | number | null)[]): Record<string, unknown> {
+  const record: Record<string, unknown> = {};
+  for (let index = 0; index + 1 < fields.length; index += 2) {
+    record[String(fields[index])] = fields[index + 1];
+  }
+  return record;
 }
 
 /** Grup yok: akis silinmis ya da Redis verisiz yeniden baslamis. */

@@ -6,13 +6,20 @@
 
 import { recordingLogger } from '@getir/core/testing';
 import type { LogLine } from '@getir/core/testing';
-import { describe, expect, it, vi } from 'vitest';
+import { metricsRegistry } from '@getir/observability';
+import { histogramCount, metricValue } from '@getir/observability/testing';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { SweepResult } from '../../src/application/sweep-expired.js';
 import { startReservationSweeper } from '../../src/interfaces/workers/reservation-sweeper.js';
+import { SWEEPER_METRICS } from '../../src/interfaces/workers/sweeper-metrics.js';
 
 const QUIET: SweepResult = { expired: 0, completed: 0, pending: 0 };
 const INTERVAL_MS = 5;
+
+beforeEach(() => {
+  metricsRegistry.resetMetrics();
+});
 
 function harness(
   leaderTurns: readonly boolean[],
@@ -118,5 +125,48 @@ describe('startReservationSweeper', () => {
 
     await expect(worker.stop()).resolves.toBeUndefined();
     expect(messages()).toContain('supurucu kilidi birakilamadi; omru dolunca duser');
+  });
+});
+
+describe('startReservationSweeper: metrikler (T10.5, #12)', () => {
+  it('lider: gosterge 1, tur suresi ve geri verilen sayisi, defteri bekleyenler yazilir', async () => {
+    const results: SweepResult[] = [
+      { expired: 2, completed: 0, pending: 1 },
+      { expired: 3, completed: 1, pending: 0 },
+    ];
+    const { worker, sweep } = harness([true], () => Promise.resolve(results.shift() ?? QUIET));
+
+    await vi.waitFor(() => expect(sweep.mock.calls.length).toBeGreaterThanOrEqual(3));
+    expect(await metricValue(SWEEPER_METRICS.LEADER)).toBe(1);
+    await worker.stop();
+
+    expect(await metricValue(SWEEPER_METRICS.EXPIRED)).toBe(5);
+    expect(await metricValue(SWEEPER_METRICS.PENDING_LEDGER)).toBe(0);
+    expect(await histogramCount(SWEEPER_METRICS.DURATION)).toBe(sweep.mock.calls.length);
+    // Kapanista kilit birakildi: bu ornek artik lider degil.
+    expect(await metricValue(SWEEPER_METRICS.LEADER)).toBe(0);
+  });
+
+  it('lider olmayan: gosterge 0, tur suresi yazilmaz', async () => {
+    const { worker, lock } = harness([false]);
+
+    await vi.waitFor(() => expect(lock.hold.mock.calls.length).toBeGreaterThanOrEqual(2));
+    await worker.stop();
+
+    expect(await metricValue(SWEEPER_METRICS.LEADER)).toBe(0);
+    expect((await histogramCount(SWEEPER_METRICS.DURATION)) ?? 0).toBe(0);
+  });
+
+  it('dusen tur hata sayilir', async () => {
+    let calls = 0;
+    const { worker } = harness([true], () => {
+      calls += 1;
+      return calls === 1 ? Promise.reject(new Error('redis kapali')) : Promise.resolve(QUIET);
+    });
+
+    await vi.waitFor(() => expect(calls).toBeGreaterThanOrEqual(2));
+    await worker.stop();
+
+    expect(await metricValue(SWEEPER_METRICS.ERRORS)).toBe(1);
   });
 });

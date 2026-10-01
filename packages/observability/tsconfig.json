@@ -1,0 +1,9 @@
+{
+  // Editor + ESLint + typecheck projesi: kaynak VE testleri kapsar.
+  // Derleme ayri dosyadan yapilir (tsconfig.build.json), cunku testler dist'e girmez.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src", "test"]
+}

@@ -87,7 +87,8 @@ COPY --from=builder --chown=node:node /app ./
 # calisirsa, imajdaki bir acik dogrudan host'a dogru genisler.
 USER node
 
-EXPOSE 50054
+# gRPC ve metrik ucu (T10.5: gRPC portu + 1000, HTTP /metrics).
+EXPOSE 50054 51054
 
 # Saglik kontrolu servisin KENDI health RPC'sini cagirir (grpc.health.v1).
 # start-period: acilis (port baglama) icin pay; bu sure icindeki basarisizlik

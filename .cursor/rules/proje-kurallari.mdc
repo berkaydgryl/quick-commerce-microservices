@@ -109,8 +109,9 @@ ya hatayi cevirir; ucunu birden degil.
   `installProcessHandlers` geri alma fonksiyonu dondurur.
 - Buyuk veri bellege tek seferde alinmaz; akis (stream) ile islenir.
 - Her servis SIGTERM ve SIGINT yakalar ve zarif kapanir: health NOT_SERVING -> acik akislar
-  kapanir -> devam eden cagrilar beklenir -> sure asiminda zorla kapanir -> EN SON veritabani
-  baglantilari kapanir (`service-kit/src/grpc/graceful-shutdown.ts`).
+  kapanir -> devam eden cagrilar beklenir -> sure asiminda zorla kapanir -> metrik ucu kapanir ->
+  EN SON isciler ve veritabani baglantilari kapanir (`service-kit/src/grpc/graceful-shutdown.ts`).
+  Her adim sinirlidir: son adim 10 sn'de bitmezse beklenmez ve surec cikar (#56, T10.5).
 
 ## Go
 
@@ -225,17 +226,27 @@ Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicid
 
 ## Gozlemlenebilirlik
 
-- Gunluk JSON'dur (pino) ve baglam alanlari mesajdan ONCE gelir.
-- Seviye sozlesmesi: `debug` yerel ayrinti · `info` is akisi kilometre taslari · `warn`
-  sistem calisiyor ama siradisi durum (beklenen is hatasi) · `error` mudahale gerektiren,
-  akisi bozan hata.
+- Gunluk JSON'dur (pino, `@getir/observability`) ve baglam alanlari mesajdan ONCE gelir.
+  stdout esli yazilir; yazilamazsa (okuyucusu gitti) gunluk birakilir, surec isine devam eder (#56).
+- Seviye sozlesmesi: `debug` yerel ayrinti · `info` is akisi kilometre taslari ve beklenen is
+  sonucu (stok yok, kupon gecersiz, oturum yok) · `warn` sistem calisiyor ama siradisi durum
+  (bagimli servis gecici olarak yok, yazilmamis uc cagrildi) · `error` mudahale gerektiren,
+  akisi bozan hata. RPC hatasinin seviyesi kodun agirligindan gelir (`@getir/core`
+  `ERROR_CODE_SEVERITY`, #49); gRPC durum numarasindan turetilmez.
 - Korelasyon kimligi (`x-request-id`) her cagrida tasinir; gelmezse uretilir ve gunluge
-  yazilir (`service-kit/src/grpc/context.ts`). Servisler arasi cagrida ayni deger
-  GECIRILIR, yenisi uretilmez.
+  yazilir (kural `@getir/observability` `request-id.ts`, gRPC'den okuma
+  `service-kit/src/grpc/context.ts`). Servisler arasi cagrida ayni deger GECIRILIR, yenisi
+  uretilmez.
 - Kimlik bicimi `req_` + 32 kucuk onaltilik karakterdir (`@getir/core` `id.ts`). Gateway
   disaridan gelen kimligi YALNIZCA bu bicimdeyse kabul eder, degilse yenisini uretir (D8):
   kabul edilen deger her servisin gunlugune yazilir.
-- Metrik ucu servis portu + 1000'dedir (roadmap port haritasi).
+- Metrik ucu servis portu + 1000'dedir (roadmap port haritasi): service-kit acar (`GET /metrics`),
+  zarif kapanista kapatir; servis kodu bir sey yapmaz (T10.5).
+- Metrik adi onek tasimaz (`getir_` yok); servis her metrikteki `service` etiketiyle ayrilir.
+  Birim adin sonundadir (`_seconds`, `_total`). Etiket degeri KAPALI bir kumeden gelir (RPC adi,
+  hata kodu, olay konusu, grup); kimlik (siparis, kullanici, istek), telefon, adres etiket olmaz.
+  Kutuphane (`@prometheus-io/client`) dogrudan import edilmez: `@getir/observability`
+  ureticileri (`counter`, `gauge`, `histogram`) kullanilir.
 
 ## Test
 

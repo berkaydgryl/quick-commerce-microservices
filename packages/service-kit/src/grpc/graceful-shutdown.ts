@@ -7,16 +7,23 @@
  *   2) Watch akislari kapanir : acik stream varken sunucu asla bosalmaz
  *   3) tryShutdown            : DEVAM EDEN cagrilarin bitmesi beklenir
  *   4) sure asiminda forceShutdown : takilmis cagri kapanisi sonsuza kilitlemesin
- *   5) onShutdown             : Mongo/Redis baglantilari en SON kapanir
+ *   5) metrik ucu kapanir     : drenaj boyunca acikti, son kazima kapanisi da gorur (T10.5)
+ *   6) onShutdown             : isciler ve Mongo/Redis baglantilari en SON kapanir;
+ *                               hookTimeoutMs'de bitmezse beklenmez (#56)
  *
- * (5) sonda cunku (3) sirasinda devam eden cagrilar hala veritabanina yaziyor
+ * (6) sonda cunku (3) sirasinda devam eden cagrilar hala veritabanina yaziyor
  * olabilir; baglantiyi once kapatmak, tam da zarif kapanisla onlemeye
  * calistigimiz yarim kalmis islemi uretirdi.
+ *
+ * Her adim sinirlidir: kapanis en gec timeoutMs + METRICS_CLOSE_GRACE_MS +
+ * hookTimeoutMs'de biter, surec cikar (takilmis bir Mongo kapanisi ya da isci
+ * turu sureci ayakta tutmaz).
  *
  * Acilis ayri dosyadadir (server.ts): ikisi ayri sebeplerle degisir - biri
  * servis kaydi ve bind secenekleri, digeri drenaj politikasi ve sure asimi.
  */
 
+import type { MetricsServer } from '@getir/observability';
 import type { Server } from '@grpc/grpc-js';
 
 import { OVERALL_HEALTH_KEY, SERVING_STATUS } from '../config/constants.js';
@@ -30,14 +37,21 @@ export interface GracefulShutdownParams {
   readonly health: HealthRegistry;
   readonly healthGrpc: HealthGrpcService;
   readonly services: readonly GrpcServiceRegistration[];
+  /** HTTP /metrics ucu; kapanisi hata firlatmaz. */
+  readonly metrics: Pick<MetricsServer, 'close'>;
   readonly logger: Logger;
   /** Gunluge yazilan sebep: "SIGTERM", "test"... */
   readonly reason: string;
   readonly timeoutMs: number;
+  /** onShutdown icin beklenecek en uzun sure (ms). */
+  readonly hookTimeoutMs: number;
   readonly onShutdown?: () => Promise<void> | void;
 }
 
-/** Yukaridaki bes adimi sirayla uygular. Hata firlatmaz; kaydini birakir. */
+/** Kapanis kancasinin sonucu; "zarif kapanis bitti" satirinda `hook` alani. */
+type HookOutcome = 'done' | 'failed' | 'timed-out';
+
+/** Yukaridaki alti adimi sirayla uygular. Hata firlatmaz; kaydini birakir. */
 export async function runGracefulShutdown(params: GracefulShutdownParams): Promise<void> {
   const { server, health, healthGrpc, logger, reason, timeoutMs } = params;
   logger.info({ reason, timeoutMs }, 'zarif kapanis basladi');
@@ -56,15 +70,10 @@ export async function runGracefulShutdown(params: GracefulShutdownParams): Promi
     server.forceShutdown();
   }
 
-  try {
-    await params.onShutdown?.();
-  } catch (error: unknown) {
-    // Kapanis kancasinin hatasi processi devirmez: sunucu zaten kapandi,
-    // yapilacak tek anlamli sey kaydi birakmak.
-    logger.error({ err: error }, 'kapanis kancasi hata verdi');
-  }
+  await params.metrics.close();
+  const hook = await runHook(params.onShutdown, params.hookTimeoutMs, logger);
 
-  logger.info({ reason, forced: !drained }, 'zarif kapanis bitti');
+  logger.info({ reason, forced: !drained, hook }, 'zarif kapanis bitti');
 }
 
 /**
@@ -87,4 +96,39 @@ function drain(server: Server, timeoutMs: number): Promise<boolean> {
       resolve(error === undefined || error === null);
     });
   });
+}
+
+/**
+ * Kapanis kancasini sure siniriyla calistirir. Kancanin hatasi da sure asimi da
+ * kapanisi durdurmaz: sunucu zaten kapandi, yapilacak tek anlamli sey kaydi
+ * birakmak. Sure asiminda kancanin suren isi beklenmez; surec cikarken kesilir.
+ */
+async function runHook(
+  onShutdown: (() => Promise<void> | void) | undefined,
+  timeoutMs: number,
+  logger: Logger,
+): Promise<HookOutcome> {
+  if (onShutdown === undefined) {
+    return 'done';
+  }
+  let timer: NodeJS.Timeout | undefined;
+  // unref EDILMEZ: suren kanca bekleyen tek is olsa da sure dolsun ve kapanis bitsin.
+  const timedOut = new Promise<HookOutcome>((resolve) => {
+    timer = setTimeout(() => resolve('timed-out'), timeoutMs);
+  });
+  const finished = Promise.resolve()
+    .then(onShutdown)
+    .then((): HookOutcome => 'done');
+  try {
+    const outcome = await Promise.race([finished, timedOut]);
+    if (outcome === 'timed-out') {
+      logger.error({ hookTimeoutMs: timeoutMs }, 'kapanis kancasi suresinde bitmedi; beklenmiyor');
+    }
+    return outcome;
+  } catch (error: unknown) {
+    logger.error({ err: error }, 'kapanis kancasi hata verdi');
+    return 'failed';
+  } finally {
+    clearTimeout(timer);
+  }
 }

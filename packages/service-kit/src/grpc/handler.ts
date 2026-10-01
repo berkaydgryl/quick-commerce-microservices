@@ -6,6 +6,11 @@
  *   2) is mantigini cagir,
  *   3) her hatayi AppError uzerinden gRPC status'una cevir ve gunluge yaz.
  *
+ * Her cagri ayrica sayilir ve suresi kaydedilir (T10.5, rpc-metrics.ts).
+ * Hatanin gunluk seviyesi kodun agirligindan gelir (#49; @getir/core
+ * ERROR_CODE_SEVERITY): beklenen is sonucu info, siradisi durum (bagimli
+ * servis yok, yazilmamis uc) warn, beklenmeyen ariza error.
+ *
  * Boylece `src/interfaces/grpc` altindaki handler'lar proje kuralinin istedigi
  * gibi ~15 satirda kalir: try/catch, dogrulama ve gunlukleme tekrari yok.
  *
@@ -17,8 +22,8 @@
  * okunabilir kalmasi.
  */
 
-import { isAppError } from '@getir/core';
-import { status as GrpcStatus } from '@grpc/grpc-js';
+import { ERROR_CODES, ERROR_SEVERITY, errorSeverityFor, isAppError } from '@getir/core';
+import type { ErrorSeverity, LogFields } from '@getir/core';
 import type { handleUnaryCall, sendUnaryData, ServerUnaryCall } from '@grpc/grpc-js';
 
 import type { Logger } from '../logger.js';
@@ -27,12 +32,33 @@ import type { HandlerContext } from './context.js';
 import { requestIdFrom } from './context.js';
 import { parseRequest } from './request.js';
 import type { RequestSchema } from './request.js';
+import { recordRpc, RPC_OK_CODE } from './rpc-metrics.js';
 import { toServiceError } from './status.js';
 
 export type { RequestSchema } from './request.js';
 
-/** hrtime nanosaniye doner; gunluge milisaniye yaziyoruz. */
+/** hrtime nanosaniye doner; gunluge milisaniye, metrige saniye yaziyoruz. */
 const NANOSECONDS_PER_MS = 1_000_000;
+const MS_PER_SECOND = 1_000;
+
+type FailureLog = (logger: Logger, fields: LogFields, error: unknown) => void;
+
+/**
+ * Agirlik -> gunluk satiri (#49). Beklenen is sonucu (stok yok, kupon gecersiz)
+ * ariza degildir: info, yigin izi yok. Siradisi durum ve beklenmeyen ariza hatayi
+ * (`err`) tasir; ikincisi uyari akisinda kaybolmasin diye error seviyesindedir.
+ */
+const FAILURE_LOG: Readonly<Record<ErrorSeverity, FailureLog>> = {
+  [ERROR_SEVERITY.EXPECTED]: (logger, fields) => {
+    logger.info(fields, 'rpc is hatasiyla dondu');
+  },
+  [ERROR_SEVERITY.UNUSUAL]: (logger, fields, error) => {
+    logger.warn({ ...fields, err: error }, 'rpc siradisi hatayla dondu');
+  },
+  [ERROR_SEVERITY.UNEXPECTED]: (logger, fields, error) => {
+    logger.error({ ...fields, err: error }, 'rpc beklenmeyen hatayla dondu');
+  },
+};
 
 export interface UnaryHandlerOptions<TInput, TResponse> {
   /** RPC adi; yalnizca gunluk alani olarak kullanilir (orn. "ListProducts"). */
@@ -71,24 +97,21 @@ export function unaryHandler<TInput, TResponse>(
       try {
         const input = parseRequest(options.schema, call.request, requestId);
         const response = await options.handle(input, context);
-        logger.debug({ durationMs: elapsedMs(startedAt) }, 'rpc tamamlandi');
+        const durationMs = elapsedMs(startedAt);
+        recordRpc(options.name, RPC_OK_CODE, durationMs / MS_PER_SECOND);
+        logger.debug({ durationMs }, 'rpc tamamlandi');
         callback(null, response);
       } catch (error: unknown) {
         const serviceError = toServiceError(error, { requestId });
-        const fields = {
-          durationMs: elapsedMs(startedAt),
-          code: isAppError(error) ? error.code : 'INTERNAL',
-          grpcStatus: serviceError.code,
-        };
+        const code = isAppError(error) ? error.code : ERROR_CODES.INTERNAL;
+        const durationMs = elapsedMs(startedAt);
+        recordRpc(options.name, code, durationMs / MS_PER_SECOND);
 
-        // Beklenen is hatasi (stok yok, kupon gecersiz) gurultu degildir: warn.
-        // Beklenmeyen hata yigin iziyle birlikte error seviyesinde yazilir ki
-        // uyari akisinda kaybolmasin.
-        if (isAppError(error) && serviceError.code < GrpcStatus.INTERNAL) {
-          logger.warn(fields, 'rpc is hatasiyla dondu');
-        } else {
-          logger.error({ ...fields, err: error }, 'rpc beklenmeyen hatayla dondu');
-        }
+        // AppError olmayan hata beklenmeyendir (INTERNAL'a duser).
+        const severity = isAppError(error)
+          ? errorSeverityFor(error.code)
+          : ERROR_SEVERITY.UNEXPECTED;
+        FAILURE_LOG[severity](logger, { durationMs, code, grpcStatus: serviceError.code }, error);
         callback(serviceError, null);
       }
     })();

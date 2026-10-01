@@ -85,6 +85,8 @@ export const HTTP_STATUS = {
   PAYMENT_REQUIRED: 402,
   FORBIDDEN: 403,
   NOT_FOUND: 404,
+  /** Yol var, fiil yok (T10.5: /metrics yalnizca GET). Cevaba `Allow` basligi eklenir. */
+  METHOD_NOT_ALLOWED: 405,
   CONFLICT: 409,
   GONE: 410,
   UNPROCESSABLE_ENTITY: 422,
@@ -183,6 +185,54 @@ export const ERROR_CODE_GRPC_STATUS: Readonly<Record<ErrorCode, GrpcStatus>> = {
   [ERROR_CODES.NOT_IMPLEMENTED]: GRPC_STATUS.UNIMPLEMENTED,
 };
 
+/**
+ * Hata kodunun agirligi (T10.5, #49): servis gunlugunun seviyesi bundan secilir
+ * (proje kurallari, "Seviye sozlesmesi"). gRPC durum numarasindan TURETILMEZ:
+ * UNAUTHENTICATED (16) sayica INTERNAL'dan (13) buyuk ama bir is sonucudur.
+ */
+export const ERROR_SEVERITY = {
+  /** Beklenen is sonucu (stok yok, kupon gecersiz, oturum yok); sistem dogru calisiyor: info. */
+  EXPECTED: 'expected',
+  /** Sistem calisiyor ama siradisi (bagimli servis gecici olarak yok, yazilmamis uc): warn. */
+  UNUSUAL: 'unusual',
+  /** Beklenmeyen ariza, mudahale ister: error. */
+  UNEXPECTED: 'unexpected',
+} as const;
+
+export type ErrorSeverity = (typeof ERROR_SEVERITY)[keyof typeof ERROR_SEVERITY];
+
+/** Hata kodu -> agirlik. Yeni kod eklenince derleme burada kirilir. */
+export const ERROR_CODE_SEVERITY: Readonly<Record<ErrorCode, ErrorSeverity>> = {
+  [ERROR_CODES.VALIDATION_FAILED]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.UNAUTHORIZED]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.INVALID_CREDENTIALS]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.FORBIDDEN]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.NOT_FOUND]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.CONFLICT]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.PHONE_ALREADY_REGISTERED]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.INTERNAL]: ERROR_SEVERITY.UNEXPECTED,
+  [ERROR_CODES.STOCK_INSUFFICIENT]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.RESERVATION_EXPIRED]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.RESERVATION_ACTIVE]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.RISK_BLOCKED]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.RISK_REVIEW]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.PAYMENT_DECLINED]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.THREEDS_FAILED]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.PAYMENT_METHOD_NOT_ALLOWED]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.PRICE_CHANGED]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.COUPON_INVALID]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.MIN_BASKET_NOT_MET]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.NO_STORE]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.REQUEST_IN_PROGRESS]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.RATE_LIMITED]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.ORDER_STATE_INVALID]: ERROR_SEVERITY.EXPECTED,
+  [ERROR_CODES.THREEDS_REQUIRED]: ERROR_SEVERITY.EXPECTED,
+  // Bagimli servis kapali ya da cevap vermedi: tekrar denenir, ama tekrarlanirsa bakilmali.
+  [ERROR_CODES.SERVICE_UNAVAILABLE]: ERROR_SEVERITY.UNUSUAL,
+  // Sozlesmedeki uc henuz yok (D5): cagiran eski ya da erken; is hatasi degil.
+  [ERROR_CODES.NOT_IMPLEMENTED]: ERROR_SEVERITY.UNUSUAL,
+};
+
 /** Hata kodunun HTTP karsiligi. */
 export function httpStatusFor(code: ErrorCode): HttpStatus {
   return ERROR_CODE_HTTP_STATUS[code];
@@ -191,6 +241,11 @@ export function httpStatusFor(code: ErrorCode): HttpStatus {
 /** Hata kodunun gRPC karsiligi. */
 export function grpcStatusFor(code: ErrorCode): GrpcStatus {
   return ERROR_CODE_GRPC_STATUS[code];
+}
+
+/** Hata kodunun agirligi (gunluk seviyesi). */
+export function errorSeverityFor(code: ErrorCode): ErrorSeverity {
+  return ERROR_CODE_SEVERITY[code];
 }
 
 /** Disaridan gelen bir degerin bilinen hata kodu olup olmadigini dogrular. */

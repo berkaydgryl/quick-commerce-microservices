@@ -63,7 +63,7 @@ describe('unimplemented', () => {
     expect(error?.metadata.get(REQUEST_ID_METADATA_KEY)).toEqual(['req_yok']);
   });
 
-  it('cagri WARN olarak yazilir (beklenen is hatasi gibi, gurultu degil)', async () => {
+  it('cagri WARN olarak yazilir: siradisi durum, ariza degil (#49)', async () => {
     const lines: LogLine[] = [];
     const { client } = await serveUnimplementedEcho(lines);
 
@@ -72,7 +72,7 @@ describe('unimplemented', () => {
     expect(lines).toEqual([
       expect.objectContaining({
         level: 'warn',
-        message: 'rpc is hatasiyla dondu',
+        message: 'rpc siradisi hatayla dondu',
         fields: expect.objectContaining({
           rpc: 'Echo',
           code: ERROR_CODES.NOT_IMPLEMENTED,

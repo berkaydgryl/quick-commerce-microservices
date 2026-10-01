@@ -95,7 +95,55 @@ describe('zarif kapanis: sure asimi ve hata yollari', () => {
     expect(lines).toContainEqual(
       expect.objectContaining({ level: 'error', message: 'kapanis kancasi hata verdi' }),
     );
-    expect(lines.at(-1)?.message).toBe('zarif kapanis bitti');
+    expect(lines.at(-1)).toMatchObject({
+      message: 'zarif kapanis bitti',
+      fields: { hook: 'failed' },
+    });
+  });
+
+  it('kanca suresinde bitmezse beklenmez: kapanis biter, ERROR yazilir (#56)', async () => {
+    const lines: LogLine[] = [];
+    const server = await start({
+      logger: recordingLogger(lines),
+      services: [],
+      shutdownHookTimeoutMs: SHORT_SHUTDOWN_MS,
+      // Takilmis Mongo kapanisi ya da isci turu: hic bitmeyen kanca.
+      onShutdown: () => new Promise<void>(() => undefined),
+    });
+
+    await expect(server.handle.shutdown('test')).resolves.toBeUndefined();
+
+    expect(lines).toContainEqual(
+      expect.objectContaining({
+        level: 'error',
+        message: 'kapanis kancasi suresinde bitmedi; beklenmiyor',
+        fields: expect.objectContaining({ hookTimeoutMs: SHORT_SHUTDOWN_MS }) as unknown,
+      }),
+    );
+    expect(lines.at(-1)).toMatchObject({
+      message: 'zarif kapanis bitti',
+      fields: { hook: 'timed-out' },
+    });
+  });
+
+  it('metrik ucu drenajdan sonra, kancadan ONCE kapanir (T10.5)', async () => {
+    let metricsAtHook: 'acik' | 'kapali' | undefined;
+    const holder: { port?: number } = {};
+    const server = await start({
+      services: [],
+      onShutdown: async () => {
+        metricsAtHook = await fetch(`http://127.0.0.1:${String(holder.port)}/metrics`).then(
+          () => 'acik' as const,
+          () => 'kapali' as const,
+        );
+      },
+    });
+    holder.port = server.handle.metricsPort;
+    expect((await fetch(`http://127.0.0.1:${server.handle.metricsPort}/metrics`)).status).toBe(200);
+
+    await server.handle.shutdown('test');
+
+    expect(metricsAtHook).toBe('kapali');
   });
 });
 

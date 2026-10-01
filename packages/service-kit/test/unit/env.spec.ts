@@ -46,6 +46,11 @@ describe('serviceEnvSchema', () => {
     expect(() => loadEnv(schema, { CATALOG_GRPC_PORT: 'elli-bir' })).toThrow(/tam sayi/);
   });
 
+  it('gRPC portu en fazla 64535: metrik ucu (port + 1000) de gecerli port olmali (T10.5)', () => {
+    expect(loadEnv(schema, { CATALOG_GRPC_PORT: '64535' }).CATALOG_GRPC_PORT).toBe(64_535);
+    expect(() => loadEnv(schema, { CATALOG_GRPC_PORT: '64536' })).toThrow(/CATALOG_GRPC_PORT/);
+  });
+
   it('gecersiz kapanis suresini reddeder', () => {
     expect(() => loadEnv(schema, { GRPC_SHUTDOWN_TIMEOUT_MS: '-1' })).toThrow(
       /GRPC_SHUTDOWN_TIMEOUT_MS/,

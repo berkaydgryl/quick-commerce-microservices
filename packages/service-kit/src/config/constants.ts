@@ -18,12 +18,26 @@ export const DEFAULT_GRPC_HOST = '0.0.0.0';
 export const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000;
 
 /**
- * Korelasyon kimliginin tasindigi metadata anahtari.
- * Gateway istegi karsilarken uretir, her gRPC cagrisina koyar; servis logu ve
- * REST cevabindaki `error.requestId` boylece ayni degeri gosterir.
- * gRPC metadata anahtarlari KUCUK HARF olmak zorundadir.
+ * Zarif kapanista `onShutdown` kancasina (isciler, Mongo/Redis) taninan en uzun
+ * sure (#56). Asilirsa beklenmez, kapanis biter ve surec cikar: takilmis bir
+ * baglanti kapanisi sureci sonsuza dek ayakta tutmasin. Kapanisin ust siniri
+ * boylece GRPC_SHUTDOWN_TIMEOUT_MS + metrik ucu (1 sn) + bu sure olur; 10 sn
+ * varsayilanlarla 21 sn, Kubernetes'in 30 sn'lik penceresinin icinde.
  */
-export const REQUEST_ID_METADATA_KEY = 'x-request-id';
+export const DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS = 10_000;
+
+/**
+ * Metrik ucunun portu: gRPC portu + bu fark (roadmap port haritasi; catalog
+ * 50051 -> 51051). Ayri ortam degiskeni yoktur: kural sabit, portu tahmin edilir.
+ */
+export const METRICS_PORT_OFFSET = 1_000;
+
+/**
+ * Korelasyon kimliginin tasindigi metadata anahtari. Tanim (ve "gelen degeri
+ * kullan, yoksa uret" kurali) T10.5'te @getir/observability'ye tasindi;
+ * buradan da disari verilir (eski import yollari).
+ */
+export { REQUEST_ID_METADATA_KEY } from '@getir/observability';
 
 /**
  * AppError'in tel uzerindeki tasiyicisi: JSON kodlanmis `AppErrorJson`.

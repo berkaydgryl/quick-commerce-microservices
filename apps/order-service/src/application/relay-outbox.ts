@@ -8,6 +8,9 @@
  *  - Yalnizca yayinlanan olaylar isaretlenir; kalanlar sonraki turda.
  *  - Teslimat EN AZ BIR KEZDIR: yayinla ile isaretle arasinda cokulurse olay
  *    tekrar gider. Tuketici eventId ile tekillestirir.
+ *
+ * Tur sonucu isciye metrik icin doner (T10.5, #12): yayinlanan sayisi, yayinin
+ * yarida kalip kalmadigi ve turun gordugu en eski olayin yasi (gecikme).
  */
 
 import type { Clock, Logger } from '@getir/core';
@@ -25,29 +28,48 @@ export interface RelayOutboxDeps {
   readonly batchSize: number;
 }
 
-/** @returns Bu turda yayinlanan olay sayisi. */
-export type RelayOutbox = (logger: Logger) => Promise<number>;
+export interface RelayRound {
+  /** Bu turda yayinlanan olay sayisi. */
+  readonly published: number;
+  /** Yayin yarida kaldi (hat hatasi); kalanlar sonraki turda. */
+  readonly failed: boolean;
+  /**
+   * Turun okudugu en eski yayinlanmamis olayin yasi (ms); kuyruk bossa 0.
+   * Saglikli yayinda tur araliginin altinda kalir, buyumesi takilmayi gosterir.
+   */
+  readonly lagMs: number;
+}
+
+export type RelayOutbox = (logger: Logger) => Promise<RelayRound>;
 
 export function createRelayOutbox(deps: RelayOutboxDeps): RelayOutbox {
   return async (logger) => {
     const pending = await deps.outbox.pending(deps.batchSize);
+    const lagMs = lagOf(pending[0], deps.clock.now());
     const published: string[] = [];
+    let failed = false;
     try {
       for (const event of pending) {
         await deps.publisher.publish(toEnvelope(event));
         published.push(event.eventId);
       }
     } catch (error: unknown) {
-      const failed = pending[published.length];
+      failed = true;
+      const stuck = pending[published.length];
       logger.warn(
-        { err: error, eventId: failed?.eventId, topic: failed?.topic },
+        { err: error, eventId: stuck?.eventId, topic: stuck?.topic },
         'olay yayinlanamadi; sonraki turda tekrar denenecek',
       );
     } finally {
       await deps.outbox.markPublished(published, deps.clock.date());
     }
-    return published.length;
+    return { published: published.length, failed, lagMs };
   };
+}
+
+/** En eski bekleyenin yasi; saat geri kaysa da negatif olmaz. */
+function lagOf(oldest: OrderEvent | undefined, nowMs: number): number {
+  return oldest === undefined ? 0 : Math.max(0, nowMs - oldest.occurredAt.getTime());
 }
 
 /**

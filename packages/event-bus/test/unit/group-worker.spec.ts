@@ -5,16 +5,26 @@
  */
 
 import { EVENTS, fixedClock } from '@getir/core';
+import type { MutableClock } from '@getir/core';
 import { recordingLogger } from '@getir/core/testing';
 import type { LogLine } from '@getir/core/testing';
+import { metricsRegistry } from '@getir/observability';
+import { metricValue } from '@getir/observability/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { CONSUMER_METRICS, UNKNOWN_TOPIC } from '../../src/consumer-metrics.js';
 
 import { DEAD_LETTER_REASON } from '../../src/dead-letter.js';
 import { GROUP_START } from '../../src/delivery-settings.js';
 import type { DeliverySettings } from '../../src/delivery-settings.js';
 import type { StreamEntry } from '../../src/dispatch.js';
-import { runGroupWorker } from '../../src/group-worker.js';
-import type { DeadLetterDetails, PendingEntry, StreamGroup } from '../../src/redis-stream-group.js';
+import { GROUP_STATS_INTERVAL_MS, runGroupWorker } from '../../src/group-worker.js';
+import type {
+  DeadLetterDetails,
+  GroupStats,
+  PendingEntry,
+  StreamGroup,
+} from '../../src/redis-stream-group.js';
 import { EVENT_HANDLED } from '../../src/subscriber.js';
 import type { EventHandler } from '../../src/subscriber.js';
 import { entryOf, envelopeOf } from '../support/envelopes.js';
@@ -41,8 +51,11 @@ class ScriptedStreamGroup implements StreamGroup {
   readonly batches: StreamEntry[][] = [];
   readonly stale: PendingEntry[][] = [];
   readonly claimable = new Map<string, StreamEntry>();
+  /** Sirayla donen grup istatistikleri; bitince { lag: 0, pending: 0 }. */
+  readonly groupStats: (GroupStats | Error)[] = [];
   ensureCalls = 0;
   readCalls = 0;
+  statsCalls = 0;
 
   constructor(private readonly onDrained: () => void) {}
 
@@ -89,16 +102,25 @@ class ScriptedStreamGroup implements StreamGroup {
   release(): Promise<boolean> {
     return Promise.resolve(true);
   }
+
+  stats(): Promise<GroupStats | undefined> {
+    this.statsCalls += 1;
+    const next = this.groupStats.shift() ?? { lag: 0, pending: 0 };
+    return next instanceof Error ? Promise.reject(next) : Promise.resolve(next);
+  }
 }
 
 let controller: AbortController;
 let stream: ScriptedStreamGroup;
 let lines: LogLine[];
+let clock: MutableClock;
 
 beforeEach(() => {
   controller = new AbortController();
   stream = new ScriptedStreamGroup(() => controller.abort());
   lines = [];
+  clock = fixedClock(NOW_MS);
+  metricsRegistry.resetMetrics();
 });
 
 /** Iade komutu isleyicisi: orderId "ord_hata" ise gecici hata firlatir. */
@@ -109,10 +131,11 @@ const refundHandler: EventHandler = (envelope) =>
 
 function run(handler: EventHandler = refundHandler): Promise<void> {
   return runGroupWorker({
+    group: 'payment',
     stream,
     handlers: new Map([[EVENTS.PAYMENT_REFUND_REQUESTED, handler]]),
     settings,
-    clock: fixedClock(NOW_MS),
+    clock,
     logger: recordingLogger(lines, { group: 'payment' }),
     signal: controller.signal,
   });
@@ -241,5 +264,86 @@ describe('runGroupWorker: hata ve kapanis', () => {
 
     expect(stream.ackCalls).toEqual([['1-0'], ['2-0']]);
     expect(stream.readCalls).toBe(1);
+  });
+});
+
+describe('runGroupWorker: metrikler (T10.5, #12)', () => {
+  const events = CONSUMER_METRICS.EVENTS;
+  const refundTopic = EVENTS.PAYMENT_REFUND_REQUESTED;
+
+  it('sonuclanan kaydi grup, konu ve sonucla sayar; grubun olmayan konu sayilmaz', async () => {
+    stream.stale.push([{ id: '6-0', deliveries: settings.maxDeliveries }]);
+    stream.claimable.set('6-0', refund('6-0'));
+    stream.batches.push([refund('1-0'), refund('2-0', 'ord_hata'), other('3-0')]);
+
+    await run();
+
+    const of = (outcome: string) =>
+      metricValue(events, { group: 'payment', topic: refundTopic, outcome });
+    expect(await of('handled')).toBe(1);
+    expect(await of('retry')).toBe(1);
+    expect(await of('dead')).toBe(1);
+    expect(await metricValue(events, { topic: EVENTS.ORDER_CREATED })).toBeUndefined();
+    expect(await metricValue(events)).toBe(3);
+  });
+
+  it('konusu okunamayan kayit (akistan kirpilmis) unknown konusuyla olu sayilir', async () => {
+    stream.batches.push([{ id: '9-0', fields: null }]);
+
+    await run();
+
+    expect(
+      await metricValue(events, { group: 'payment', topic: UNKNOWN_TOPIC, outcome: 'dead' }),
+    ).toBe(1);
+  });
+
+  it('grubun gecikmesi ve bekleyeni metrige yazilir', async () => {
+    stream.groupStats.push({ lag: 7, pending: 2 });
+    stream.batches.push([refund('1-0')]);
+
+    await run();
+
+    expect(await metricValue(CONSUMER_METRICS.LAG, { group: 'payment' })).toBe(7);
+    expect(await metricValue(CONSUMER_METRICS.PENDING, { group: 'payment' })).toBe(2);
+  });
+
+  it('istatistik en fazla GROUP_STATS_INTERVAL_MSde bir okunur', async () => {
+    stream.batches.push([refund('1-0')], [refund('2-0')], [refund('3-0')]);
+    // Ikinci partide saat bir aralik ilerler: ucuncu turun sonunda yeniden okunur.
+    let handled = 0;
+    const handler: EventHandler = () => {
+      handled += 1;
+      if (handled === 2) {
+        clock.advance(GROUP_STATS_INTERVAL_MS);
+      }
+      return Promise.resolve(EVENT_HANDLED);
+    };
+
+    await run(handler);
+
+    // 4 tur (3 parti + bos okuma): ilk tur ve saatin ilerledigi tur okur.
+    expect(stream.readCalls).toBe(4);
+    expect(stream.statsCalls).toBe(2);
+  });
+
+  it('istatistik okunamazsa dongu durmaz; WARN yazilir, onceki deger kalir', async () => {
+    stream.groupStats.push({ lag: 4, pending: 1 });
+    stream.groupStats.push(new Error('XINFO zaman asimi'));
+    stream.batches.push([refund('1-0')], [refund('2-0')]);
+    const handler: EventHandler = () => {
+      clock.advance(GROUP_STATS_INTERVAL_MS);
+      return Promise.resolve(EVENT_HANDLED);
+    };
+
+    await run(handler);
+
+    expect(stream.ackCalls).toEqual([['1-0'], ['2-0']]);
+    expect(
+      lines.find((line) => line.message.startsWith('grup istatistigi okunamadi')),
+    ).toMatchObject({
+      level: 'warn',
+    });
+    expect(await metricValue(CONSUMER_METRICS.LAG, { group: 'payment' })).toBe(4);
+    expect(stream.statsCalls).toBe(2);
   });
 });

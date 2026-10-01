@@ -4,8 +4,8 @@
  * NEDEN CORE'DA: mongo-kit, redis-kit ve service-kit'in ucu de "bana bir
  * gunlukcu ver" demek zorunda. Arayuz service-kit'te kalsaydi, veri katmani
  * paketleri gRPC paketine bagimli olurdu - yanlis yon. Burada yalnizca TIP ve
- * hicbir sey yazmayan bir uygulama durur; gercek gunlukcu (pino) service-kit
- * icindedir ve ileride packages/observability'ye tasinacaktir.
+ * hicbir sey yazmayan bir uygulama durur; gercek gunlukcu (pino)
+ * packages/observability icindedir (T10.5; service-kit yeniden disari verir).
  *
  * Bu dosya core'un kuralini bozmaz: bagimlilik yok, I/O yok.
  */

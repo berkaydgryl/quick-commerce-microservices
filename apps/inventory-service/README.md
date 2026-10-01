@@ -173,8 +173,12 @@ Süresi dolan rezervasyonun stoğunu geri verir. Keyspace notification kullanıl
   `ALREADY_APPLIED` (stok zaten döndü).
 - **Kaydı düşmüş indeks üyesi** (bütün örnekler 60 sn'den uzun kapalı kaldıysa hash'in payı dolar): uyarı
   yazılır, stok geri verilemez (adetler bilinmiyor); `reseed` gerekir.
-- **Günlük:** lider olunca ve liderlik düşünce bir satır; stok geri verilen turda özet. Metrik ve sağlık
-  T10.5'te (#12).
+- **Günlük:** lider olunca ve liderlik düşünce bir satır; stok geri verilen turda özet.
+- **Metrikler (T10.5, #12; `interfaces/workers/sweeper-metrics.ts`):** `reservation_sweeper_leader`
+  (bu örnek lider mi, 1/0; bütün örneklerin toplamı 1 olmalı), `reservation_sweeper_round_duration_seconds`
+  (liderin süpürme turu), `reservation_sweeper_expired_total` (stoğu geri verilen),
+  `reservation_sweeper_pending_ledger` (stoğu döndü, defteri bekleyen) ve `reservation_sweeper_errors_total`
+  (düşen tur). Uç `localhost:51052/metrics`. Sağlık durumu (health) süpürücüye bağlı değil (bekleyen iş #12).
 - **MOCK** (B16): süpürücü bellekte aynı kurallarla; tek süreç, kilit hep bizde.
 
 ## Redis boşalınca (T10.1 PR 2, ADR-17)

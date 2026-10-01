@@ -38,11 +38,18 @@ export interface GrpcServerOptions {
   readonly shutdownTimeoutMs?: number;
   /** Sunucu kapandiktan SONRA calisir: Mongo/Redis baglantilarini kapatir. */
   readonly onShutdown?: () => Promise<void> | void;
+  /**
+   * onShutdown icin beklenecek en uzun sure (ms; #56). Asilirsa beklenmez,
+   * kapanis biter. Varsayilan DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS.
+   */
+  readonly shutdownHookTimeoutMs?: number;
 }
 
 export interface GrpcServerHandle {
   /** Gercekten baglanilan port (port 0 verildiginde isletim sisteminin sectigi). */
   readonly port: number;
+  /** HTTP /metrics ucunun portu (T10.5): gRPC portu + 1000, testte bos port. */
+  readonly metricsPort: number;
   /** Durum tablosu; servis kendi bagimliliklarina gore guncelleyebilir. */
   readonly health: HealthRegistry;
   /** Zarif kapanis. Birden cok kez cagrilabilir; ilk cagri disindakiler ayni sozu bekler. */

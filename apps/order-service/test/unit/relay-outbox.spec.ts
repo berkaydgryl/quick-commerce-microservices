@@ -47,9 +47,9 @@ describe('relayOutbox', () => {
   it('bekleyenleri sirayla zarf olarak yayinlar ve isaretler', async () => {
     const order = await insertAwaitingPayment(store, clock);
 
-    const count = await relayWith(publisher)(silentLogger);
+    const result = await relayWith(publisher)(silentLogger);
 
-    expect(count).toBe(4);
+    expect(result).toEqual({ published: 4, failed: false, lagMs: 0 });
     expect(publisher.published.map((envelope) => [envelope.topic, envelope.payload['to']])).toEqual(
       [
         ['order.created', undefined],
@@ -72,7 +72,7 @@ describe('relayOutbox', () => {
     await relay(silentLogger);
     const second = await relay(silentLogger);
 
-    expect(second).toBe(0);
+    expect(second).toEqual({ published: 0, failed: false, lagMs: 0 });
     expect(publisher.published).toHaveLength(1);
   });
 
@@ -80,9 +80,9 @@ describe('relayOutbox', () => {
     await insertAwaitingPayment(store, clock);
     const { publisher: flaky, sent } = failingAt(2);
 
-    const count = await relayWith(flaky)(silentLogger);
+    const result = await relayWith(flaky)(silentLogger);
 
-    expect(count).toBe(2);
+    expect(result).toMatchObject({ published: 2, failed: true });
     const remaining = await store.pending(10);
     expect(remaining.map((event) => event.version)).toEqual([3, 4]);
     // Sonraki tur kaldigi yerden, sirayla devam eder.
@@ -95,7 +95,22 @@ describe('relayOutbox', () => {
   it('parti boyu sinirlidir', async () => {
     await insertAwaitingPayment(store, clock);
 
-    await expect(relayWith(publisher, 3)(silentLogger)).resolves.toBe(3);
+    await expect(relayWith(publisher, 3)(silentLogger)).resolves.toMatchObject({ published: 3 });
     await expect(store.pending(10)).resolves.toHaveLength(1);
+  });
+
+  it('gecikme: turun gordugu en eski bekleyen olayin yasi (T10.5)', async () => {
+    await insertDraft(store, clock);
+    const later = fixedClock(T0 + 1_500);
+    const { publisher: down } = failingAt(0);
+
+    const stuck = await createRelayOutbox({
+      outbox: store,
+      publisher: down,
+      clock: later,
+      batchSize: 100,
+    })(silentLogger);
+
+    expect(stuck).toEqual({ published: 0, failed: true, lagMs: 1_500 });
   });
 });
