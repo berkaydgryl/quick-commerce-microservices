@@ -32,6 +32,7 @@
     "@getir/observability": "workspace:*",
     "@grpc/grpc-js": "^1.14.5",
     "@grpc/proto-loader": "^0.8.1",
+    "@opentelemetry/api": "^1.9.1",
     "zod": "^3.23.8"
   }
 }

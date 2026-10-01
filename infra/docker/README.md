@@ -86,6 +86,26 @@ koleksiyonuna erisim Mongo tarafindan reddedilir (`not authorized`).
 
 ---
 
+### 2b. Iz goruntuleyicisi (Jaeger, D15)
+
+Compose Mongo ve Redis'in yaninda Jaeger v2'yi de kaldirir (`getir-jaeger`):
+
+| Port  | Is                                                                     |
+| ----- | ---------------------------------------------------------------------- |
+| 16686 | Arayuz: http://localhost:16686 (servis secip izleri gor)               |
+| 4318  | OTLP/HTTP alicisi: `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` |
+
+Gateway ve Node servisleri izleri bu adrese gonderir (`.env.example`). Izler **bellekte** tutulur:
+konteyner yeniden baslayinca gider. Bir istegin izini bulmak icin hata cevabindaki `requestId`
+span'lerde `app.request_id` olarak durur; gunluk satirlarindaki `traceId` dogrudan izin kimligidir.
+
+Sorgu API'si v3'tur (v2'de eski `/api/traces?service=` yok):
+
+```bash
+curl -s localhost:16686/api/v3/services
+curl -s localhost:16686/api/v3/traces/<traceId>
+```
+
 ## 3. Saglik kontrolu
 
 Her iki konteyner de `healthy` olana kadar bekleyin:
@@ -178,6 +198,7 @@ docker exec getir-mongo bash -c 'mongosh --quiet -u "$MONGO_ROOT_USERNAME" -p "$
 ```powershell
 docker compose -f infra/docker/docker-compose.dev.yml logs -f mongo
 docker compose -f infra/docker/docker-compose.dev.yml logs -f redis
+docker compose -f infra/docker/docker-compose.dev.yml logs -f jaeger
 ```
 
 Son 100 satir:

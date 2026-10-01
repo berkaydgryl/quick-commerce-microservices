@@ -4,6 +4,11 @@
  * Kural: `console.log` yasaktir (eslint kapisi), her kayit JSON'dur ve baglam
  * alanlari mesajdan ONCE gelir: `logger.info({ orderId }, 'siparis olusturuldu')`.
  *
+ * Iz baglami (D15): aktif span'in `traceId` ve `spanId`'si her satira kendiliginden
+ * eklenir (pino mixin). Bir RPC'nin butun satirlari - use-case ve giden cagri
+ * dahil - iz goruntuleyicideki izle eslesir; span disindaki satir (acilis,
+ * isci turu) bu alanlari tasimaz.
+ *
  * ARAYUZ BURADA DEGIL: `Logger` ve `silentLogger` @getir/core icindedir (T2.5).
  * mongo-kit ve redis-kit de bir gunlukcu ister; arayuz burada olsaydi veri
  * katmani paketleri bu pakete bagimli olurdu. Bu dosya yalnizca UYGULAMAYI
@@ -11,6 +16,7 @@
  * `@getir/service-kit`'ten almaya devam eder.
  */
 
+import { isSpanContextValid, trace } from '@opentelemetry/api';
 import { pino } from 'pino';
 
 import type { Logger } from '@getir/core';
@@ -42,7 +48,17 @@ export function createLogger(options: CreateLoggerOptions): Logger {
       formatters: {
         level: (label) => ({ level: label }),
       },
+      mixin: traceFields,
     },
     stdoutDestination(options.name),
   );
+}
+
+/** Aktif span'in kimlikleri; span yoksa (ya da gecersizse) alan eklenmez. */
+export function traceFields(): { traceId?: string; spanId?: string } {
+  const spanContext = trace.getActiveSpan()?.spanContext();
+  if (spanContext === undefined || !isSpanContextValid(spanContext)) {
+    return {};
+  }
+  return { traceId: spanContext.traceId, spanId: spanContext.spanId };
 }

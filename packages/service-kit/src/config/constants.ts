@@ -21,8 +21,9 @@ export const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000;
  * Zarif kapanista `onShutdown` kancasina (isciler, Mongo/Redis) taninan en uzun
  * sure (#56). Asilirsa beklenmez, kapanis biter ve surec cikar: takilmis bir
  * baglanti kapanisi sureci sonsuza dek ayakta tutmasin. Kapanisin ust siniri
- * boylece GRPC_SHUTDOWN_TIMEOUT_MS + metrik ucu (1 sn) + bu sure olur; 10 sn
- * varsayilanlarla 21 sn, Kubernetes'in 30 sn'lik penceresinin icinde.
+ * boylece GRPC_SHUTDOWN_TIMEOUT_MS + metrik ucu (1 sn) + bu sure + izlerin
+ * gonderilmesi (2 sn, D15) olur; varsayilanlarla 23 sn, Kubernetes'in 30 sn'lik
+ * penceresinin icinde.
  */
 export const DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS = 10_000;
 

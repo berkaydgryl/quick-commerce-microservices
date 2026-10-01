@@ -2,14 +2,16 @@
  * gRPC sunucusunun ACILISI.
  *
  * Bir Node servisinin `bootstrap.ts` dosyasinin yaptigi is buraya iner:
- * sunucuyu kur, health servisini bagla, portu ac, metrik ucunu ac (T10.5),
- * durumu SERVING'e cevir ve cagirana bir kapanis dugmesi (handle.shutdown) ver.
+ * izleri kur (D15), sunucuyu kur, health servisini bagla, portu ac, metrik
+ * ucunu ac (T10.5), durumu SERVING'e cevir ve cagirana bir kapanis dugmesi
+ * (handle.shutdown) ver.
  *
  * Kapanisin KENDISI burada degil: graceful-shutdown.ts icindedir. Burasi
  * yalnizca onu tek seferlik calisacak sekilde baglar.
  */
 
 import { AppError } from '@getir/core';
+import { startTracing } from '@getir/observability';
 import type { MetricsServer } from '@getir/observability';
 import { Server, ServerCredentials } from '@grpc/grpc-js';
 
@@ -36,6 +38,13 @@ export async function startGrpcServer(options: GrpcServerOptions): Promise<GrpcS
   const host = options.host ?? DEFAULT_GRPC_HOST;
   const shutdownTimeoutMs = options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS;
   const hookTimeoutMs = options.shutdownHookTimeoutMs ?? DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS;
+  // Port acilmadan ONCE: ilk cagrinin span'i da kaydedilsin. Surecte tek
+  // saglayici vardir; ikinci sunucu (test) ayni saglayiciyi kullanir.
+  const tracing = startTracing({
+    serviceName: options.serviceName,
+    otlpEndpoint: options.otlpEndpoint,
+    logger,
+  });
 
   const server = new Server();
   const health = new HealthRegistry(logger);
@@ -83,6 +92,7 @@ export async function startGrpcServer(options: GrpcServerOptions): Promise<GrpcS
       reason,
       timeoutMs: shutdownTimeoutMs,
       hookTimeoutMs,
+      flushTraces: () => tracing.flush(),
       ...(options.onShutdown === undefined ? {} : { onShutdown: options.onShutdown }),
     });
     return shutdownPromise;

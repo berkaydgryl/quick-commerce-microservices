@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
 )
@@ -21,6 +23,8 @@ func errorHandler(logger *slog.Logger) fiber.ErrorHandler {
 	return func(c fiber.Ctx, err error) error {
 		appErr := toAppError(err)
 		requestID := ensureRequestID(c)
+		// Istek span'i hatanin sozluk kodunu tasir (D15; Node span'leriyle ayni ad).
+		trace.SpanFromContext(c.Context()).SetAttributes(attribute.String(attrErrorCode, string(appErr.Code)))
 
 		// 4xx istemcinin hatasidir, gateway'in degil: ERROR seviyesi alarm
 		// gurultusu uretirdi.
@@ -63,6 +67,8 @@ func errorHandler(logger *slog.Logger) fiber.ErrorHandler {
 			c.Locals(pendingRequestLogKey{}, nil)
 			logRequest(logger, c, startedAt)
 		}
+		// Ayni on geciste istek span'i de bekletildi (tracing.go): son durumla kapanir.
+		endPendingSpan(c)
 		return written
 	}
 }

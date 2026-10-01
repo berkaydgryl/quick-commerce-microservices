@@ -52,6 +52,8 @@ const { handle, source } = await startOrExit(
       host: env.GRPC_HOST,
       port: env.INVENTORY_GRPC_PORT,
       shutdownTimeoutMs: env.GRPC_SHUTDOWN_TIMEOUT_MS,
+      // Izler (D15): adres yoksa olusur ve tasinir, disari gonderilmez.
+      otlpEndpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
       logger,
       services: [buildInventoryService({ logger, stock: opened })],
       // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti kesilmesin.

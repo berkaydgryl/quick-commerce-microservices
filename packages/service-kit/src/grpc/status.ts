@@ -92,6 +92,14 @@ export function fromServiceError(error: unknown): AppError {
   });
 }
 
+/**
+ * Karsi servisten donen durumun AppError kodu (D15: istemci span'inin hata
+ * isareti): `x-app-error` varsa ondaki kod, yoksa durum kodundan en yakini.
+ */
+export function errorCodeOfStatus(code: GrpcStatus, metadata: Metadata | undefined): ErrorCode {
+  return parseErrorMetadata(metadata)?.code ?? errorCodeForStatus(code);
+}
+
 /** Deger, gRPC istemcisinden gelen bir ServiceError mi? */
 export function isServiceError(value: unknown): value is ServiceError {
   return value instanceof Error && 'code' in value && typeof value.code === 'number';

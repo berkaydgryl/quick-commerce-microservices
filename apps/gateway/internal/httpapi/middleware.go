@@ -46,7 +46,8 @@ func requestLogger(logger *slog.Logger) fiber.Handler {
 
 // logRequest, istek satirini cevabin SON durumuyla yazar.
 func logRequest(logger *slog.Logger, c fiber.Ctx, startedAt time.Time) {
-	logger.Info("http istegi",
+	// Baglamla: istek span'inin traceId'si satira eklenir (D15, telemetry).
+	logger.InfoContext(c.Context(), "http istegi",
 		slog.String("method", c.Method()),
 		slog.String("path", c.Path()),
 		slog.Int("status", c.Response().StatusCode()),

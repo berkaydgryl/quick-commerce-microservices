@@ -6,7 +6,9 @@
  *   2) is mantigini cagir,
  *   3) her hatayi AppError uzerinden gRPC status'una cevir ve gunluge yaz.
  *
- * Her cagri ayrica sayilir ve suresi kaydedilir (T10.5, rpc-metrics.ts).
+ * Her cagri ayrica sayilir ve suresi kaydedilir (T10.5, rpc-metrics.ts) ve
+ * bir sunucu span'inin icinde kosar (D15, tracing.ts): ust span gelen
+ * traceparent'tan, handler'in gunluk satirlari ve giden cagrilari bu izde.
  * Hatanin gunluk seviyesi kodun agirligindan gelir (#49; @getir/core
  * ERROR_CODE_SEVERITY): beklenen is sonucu info, siradisi durum (bagimli
  * servis yok, yazilmamis uc) warn, beklenmeyen ariza error.
@@ -24,6 +26,7 @@
 
 import { ERROR_CODES, ERROR_SEVERITY, errorSeverityFor, isAppError } from '@getir/core';
 import type { ErrorSeverity, LogFields } from '@getir/core';
+import { status as GrpcStatus } from '@grpc/grpc-js';
 import type { handleUnaryCall, sendUnaryData, ServerUnaryCall } from '@grpc/grpc-js';
 
 import type { Logger } from '../logger.js';
@@ -34,6 +37,7 @@ import { parseRequest } from './request.js';
 import type { RequestSchema } from './request.js';
 import { recordRpc, RPC_OK_CODE } from './rpc-metrics.js';
 import { toServiceError } from './status.js';
+import { endRpcSpan, runInSpan, startServerSpan } from './tracing.js';
 
 export type { RequestSchema } from './request.js';
 
@@ -92,13 +96,15 @@ export function unaryHandler<TInput, TResponse>(
     const logger = baseLogger.child({ rpc: options.name, requestId });
     const context: HandlerContext = { requestId, metadata: call.metadata, logger };
     const startedAt = process.hrtime.bigint();
+    const server = startServerSpan(call.getPath(), call.metadata, requestId);
 
-    void (async () => {
+    void runInSpan(server, async () => {
       try {
         const input = parseRequest(options.schema, call.request, requestId);
         const response = await options.handle(input, context);
         const durationMs = elapsedMs(startedAt);
         recordRpc(options.name, RPC_OK_CODE, durationMs / MS_PER_SECOND);
+        endRpcSpan(server.span, GrpcStatus.OK);
         logger.debug({ durationMs }, 'rpc tamamlandi');
         callback(null, response);
       } catch (error: unknown) {
@@ -111,10 +117,11 @@ export function unaryHandler<TInput, TResponse>(
         const severity = isAppError(error)
           ? errorSeverityFor(error.code)
           : ERROR_SEVERITY.UNEXPECTED;
+        endRpcSpan(server.span, serviceError.code, { errorCode: code, severity, error });
         FAILURE_LOG[severity](logger, { durationMs, code, grpcStatus: serviceError.code }, error);
         callback(serviceError, null);
       }
-    })();
+    });
   };
 }
 

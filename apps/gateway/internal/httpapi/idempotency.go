@@ -180,7 +180,7 @@ func finish(c fiber.Ctx, settings Idempotency, policy idempotencyPolicy, key, to
 		} else {
 			// Bugunku uclarda olmaz (cevaplar birkac yuz bayt); olursa tekrar
 			// istegi 409 alir. Gunlukte gorunsun.
-			logger.Warn("idempotency: cevap saklanamayacak kadar buyuk; tekrar edilemeyecek",
+			logger.WarnContext(c.Context(), "idempotency: cevap saklanamayacak kadar buyuk; tekrar edilemeyecek",
 				slog.String("requestId", requestIDOf(c)), slog.Int("bytes", len(body)))
 		}
 	}
@@ -191,17 +191,17 @@ func finish(c fiber.Ctx, settings Idempotency, policy idempotencyPolicy, key, to
 	written, err := settings.Store.Complete(c.Context(), key, token, done, ttl)
 	switch {
 	case err != nil:
-		logger.Warn("idempotency kaydi yazilamadi", slog.String("requestId", requestIDOf(c)), slog.Any("err", err))
+		logger.WarnContext(c.Context(), "idempotency kaydi yazilamadi", slog.String("requestId", requestIDOf(c)), slog.Any("err", err))
 	case !written:
 		// Uc "isleniyor" omrunden (30 sn) uzun surdu; kaydi artik baska bir
 		// istek tutuyor ya da kayit dustu. Onun ustune yazilmaz.
-		logger.Warn("idempotency kaydi baska istege gecmis; cevap kaydedilmedi", slog.String("requestId", requestIDOf(c)))
+		logger.WarnContext(c.Context(), "idempotency kaydi baska istege gecmis; cevap kaydedilmedi", slog.String("requestId", requestIDOf(c)))
 	}
 }
 
 func release(c fiber.Ctx, store idempotency.Store, key, token string, logger *slog.Logger) {
 	if _, err := store.Release(c.Context(), key, token); err != nil {
-		logger.Warn("idempotency kaydi birakilamadi", slog.String("requestId", requestIDOf(c)), slog.Any("err", err))
+		logger.WarnContext(c.Context(), "idempotency kaydi birakilamadi", slog.String("requestId", requestIDOf(c)), slog.Any("err", err))
 	}
 }
 

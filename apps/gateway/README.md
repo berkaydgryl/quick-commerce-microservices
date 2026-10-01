@@ -117,6 +117,31 @@ gRPC metadata'sı (`x-request-id`). Böylece tek istek gateway'den servise kadar
   bulundu). Ara katmanlar hiç çalışmadan gelen hatada kimlik hata işleyicide üretilir; hata cevabı
   yine kimliksiz kalmaz.
 
+## İzler (D15, ADR-20)
+
+Her HTTP isteği bir sunucu span'i, giden her gRPC çağrısı bir istemci span'i açar; `traceparent`
+servise gRPC metadata'sıyla gider ve Node servislerinin span'leri aynı izde görünür. İzler
+`OTEL_EXPORTER_OTLP_ENDPOINT`'e (OTLP/HTTP, yerelde Jaeger: http://localhost:16686) gönderilir;
+adres yoksa span'ler yine oluşur ve taşınır, yalnızca dışarı gönderilmez.
+
+- **Kurulum** `internal/telemetry`: sağlayıcı, W3C yayıcı, OpenTelemetry hatalarının JSON günlüğe
+  (dakikada en çok bir WARN) yönlendirilmesi. Küresel OpenTelemetry durumu yalnızca `main`'de kurulur;
+  paketler izleyiciyi parametre alır, testler küresel duruma dokunmaz.
+- **İstek span'i** (`internal/httpapi/tracing.go`): istek kimliğinden sonra, istek günlüğünden önce.
+  Ad rota kalıbı (`POST /v1/orders`; eşleşmeyen yolda yalnızca yöntem). Nitelikler **izin
+  listelidir**: yöntem, rota, yol, durum kodu, `app.request_id`, hata varsa `app.error_code`.
+  **Sorgu dizesi (konum, arama metni), istemci IP'si ve kullanıcı ajanı yazılmaz.** Resmî Fiber ara
+  katmanı sorguyu ve tam adresi her zaman yazdığı için kullanılmadı. 5xx hata sayılır, 4xx sayılmaz.
+  Fiber'in yönlendirme öncesi hata geçişinde (gövde sınırı) span da istek satırı gibi bekletilir ve
+  hata işleyici cevabı yazdıktan sonra son durumla kapanır.
+- **İstemci span'i** (`internal/rpc/tracing.go`, havuzdaki her bağlantıda): yalnızca sistem tarafı
+  kodlar (Unavailable, DeadlineExceeded, Internal, Unimplemented, Unknown, DataLoss, Canceled) hata
+  işaretlenir; iş sonucu (FailedPrecondition, NotFound...) işaretlenmez. Node'daki ağırlık tablosuyla
+  aynı karar (otelgrpc OK dışı her kodu hata sayar, bu yüzden kullanılmadı).
+- **Günlük:** istek kapsamındaki satırlar (`InfoContext`, `WarnContext`...) span'in `traceId` ve
+  `spanId`'sini taşır (`telemetry.NewLogHandler`).
+- **Kapanış:** sunucu ve bağlantılar kapandıktan sonra bekleyen span'ler en çok 2 sn'de gönderilir.
+
 ## Go kuralları ve lint (D8)
 
 Kuralların kendisi `.cursor/rules/proje-kurallari.mdc` "Go" bölümündedir; CI onları
@@ -452,6 +477,7 @@ curl -s "localhost:8080/v1/search?lat=40.9885&lng=29.0262&q=s%C3%BCt" \
 | `RATE_LIMIT_AUTH_MAX_REQUESTS` | `10`            | Kayıt ve giriş (IP başına); yenileme ve çıkış genel sınırda |
 | `RATE_LIMIT_ORDER_MAX_REQUESTS` | `20`           | Rezervasyon, sipariş, 3DS (kullanıcı başına) |
 | `NODE_ENV`                   | `development`     | `development/test/production`                   |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | yok              | İzlerin OTLP/HTTP taban adresi (D15; yerelde `http://localhost:4318`, Jaeger). Boşsa izler oluşur ama gönderilmez |
 
 ## Görsel adresleri (`ASSET_BASE_URL`)
 

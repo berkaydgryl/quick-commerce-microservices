@@ -8,16 +8,17 @@
  *   3) tryShutdown            : DEVAM EDEN cagrilarin bitmesi beklenir
  *   4) sure asiminda forceShutdown : takilmis cagri kapanisi sonsuza kilitlemesin
  *   5) metrik ucu kapanir     : drenaj boyunca acikti, son kazima kapanisi da gorur (T10.5)
- *   6) onShutdown             : isciler ve Mongo/Redis baglantilari en SON kapanir;
+ *   6) onShutdown             : isciler ve Mongo/Redis baglantilari kapanir;
  *                               hookTimeoutMs'de bitmezse beklenmez (#56)
+ *   7) izler gonderilir       : bekleyen span'ler (en cok 2 sn; D15)
  *
  * (6) sonda cunku (3) sirasinda devam eden cagrilar hala veritabanina yaziyor
  * olabilir; baglantiyi once kapatmak, tam da zarif kapanisla onlemeye
  * calistigimiz yarim kalmis islemi uretirdi.
  *
  * Her adim sinirlidir: kapanis en gec timeoutMs + METRICS_CLOSE_GRACE_MS +
- * hookTimeoutMs'de biter, surec cikar (takilmis bir Mongo kapanisi ya da isci
- * turu sureci ayakta tutmaz).
+ * hookTimeoutMs + TRACE_FLUSH_TIMEOUT_MS'de biter, surec cikar (takilmis bir
+ * Mongo kapanisi ya da isci turu sureci ayakta tutmaz).
  *
  * Acilis ayri dosyadadir (server.ts): ikisi ayri sebeplerle degisir - biri
  * servis kaydi ve bind secenekleri, digeri drenaj politikasi ve sure asimi.
@@ -45,13 +46,15 @@ export interface GracefulShutdownParams {
   readonly timeoutMs: number;
   /** onShutdown icin beklenecek en uzun sure (ms). */
   readonly hookTimeoutMs: number;
+  /** Bekleyen span'leri gonderir (D15); kendi suresiyle sinirli, hata firlatmaz. */
+  readonly flushTraces: () => Promise<void>;
   readonly onShutdown?: () => Promise<void> | void;
 }
 
 /** Kapanis kancasinin sonucu; "zarif kapanis bitti" satirinda `hook` alani. */
 type HookOutcome = 'done' | 'failed' | 'timed-out';
 
-/** Yukaridaki alti adimi sirayla uygular. Hata firlatmaz; kaydini birakir. */
+/** Yukaridaki yedi adimi sirayla uygular. Hata firlatmaz; kaydini birakir. */
 export async function runGracefulShutdown(params: GracefulShutdownParams): Promise<void> {
   const { server, health, healthGrpc, logger, reason, timeoutMs } = params;
   logger.info({ reason, timeoutMs }, 'zarif kapanis basladi');
@@ -72,6 +75,8 @@ export async function runGracefulShutdown(params: GracefulShutdownParams): Promi
 
   await params.metrics.close();
   const hook = await runHook(params.onShutdown, params.hookTimeoutMs, logger);
+  // En son: kapanis sirasinda biten span'ler (son cagrilar) da gitsin.
+  await params.flushTraces();
 
   logger.info({ reason, forced: !drained, hook }, 'zarif kapanis bitti');
 }

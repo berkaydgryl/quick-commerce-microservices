@@ -8,6 +8,9 @@
  *    kilitlememeli.
  *  - Hata AppError'a geri cevrilir (fromServiceError): karsi taraf x-app-error
  *    koyduysa kodu korunur; ulasilamaz ya da sure dolduysa SERVICE_UNAVAILABLE.
+ *
+ * Her cagri bir istemci span'i acar ve traceparent'i metadata'ya yazar (D15,
+ * tracing.ts): karsi servisin span'i bu cagrinin cocugu olur.
  */
 
 import { Metadata } from '@grpc/grpc-js';
@@ -15,6 +18,7 @@ import type { CallOptions, ClientUnaryCall, ServiceError } from '@grpc/grpc-js';
 
 import { REQUEST_ID_METADATA_KEY } from '../config/constants.js';
 import { fromServiceError } from './status.js';
+import { clientTracingInterceptor } from './tracing.js';
 
 /** Uretilen istemcinin 4 parametreli unary metodu (istek, metadata, secenek, geri cagri). */
 export type UnaryInvoker<TRequest, TResponse> = (
@@ -44,12 +48,17 @@ export function callUnary<TRequest, TResponse>(
   const deadline = Date.now() + options.timeoutMs;
 
   return new Promise((resolve, reject) => {
-    invoke(request, metadata, { deadline }, (error, response) => {
-      if (error !== null) {
-        reject(fromServiceError(error));
-        return;
-      }
-      resolve(response);
-    });
+    invoke(
+      request,
+      metadata,
+      { deadline, interceptors: [clientTracingInterceptor] },
+      (error, response) => {
+        if (error !== null) {
+          reject(fromServiceError(error));
+          return;
+        }
+        resolve(response);
+      },
+    );
   });
 }

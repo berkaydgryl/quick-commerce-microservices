@@ -1,8 +1,9 @@
 # Gelistirme ortami altyapisi (yalnizca durum tutan servisler).
 #
-# Bu compose dosyasi SADECE MongoDB ve Redis'i ayaga kaldirir. Uygulama
-# servisleri (apps/*) host uzerinde "pnpm dev" ile calisir; bilerek
-# konteynerize edilmemislerdir (hizli yeniden yukleme + kolay hata ayiklama).
+# Bu compose dosyasi SADECE MongoDB'yi, Redis'i ve iz goruntuleyicisini
+# (Jaeger, D15) ayaga kaldirir. Uygulama servisleri (apps/*) host uzerinde
+# "pnpm dev" ile calisir; bilerek konteynerize edilmemislerdir (hizli yeniden
+# yukleme + kolay hata ayiklama).
 #
 # Kullanim:
 #   docker compose -f infra/docker/docker-compose.dev.yml up -d
@@ -99,6 +100,29 @@ services:
       - getir-net
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+      start_period: 5s
+
+  # ---------------------------------------------------------------------------
+  # Jaeger v2 - dagitik izlerin goruntuleyicisi (D15, ADR-20)
+  # ---------------------------------------------------------------------------
+  # Gateway ve Node servisleri izleri OTLP/HTTP ile 4318'e gonderir
+  # (OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318); arayuz
+  # http://localhost:16686. Izler BELLEKTE tutulur, konteyner yeniden baslayinca
+  # gider: yerel gelistirme icin kalici depo gerekmez. v1'in all-in-one imaji
+  # Aralik 2025'ten beri guncellenmiyor; v2 ayni isi tek ikiliyle yapar.
+  jaeger:
+    image: jaegertracing/jaeger:2.21.0
+    container_name: getir-jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+    networks:
+      - getir-net
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:13133/status"]
       interval: 5s
       retries: 20
       start_period: 5s

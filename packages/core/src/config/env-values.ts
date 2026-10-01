@@ -69,6 +69,42 @@ export function envString(defaultValue?: string) {
     });
 }
 
+/** Adres degiskeninin kabul edilen semalari. */
+const HTTP_PROTOCOLS: ReadonlySet<string> = new Set(['http:', 'https:']);
+
+/**
+ * Istege bagli http(s) adresi (D15: OTEL_EXPORTER_OTLP_ENDPOINT). Tanimsiz ya
+ * da bos: undefined (ozellik kapali). Doluysa gecerli bir http/https adresi
+ * olmali; sondaki egik cizgi atilir ki yol eklerken cift cizgi olusmasin.
+ */
+export function envOptionalHttpUrl() {
+  return z
+    .string()
+    .optional()
+    .transform((raw, ctx) => {
+      const text = raw?.trim() ?? '';
+      if (text === '') {
+        return undefined;
+      }
+      let parsed: URL;
+      try {
+        parsed = new URL(text);
+      } catch {
+        // Deger mesaja yazilmaz: adres kimlik bilgisi tasiyabilir.
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'gecerli bir adres degil' });
+        return z.NEVER;
+      }
+      if (!HTTP_PROTOCOLS.has(parsed.protocol)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'http:// ya da https:// ile baslamali',
+        });
+        return z.NEVER;
+      }
+      return text.replace(/\/+$/, '');
+    });
+}
+
 export interface EnvIntOptions {
   readonly min?: number;
   readonly max?: number;
