@@ -1,6 +1,7 @@
 /**
  * Rezervasyonun Redis uygulamasi: lua/reserve.lua (T10.1), lua/release.lua ve
- * lua/commit.lua (T10.2; ADR-01, ADR-18).
+ * lua/commit.lua (T10.2; ADR-01, ADR-18). Sure dolumu release.lua'nin "expire"
+ * kipidir (T10.3, ADR-02).
  *
  * Anahtarlar redis-kit'in ureticilerinden gelir (bicim tek kaynakta); script'in
  * bekledigi sira B15'tedir: once stok sayaclari, sonra rezervasyon hash'i,
@@ -25,6 +26,8 @@ import { duplicateSku } from '../../domain/reservation.js';
 import type {
   CommitCommand,
   CommitOutcome,
+  ExpireCommand,
+  ExpireOutcome,
   ReleaseCommand,
   ReleaseOutcome,
   ReservationLine,
@@ -33,7 +36,7 @@ import type {
   ReserveOutcome,
   SettledReservation,
 } from '../../domain/reservation.js';
-import { COMMIT_REASON } from '../../domain/stock-ledger.js';
+import { COMMIT_REASON, EXPIRE_REASON } from '../../domain/stock-ledger.js';
 import { readReservationHash } from './reservation-hash.js';
 import type { ReservationHash } from './reservation-hash.js';
 
@@ -65,7 +68,12 @@ const pairsReply = z.union([z.string().min(1), z.number()]);
 
 /** Daha once sonuclanmis kaydin izi: durum, gerekce, an, sonra ciftler. */
 const settledReplySchema = z
-  .tuple([z.literal('settled'), z.enum(['released', 'committed']), z.string().min(1), integerReply])
+  .tuple([
+    z.literal('settled'),
+    z.enum(['released', 'committed', 'expired']),
+    z.string().min(1),
+    integerReply,
+  ])
   .rest(pairsReply);
 
 const releaseReplySchema = z.union([
@@ -74,8 +82,15 @@ const releaseReplySchema = z.union([
   z.tuple([z.literal('absent')]),
   z.tuple([z.literal('orphaned')]),
   z.tuple([z.literal('stale')]),
+  z.tuple([z.literal('not-due')]),
   z.tuple([z.literal('corrupt'), lineIndex]),
 ]);
+
+/** release.lua'nin kipi: Release RPC ya da supurucu (yalnizca bitis ani gecmisse). */
+type ReleaseMode = 'release' | 'expire';
+
+/** release.lua'nin iki kipte ortak sonucu. */
+type ReleaseScriptOutcome = ReleaseOutcome | { readonly status: 'not-due' };
 
 const commitReplySchema = z.union([
   z.tuple([z.literal('committed')]).rest(pairsReply),
@@ -176,7 +191,40 @@ export class RedisReservationStore implements ReservationStore {
   }
 
   release(command: ReleaseCommand): Promise<ReleaseOutcome> {
-    return this.withPreRead(command, (hash) => this.releaseOnce(command, hash));
+    return this.withPreRead(command, async (hash) => {
+      const outcome = await this.releaseOnce(command, hash, 'release');
+      if (outcome === 'stale') {
+        return outcome;
+      }
+      if (outcome.status === 'not-due') {
+        throw AppError.internal('release script birakma kipinde not-due dondurdu', {
+          details: { orderId: command.orderId, marketId: command.marketId },
+        });
+      }
+      return outcome;
+    });
+  }
+
+  expire(command: ExpireCommand): Promise<ExpireOutcome> {
+    return this.withPreRead(command, async (hash) => {
+      const outcome = await this.releaseOnce({ ...command, reason: EXPIRE_REASON }, hash, 'expire');
+      if (outcome === 'stale' || outcome.status !== 'released') {
+        return outcome;
+      }
+      return { status: 'expired', lines: outcome.lines, skippedCounters: outcome.skippedCounters };
+    });
+  }
+
+  /** Bitis ani gelmis siparisler, en eskisi once (ZRANGEBYSCORE, ADR-02). */
+  listDue(marketId: string, nowMs: number, limit: number): Promise<readonly string[]> {
+    return this.redis.zrangebyscore(
+      reservationIndexKey(marketId),
+      '-inf',
+      nowMs,
+      'LIMIT',
+      0,
+      limit,
+    );
   }
 
   commit(command: CommitCommand): Promise<CommitOutcome> {
@@ -255,7 +303,8 @@ export class RedisReservationStore implements ReservationStore {
   private async releaseOnce(
     command: ReleaseCommand,
     hash: ReservationHash | undefined,
-  ): Promise<ReleaseOutcome | 'stale'> {
+    mode: ReleaseMode,
+  ): Promise<ReleaseScriptOutcome | 'stale'> {
     const { orderId, marketId, reason, nowMs } = command;
     const skus = hash?.lines.map(({ sku }) => sku) ?? [];
     const keys = [
@@ -264,7 +313,15 @@ export class RedisReservationStore implements ReservationStore {
       ...skus.map((sku) => stockAvailKey(marketId, sku)),
       ...(hash === undefined ? [] : [userReservationKey(hash.userId)]),
     ];
-    const args = [orderId, hash?.userId ?? '', reason, nowMs, this.options.settledTtlMs, ...skus];
+    const args = [
+      orderId,
+      hash?.userId ?? '',
+      reason,
+      nowMs,
+      this.options.settledTtlMs,
+      mode,
+      ...skus,
+    ];
 
     const parsed = releaseReplySchema.safeParse(await this.scripts.release.run(keys, args));
     if (!parsed.success) {
@@ -297,6 +354,8 @@ export class RedisReservationStore implements ReservationStore {
         return { status: 'orphaned' };
       case 'stale':
         return 'stale';
+      case 'not-due':
+        return { status: 'not-due' };
       case 'corrupt':
         throw AppError.internal('stok sayaci bozuk', {
           details: { marketId, sku: skus[reply[1] - 1] ?? `#${reply[1]}` },

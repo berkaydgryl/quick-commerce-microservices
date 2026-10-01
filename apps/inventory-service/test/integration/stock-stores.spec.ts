@@ -14,9 +14,11 @@
  *   8. Onay (T10.2 PR 2): eldeki adet ve surum Mongo'da duser, defterde -adet;
  *      eksiye dusen adet; P3 (bekleyerek yeniden deneme, denemeler bitince
  *      CONFLICT ve ayni istegin tekrariyla tamamlanma); defter denetimi (B24).
+ *   9. Supurucu (T10.3): sahte saatle "sure dolunca stok 2 sn icinde geri
+ *      gelir"; defterde expire; suresi dolana onay NOT_FOUND, birakma ALREADY_APPLIED.
  */
 
-import { AppError, ERROR_CODES, GRPC_STATUS, silentLogger } from '@getir/core';
+import { AppError, ERROR_CODES, fixedClock, GRPC_STATUS, silentLogger } from '@getir/core';
 import type { Logger } from '@getir/core';
 import { recordingLogger } from '@getir/core/testing';
 import type { LogLine } from '@getir/core/testing';
@@ -35,7 +37,7 @@ import { createSeedCounters } from '../../src/application/seed-counters.js';
 import { createSeedStock } from '../../src/application/seed-stock.js';
 import type { StockPorts } from '../../src/domain/stock-ports.js';
 import { commitEntries, releaseEntries } from '../../src/domain/stock-ledger.js';
-import { buildInventoryService } from '../../src/bootstrap.js';
+import { buildInventoryService, buildSweepExpired } from '../../src/bootstrap.js';
 import type { StockStoresEnv } from '../../src/config/env.js';
 import { STOCK_LEVELS } from '../../src/infrastructure/fixtures/stock-levels.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
@@ -46,6 +48,7 @@ import type {
 import { MongoStockCommitter } from '../../src/infrastructure/mongo/mongo-stock-committer.js';
 import { MongoStockSeedWriter } from '../../src/infrastructure/mongo/mongo-stock-seed-writer.js';
 import { openStockSource } from '../../src/infrastructure/stock-source.js';
+import { startReservationSweeper } from '../../src/interfaces/workers/reservation-sweeper.js';
 import type { StockStores } from '../../src/infrastructure/stock-stores.js';
 import { openStockStores } from '../../src/infrastructure/stock-stores.js';
 import { describeStockCounterContract } from '../support/stock-counter-contract.js';
@@ -776,5 +779,94 @@ describe('stok defteri (T10.2, ADR-18)', () => {
         ledger: onHandOf('SUT-1L'),
       },
     ]);
+  });
+
+  // ---------- supurucu (T10.3) ----------
+
+  it('sure dolunca stok 2 sn icinde geri gelir (sahte saat); defterde expire; onay NOT_FOUND, birakma ALREADY_APPLIED', async () => {
+    const start = Date.UTC(2026, 9, 1, 12, 0, 0);
+    const clock = fixedClock(start);
+    const source = await openStockSource(env, silentLogger);
+    const server = await startTestGrpcServer({
+      serviceName: 'inventory-supurucu-it',
+      services: [buildInventoryService({ stock: source, clock })],
+    });
+    try {
+      await server.call(
+        service.reserve,
+        inventoryV1.ReserveRequest.fromPartial({
+          orderId: ORDER,
+          marketId: MIGROS,
+          userId: USER,
+          items: [{ sku: 'SUT-1L', quantity: 2 }],
+          ttlSeconds: 30,
+        }),
+      );
+      expect(await counter('SUT-1L')).toBe(onHandOf('SUT-1L') - 2);
+
+      // Sure doldu (sahte saatte 30 sn + 1); supurucu her saniye tarar.
+      clock.advance(31_000);
+      const sweeper = startReservationSweeper({
+        lock: source.leader,
+        sweep: buildSweepExpired({
+          stock: source,
+          markets: source.markets,
+          logger: silentLogger,
+          clock,
+        }),
+        intervalMs: 1_000,
+        logger: silentLogger,
+      });
+      const startedAt = Date.now();
+      try {
+        await vi.waitFor(
+          async () => {
+            expect(await counter('SUT-1L')).toBe(onHandOf('SUT-1L'));
+          },
+          { timeout: 3_000, interval: 50 },
+        );
+        expect(Date.now() - startedAt).toBeLessThanOrEqual(2_000);
+        await vi.waitFor(async () => {
+          expect(await ledgerCollection().countDocuments({ orderId: ORDER, kind: 'expire' })).toBe(
+            1,
+          );
+        });
+      } finally {
+        await sweeper.stop();
+      }
+
+      const commitAfter = await server.call(
+        service.commit,
+        inventoryV1.CommitRequest.fromPartial({ orderId: ORDER, marketId: MIGROS }),
+      );
+      const releaseAfter = await server.call(
+        service.release,
+        inventoryV1.ReleaseRequest.fromPartial({
+          orderId: ORDER,
+          marketId: MIGROS,
+          reason: 'user_cancelled',
+        }),
+      );
+      expect(commitAfter.response?.outcome).toBe(RESERVATION_OUTCOME_NOT_FOUND);
+      expect(releaseAfter.response?.outcome).toBe(RESERVATION_OUTCOME_ALREADY_APPLIED);
+      expect(await ledgerCollection().findOne({ orderId: ORDER })).toMatchObject({
+        kind: 'expire',
+        delta: 0,
+        quantity: 2,
+        reason: 'expired',
+      });
+      expect(await ledgerMismatches()).toEqual([]);
+    } finally {
+      await server.stop();
+      await source.close();
+    }
+  });
+
+  it('supurucunun market listesi Mongo stoktan: 6 market, sirali', async () => {
+    const markets = await stores.repository.marketIds();
+
+    expect(markets).toHaveLength(6);
+    expect(markets).toEqual([...markets].sort());
+    expect(markets).toContain(MIGROS);
   });
 });

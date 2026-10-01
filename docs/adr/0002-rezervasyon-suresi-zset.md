@@ -45,3 +45,18 @@ yakin bitisin ne zaman oldugu ve kac aktif rezervasyon bulundugu bedavaya okunur
 ## Ilgili
 
 ADR-01, ADR-03, ADR-11; gorev T1.5.
+
+## Ek (T10.3, 2026-10-01): uygulama
+
+Ustteki karar degismez; supurucu bu ADR'ye gore yazildi.
+
+- Supurucu stok servisinin icinde, her ornekte calisir; yalnizca lider supurur. Liderlik `lock:reconcile`:
+  tek Redis dugumunde Redlock'un tek ornekli hali (`lua/leader.lua`: ornege ozgu belirtec, yalnizca sahibi
+  yeniler ya da birakir), omru 3 sn ve her turda yenilenir; lider duserse en gec 3 sn'de devralinir (B25).
+- Tur `SWEEPER_INTERVAL_MS` (1 sn); market basina bitis ani gelmis en cok 100 siparis `ZRANGEBYSCORE ... LIMIT`
+  ile en eskisi once okunur.
+- Iade `release.lua`'nin sure dolumu kipidir: script bitis anini yeniden denetler (skor simdiden sonraysa
+  dokunmaz; uzatilmis rezervasyon birakilmaz), sahipligi `ZREM` ile alir ("karsilastir-ve-degistir"), adetleri
+  geri ekler. Kalici kayit ADR-18'deki gibi sonra yazilir (defterde `expire`, delta 0).
+- `stock.released` olayi bu gorevde yayinlanmadi: dinleyeni yok (kural geregi olay govdesi dinleyenle gelir);
+  order (T11.2) ya da realtime (T12.3) ihtiyac duyunca inventory outbox'iyla yayinlanir.

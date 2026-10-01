@@ -8,7 +8,7 @@ hareket eder.
 Bu serviste **olmayanlar**, bilinçli: ürün adı, fiyatı ve kategorisi `catalog-service`'in;
 sipariş durumu ve rezervasyon süresinin **ne kadar** olacağı `order-service`'in işidir.
 
-## Bugünkü durum (T9.1 + T9.2 + T10.1 + T10.2)
+## Bugünkü durum (T9.1 + T9.2 + T10.1 + T10.2 + T10.3)
 
 | RPC                 | Durum                                                                                                             |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------- |
@@ -16,7 +16,7 @@ sipariş durumu ve rezervasyon süresinin **ne kadar** olacağı `order-service`
 | `Reserve`           | ✅ Sepetin tamamı tek atomik adımda ya da hiç (`reserve.lua`, T10.1); aşağıda                                     |
 | `Release`           | ✅ Rezervasyonu bırakır, adetler sayaca döner; stok defterine yazar (`release.lua`, T10.2 PR 1); aşağıda          |
 | `Commit`            | ✅ Onay: eldeki adet kalıcı düşer, defterde −adet (`commit.lua` + tek Mongo transaction'ı, T10.2 PR 2); aşağıda   |
-| `ExtendReservation` | ⏳ `NOT_IMPLEMENTED` — T10                                                                                        |
+| `ExtendReservation` | ⏳ `NOT_IMPLEMENTED` — T11.3                                                                                      |
 | `GetReservation`    | ⏳ `NOT_IMPLEMENTED` — T10                                                                                        |
 
 ## Stok nerede durur (ADR-03)
@@ -76,10 +76,8 @@ giremez: kısmi rezervasyon imkânsızdır. Rezervasyonun kimliği siparişin ki
 - **Saat:** "şimdi" servisin saatidir (`Clock`); testler sabit saat verir.
 - **MOCK** (B16): bellekte aynı kurallar; sayaçlar ve rezervasyonlar aynı haritayı paylaşır, rezervasyon
   müsaitlikte hemen görünür. İki uygulama da `test/support/reservation-store-contract.ts` senaryolarından geçer.
-- **Henüz yok:** uzatma (`ExtendReservation`, T11.3). Bırakma ve onay geldi (aşağıda).
-  - Süresi dolan rezervasyonun stoğunu geri veren süpürücü T10.3'te; o gelene kadar süresi dolan
-    rezervasyonun stoğu geri gelmez.
-  - Order'ın `Reserve`'ü çağırması T11.2'de.
+- **Henüz yok:** uzatma (`ExtendReservation`, T11.3); order'ın `Reserve`'ü çağırması (T11.2). Bırakma, onay
+  ve süre dolumu (süpürücü) geldi (aşağıda).
 
 ## Bırakma ve stok defteri (T10.2 PR 1, ADR-18)
 
@@ -111,7 +109,8 @@ dener, yine değiştiyse `CONFLICT` (tekrar denenebilir).
 - **Stok defteri** eldeki adedin hesabıdır: bir market × SKU için `delta` toplamı `stock.onHand`'e eşittir.
   - `opening`: seed'in açılış kaydı, `delta = +onHand` (seed defteri stokla aynı transaction'da baştan yazar).
   - `release`: bırakma. Eldeki adet değişmez (`delta: 0`), adet `quantity`'de, çağıranın gerekçesi `reason`'da.
-  - `commit`: onay, `delta = -adet` (T10.2 PR 2; aşağıda). Süre dolumu (`expire`) T10.3'te.
+  - `commit`: onay, `delta = -adet` (T10.2 PR 2; aşağıda).
+  - `expire`: süpürücünün süre dolumu, `delta: 0`, gerekçe `expired` (T10.3; aşağıda).
 - **Çift kayıt yok (B14):** kaydın `_id`'si doğal anahtardır (`sipariş/sku/tür`); aynı hareket ikinci kez
   yazılırsa değişmez. İndeksler: `orderId` (kısmi) ve `marketId + sku + createdAt`.
 - **Gerekçe** serbest metin değil, kısa anahtardır: küçük harf, rakam, alt çizgi, en fazla 64
@@ -124,7 +123,8 @@ dener, yine değiştiyse `CONFLICT` (tekrar denenebilir).
   alır; order bırakılmış siparişi yeniden rezerve etmez (T11.2).
 - **MOCK** (B16): bırakma bellekte aynı kurallarla; defter de bellektedir (Mongo'ya yazılmaz). Bellek ve
   Redis `test/support/reservation-store-contract.ts` senaryolarından birlikte geçer.
-- **Olay yok:** `stock.released` olayını bugün dinleyen yok; gövdesi dinleyen gelince yazılır (T10.3, T12).
+- **Olay yok:** `stock.released` olayını bugün dinleyen yok; gövdesi dinleyen gelince (order T11.2, realtime
+  T12.3) inventory outbox'ıyla yazılır (T10.3 kararı).
 
 ## Onay (T10.2 PR 2, ADR-18)
 
@@ -148,6 +148,33 @@ dener, yine değiştiyse `CONFLICT` (tekrar denenebilir).
   rezervasyona `Commit` → `NOT_FOUND` (order iade eder, B20). Karşı tarafın izine dokunulmaz.
 - **Mongo erişilemezse** `UNAVAILABLE`; iz kalır, tekrar gelen istek tamamlar (ADR-18).
 - **MOCK** (B16): eldeki adet ve defter bellekte, kurallar aynı.
+
+## Süpürücü (T10.3, ADR-02, B25)
+
+Süresi dolan rezervasyonun stoğunu geri verir. Keyspace notification kullanılmaz (ADR-02): tek gerçek
+`resv:index:{market}` ZSET'idir, skor bitiş anı.
+
+- **Nerede çalışır:** servisin içinde, her örnekte (`src/interfaces/workers/reservation-sweeper.ts`). Her tur
+  (varsayılan 1 sn, `SWEEPER_INTERVAL_MS`) önce liderliği alır ya da yeniler; **yalnızca lider süpürür**.
+- **Liderlik kilidi** `lock:reconcile` (`lua/leader.lua`): tek Redis düğümünde Redlock'un tek örnekli hâli.
+  Değer örneğe özgü belirteçtir (`randomUUID`); yalnızca sahibi yeniler ya da bırakır. Ömrü 3 sn
+  (`SWEEPER_LOCK_TTL_SECONDS`), her turda yenilenir: lider çökerse en geç 3 sn'de başka örnek devralır (B25).
+  Kapanışta lider kilidi bırakır, devralma beklemeden olur. Ömür en az iki tur olmalı (ortam doğrular).
+- **Tur:** her market için (Mongo `stock`'tan, dakikada bir tazelenir) bitiş anı gelmiş en çok 100 sipariş
+  (`ZRANGEBYSCORE ... LIMIT`, en eskisi önce) `release.lua`'nın **süre dolumu kipiyle** bırakılır:
+  - Script bitiş anını **yeniden** denetler; skor şimdiden sonraysa dokunmaz (`not-due`; uzatılmış olabilir).
+  - Sahiplik `ZREM`: onay ya da iptal aynı anda gelse de rezervasyon tek yoldan sonuçlanır (B3).
+  - Adetler sayaçlara döner, iz `state: expired`; defter `expire` (`delta: 0`, gerekçe `expired`), iz silinir.
+- **Mongo erişilemezse** sayaçlar yine döner; sipariş bekleyenlere alınır, sonraki turlarda izden
+  tamamlanır. Süreç yeniden başlarsa bekleyen liste kaybolur: o süre dolumunun defter kaydı eksik kalır
+  (`delta: 0`, eldeki adet hesabını bozmaz); aynı siparişe gelen `Release` izi bulup tamamlar.
+- **Sonuçları:** süresi dolmuş rezervasyona `Commit` → `NOT_FOUND` (order iade eder, B20); `Release` →
+  `ALREADY_APPLIED` (stok zaten döndü).
+- **Kaydı düşmüş indeks üyesi** (bütün örnekler 60 sn'den uzun kapalı kaldıysa hash'in payı dolar): uyarı
+  yazılır, stok geri verilemez (adetler bilinmiyor); `reseed` gerekir.
+- **Günlük:** lider olunca ve liderlik düşünce bir satır; stok geri verilen turda özet. Metrik ve sağlık
+  T10.5'te (#12).
+- **MOCK** (B16): süpürücü bellekte aynı kurallarla; tek süreç, kilit hep bizde.
 
 ## Redis boşalınca (T10.1 PR 2, ADR-17)
 
@@ -229,15 +256,20 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/inventory/v1/i
 ## Klasörler
 
 ```text
-lua/               reserve.lua (T10.1), release.lua ve commit.lua (T10.2); imaja package.json "files" ile girer
+lua/               reserve.lua (T10.1), release.lua ve commit.lua (T10.2), leader.lua (T10.3); imaja
+                   package.json "files" ile girer
 src/
   application/     check-availability, reserve-stock, release-reservation, commit-reservation,
-                   reservation-result, seed-stock, seed-counters, counter-recovery, check-ledger
-  domain/          stock.ts, reservation.ts, stock-ledger.ts, stock-ports.ts: kavramlar ve portlar (depo yok)
-  infrastructure/  fixtures, memory (MOCK: sayaçlar + rezervasyon + defter + onay yazımı),
+                   reservation-result, sweep-expired, seed-stock, seed-counters, counter-recovery,
+                   check-ledger
+  domain/          stock.ts, reservation.ts, stock-ledger.ts, stock-ports.ts, leader-lock.ts: kavramlar ve
+                   portlar (depo yok)
+  infrastructure/  fixtures, memory (MOCK: sayaçlar + rezervasyon + defter + onay yazımı + liderlik),
                    mongo (stock, stock_ledger, onay transaction'ı),
-                   redis (sayaçlar, işaret, rezervasyon + hash ön okuması, Lua yükleyici, tahliye denetimi),
+                   redis (sayaçlar, işaret, rezervasyon + hash ön okuması, liderlik kilidi, Lua yükleyici,
+                   tahliye denetimi),
                    stock-stores (bağlantılar), stock-source (açılış)
   interfaces/grpc/ handler, şema (Zod), eşleyici
+  interfaces/workers/ süpürücü işçi (T10.3)
   main.ts · seed.ts · reseed.ts · healthcheck.ts
 ```

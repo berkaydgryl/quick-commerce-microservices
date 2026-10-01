@@ -9,8 +9,9 @@
  *     delta 0, adet `quantity`'de.
  *   - commit: odeme onaylandi, adet kalici dustu (T10.2 PR 2): delta = -adet.
  *     Eldeki adet AYNI transaction'da duser (StockCommitter).
+ *   - expire: supurucu suresi dolani birakti (T10.3). onHand DEGISMEZ: delta 0.
  * Siparis kayitlari siparisin nasil sonuclandigini da soyler: tekrar gelen
- * cagri "zaten uygulandi" alir. Sure dolumu (expire, delta 0) T10.3'te eklenir.
+ * cagri "zaten uygulandi" alir.
  *
  * Burada depo yoktur; yalnizca kavramlar, port ve kayit kurallari.
  */
@@ -21,6 +22,7 @@ export const LEDGER_KINDS = {
   OPENING: 'opening',
   RELEASE: 'release',
   COMMIT: 'commit',
+  EXPIRE: 'expire',
 } as const;
 
 export type LedgerKind = (typeof LEDGER_KINDS)[keyof typeof LEDGER_KINDS];
@@ -30,6 +32,9 @@ export const OPENING_REASON = 'seed';
 
 /** Onay kaydinin gerekcesi: Commit istekte gerekce tasimaz, odeme onayi demektir. */
 export const COMMIT_REASON = 'order_paid';
+
+/** Sure dolumu kaydinin gerekcesi (supurucu, T10.3). */
+export const EXPIRE_REASON = 'expired';
 
 export interface LedgerEntry {
   readonly marketId: string;
@@ -91,6 +96,14 @@ export function commitEntries(input: Omit<ReleaseEntriesInput, 'reason'>): Ledge
   }));
 }
 
+/** Suresi dolan rezervasyonun kalem basina kaydi: onHand degismez (delta 0). */
+export function expireEntries(input: Omit<ReleaseEntriesInput, 'reason'>): LedgerEntry[] {
+  return releaseEntries({ ...input, reason: EXPIRE_REASON }).map((entry) => ({
+    ...entry,
+    kind: LEDGER_KINDS.EXPIRE,
+  }));
+}
+
 /** Birakilan rezervasyonun kalem basina kaydi: onHand degismez (delta 0). */
 export function releaseEntries(input: ReleaseEntriesInput): LedgerEntry[] {
   const { marketId, orderId, reason, lines, at } = input;
@@ -113,6 +126,8 @@ export function settlementOfKind(kind: LedgerKind): ReservationSettlement | unde
       return 'released';
     case LEDGER_KINDS.COMMIT:
       return 'committed';
+    case LEDGER_KINDS.EXPIRE:
+      return 'expired';
     case LEDGER_KINDS.OPENING:
       return undefined;
   }

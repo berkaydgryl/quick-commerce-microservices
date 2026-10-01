@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   commitEntries,
+  expireEntries,
   LEDGER_KINDS,
   ledgerEntryId,
   releaseEntries,
@@ -60,7 +61,32 @@ describe('birakma kaydi', () => {
   it('tur -> siparisin sonucu: birakma "released", onay "committed", acilis sonuc degil', () => {
     expect(settlementOfKind(LEDGER_KINDS.RELEASE)).toBe('released');
     expect(settlementOfKind(LEDGER_KINDS.COMMIT)).toBe('committed');
+    expect(settlementOfKind(LEDGER_KINDS.EXPIRE)).toBe('expired');
     expect(settlementOfKind(LEDGER_KINDS.OPENING)).toBeUndefined();
+  });
+});
+
+describe('sure dolumu kaydi (T10.3)', () => {
+  it('kalem basina bir kayit: eldeki adet degismez (delta 0), gerekce expired', () => {
+    expect(
+      expireEntries({
+        marketId: MARKET,
+        orderId: ORDER,
+        lines: [{ sku: 'SUT-1L', quantity: 2 }],
+        at: AT,
+      }),
+    ).toEqual([
+      {
+        marketId: MARKET,
+        sku: 'SUT-1L',
+        kind: 'expire',
+        delta: 0,
+        quantity: 2,
+        reason: 'expired',
+        orderId: ORDER,
+        at: AT,
+      },
+    ]);
   });
 });
 

@@ -22,10 +22,11 @@ import {
   startOrExit,
 } from '@getir/service-kit';
 
-import { buildInventoryService } from './bootstrap.js';
-import { SERVICE_NAME } from './config/constants.js';
+import { buildInventoryService, buildSweepExpired } from './bootstrap.js';
+import { MS_PER_SECOND, SERVICE_NAME } from './config/constants.js';
 import { loadServiceEnv } from './config/env.js';
 import { openStockSource } from './infrastructure/stock-source.js';
+import { startReservationSweeper } from './interfaces/workers/reservation-sweeper.js';
 
 const env = loadServiceEnv();
 const logger = createLogger({ name: SERVICE_NAME, level: env.LOG_LEVEL });
@@ -35,7 +36,16 @@ const logger = createLogger({ name: SERVICE_NAME, level: env.LOG_LEVEL });
 // Sayaclar portTAN ONCE yazilir: seed bitmeden servis hazir gorunmez (ADR-03).
 const { handle, source } = await startOrExit(
   async () => {
-    const opened = await openStockSource(env.stores, logger);
+    const opened = await openStockSource(env.stores, logger, {
+      lockTtlMs: env.SWEEPER_LOCK_TTL_SECONDS * MS_PER_SECOND,
+    });
+    // Supurucu (T10.3): her ornekte calisir, yalnizca lider supurur (B25).
+    const sweeper = startReservationSweeper({
+      lock: opened.leader,
+      sweep: buildSweepExpired({ stock: opened, markets: opened.markets, logger }),
+      intervalMs: env.SWEEPER_INTERVAL_MS,
+      logger,
+    });
     const server = await startGrpcServer({
       serviceName: SERVICE_NAME,
       host: env.GRPC_HOST,
@@ -44,7 +54,11 @@ const { handle, source } = await startOrExit(
       logger,
       services: [buildInventoryService({ logger, stock: opened })],
       // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti kesilmesin.
-      onShutdown: () => opened.close(),
+      // Once supurucu (suren tur biter, lider kilidi birakir), depolar EN SON.
+      onShutdown: async () => {
+        await sweeper.stop();
+        await opened.close();
+      },
     });
     return { handle: server, source: opened };
   },

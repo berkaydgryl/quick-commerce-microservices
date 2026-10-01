@@ -65,8 +65,9 @@ service InventoryService {
   // kalem basina bir birakma kaydi yazar (eldeki adet degismez).
   //
   // Sonuc hata degil ReservationOutcome'dur: APPLIED (bu cagri birakti),
-  // ALREADY_APPLIED (daha once birakilmisti; tekrar guvenlidir), NOT_FOUND
-  // (birakilacak rezervasyon yok). Defter yazilamazsa (Mongo erisilemez)
+  // ALREADY_APPLIED (daha once birakilmisti ya da suresi dolup supurucu geri
+  // vermisti; tekrar guvenlidir), NOT_FOUND (birakilacak rezervasyon yok ya da
+  // onaylanmis). Defter yazilamazsa (Mongo erisilemez)
   // UNAVAILABLE doner ama sayaclar ZATEN geri artmistir; ayni istegin tekrari
   // defteri tamamlar ve ALREADY_APPLIED alir.
   rpc Release(ReleaseRequest) returns (ReleaseResponse);

@@ -14,8 +14,15 @@ import { createCheckAvailability } from './application/check-availability.js';
 import { createCommitReservation } from './application/commit-reservation.js';
 import { createReleaseReservation } from './application/release-reservation.js';
 import { createReserveStock } from './application/reserve-stock.js';
-import { INVENTORY_SERVICE_FULL_NAME } from './config/constants.js';
+import { createSweepExpired } from './application/sweep-expired.js';
+import type { SweepExpired } from './application/sweep-expired.js';
+import {
+  INVENTORY_SERVICE_FULL_NAME,
+  SWEEP_BATCH_SIZE,
+  SWEEPER_MARKET_REFRESH_MS,
+} from './config/constants.js';
 import type { StockPorts } from './domain/stock-ports.js';
+import type { StockMarketSource } from './domain/stock.js';
 import { STOCK_LEVELS } from './infrastructure/fixtures/stock-levels.js';
 import { createInMemoryStock } from './infrastructure/memory/in-memory-stock.js';
 import { createInventoryImplementation } from './interfaces/grpc/inventory-handlers.js';
@@ -66,4 +73,24 @@ export function buildInventoryService(options: BootstrapOptions = {}): GrpcServi
     definition: inventoryV1.InventoryServiceService,
     implementation,
   };
+}
+
+export interface SweepOptions {
+  readonly stock: Pick<StockPorts, 'reservations' | 'ledger'>;
+  readonly markets: StockMarketSource;
+  readonly logger: Logger;
+  readonly clock?: Clock;
+}
+
+/** Supurucunun turu (T10.3): suresi dolanlari geri verir; isci main.ts'te baslar. */
+export function buildSweepExpired(options: SweepOptions): SweepExpired {
+  return createSweepExpired({
+    markets: options.markets,
+    reservations: options.stock.reservations,
+    ledger: options.stock.ledger,
+    clock: options.clock ?? systemClock,
+    logger: options.logger,
+    batchSize: SWEEP_BATCH_SIZE,
+    marketRefreshMs: SWEEPER_MARKET_REFRESH_MS,
+  });
 }
