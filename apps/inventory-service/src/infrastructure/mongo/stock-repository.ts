@@ -7,11 +7,14 @@ import type { SessionOption } from '@getir/mongo-kit';
 import { MongoRepository } from '@getir/mongo-kit';
 import type { Db, IndexDescription } from 'mongodb';
 
-import type { StockLevel, StockLevelSource } from '../../domain/stock.js';
+import type { StockLevel, StockLevelSource, StockMarketSource } from '../../domain/stock.js';
 import { COLLECTIONS, stockDocumentId } from './documents.js';
 import type { StockDocument } from './documents.js';
 
-export class StockRepository extends MongoRepository<StockDocument> implements StockLevelSource {
+export class StockRepository
+  extends MongoRepository<StockDocument>
+  implements StockLevelSource, StockMarketSource
+{
   constructor(db: Db) {
     super(db, COLLECTIONS.STOCK);
   }
@@ -46,6 +49,12 @@ export class StockRepository extends MongoRepository<StockDocument> implements S
       updatedAt: at,
     }));
     await this.run('replaceAll.insert', () => this.collection.insertMany(documents, session));
+  }
+
+  /** Stogu olan marketler (supurucu, T10.3); indeks (marketId, sku) bunu karsilar. */
+  async marketIds(): Promise<readonly string[]> {
+    const ids = await this.run('marketIds', () => this.collection.distinct('marketId'));
+    return [...ids].sort();
   }
 
   /**

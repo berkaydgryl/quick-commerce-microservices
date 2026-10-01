@@ -70,7 +70,30 @@ export const LUA_SCRIPTS = {
   RESERVE: 'reserve',
   RELEASE: 'release',
   COMMIT: 'commit',
+  LEADER: 'leader',
 } as const;
+
+/**
+ * Supurucu (T10.3; ADR-02, roadmap B25). Varsayilanlar .env.example ile ayni:
+ * tur 1 sn, liderlik kilidinin omru 3 sn (her turda yenilenir; lider duserse
+ * en gec 3 sn'de baska ornek devralir). Kilit omru turdan belirgin buyuk
+ * olmali: en az iki tur (env dogrular).
+ */
+export const DEFAULT_SWEEPER_INTERVAL_MS = 1_000;
+export const SWEEPER_INTERVAL_MIN_MS = 100;
+export const SWEEPER_INTERVAL_MAX_MS = 60_000;
+export const DEFAULT_SWEEPER_LOCK_TTL_SECONDS = 3;
+export const SWEEPER_LOCK_TTL_MAX_SECONDS = 60;
+/** Kilit omru en az bu kadar tur surmeli (yenileme kacarsa kilit hemen dusmesin). */
+export const SWEEPER_LOCK_MIN_TURNS = 2;
+
+/** Market basina tur basina en cok kac suresi dolmus siparis (kalani sonraki tura). */
+export const SWEEP_BATCH_SIZE = 100;
+
+/** Supurucunun market listesini (Mongo stock) tazeleme araligi. */
+export const SWEEPER_MARKET_REFRESH_MS = 60_000;
+
+export const MS_PER_SECOND = 1_000;
 
 /**
  * Redis bosalinca bir istegin sayaclarin yeniden kurulmasini en fazla bekledigi

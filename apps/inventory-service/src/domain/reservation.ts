@@ -53,10 +53,10 @@ export type ReserveOutcome =
     };
 
 /**
- * Rezervasyonun nasil sonuclandigi (T10.2, ADR-18): birakma (PR 1) ya da onay
- * (PR 2). Sure dolumu (supurucu, T10.3) buraya eklenir.
+ * Rezervasyonun nasil sonuclandigi (ADR-18): birakma ve onay (T10.2) ya da sure
+ * dolumu (supurucu, T10.3).
  */
-export type ReservationSettlement = 'released' | 'committed';
+export type ReservationSettlement = 'released' | 'committed' | 'expired';
 
 /** Onay komutu (T10.2 PR 2): odeme onaylandi, ayrilan adet kalici dusecek. */
 export interface CommitCommand {
@@ -65,6 +65,13 @@ export interface CommitCommand {
   /** Istek ani (ms, servisin saati): sonuclanma ani olarak Redis izine yazilir. */
   readonly nowMs: number;
 }
+
+/**
+ * Sure dolumu komutu (T10.3): supurucu verir. Script, indeks skorunun (bitis
+ * ani) hala `nowMs`'ten once oldugunu YENIDEN denetler; uzatilmis rezervasyon
+ * (T11.3) birakilmaz.
+ */
+export type ExpireCommand = CommitCommand;
 
 /** Birakma komutu (T10.2). */
 export interface ReleaseCommand extends CommitCommand {
@@ -129,6 +136,23 @@ export type CommitOutcome =
   | OrphanedReservation;
 
 /**
+ * Deponun sure dolumu cevabi (T10.3). Sahiplik birakmadakiyle ayni (ZREM):
+ * supurucu ile onay ayni rezervasyonu yaris halinde isleyebilir (B3).
+ */
+export type ExpireOutcome =
+  /** Sahiplik bu cagrinin: adetler sayaclara dondu; iz defter yazilinca silinir. */
+  | {
+      readonly status: 'expired';
+      readonly lines: readonly ReservationLine[];
+      readonly skippedCounters: number;
+    }
+  /** Bitis ani henuz gelmemis (uzatilmis ya da saat kaymasi): HICBIR SEY yazilmadi. */
+  | { readonly status: 'not-due' }
+  | SettledReservation
+  | AbsentReservation
+  | OrphanedReservation;
+
+/**
  * Rezervasyonun yazilmasi: Redis'te reserve.lua, release.lua ve commit.lua;
  * MOCK'ta bellek.
  */
@@ -136,6 +160,13 @@ export interface ReservationStore {
   reserve(command: ReserveCommand): Promise<ReserveOutcome>;
   release(command: ReleaseCommand): Promise<ReleaseOutcome>;
   commit(command: CommitCommand): Promise<CommitOutcome>;
+  /** Suresi dolani birakir (release.lua'nin sure dolumu kipi, T10.3). */
+  expire(command: ExpireCommand): Promise<ExpireOutcome>;
+  /**
+   * Bitis ani `nowMs`'e kadar gelmis siparisler, en eskisi once, en cok
+   * `limit` tane (resv:index ZSET'i, ADR-02).
+   */
+  listDue(marketId: string, nowMs: number, limit: number): Promise<readonly string[]>;
   /** Defter yazildiktan sonra sonuclanan rezervasyonun izini siler (ADR-18). */
   forgetSettled(marketId: string, orderId: string): Promise<void>;
 }

@@ -1,6 +1,7 @@
 /**
- * Rezervasyon sozlesmesi (T10.1; birakma ve onay T10.2): bellek (MOCK) ve Redis
- * (reserve.lua, release.lua, commit.lua) uygulamalari AYNI senaryolardan gecer.
+ * Rezervasyon sozlesmesi (T10.1; birakma ve onay T10.2; sure dolumu T10.3):
+ * bellek (MOCK) ve Redis (reserve.lua, release.lua, commit.lua) uygulamalari
+ * AYNI senaryolardan gecer.
  * Bellekteki birim testinde, Redis entegrasyon testinde kosar.
  *
  * Saat GERCEKTIR: Redis'te kullanici kilidi ve kayit gercek sureyle (PX,
@@ -339,6 +340,85 @@ export function describeReservationStoreContract(
       await reserve(2, 2, [{ sku: 'KOLA-1L', quantity: 1 }]);
       expect(await commit(2, OTHER_MARKET)).toEqual({ status: 'absent' });
       expect(await commit(9)).toEqual({ status: 'absent' });
+    });
+
+    // ---------- sure dolumu (T10.3) ----------
+    // Bitis ani gecmiste olsun diye rezervasyon gecmis bir "simdi" ile acilir;
+    // Redis'te kaydin omru gercek zamanlidir (sure + pay), kayit yerinde kalir.
+    const expiredAgo = (
+      order: number,
+      user: number,
+      lines: readonly ReservationLine[],
+      agoMs = 1_000,
+    ) =>
+      reserve(order, user, lines, {
+        nowMs: systemClock.now() - TEN_MINUTES_MS - agoMs,
+        ttlMs: TEN_MINUTES_MS,
+      });
+    const expire = (order: number) =>
+      stock.reservations.expire({
+        orderId: orderId(order),
+        marketId: MARKET,
+        nowMs: systemClock.now(),
+      });
+
+    it('listDue: bitis ani gelmisler en eskisi once, sinira kadar; gelmeyen ve sonuclanan yok', async () => {
+      await expiredAgo(1, 1, [{ sku: 'SUT-1L', quantity: 1 }], 1_000);
+      await expiredAgo(2, 2, [{ sku: 'SUT-1L', quantity: 1 }], 5_000);
+      await expiredAgo(3, 3, [{ sku: 'KOLA-1L', quantity: 1 }], 3_000);
+      await reserve(4, 4, [{ sku: 'KOLA-1L', quantity: 1 }]);
+      await expiredAgo(5, 5, [{ sku: 'CIPS-150', quantity: 1 }], 2_000);
+      await release(5);
+
+      const nowMs = systemClock.now();
+      expect(await stock.reservations.listDue(MARKET, nowMs, 10)).toEqual([
+        orderId(2),
+        orderId(3),
+        orderId(1),
+      ]);
+      expect(await stock.reservations.listDue(MARKET, nowMs, 2)).toEqual([orderId(2), orderId(3)]);
+      expect(await stock.reservations.listDue(OTHER_MARKET, nowMs, 10)).toEqual([]);
+    });
+
+    it('sure dolumu: adetler sayaca doner, kilit kalkar; ikinci kez settled (expired)', async () => {
+      await expiredAgo(1, 1, [
+        { sku: 'SUT-1L', quantity: 2 },
+        { sku: 'KOLA-1L', quantity: 1 },
+      ]);
+
+      expect(await expire(1)).toEqual({
+        status: 'expired',
+        skippedCounters: 0,
+        lines: [
+          { sku: 'KOLA-1L', quantity: 1 },
+          { sku: 'SUT-1L', quantity: 2 },
+        ],
+      });
+      expect(await counts(MARKET, ['SUT-1L', 'KOLA-1L'])).toEqual({ 'SUT-1L': 5, 'KOLA-1L': 3 });
+      expect(await expire(1)).toMatchObject({ status: 'settled', settlement: 'expired' });
+      expect(await stock.reservations.listDue(MARKET, systemClock.now(), 10)).toEqual([]);
+    });
+
+    it('bitis ani gelmemis rezervasyona sure dolumu DOKUNMAZ (not-due): uzatilmis olabilir', async () => {
+      await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 2 }]);
+
+      expect(await expire(1)).toEqual({ status: 'not-due' });
+      expect(await counts(MARKET, ['SUT-1L'])).toEqual({ 'SUT-1L': 3 });
+      expect((await commit(1)).status).toBe('committed');
+    });
+
+    it('suresi dolan onaylanamaz, birakilamaz (iz expired); onaylanan ya da birakilan sure dolumunda settled', async () => {
+      await expiredAgo(1, 1, [{ sku: 'SUT-1L', quantity: 2 }]);
+      await expire(1);
+      expect(await commit(1)).toMatchObject({ status: 'settled', settlement: 'expired' });
+      expect(await release(1)).toMatchObject({ status: 'settled', settlement: 'expired' });
+      expect(await counts(MARKET, ['SUT-1L'])).toEqual({ 'SUT-1L': 5 });
+
+      await expiredAgo(2, 2, [{ sku: 'KOLA-1L', quantity: 1 }]);
+      await commit(2);
+      expect(await expire(2)).toMatchObject({ status: 'settled', settlement: 'committed' });
+      expect(await counts(MARKET, ['KOLA-1L'])).toEqual({ 'KOLA-1L': 2 });
+      expect(await expire(9)).toEqual({ status: 'absent' });
     });
 
     it('tekrar eden SKU depoya ulasirsa INTERNAL; hicbir sey yazilmaz (fazla satis olurdu)', async () => {

@@ -14,6 +14,8 @@
  *      kaydi dusmus indeks uyesi, eskimis on okuma.
  *   9. Onay (commit.lua, T10.2 PR 2): iz, sayaclara dokunmama, onay ile
  *      birakmanin yarisi (tam biri kazanir, B3/B4).
+ *  10. Supurucu (T10.3): liderlik kilidi (leader.lua), sure dolumu izi,
+ *      supurucu ile onayin yarisi, lider coktugunde devralma (B25).
  */
 
 import { ERROR_CODES, GRPC_STATUS, silentLogger, systemClock } from '@getir/core';
@@ -23,6 +25,7 @@ import { inventoryV1 } from '@getir/proto';
 import type { LuaScript, RedisConnection } from '@getir/redis-kit';
 import {
   connectRedis,
+  RECONCILE_LOCK_KEY,
   reservationIndexKey,
   reservationKey,
   stockAvailKey,
@@ -31,8 +34,9 @@ import {
 import { appErrorOf, startTestGrpcServer } from '@getir/service-kit/testing';
 import { RedisContainer } from '@testcontainers/redis';
 import type { StartedRedisContainer } from '@testcontainers/redis';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createSweepExpired } from '../../src/application/sweep-expired.js';
 import { buildInventoryService } from '../../src/bootstrap.js';
 import {
   LUA_SCRIPTS,
@@ -43,8 +47,10 @@ import type { ReservationLine } from '../../src/domain/reservation.js';
 import { InMemoryStockCommitter } from '../../src/infrastructure/memory/in-memory-stock-committer.js';
 import { InMemoryStockLedger } from '../../src/infrastructure/memory/in-memory-stock-ledger.js';
 import { loadInventoryScripts } from '../../src/infrastructure/redis/lua-scripts.js';
+import { RedisLeaderLock } from '../../src/infrastructure/redis/redis-leader-lock.js';
 import { RedisReservationStore } from '../../src/infrastructure/redis/redis-reservation-store.js';
 import { RedisStockCounters } from '../../src/infrastructure/redis/redis-stock-counters.js';
+import { startReservationSweeper } from '../../src/interfaces/workers/reservation-sweeper.js';
 import {
   describeReservationStoreContract,
   MARKET,
@@ -64,6 +70,7 @@ let counters: RedisStockCounters;
 let reservations: RedisReservationStore;
 let releaseScript: LuaScript;
 let commitScript: LuaScript;
+let leaderScript: LuaScript;
 const loadLines: LogLine[] = [];
 
 beforeAll(async () => {
@@ -76,6 +83,7 @@ beforeAll(async () => {
   const scripts = await loadInventoryScripts(connection.redis, recordingLogger(loadLines));
   releaseScript = scripts.get(LUA_SCRIPTS.RELEASE);
   commitScript = scripts.get(LUA_SCRIPTS.COMMIT);
+  leaderScript = scripts.get(LUA_SCRIPTS.LEADER);
   reservations = new RedisReservationStore(
     connection.redis,
     {
@@ -517,6 +525,126 @@ describe('onay (commit.lua, T10.2 PR 2)', () => {
         (line) => line.level === 'info' && line.fields['script'] === LUA_SCRIPTS.COMMIT,
       ),
     ).toHaveLength(1);
+  });
+});
+
+describe('supurucu (T10.3)', () => {
+  beforeEach(() => seed({ 'SUT-1L': 5, 'KOLA-1L': 3 }));
+
+  const LOCK_TTL_MS = 3_000;
+  const lockFor = (token: string, ttlMs = LOCK_TTL_MS) =>
+    new RedisLeaderLock(leaderScript, token, ttlMs);
+  /** Bitis ani 1 sn once gecmis rezervasyon (kaydi gercek zamanda 10 dk + pay yasar). */
+  const reserveExpired = (order: number, lines: readonly ReservationLine[]) =>
+    reserve(order, order, lines, systemClock.now() - TTL_MS - 1_000);
+
+  it('liderlik kilidi: ilk alan lider, yeniler; baskasi alamaz; yalnizca sahibi birakir; omru verilen kadar', async () => {
+    const a = lockFor('ornek-a');
+    const b = lockFor('ornek-b');
+
+    expect(await a.hold()).toBe(true);
+    expect(await b.hold()).toBe(false);
+    expect(await a.hold()).toBe(true);
+    const ttl = await connection.redis.pttl(RECONCILE_LOCK_KEY);
+    expect(ttl).toBeGreaterThan(LOCK_TTL_MS - TTL_TOLERANCE_MS);
+    expect(ttl).toBeLessThanOrEqual(LOCK_TTL_MS);
+
+    await b.release();
+    expect(await connection.redis.get(RECONCILE_LOCK_KEY)).toBe('ornek-a');
+    await a.release();
+    expect(await b.hold()).toBe(true);
+  });
+
+  it('lider her turda kilidin omrunu YENILER: yenilenmeseydi kilit lider calisirken duserdi', async () => {
+    const shortTtlMs = 600;
+    const waitMs = 400;
+    const a = lockFor('ornek-a', shortTtlMs);
+
+    expect(await a.hold()).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+    expect(await a.hold()).toBe(true);
+
+    // Yenilenmeseydi kalan omur ~200 ms olurdu (600 - 400).
+    expect(await connection.redis.pttl(RECONCILE_LOCK_KEY)).toBeGreaterThan(waitMs);
+  });
+
+  it('sure dolumu izi: state expired, gerekce expired; indeks uyesi gider; stok doner', async () => {
+    await reserveExpired(1, [{ sku: 'SUT-1L', quantity: 2 }]);
+
+    const outcome = await reservations.expire({
+      orderId: orderId(1),
+      marketId: MARKET,
+      nowMs: systemClock.now(),
+    });
+
+    expect(outcome.status).toBe('expired');
+    expect(await connection.redis.hgetall(reservationKey(MARKET, orderId(1)))).toMatchObject({
+      state: 'expired',
+      reason: 'expired',
+    });
+    expect(await connection.redis.zscore(reservationIndexKey(MARKET), orderId(1))).toBeNull();
+    expect(await connection.redis.get(stockAvailKey(MARKET, 'SUT-1L'))).toBe('5');
+  });
+
+  it('supurucu ile onay yarisi (B3): tam BIRI kazanir; stok kazanana gore bir kez hareket eder', async () => {
+    await reserveExpired(1, [{ sku: 'SUT-1L', quantity: 2 }]);
+    const nowMs = systemClock.now();
+
+    const outcomes = await Promise.all(
+      Array.from({ length: 20 }, (_, index) =>
+        index % 2 === 0
+          ? reservations.expire({ orderId: orderId(1), marketId: MARKET, nowMs })
+          : reservations.commit({ orderId: orderId(1), marketId: MARKET, nowMs }),
+      ),
+    );
+
+    const winners = outcomes.filter(
+      (outcome) => outcome.status === 'expired' || outcome.status === 'committed',
+    );
+    expect(winners).toHaveLength(1);
+    expect(await connection.redis.get(stockAvailKey(MARKET, 'SUT-1L'))).toBe(
+      winners[0]?.status === 'expired' ? '5' : '3',
+    );
+  });
+
+  it('B25: lider coker (kilidi birakmadan durur); ikinci ornek en gec kilit omru icinde devralir ve suresi dolani birakir', async () => {
+    await reserveExpired(1, [{ sku: 'SUT-1L', quantity: 2 }]);
+    // Ornek A lider oldu ve coktu: kilit yenilenmeden omru dolacak.
+    expect(await lockFor('ornek-a').hold()).toBe(true);
+    const crashedAt = systemClock.now();
+    const ledger = new InMemoryStockLedger();
+    const lines: LogLine[] = [];
+    const sweeper = startReservationSweeper({
+      lock: lockFor('ornek-b'),
+      sweep: createSweepExpired({
+        markets: { marketIds: () => Promise.resolve([MARKET]) },
+        reservations,
+        ledger,
+        clock: systemClock,
+        logger: silentLogger,
+        batchSize: 100,
+        marketRefreshMs: 60_000,
+      }),
+      intervalMs: 200,
+      logger: recordingLogger(lines),
+    });
+    try {
+      await vi.waitFor(
+        async () => {
+          expect(await connection.redis.get(stockAvailKey(MARKET, 'SUT-1L'))).toBe('5');
+        },
+        { timeout: LOCK_TTL_MS + 2_000, interval: 50 },
+      );
+      const tookOverInMs = systemClock.now() - crashedAt;
+
+      expect(tookOverInMs).toBeLessThanOrEqual(LOCK_TTL_MS + 1_000);
+      expect(lines.filter((line) => line.message === 'supurucu lider oldu')).toHaveLength(1);
+      expect(await ledger.settlementOf(MARKET, orderId(1))).toBe('expired');
+    } finally {
+      await sweeper.stop();
+    }
+    // Kapanista lider kilidi birakti: bir sonraki ornek beklemeden alir.
+    expect(await connection.redis.exists(RECONCILE_LOCK_KEY)).toBe(0);
   });
 });
 

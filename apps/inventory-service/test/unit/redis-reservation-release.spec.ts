@@ -12,7 +12,7 @@ import {
   stockAvailKey,
   userReservationKey,
 } from '@getir/redis-kit';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { RedisReservationStore } from '../../src/infrastructure/redis/redis-reservation-store.js';
 import { readReservationHash } from '../../src/infrastructure/redis/reservation-hash.js';
@@ -68,7 +68,16 @@ describe('RedisReservationStore.release', () => {
           stockAvailKey(MARKET, 'SUT-1L'),
           userReservationKey(USER),
         ],
-        args: [ORDER, USER, 'user_cancelled', 1_000, OPTIONS.settledTtlMs, 'KOLA-1L', 'SUT-1L'],
+        args: [
+          ORDER,
+          USER,
+          'user_cancelled',
+          1_000,
+          OPTIONS.settledTtlMs,
+          'release',
+          'KOLA-1L',
+          'SUT-1L',
+        ],
       },
     ]);
     expect(outcome).toEqual({
@@ -160,6 +169,68 @@ describe('rezervasyon hash on okumasi', () => {
     expect(() => readReservationHash({ 'qty:SUT-1L': '2' }, where)).toThrow(AppError);
     expect(() => readReservationHash({ ...HASH, 'qty:SUT-1L': '2.5' }, where)).toThrow(
       /bozuk adet/,
+    );
+  });
+});
+
+describe('RedisReservationStore.expire ve listDue (T10.3)', () => {
+  it('sure dolumu release.lua yi "expire" kipinde, gerekce expired ile cagirir; basari "expired" doner', async () => {
+    const { store, calls } = storeWith(HASH, ['released', 0, '1', '2']);
+
+    const outcome = await store.expire({ orderId: ORDER, marketId: MARKET, nowMs: 1_000 });
+
+    expect(calls[0]?.args).toEqual([
+      ORDER,
+      USER,
+      'expired',
+      1_000,
+      OPTIONS.settledTtlMs,
+      'expire',
+      'KOLA-1L',
+      'SUT-1L',
+    ]);
+    expect(outcome).toEqual({
+      status: 'expired',
+      skippedCounters: 0,
+      lines: [
+        { sku: 'KOLA-1L', quantity: 1 },
+        { sku: 'SUT-1L', quantity: 2 },
+      ],
+    });
+  });
+
+  it('bitis ani gelmemis (not-due) oldugu gibi doner; birakma kipinde not-due beklenmez (INTERNAL)', async () => {
+    const expiring = storeWith(HASH, ['not-due']);
+    const releasing = storeWith(HASH, ['not-due']);
+
+    expect(await expiring.store.expire({ orderId: ORDER, marketId: MARKET, nowMs: 1_000 })).toEqual(
+      {
+        status: 'not-due',
+      },
+    );
+    await expect(releasing.store.release(COMMAND)).rejects.toMatchObject({
+      code: ERROR_CODES.INTERNAL,
+    });
+  });
+
+  it('listDue: indeks skor araliginda, en eskisi once, sinirli (ZRANGEBYSCORE ... LIMIT)', async () => {
+    const zrangebyscore = vi.fn(() => Promise.resolve([ORDER]));
+    const redis = { zrangebyscore } as unknown as RedisClient;
+    const unused: LuaScript = { name: 'x', sha: 'x', run: () => Promise.reject(new Error('yok')) };
+    const store = new RedisReservationStore(
+      redis,
+      { reserve: unused, release: unused, commit: unused },
+      OPTIONS,
+    );
+
+    expect(await store.listDue(MARKET, 5_000, 25)).toEqual([ORDER]);
+    expect(zrangebyscore).toHaveBeenCalledWith(
+      reservationIndexKey(MARKET),
+      '-inf',
+      5_000,
+      'LIMIT',
+      0,
+      25,
     );
   });
 });

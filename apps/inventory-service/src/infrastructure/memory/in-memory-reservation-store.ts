@@ -1,15 +1,14 @@
 /**
- * Bellekteki rezervasyon (MOCK=true, B16): reserve.lua, release.lua ve
- * commit.lua'nin AYNI kurallari, Redis olmadan. Butun adimlar tek senkron blokta kosar: arada
+ * Bellekteki rezervasyon (MOCK=true, B16): reserve.lua, release.lua (birakma ve
+ * sure dolumu kipleri) ve commit.lua'nin AYNI kurallari, Redis olmadan. Butun adimlar tek senkron blokta kosar: arada
  * baska cagri calisamaz, bu yuzden bellekte de kismi rezervasyon ya da cift
  * birakma olmaz. Redis uygulamasi ayni senaryolardan gecer
  * (test/support/reservation-store-contract.ts).
  *
  * Sure dolumu: rezervasyon kaydi bitisten `holdAfterExpiryMs` sonrasina,
  * kullanici kilidi bitise kadar yasar (Redis'teki PEXPIRE ve PX ile ayni).
- * Suresi dolanin sayaclari geri vermek supurucunun isidir (T10.3). Birakilan ya
- * da onaylanan kaydin izi `settledTtlMs` boyunca ya da forgetSettled'a kadar
- * durur (ADR-18).
+ * Suresi dolanin sayaclarini supurucu geri verir (expire, T10.3). Sonuclanan
+ * kaydin izi `settledTtlMs` boyunca ya da forgetSettled'a kadar durur (ADR-18).
  */
 
 import { AppError } from '@getir/core';
@@ -18,6 +17,8 @@ import { duplicateSku } from '../../domain/reservation.js';
 import type {
   CommitCommand,
   CommitOutcome,
+  ExpireCommand,
+  ExpireOutcome,
   ReleaseCommand,
   ReleaseOutcome,
   ReservationLine,
@@ -27,7 +28,7 @@ import type {
   ReserveOutcome,
   SettledReservation,
 } from '../../domain/reservation.js';
-import { COMMIT_REASON } from '../../domain/stock-ledger.js';
+import { COMMIT_REASON, EXPIRE_REASON } from '../../domain/stock-ledger.js';
 
 import { counterKey } from './in-memory-counter-key.js';
 
@@ -78,7 +79,39 @@ export class InMemoryReservationStore implements ReservationStore {
   }
 
   release(command: ReleaseCommand): Promise<ReleaseOutcome> {
-    return Promise.resolve(this.releaseNow(command));
+    const outcome = this.returnNow(command, 'released');
+    if (outcome.status === 'not-due') {
+      return Promise.reject(
+        AppError.internal('birakma kipinde not-due', { details: { ...command } }),
+      );
+    }
+    return Promise.resolve(outcome);
+  }
+
+  expire(command: ExpireCommand): Promise<ExpireOutcome> {
+    const outcome = this.returnNow({ ...command, reason: EXPIRE_REASON }, 'expired');
+    return Promise.resolve(
+      outcome.status === 'released'
+        ? { status: 'expired', lines: outcome.lines, skippedCounters: outcome.skippedCounters }
+        : outcome,
+    );
+  }
+
+  /** Bitis ani gelmis aktif rezervasyonlar, en eskisi once (Redis'te resv:index). */
+  listDue(marketId: string, nowMs: number, limit: number): Promise<readonly string[]> {
+    const prefix = reservationKey(marketId, '');
+    const due = [...this.reservations.entries()]
+      .filter(
+        ([key, reservation]) =>
+          key.startsWith(prefix) &&
+          reservation.settled === undefined &&
+          this.isStored(reservation, nowMs) &&
+          reservation.expiresAt <= nowMs,
+      )
+      .sort(([, left], [, right]) => left.expiresAt - right.expiresAt)
+      .slice(0, limit)
+      .map(([key]) => key.slice(prefix.length));
+    return Promise.resolve(due);
   }
 
   commit(command: CommitCommand): Promise<CommitOutcome> {
@@ -137,7 +170,11 @@ export class InMemoryReservationStore implements ReservationStore {
     return { status: 'reserved', expiresAt };
   }
 
-  private releaseNow(command: ReleaseCommand): ReleaseOutcome {
+  /** Birakma ve sure dolumu: adetler sayaca doner (release.lua'nin iki kipi). */
+  private returnNow(
+    command: ReleaseCommand,
+    settlement: 'released' | 'expired',
+  ): ReleaseOutcome | { readonly status: 'not-due' } {
     const { orderId, marketId, reason, nowMs } = command;
     const key = reservationKey(marketId, orderId);
     const existing = this.reservations.get(key);
@@ -146,6 +183,10 @@ export class InMemoryReservationStore implements ReservationStore {
     const done = this.settledOrAbsent(existing, nowMs);
     if (done !== undefined || existing === undefined) {
       return done ?? { status: 'absent' };
+    }
+    // Sure dolumunda bitis ani gelmemisse dokunulmaz (uzatilmis olabilir).
+    if (settlement === 'expired' && existing.expiresAt > nowMs) {
+      return { status: 'not-due' };
     }
 
     // 2. Adetleri geri ekle; sayaci olmayan kalem atlanir (sayac yaratilmaz).
@@ -164,10 +205,7 @@ export class InMemoryReservationStore implements ReservationStore {
     if (this.userLocks.get(existing.userId)?.orderId === orderId) {
       this.userLocks.delete(existing.userId);
     }
-    this.reservations.set(key, {
-      ...existing,
-      settled: { settlement: 'released', reason, at: nowMs },
-    });
+    this.reservations.set(key, { ...existing, settled: { settlement, reason, at: nowMs } });
     return { status: 'released', skippedCounters, lines: sortedLines(existing.lines) };
   }
 

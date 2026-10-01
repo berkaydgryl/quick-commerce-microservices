@@ -11,16 +11,17 @@
  *
  * Sonuclar (inventory.proto ReservationOutcome):
  *  - applied: sahiplik bu cagrinin, sayaclar geri artti.
- *  - already-applied: birakma daha once yapilmisti; sayaclar tekrar artmadi.
+ *  - already-applied: birakma daha once yapilmisti ya da supurucu suresi dolani
+ *    geri vermisti (T10.3); sayaclar tekrar artmadi.
  *  - not-found: birakilacak rezervasyon yok (hic olmamis ya da onaylanmis;
  *    onaylanan stok geri verilmez). Hata degil; cagiran sonuca gore dallanir.
  */
 
 import type { Clock, Logger } from '@getir/core';
 
-import type { ReservationLine, ReservationStore } from '../domain/reservation.js';
-import { releaseEntries } from '../domain/stock-ledger.js';
-import type { StockLedger } from '../domain/stock-ledger.js';
+import type { ReservationStore, ReservationSettlement } from '../domain/reservation.js';
+import { expireEntries, releaseEntries } from '../domain/stock-ledger.js';
+import type { LedgerEntry, StockLedger } from '../domain/stock-ledger.js';
 import type { ReservationResult } from './reservation-result.js';
 
 export interface ReleaseReservationDeps {
@@ -42,17 +43,17 @@ export type ReleaseReservation = (input: ReleaseReservationInput) => Promise<Res
 export function createReleaseReservation(deps: ReleaseReservationDeps): ReleaseReservation {
   /** Defteri yazar, sonra izi siler: sira tersine donerse iz defterden once kaybolurdu. */
   const settle = async (
-    input: ReleaseReservationInput & { readonly lines: readonly ReservationLine[] },
-    at: Date,
+    input: ReleaseReservationInput,
+    entries: readonly LedgerEntry[],
   ): Promise<void> => {
-    await deps.ledger.record(releaseEntries({ ...input, at }));
+    await deps.ledger.record(entries);
     await deps.reservations.forgetSettled(input.marketId, input.orderId);
   };
 
   /** Ne aktif rezervasyon ne iz var: sonucu defter soyler. */
   const fromLedger = async (input: ReleaseReservationInput): Promise<ReservationResult> => {
     const settlement = await deps.ledger.settlementOf(input.marketId, input.orderId);
-    return { outcome: settlement === 'released' ? 'already-applied' : 'not-found' };
+    return { outcome: stockReturned(settlement) ? 'already-applied' : 'not-found' };
   };
 
   return async (input) => {
@@ -68,20 +69,33 @@ export function createReleaseReservation(deps: ReleaseReservationDeps): ReleaseR
             'birakma: sayaci olmayan kalem geri eklenmedi',
           );
         }
-        await settle({ ...input, lines: outcome.lines }, new Date(nowMs));
+        await settle(
+          input,
+          releaseEntries({ ...input, lines: outcome.lines, at: new Date(nowMs) }),
+        );
         return { outcome: 'applied' };
-      case 'settled':
+      case 'settled': {
         // Onaylanmis rezervasyon birakilamaz; izine de dokunulmaz (onayin kendi
-        // tekrari tamamlar). Birakilmissa onceki cagri sahipligi aldi; defteri
-        // yarida kalmis olabilir: onceki gerekce ve anla tamamlanir (B14).
-        if (outcome.settlement !== 'released') {
+        // tekrari tamamlar). Birakilmis ya da suresi dolmussa stok zaten dondu:
+        // onceki cagrinin (ya da supurucunun) defteri yarida kalmis olabilir,
+        // onun gerekcesi ve aniyla tamamlanir (B14).
+        if (!stockReturned(outcome.settlement)) {
           return { outcome: 'not-found' };
         }
+        const settled = {
+          orderId,
+          marketId,
+          lines: outcome.lines,
+          at: new Date(outcome.settledAt),
+        };
         await settle(
-          { orderId, marketId, reason: outcome.reason, lines: outcome.lines },
-          new Date(outcome.settledAt),
+          input,
+          outcome.settlement === 'expired'
+            ? expireEntries(settled)
+            : releaseEntries({ ...settled, reason: outcome.reason }),
         );
         return { outcome: 'already-applied' };
+      }
       case 'orphaned':
         deps.logger.warn(
           { marketId, orderId },
@@ -92,4 +106,9 @@ export function createReleaseReservation(deps: ReleaseReservationDeps): ReleaseR
         return fromLedger(input);
     }
   };
+}
+
+/** Stok sayaca dondu mu: birakildi ya da suresi doldu (onaylanan donmez). */
+function stockReturned(settlement: ReservationSettlement | undefined): boolean {
+  return settlement === 'released' || settlement === 'expired';
 }

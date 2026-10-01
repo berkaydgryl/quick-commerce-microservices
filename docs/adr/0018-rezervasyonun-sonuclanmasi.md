@@ -82,3 +82,11 @@ Karar ayni desenle onaya uygulandi:
 - Eldeki adet eksiye duserse onay yine yazilir (odeme alinmistir) ve uyari verilir; iz gizlenmez.
 - Onaylanmis rezervasyona birakma, birakilmis rezervasyona onay NOT_FOUND alir; karsi tarafin izine
   dokunulmaz (kendi tekrari tamamlar).
+
+## Ek (T10.3, 2026-10-01): sure dolumu
+
+Ayni desen supurucuya uygulandi: `release.lua`'nin sure dolumu kipi sahipligi `ZREM` ile alir, iz
+`state: expired` olur, defterde `expire` (delta 0, gerekce `expired`) yazilinca iz silinir. Defter
+yazilamazsa sayaclar yine doner; supurucu siparisi bekleyenlere alir ve sonraki turlarda izden tamamlar.
+Supurucu yeniden baslarsa bekleyen liste kaybolur; ayni siparise gelen Release izi bulup tamamlar (iz 24
+saat yasar). Suresi dolmus rezervasyona Commit NOT_FOUND, Release ALREADY_APPLIED alir.

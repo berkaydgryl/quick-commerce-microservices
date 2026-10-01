@@ -61,3 +61,8 @@ export type CounterRecovery = () => Promise<boolean>;
 export interface StockSeedWriter {
   replaceAll(levels: readonly StockLevel[]): Promise<void>;
 }
+
+/** Stogu olan marketler (supurucu, T10.3): market basina ayri sure indeksi var. */
+export interface StockMarketSource {
+  marketIds(): Promise<readonly string[]>;
+}

@@ -10,7 +10,11 @@ import type { LogLine } from '@getir/core/testing';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createReleaseReservation } from '../../src/application/release-reservation.js';
-import type { ReleaseCommand, ReleaseOutcome } from '../../src/domain/reservation.js';
+import type {
+  ReleaseCommand,
+  ReleaseOutcome,
+  ReservationSettlement,
+} from '../../src/domain/reservation.js';
 import type { LedgerEntry, StockLedger } from '../../src/domain/stock-ledger.js';
 
 const NOW = Date.UTC(2026, 9, 1, 9, 0, 0);
@@ -26,7 +30,7 @@ const LINES = [
 
 function setup(
   outcome: ReleaseOutcome,
-  options: { settlement?: 'released'; record?: () => Promise<void> } = {},
+  options: { settlement?: ReservationSettlement; record?: () => Promise<void> } = {},
 ) {
   const calls: string[] = [];
   const commands: ReleaseCommand[] = [];
@@ -128,6 +132,24 @@ describe('createReleaseReservation', () => {
     ]);
   });
 
+  it('sure dolumu izi (T10.3): stok zaten dondu -> already-applied; defter expire kaydiyla tamamlanir', async () => {
+    const settledAt = NOW - 2_000;
+    const { release, calls, recorded } = setup({
+      status: 'settled',
+      settlement: 'expired',
+      reason: 'expired',
+      settledAt,
+      lines: LINES,
+    });
+
+    expect(await release(INPUT)).toEqual({ outcome: 'already-applied' });
+    expect(calls).toEqual(['release', 'record', 'forgetSettled']);
+    expect(recorded[0]?.map((entry) => [entry.kind, entry.delta, entry.reason, entry.at])).toEqual([
+      ['expire', 0, 'expired', new Date(settledAt)],
+      ['expire', 0, 'expired', new Date(settledAt)],
+    ]);
+  });
+
   it('onay izi: onaylanan stok geri verilmez -> not-found; defter YAZILMAZ, ize dokunulmaz', async () => {
     const { release, calls } = setup({
       status: 'settled',
@@ -141,11 +163,15 @@ describe('createReleaseReservation', () => {
     expect(calls).toEqual(['release']);
   });
 
-  it('ne rezervasyon ne iz var: defterde birakildiysa already-applied, kaydi yoksa not-found', async () => {
+  it('ne rezervasyon ne iz var: defterde birakildiysa ya da suresi dolduysa already-applied; onaylandiysa ya da kaydi yoksa not-found', async () => {
     const released = setup({ status: 'absent' }, { settlement: 'released' });
+    const expired = setup({ status: 'absent' }, { settlement: 'expired' });
+    const committed = setup({ status: 'absent' }, { settlement: 'committed' });
     const unknown = setup({ status: 'absent' });
 
     expect(await released.release(INPUT)).toEqual({ outcome: 'already-applied' });
+    expect(await expired.release(INPUT)).toEqual({ outcome: 'already-applied' });
+    expect(await committed.release(INPUT)).toEqual({ outcome: 'not-found' });
     expect(await unknown.release(INPUT)).toEqual({ outcome: 'not-found' });
     expect(unknown.calls).toEqual(['release', 'settlementOf']);
   });

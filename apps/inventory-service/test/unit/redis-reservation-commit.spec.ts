@@ -107,7 +107,7 @@ describe('RedisReservationStore.commit', () => {
 
   it.each([
     ['bilinmeyen durum', ['bitti']],
-    ['bilinmeyen iz durumu', ['settled', 'expired', 'x', '900']],
+    ['bilinmeyen iz durumu', ['settled', 'archived', 'x', '900']],
     ['sifir adet', ['committed', 'SUT-1L', '0']],
     ['tek kalmis sku', ['committed', 'SUT-1L']],
   ])('beklenmeyen cevap (%s) INTERNAL', async (_name, reply) => {

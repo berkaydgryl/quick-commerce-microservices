@@ -25,7 +25,7 @@ import { COLLECTIONS } from './documents.js';
 import type { StockLedgerDocument } from './documents.js';
 
 /** Siparisin sonucunu soyleyen turler (acilis bir siparis sonucu degildir). */
-const SETTLEMENT_KINDS = [LEDGER_KINDS.RELEASE, LEDGER_KINDS.COMMIT];
+const SETTLEMENT_KINDS = [LEDGER_KINDS.RELEASE, LEDGER_KINDS.COMMIT, LEDGER_KINDS.EXPIRE];
 
 export class StockLedgerRepository
   extends MongoRepository<StockLedgerDocument>
