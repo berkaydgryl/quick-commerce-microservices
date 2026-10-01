@@ -60,7 +60,7 @@ beforeAll(async () => {
   ]);
   const uri = `${mongo.getConnectionString()}?directConnection=true`;
   store = await openOrderStore(
-    { MONGO_URI: uri, MONGO_DB: DB_NAME, MONGO_SERVER_SELECTION_TIMEOUT_MS: 5_000 },
+    { uri, dbName: DB_NAME, serverSelectionTimeoutMs: 5_000 },
     silentLogger,
     'test',
   );

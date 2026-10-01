@@ -6,7 +6,8 @@
  *   pnpm --filter @getir/catalog-service start      (kok .env varsa okunur)
  *
  * Veri kaynagi MOCK ile secilir: MOCK=true -> bellek (Mongo gerekmez),
- * aksi halde MONGO_URI zorunlu. Mongo'yu doldurmak icin: pnpm seed
+ * aksi halde CATALOG_MONGO_URI zorunlu (kendi veritabani ve kullanicisi, D14).
+ * Mongo'yu doldurmak icin: pnpm seed
  *
  * Dogrulama (grpcurl):
  *   grpcurl -plaintext -import-path packages/proto/proto \

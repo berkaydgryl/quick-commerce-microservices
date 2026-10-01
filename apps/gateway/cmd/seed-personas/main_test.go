@@ -22,7 +22,7 @@ func TestSeedRefusesProductionBeforeConnecting(t *testing.T) {
 	// Adres ulasilamaz: production denetimi baglantidan ONCE olmali, yoksa
 	// hata "ulasilamadi" olurdu.
 	err := run(t.Context(), envOf(map[string]string{
-		"NODE_ENV": "production", "MONGO_URI": "mongodb://127.0.0.1:1/?directConnection=true",
+		"NODE_ENV": "production", "GATEWAY_MONGO_URI": "mongodb://127.0.0.1:1/?directConnection=true",
 	}), silentLogger())
 
 	if !errors.Is(err, persona.ErrProduction) {
@@ -33,7 +33,7 @@ func TestSeedRefusesProductionBeforeConnecting(t *testing.T) {
 func TestSeedRequiresMongoURI(t *testing.T) {
 	err := run(t.Context(), envOf(map[string]string{}), silentLogger())
 
-	if err == nil || !strings.Contains(err.Error(), "MONGO_URI") {
-		t.Errorf("MONGO_URI zorunlu olmali: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "GATEWAY_MONGO_URI") {
+		t.Errorf("GATEWAY_MONGO_URI zorunlu olmali: %v", err)
 	}
 }

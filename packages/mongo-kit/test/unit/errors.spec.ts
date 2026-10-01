@@ -4,6 +4,7 @@ import type { BulkWriteResult } from 'mongodb';
 import { describe, expect, it } from 'vitest';
 
 import {
+  isAuthenticationError,
   isDuplicateKeyError,
   retryableTransactionCause,
   toMongoAppError,
@@ -101,6 +102,25 @@ describe('toplu yazim hatasi (bulkWrite, insertMany; T10.2)', () => {
     );
 
     expect(toMongoAppError(duplicate).code).toBe(ERROR_CODES.CONFLICT);
+  });
+});
+
+describe('servis basina kullanici (D14)', () => {
+  it('yetkisiz erisim (13) INTERNAL ve sebebi adiyla: baska servisin veritabani', () => {
+    const error = toMongoAppError(
+      new MongoServerError({ message: 'not authorized on getir_order', code: 13 }),
+      { operation: 'find', collection: 'orders' },
+    );
+
+    expect(error.code).toBe(ERROR_CODES.INTERNAL);
+    expect(error.message).toBe('Veritabani yetkisi yok');
+    expect(error.details).toEqual({ operation: 'find', collection: 'orders' });
+  });
+
+  it('kimlik dogrulama hatasi yalnizca AuthenticationFailed (18)', () => {
+    expect(isAuthenticationError(new MongoServerError({ message: 'auth', code: 18 }))).toBe(true);
+    expect(isAuthenticationError(new MongoServerError({ message: 'yetki', code: 13 }))).toBe(false);
+    expect(isAuthenticationError(new MongoNetworkError('connection closed'))).toBe(false);
   });
 });
 

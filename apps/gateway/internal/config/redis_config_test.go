@@ -35,7 +35,7 @@ func TestRedisURLIsRequiredOutsideMock(t *testing.T) {
 		t.Errorf("REDIS_URL zorunlu olmali: %v", err)
 	}
 
-	cfg, err := Load(minimalEnv(map[string]string{"REDIS_URL": "", "MONGO_URI": "", "MOCK": "true"}))
+	cfg, err := Load(minimalEnv(map[string]string{"REDIS_URL": "", "GATEWAY_MONGO_URI": "", "MOCK": "true"}))
 	if err != nil || cfg.RedisURL != "" {
 		t.Errorf("MOCK'ta Redis gerekmemeli: %q %v", cfg.RedisURL, err)
 	}

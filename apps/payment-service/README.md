@@ -91,10 +91,10 @@ tipten kurar, payment aynı şemadan geçirir. Gerekçe ve anahtar kuralı `Refu
 
 ## Veri kaynağı: Mongo ya da MOCK
 
-| `MOCK` | Depo                                            | Mongo / Redis gerekir mi                                     |
-| ------ | ----------------------------------------------- | ------------------------------------------------------------ |
-| `true` | Bellek (`infrastructure/memory`)                | Hayır; yeniden başlayınca unutur, olay dinleme kapalı        |
-| değil  | `payments` koleksiyonu (`infrastructure/mongo`) | Evet: `MONGO_URI` ve `REDIS_URL` (iade komutu, T7.4) zorunlu |
+| `MOCK` | Depo                                            | Mongo / Redis gerekir mi                                                                                     |
+| ------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `true` | Bellek (`infrastructure/memory`)                | Hayır; yeniden başlayınca unutur, olay dinleme kapalı                                                        |
+| değil  | `payments` koleksiyonu (`infrastructure/mongo`) | Evet: `PAYMENT_MONGO_URI` (kendi veritabanı `getir_payment`, D14) ve `REDIS_URL` (iade komutu, T7.4) zorunlu |
 
 İki depo **aynı sözleşme testinden** geçer (`test/support/payment-store-contract.ts`): birim testinde
 bellek, entegrasyon testinde gerçek Mongo. Depoyu seçip açan tek yer `infrastructure/payment-store.ts`.
@@ -151,7 +151,7 @@ src/
 ## Çalıştırma ve doğrulama
 
 ```bash
-pnpm --filter @getir/payment-service build && pnpm --filter @getir/payment-service start   # :50054 (kok .env: MOCK, MONGO_URI, REDIS_URL)
+pnpm --filter @getir/payment-service build && pnpm --filter @getir/payment-service start   # :50054 (kok .env: MOCK, PAYMENT_MONGO_URI, REDIS_URL)
 pnpm test:int   # gercek Mongo + Redis (Testcontainers): sozlesme, indeksler, yeniden baslatma, iade komutu uctan uca
 
 redis-cli XINFO GROUPS stream:events             # payment grubu: pending ve lag 0 olmali
@@ -167,6 +167,6 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/payment/v1/pay
 
 ```bash
 docker build -f apps/payment-service/Dockerfile -t getir/payment-service .   # baglam depo koku
-docker run --rm -p 50054:50054 -e MOCK=true getir/payment-service   # MOCK'suz: MONGO_URI + REDIS_URL zorunlu
+docker run --rm -p 50054:50054 -e MOCK=true getir/payment-service   # MOCK'suz: PAYMENT_MONGO_URI + REDIS_URL zorunlu
 node scripts/check-node-image.mjs getir/payment-service   # imaj denetimi (D12), CI'da da kosar
 ```

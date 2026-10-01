@@ -194,6 +194,10 @@ Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicid
 
 ## Veritabani
 
+- Her servisin kendi veritabani (`getir_<servis>`) ve kendi Mongo kullanicisi vardir; kullanici
+  yalnizca kendi veritabaninda `readWrite` yetkilidir (D14, ADR-05). Adres servis onekli degiskende
+  (`CATALOG_MONGO_URI`, `CATALOG_MONGO_DB`); ortak `MONGO_URI` yoktur. Yeni servis: `.env.example`'a
+  adresi, `infra/docker/mongo/init/service-users.js`'e onekini ekler.
 - N+1 sorgu yasak: capraz veri toplu uclarla alinir (`BatchGetProducts`,
   `CheckAvailability(store, sku[])` - B27).
 - Sema degisikligi elle yapilmaz; versiyonlanmis ve geri alinabilir migration ile yapilir.
@@ -207,7 +211,8 @@ Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicid
 - Kodda sir YOK: anahtar, parola, baglanti dizesi yalnizca ortam degiskeninden gelir.
 - Her giris noktasi girdiyi dogrular (Zod); dogrulanmamis veri application katmanina giremez.
 - En az yetki: veritabani kullanicisi, jeton ve CI izinleri isin gerektirdigi kadar
-  (ornek: `.github/workflows/ci.yml` icinde `permissions: contents: read`).
+  (ornekler: servis basina Mongo kullanicisi yalnizca kendi veritabaninda, D14;
+  `.github/workflows/ci.yml` icinde `permissions: contents: read`).
 - Gunluk ve hata cevabi KISISEL VERI TASIMAZ. Ornekler: Mongo benzersiz indeks ihlalinde
   yalnizca alan ADI disari verilir, deger verilmez (`mongo-kit/src/errors.ts`); baglanti
   dizesindeki parola gunluge maskelenerek yazilir (`@getir/core` `redactConnectionString`).

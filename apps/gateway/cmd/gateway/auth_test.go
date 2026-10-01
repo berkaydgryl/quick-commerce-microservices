@@ -16,7 +16,7 @@ func authConfig(mock bool, mongoURI string) config.Config {
 	return config.Config{
 		Mock:                        mock,
 		MongoURI:                    mongoURI,
-		MongoDB:                     "getir",
+		MongoDB:                     "getir_gateway",
 		MongoServerSelectionTimeout: 200 * time.Millisecond,
 		RequestTimeout:              time.Second,
 		JWTSecret:                   config.Secret("yalnizca-test-icin-imza-sirri-32-bayttan-uzun"),

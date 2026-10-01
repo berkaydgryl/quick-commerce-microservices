@@ -35,6 +35,7 @@
     "infra:ps": "docker compose -f infra/docker/docker-compose.dev.yml ps",
     "infra:logs": "docker compose -f infra/docker/docker-compose.dev.yml logs -f",
     "infra:down": "docker compose -f infra/docker/docker-compose.dev.yml down",
+    "infra:mongosh": "docker exec -it getir-mongo bash -c 'mongosh -u \"$MONGO_ROOT_USERNAME\" -p \"$MONGO_ROOT_PASSWORD\" --authenticationDatabase admin'",
     "infra:reset": "docker compose -f infra/docker/docker-compose.dev.yml down -v",
     "verify": "pnpm proto:gen:ts && pnpm lint && pnpm lint:style && pnpm lint:proto && pnpm format:check && pnpm typecheck && pnpm build && pnpm web:bundle:check && pnpm codes:go:check && pnpm test:unit",
     "clean": "turbo run clean"

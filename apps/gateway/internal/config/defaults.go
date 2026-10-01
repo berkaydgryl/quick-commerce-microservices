@@ -21,7 +21,9 @@ const (
 
 // Kimlik ve Mongo varsayilanlari (T8.1). Adlar ve degerler .env.example ile ayni.
 const (
-	defaultMongoDB                     = "getir"
+	// defaultMongoDB, gateway'in KENDI veritabani (D14, ADR-05): GATEWAY_MONGO_DB
+	// verilmezse. Kullanicisi (GATEWAY_MONGO_URI) yalnizca burada yetkilidir.
+	defaultMongoDB                     = "getir_gateway"
 	defaultMongoServerSelectionTimeout = 5 * time.Second
 	// JWT_TTL=3600 (ADR-12): erisim jetonu 1 saat.
 	defaultJWTTTL = time.Hour

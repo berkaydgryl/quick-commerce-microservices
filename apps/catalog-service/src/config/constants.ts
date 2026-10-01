@@ -15,6 +15,12 @@ export const CATALOG_SERVICE_FULL_NAME = 'getir.catalog.v1.CatalogService';
 export const DEFAULT_CATALOG_GRPC_PORT = 50_051;
 
 /**
+ * Servisin kendi veritabani (D14, ADR-05): CATALOG_MONGO_DB verilmezse.
+ * Kullanicisi (CATALOG_MONGO_URI) yalnizca burada yetkilidir.
+ */
+export const DEFAULT_MONGO_DB = 'getir_catalog';
+
+/**
  * BatchGetOffers tek cagrida en fazla bu kadar urun kimligi kabul eder
  * (catalog.proto sozlesmesi). Sepet en fazla 50 kalemdir; 100 genis bir tavandir,
  * daha fazlasi VALIDATION_FAILED.

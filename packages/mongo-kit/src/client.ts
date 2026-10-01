@@ -15,7 +15,7 @@ import type { Logger } from '@getir/core';
 import { MongoClient } from 'mongodb';
 import type { ClientSession, Db, TransactionOptions } from 'mongodb';
 
-import { retryableTransactionCause, toMongoAppError } from './errors.js';
+import { isAuthenticationError, retryableTransactionCause, toMongoAppError } from './errors.js';
 
 /** Sunucu secimi icin varsayilan bekleme (ms). */
 const DEFAULT_SERVER_SELECTION_TIMEOUT_MS = 5_000;
@@ -87,11 +87,17 @@ export async function connectMongo(options: MongoConnectionOptions): Promise<Mon
     await client.db(options.dbName).command({ ping: 1 });
   } catch (error: unknown) {
     await client.close().catch(() => undefined);
-    throw new AppError(
-      ERROR_CODES.SERVICE_UNAVAILABLE,
-      `Mongo baglantisi kurulamadi: ${redactConnectionString(options.uri)}`,
-      { cause: error },
-    );
+    const uri = redactConnectionString(options.uri);
+    // Yanlis kullanici ya da parola beklemekle duzelmez: gecici hata gibi
+    // (SERVICE_UNAVAILABLE) gosterilirse sebebi ag sorunu sanilir (D14).
+    if (isAuthenticationError(error)) {
+      throw AppError.internal(`Mongo kimlik dogrulamasi reddedildi (kullanici/parola): ${uri}`, {
+        cause: error,
+      });
+    }
+    throw new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, `Mongo baglantisi kurulamadi: ${uri}`, {
+      cause: error,
+    });
   }
 
   const db = client.db(options.dbName);

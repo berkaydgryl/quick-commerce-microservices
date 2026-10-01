@@ -5,8 +5,9 @@
  *   pnpm --filter @getir/risk-service build
  *   pnpm --filter @getir/risk-service start      (kok .env varsa okunur)
  *
- * Depo MOCK ile secilir: MOCK=true -> bellek, aksi halde MONGO_URI zorunlu ve
- * degerlendirmeler `risk_events` koleksiyonuna yazilir.
+ * Depo MOCK ile secilir: MOCK=true -> bellek, aksi halde RISK_MONGO_URI zorunlu
+ * ve degerlendirmeler kendi veritabaninin (D14) `risk_events` koleksiyonuna
+ * yazilir.
  *
  * Dogrulama (grpcurl):
  *   grpcurl -plaintext -import-path packages/proto/proto \

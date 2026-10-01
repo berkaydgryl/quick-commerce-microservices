@@ -11,7 +11,7 @@ import (
 //
 // Gateway'in tamamini degil yalnizca seed'in ihtiyacini okur: veri yazmak icin
 // JWT sirri ya da gorsel adresi gerekmez. MOCK'a bakmaz: isi Mongo'ya yazmaktir,
-// MONGO_URI her zaman zorunludur (catalog seed'iyle ayni kural).
+// GATEWAY_MONGO_URI her zaman zorunludur (catalog seed'iyle ayni kural).
 type SeedConfig struct {
 	NodeEnv                     string
 	LogLevel                    slog.Level
@@ -48,7 +48,7 @@ func LoadSeed(getenv Getenv) (SeedConfig, error) {
 		NodeEnv:                     nodeEnv,
 		LogLevel:                    level,
 		MongoURI:                    mongoURI,
-		MongoDB:                     readString(getenv, "MONGO_DB", defaultMongoDB),
+		MongoDB:                     readString(getenv, "GATEWAY_MONGO_DB", defaultMongoDB),
 		MongoServerSelectionTimeout: mongoTimeout,
 	}, nil
 }

@@ -49,8 +49,9 @@ type Config struct {
 	// olarak saklar ("/img/cat/sut.png"); gateway (BFF) istemciye giden cevapta
 	// bu koku ekler. Sonunda "/" yoktur.
 	AssetBaseURL *url.URL
-	// MongoURI, gateway'in koleksiyonlari (users, sessions; T8.1) icin. MOCK'ta
-	// bos olabilir: kimlik kayitlari bellekte tutulur.
+	// MongoURI, gateway'in koleksiyonlari (users, sessions; T8.1) icin; kendi
+	// kullanicisini ve veritabanini tasir (GATEWAY_MONGO_URI, GATEWAY_MONGO_DB;
+	// D14). MOCK'ta bos olabilir: kimlik kayitlari bellekte tutulur.
 	MongoURI                    string
 	MongoDB                     string
 	MongoServerSelectionTimeout time.Duration
@@ -236,7 +237,7 @@ func Load(getenv Getenv) (Config, error) {
 		Services:                    services,
 		AssetBaseURL:                assetBaseURL,
 		MongoURI:                    mongoURI,
-		MongoDB:                     readString(getenv, "MONGO_DB", defaultMongoDB),
+		MongoDB:                     readString(getenv, "GATEWAY_MONGO_DB", defaultMongoDB),
 		MongoServerSelectionTimeout: mongoTimeout,
 		JWTSecret:                   jwtSecret,
 		JWTTTL:                      jwtTTL,

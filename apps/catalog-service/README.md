@@ -112,10 +112,10 @@ alanıdır; iki arama aynı eşleşme kuralını kullanır (T9.4: harf ve Türk�
 
 ## Veri kaynağı: Mongo ya da MOCK
 
-| `MOCK` | Kaynak                                                                | Mongo gerekir mi          |
-| ------ | --------------------------------------------------------------------- | ------------------------- |
-| `true` | Bellek okuyucuları (`infrastructure/memory`)                          | Hayır                     |
-| değil  | Mongo repository'leri (`markets`, `offers`, `products`, `categories`) | Evet, `MONGO_URI` zorunlu |
+| `MOCK` | Kaynak                                                                | Mongo gerekir mi                                                          |
+| ------ | --------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `true` | Bellek okuyucuları (`infrastructure/memory`)                          | Hayır                                                                     |
+| değil  | Mongo repository'leri (`markets`, `offers`, `products`, `categories`) | Evet, `CATALOG_MONGO_URI` zorunlu; kendi veritabanı `getir_catalog` (D14) |
 
 İki kaynak da **aynı demo verisinden** beslenir (`src/infrastructure/fixtures/`: 5 kategori,
 15 ortak ürün, 6 market, 71 teklif) ve **aynı sözleşme testlerinden** geçer
@@ -206,8 +206,7 @@ pnpm --filter @getir/catalog-service build
 MOCK=true pnpm --filter @getir/catalog-service start   # 50051, Mongo'suz
 
 pnpm infra:up && pnpm seed                             # ya da Mongo ile:
-MONGO_URI="mongodb://localhost:27017/getir?directConnection=true" \
-  pnpm --filter @getir/catalog-service start
+MOCK=false pnpm --filter @getir/catalog-service start  # adres kok .env'de (CATALOG_MONGO_URI)
 ```
 
 ```bash

@@ -56,9 +56,10 @@ cd apps/gateway
 # ASSET_BASE_URL ve JWT_SECRET zorunlu. MOCK=true: hesaplar ve tekrar kayitlari bellekte
 # (Mongo ve Redis gerekmez).
 ASSET_BASE_URL=http://localhost:5173 JWT_SECRET="$(openssl rand -hex 32)" MOCK=true go run ./cmd/gateway
-# Hesaplar Mongo'da, tekrar kayitlari Redis'te kalsin (docker compose'daki Mongo ve Redis):
+# Hesaplar Mongo'da, tekrar kayitlari Redis'te kalsin (docker compose'daki Mongo ve Redis).
+# Gateway'in kendi Mongo kullanicisi (D14): kok .env'deki GATEWAY_MONGO_URI ile ayni.
 ASSET_BASE_URL=http://localhost:5173 JWT_SECRET="$(openssl rand -hex 32)" \
-  MONGO_URI='mongodb://localhost:27017/getir?directConnection=true' \
+  GATEWAY_MONGO_URI='mongodb://gateway:gateway-dev-only@localhost:27017/?directConnection=true&authSource=admin' \
   REDIS_URL=redis://localhost:6379 go run ./cmd/gateway
 curl -s localhost:8080/v1/categories | jq
 curl -s localhost:8080/healthz | jq
@@ -85,7 +86,7 @@ docker build -f apps/gateway/Dockerfile -t getir/gateway .
 docker run --rm -p 8080:8080 \
   -e ASSET_BASE_URL=http://localhost:5173 \
   -e JWT_SECRET="$(openssl rand -hex 32)" \
-  -e MONGO_URI='mongodb://host.docker.internal:27017/getir?directConnection=true' \
+  -e GATEWAY_MONGO_URI='mongodb://gateway:gateway-dev-only@host.docker.internal:27017/?directConnection=true&authSource=admin' \
   -e REDIS_URL=redis://host.docker.internal:6379 \
   -e CATALOG_GRPC_ADDR=host.docker.internal:50051 \
   -e INVENTORY_GRPC_ADDR=host.docker.internal:50052 \
@@ -172,7 +173,8 @@ bilmez), `internal/authstore` (Mongo ve bellek depoları), `internal/httpapi` (`
   gelir. Şifre ve jetonlar günlüğe yazılmaz (testle sabit); `JWT_SECRET` `config.Secret`
   tipindedir, yanlışlıkla yazdırılsa bile `[gizli]` görünür.
 - **Depo seçimi:** `MOCK=true` ise hesaplar bellekte tutulur ve Mongo'ya hiç gidilmez (Node
-  servisleriyle aynı kural; süreç kapanınca hesaplar gider). Değilse `MONGO_URI` zorunludur,
+  servisleriyle aynı kural; süreç kapanınca hesaplar gider). Değilse `GATEWAY_MONGO_URI` zorunludur
+  (gateway'in kendi Mongo kullanıcısı, yalnızca kendi veritabanında `getir_gateway` yetkili; D14),
   açılışta ping atılır ve indeksler kurulur (`users.phone` benzersiz; `sessions.tokenHash`
   benzersiz, `sessions.expiresAt` TTL, `sessions.userId`). Mongo işlemleri de
   `GATEWAY_REQUEST_TIMEOUT_MS` ile sınırlıdır.
@@ -438,8 +440,8 @@ curl -s "localhost:8080/v1/search?lat=40.9885&lng=29.0262&q=s%C3%BCt" \
 | `JWT_SECRET`                 | **yok — zorunlu** | Erişim jetonunun imza sırrı, en az 32 bayt (`openssl rand -hex 32`); production'da örnek değer reddedilir |
 | `JWT_TTL`                    | `3600`            | Erişim jetonu ömrü (sn)                         |
 | `REFRESH_TTL`                | `1209600`         | Yenileme jetonu ömrü (sn, 14 gün; son kullanımdan itibaren) |
-| `MONGO_URI`                  | **MOCK değilse zorunlu** | `users` ve `sessions` koleksiyonları (T8.1) |
-| `MONGO_DB`                   | `getir`           | Veritabanı adı                                  |
+| `GATEWAY_MONGO_URI`          | **MOCK değilse zorunlu** | `users` ve `sessions` koleksiyonları (T8.1); gateway'in kendi kullanıcısı, yalnızca kendi veritabanında yetkili (D14) |
+| `GATEWAY_MONGO_DB`           | `getir_gateway`   | Veritabanı adı (D14 öncesi ortak `MONGO_URI` / `MONGO_DB` okunmaz) |
 | `MONGO_SERVER_SELECTION_TIMEOUT_MS` | `5000`     | Açılışta Mongo'yu bekleme sınırı (Node ile ortak) |
 | `REDIS_URL`                  | **MOCK değilse zorunlu** | `redis://` ya da `rediss://`; tekrar koruması kayıtları (T8.2). Ulaşılamazsa gateway açılmaz |
 | `REDIS_CONNECT_TIMEOUT_MS`   | `5000`            | Açılışta Redis'i bekleme sınırı (Node ile ortak) |

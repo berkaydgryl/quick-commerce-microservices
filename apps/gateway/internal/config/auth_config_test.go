@@ -16,7 +16,7 @@ func TestAuthDefaults(t *testing.T) {
 	if cfg.JWTTTL != time.Hour || cfg.RefreshTTL != 14*24*time.Hour {
 		t.Errorf("sureler .env.example varsayilanlari olmali: %v %v", cfg.JWTTTL, cfg.RefreshTTL)
 	}
-	if cfg.MongoURI != testMongoURI || cfg.MongoDB != "getir" || cfg.MongoServerSelectionTimeout != 5*time.Second {
+	if cfg.MongoURI != testMongoURI || cfg.MongoDB != "getir_gateway" || cfg.MongoServerSelectionTimeout != 5*time.Second {
 		t.Errorf("mongo ayarlari: %q %q %v", cfg.MongoURI, cfg.MongoDB, cfg.MongoServerSelectionTimeout)
 	}
 	if string(cfg.JWTSecret.Bytes()) != testJWTSecret {
@@ -25,7 +25,7 @@ func TestAuthDefaults(t *testing.T) {
 }
 
 func TestAuthValuesAreRead(t *testing.T) {
-	cfg, err := Load(minimalEnv(map[string]string{"JWT_TTL": "900", "REFRESH_TTL": "86400", "MONGO_DB": "getir_test"}))
+	cfg, err := Load(minimalEnv(map[string]string{"JWT_TTL": "900", "REFRESH_TTL": "86400", "GATEWAY_MONGO_DB": "getir_test"}))
 	if err != nil {
 		t.Fatalf("hata beklenmiyordu: %v", err)
 	}
@@ -64,12 +64,26 @@ func TestExampleSecretIsAllowedOutsideProduction(t *testing.T) {
 }
 
 func TestMongoURIRequiredOutsideMock(t *testing.T) {
-	if _, err := Load(minimalEnv(map[string]string{"MONGO_URI": ""})); err == nil || !strings.Contains(err.Error(), "MONGO_URI") {
-		t.Errorf("MOCK disinda MONGO_URI zorunlu olmali: %v", err)
+	if _, err := Load(minimalEnv(map[string]string{"GATEWAY_MONGO_URI": ""})); err == nil || !strings.Contains(err.Error(), "GATEWAY_MONGO_URI") {
+		t.Errorf("MOCK disinda GATEWAY_MONGO_URI zorunlu olmali: %v", err)
 	}
-	cfg, err := Load(minimalEnv(map[string]string{"MONGO_URI": "", "MOCK": "true"}))
+	cfg, err := Load(minimalEnv(map[string]string{"GATEWAY_MONGO_URI": "", "MOCK": "true"}))
 	if err != nil || cfg.MongoURI != "" {
 		t.Errorf("MOCK'ta Mongo'suz acilis kabul edilmeli: %v", err)
+	}
+}
+
+func TestSharedMongoVariablesAreNotRead(t *testing.T) {
+	// D14: her servisin kendi kullanicisi var. D14 oncesi .env'deki ortak
+	// MONGO_URI / MONGO_DB okunursa gateway baska bir kullaniciyla ya da ortak
+	// veritabanina sessizce baglanirdi; acilis durmali.
+	env := map[string]string{"GATEWAY_MONGO_URI": "", "MONGO_URI": testMongoURI, "MONGO_DB": "getir"}
+	if _, err := Load(minimalEnv(env)); err == nil || !strings.Contains(err.Error(), "GATEWAY_MONGO_URI") {
+		t.Errorf("ortak MONGO_URI kabul edilmemeli: %v", err)
+	}
+	cfg, err := Load(minimalEnv(map[string]string{"MONGO_DB": "getir"}))
+	if err != nil || cfg.MongoDB != "getir_gateway" {
+		t.Errorf("ortak MONGO_DB okunmamali: %q %v", cfg.MongoDB, err)
 	}
 }
 

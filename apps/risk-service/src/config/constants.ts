@@ -9,6 +9,12 @@ export const RISK_SERVICE_FULL_NAME = 'getir.risk.v1.RiskService';
 export const DEFAULT_RISK_GRPC_PORT = 50_055;
 
 /**
+ * Servisin kendi veritabani (D14, ADR-05): RISK_MONGO_DB verilmezse.
+ * Kullanicisi (RISK_MONGO_URI) yalnizca burada yetkilidir.
+ */
+export const DEFAULT_MONGO_DB = 'getir_risk';
+
+/**
  * Tek bir kuralin en fazla bekleyebilecegi sure. Evaluate checkout'un kritik
  * yolundadir; takilan bir kural siparisi bekletmemeli. Suresi dolan kural
  * hata gibi islenir: 0 puan + uyari, degerlendirme devam eder.

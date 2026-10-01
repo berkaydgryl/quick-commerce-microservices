@@ -19,8 +19,8 @@ const testAssetBase = "http://localhost:5173"
 // testJWTSecret, zorunlu JWT_SECRET icin 32 baytlik test degeri.
 const testJWTSecret = "test-sirri-en-az-otuz-iki-bayt-uzun!"
 
-// testMongoURI, MOCK disinda zorunlu MONGO_URI icin deger (baglanti kurulmaz).
-const testMongoURI = "mongodb://localhost:27017/getir?directConnection=true"
+// testMongoURI, MOCK disinda zorunlu GATEWAY_MONGO_URI icin deger (baglanti kurulmaz).
+const testMongoURI = "mongodb://gateway:test@localhost:27017/?directConnection=true&authSource=admin"
 
 // testRedisURL, MOCK disinda zorunlu REDIS_URL icin deger (baglanti kurulmaz).
 const testRedisURL = "redis://localhost:6379"
@@ -29,10 +29,10 @@ const testRedisURL = "redis://localhost:6379"
 // degerlerini yazar.
 func minimalEnv(overrides map[string]string) Getenv {
 	values := map[string]string{
-		"ASSET_BASE_URL": testAssetBase,
-		"MONGO_URI":      testMongoURI,
-		"JWT_SECRET":     testJWTSecret,
-		"REDIS_URL":      testRedisURL,
+		"ASSET_BASE_URL":    testAssetBase,
+		"GATEWAY_MONGO_URI": testMongoURI,
+		"JWT_SECRET":        testJWTSecret,
+		"REDIS_URL":         testRedisURL,
 	}
 	for key, value := range overrides {
 		values[key] = value
