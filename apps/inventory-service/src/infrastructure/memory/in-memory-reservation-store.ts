@@ -1,20 +1,23 @@
 /**
- * Bellekteki rezervasyon (MOCK=true, B16): reserve.lua ve release.lua'nin AYNI
- * kurallari, Redis olmadan. Butun adimlar tek senkron blokta kosar: arada
+ * Bellekteki rezervasyon (MOCK=true, B16): reserve.lua, release.lua ve
+ * commit.lua'nin AYNI kurallari, Redis olmadan. Butun adimlar tek senkron blokta kosar: arada
  * baska cagri calisamaz, bu yuzden bellekte de kismi rezervasyon ya da cift
  * birakma olmaz. Redis uygulamasi ayni senaryolardan gecer
  * (test/support/reservation-store-contract.ts).
  *
  * Sure dolumu: rezervasyon kaydi bitisten `holdAfterExpiryMs` sonrasina,
  * kullanici kilidi bitise kadar yasar (Redis'teki PEXPIRE ve PX ile ayni).
- * Suresi dolanin sayaclari geri vermek supurucunun isidir (T10.3). Birakilan
- * kaydin izi `settledTtlMs` boyunca ya da forgetSettled'a kadar durur (ADR-18).
+ * Suresi dolanin sayaclari geri vermek supurucunun isidir (T10.3). Birakilan ya
+ * da onaylanan kaydin izi `settledTtlMs` boyunca ya da forgetSettled'a kadar
+ * durur (ADR-18).
  */
 
 import { AppError } from '@getir/core';
 
 import { duplicateSku } from '../../domain/reservation.js';
 import type {
+  CommitCommand,
+  CommitOutcome,
   ReleaseCommand,
   ReleaseOutcome,
   ReservationLine,
@@ -22,7 +25,9 @@ import type {
   ReservationStore,
   ReserveCommand,
   ReserveOutcome,
+  SettledReservation,
 } from '../../domain/reservation.js';
+import { COMMIT_REASON } from '../../domain/stock-ledger.js';
 
 import { counterKey } from './in-memory-counter-key.js';
 
@@ -74,6 +79,10 @@ export class InMemoryReservationStore implements ReservationStore {
 
   release(command: ReleaseCommand): Promise<ReleaseOutcome> {
     return Promise.resolve(this.releaseNow(command));
+  }
+
+  commit(command: CommitCommand): Promise<CommitOutcome> {
+    return Promise.resolve(this.commitNow(command));
   }
 
   forgetSettled(marketId: string, orderId: string): Promise<void> {
@@ -133,20 +142,10 @@ export class InMemoryReservationStore implements ReservationStore {
     const key = reservationKey(marketId, orderId);
     const existing = this.reservations.get(key);
 
-    // 0. Daha once sonuclanmis: iz oldugu gibi doner.
-    if (existing?.settled !== undefined && this.isStored(existing, nowMs)) {
-      return {
-        status: 'settled',
-        settlement: existing.settled.settlement,
-        reason: existing.settled.reason,
-        settledAt: existing.settled.at,
-        lines: sortedLines(existing.lines),
-      };
-    }
-
-    // 1. Aktif rezervasyon yok (hic olmamis ya da kaydi coktan dusmus).
-    if (existing === undefined || !this.isStored(existing, nowMs)) {
-      return { status: 'absent' };
+    // 0-1. Daha once sonuclanmis (iz) ya da aktif rezervasyon yok.
+    const done = this.settledOrAbsent(existing, nowMs);
+    if (done !== undefined || existing === undefined) {
+      return done ?? { status: 'absent' };
     }
 
     // 2. Adetleri geri ekle; sayaci olmayan kalem atlanir (sayac yaratilmaz).
@@ -170,6 +169,48 @@ export class InMemoryReservationStore implements ReservationStore {
       settled: { settlement: 'released', reason, at: nowMs },
     });
     return { status: 'released', skippedCounters, lines: sortedLines(existing.lines) };
+  }
+
+  private commitNow(command: CommitCommand): CommitOutcome {
+    const { orderId, marketId, nowMs } = command;
+    const key = reservationKey(marketId, orderId);
+    const existing = this.reservations.get(key);
+
+    const done = this.settledOrAbsent(existing, nowMs);
+    if (done !== undefined || existing === undefined) {
+      return done ?? { status: 'absent' };
+    }
+
+    // Sayaclara dokunulmaz (adet rezervasyonda dustu); kilit yalnizca BU
+    // siparisinse silinir, kayit iz olarak kalir.
+    if (this.userLocks.get(existing.userId)?.orderId === orderId) {
+      this.userLocks.delete(existing.userId);
+    }
+    this.reservations.set(key, {
+      ...existing,
+      settled: { settlement: 'committed', reason: COMMIT_REASON, at: nowMs },
+    });
+    return { status: 'committed', lines: sortedLines(existing.lines) };
+  }
+
+  /** Iz varsa iz, kayit hic yoksa ya da dusmusse absent; aktif kayitta undefined. */
+  private settledOrAbsent(
+    existing: StoredReservation | undefined,
+    nowMs: number,
+  ): SettledReservation | { readonly status: 'absent' } | undefined {
+    if (existing === undefined || !this.isStored(existing, nowMs)) {
+      return { status: 'absent' };
+    }
+    if (existing.settled !== undefined) {
+      return {
+        status: 'settled',
+        settlement: existing.settled.settlement,
+        reason: existing.settled.reason,
+        settledAt: existing.settled.at,
+        lines: sortedLines(existing.lines),
+      };
+    }
+    return undefined;
   }
 
   /** Kayit hala duruyor mu (Redis'te hash'in TTL'i dolmadi mi)? */

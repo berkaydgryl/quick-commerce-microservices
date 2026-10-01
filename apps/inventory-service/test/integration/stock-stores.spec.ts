@@ -11,9 +11,13 @@
  *   7. Stok defteri (T10.2, ADR-18): acilis kayitlari, defter = onHand, cift
  *      kayit yok (B14); gercek gRPC'de Release ve yarida kalan defterin
  *      tekrar gelen istekle tamamlanmasi.
+ *   8. Onay (T10.2 PR 2): eldeki adet ve surum Mongo'da duser, defterde -adet;
+ *      eksiye dusen adet; P3 (bekleyerek yeniden deneme, denemeler bitince
+ *      CONFLICT ve ayni istegin tekrariyla tamamlanma); defter denetimi (B24).
  */
 
 import { AppError, ERROR_CODES, GRPC_STATUS, silentLogger } from '@getir/core';
+import type { Logger } from '@getir/core';
 import { recordingLogger } from '@getir/core/testing';
 import type { LogLine } from '@getir/core/testing';
 import { inventoryV1 } from '@getir/proto';
@@ -23,12 +27,14 @@ import { MongoDBContainer } from '@testcontainers/mongodb';
 import type { StartedMongoDBContainer } from '@testcontainers/mongodb';
 import { RedisContainer } from '@testcontainers/redis';
 import type { StartedRedisContainer } from '@testcontainers/redis';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { MongoClient } from 'mongodb';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createCheckLedger } from '../../src/application/check-ledger.js';
 import { createSeedCounters } from '../../src/application/seed-counters.js';
 import { createSeedStock } from '../../src/application/seed-stock.js';
 import type { StockPorts } from '../../src/domain/stock-ports.js';
-import { releaseEntries } from '../../src/domain/stock-ledger.js';
+import { commitEntries, releaseEntries } from '../../src/domain/stock-ledger.js';
 import { buildInventoryService } from '../../src/bootstrap.js';
 import type { StockStoresEnv } from '../../src/config/env.js';
 import { STOCK_LEVELS } from '../../src/infrastructure/fixtures/stock-levels.js';
@@ -37,6 +43,7 @@ import type {
   StockDocument,
   StockLedgerDocument,
 } from '../../src/infrastructure/mongo/documents.js';
+import { MongoStockCommitter } from '../../src/infrastructure/mongo/mongo-stock-committer.js';
 import { MongoStockSeedWriter } from '../../src/infrastructure/mongo/mongo-stock-seed-writer.js';
 import { openStockSource } from '../../src/infrastructure/stock-source.js';
 import type { StockStores } from '../../src/infrastructure/stock-stores.js';
@@ -471,22 +478,24 @@ describe('stok defteri (T10.2, ADR-18)', () => {
     expect(await ledgerMismatches()).toEqual([]);
   });
 
-  async function serve(stock: StockPorts) {
+  async function serve(stock: StockPorts, logger: Logger = silentLogger) {
     const server = await startTestGrpcServer({
       serviceName: 'inventory-defter-it',
-      services: [buildInventoryService({ stock })],
+      services: [buildInventoryService({ stock, logger })],
     });
-    const reserve = () =>
+    const reserve = (
+      items: readonly { sku: string; quantity: number }[] = [
+        { sku: 'SUT-1L', quantity: 2 },
+        { sku: 'PEYNIR-500', quantity: 1 },
+      ],
+    ) =>
       server.call(
         service.reserve,
         inventoryV1.ReserveRequest.fromPartial({
           orderId: ORDER,
           marketId: MIGROS,
           userId: USER,
-          items: [
-            { sku: 'SUT-1L', quantity: 2 },
-            { sku: 'PEYNIR-500', quantity: 1 },
-          ],
+          items: [...items],
           ttlSeconds: 600,
         }),
       );
@@ -499,7 +508,12 @@ describe('stok defteri (T10.2, ADR-18)', () => {
           reason: 'user_cancelled',
         }),
       );
-    return { server, reserve, release };
+    const commit = () =>
+      server.call(
+        service.commit,
+        inventoryV1.CommitRequest.fromPartial({ orderId: ORDER, marketId: MIGROS }),
+      );
+    return { server, reserve, release, commit };
   }
 
   const counter = async (sku: string) =>
@@ -568,5 +582,199 @@ describe('stok defteri (T10.2, ADR-18)', () => {
       await server.stop();
       await source.close();
     }
+  });
+
+  // ---------- onay (T10.2 PR 2) ----------
+
+  const {
+    RESERVATION_OUTCOME_APPLIED,
+    RESERVATION_OUTCOME_ALREADY_APPLIED,
+    RESERVATION_OUTCOME_NOT_FOUND,
+  } = inventoryV1.ReservationOutcome;
+  const stockDoc = (sku: string) =>
+    stores.mongo.db.collection<StockDocument>(COLLECTIONS.STOCK).findOne({ marketId: MIGROS, sku });
+
+  it('gercek gRPC: Commit APPLIED; eldeki adet ve surum duser, defterde -adet, sayaclar AYNI; tekrar ALREADY_APPLIED, birakma NOT_FOUND', async () => {
+    const source = await openStockSource(env, silentLogger);
+    const { server, reserve, release, commit } = await serve(source);
+    try {
+      await reserve();
+      const before = await stockDoc('SUT-1L');
+
+      const first = await commit();
+      const again = await commit();
+      const releaseAfter = await release();
+
+      expect(first.response?.outcome).toBe(RESERVATION_OUTCOME_APPLIED);
+      expect(again.response?.outcome).toBe(RESERVATION_OUTCOME_ALREADY_APPLIED);
+      expect(releaseAfter.response?.outcome).toBe(RESERVATION_OUTCOME_NOT_FOUND);
+      const after = await stockDoc('SUT-1L');
+      expect(after?.onHand).toBe(onHandOf('SUT-1L') - 2);
+      expect(after?.version).toBe((before?.version ?? 0) + 1);
+      expect(await counter('SUT-1L')).toBe(onHandOf('SUT-1L') - 2);
+      expect(await ledgerCollection().findOne({ orderId: ORDER, sku: 'SUT-1L' })).toMatchObject({
+        kind: 'commit',
+        delta: -2,
+        quantity: 2,
+        reason: 'order_paid',
+      });
+      expect(await ledgerCollection().countDocuments({ orderId: ORDER })).toBe(2);
+      expect(await ledgerMismatches()).toEqual([]);
+      expect(await stores.redis.redis.exists(reservationKey(MIGROS, ORDER))).toBe(0);
+    } finally {
+      await server.stop();
+      await source.close();
+    }
+  });
+
+  it('eldeki adet eksiye duserse onay YINE yapilir ve UYARI yazilir; defter yine onHand ile tutar', async () => {
+    const lines: LogLine[] = [];
+    const source = await openStockSource(env, silentLogger);
+    const { server, reserve, commit } = await serve(source, recordingLogger(lines));
+    try {
+      // Redis sayaci eldeki adetten fazla (kayma izi): rezervasyon eldekini asar.
+      await stores.redis.redis.set(stockAvailKey(MIGROS, 'PEYNIR-500'), '10');
+      expect((await reserve([{ sku: 'PEYNIR-500', quantity: 5 }])).error).toBeUndefined();
+
+      expect((await commit()).response?.outcome).toBe(RESERVATION_OUTCOME_APPLIED);
+
+      expect((await stockDoc('PEYNIR-500'))?.onHand).toBe(onHandOf('PEYNIR-500') - 5);
+      expect(
+        lines
+          .filter((line) => line.level === 'warn' && line.message.includes('eksiye dustu'))
+          .map((line) => [line.fields['sku'], line.fields['onHand']]),
+      ).toEqual([['PEYNIR-500', onHandOf('PEYNIR-500') - 5]]);
+      expect(await ledgerMismatches()).toEqual([]);
+    } finally {
+      await server.stop();
+      await source.close();
+    }
+  });
+
+  it("onay yazimi tekrar guvenli: ayni kayitlarla ikinci kez adet DUSMEZ (defter ayni transaction'da)", async () => {
+    const committer = new MongoStockCommitter(
+      stores.mongo,
+      stores.repository,
+      stores.ledger,
+      silentLogger,
+    );
+    const entries = commitEntries({
+      marketId: MIGROS,
+      orderId: ORDER,
+      lines: [{ sku: 'SUT-1L', quantity: 2 }],
+      at: new Date(),
+    });
+
+    expect(await committer.commit(entries)).toEqual({ written: 1, negative: [] });
+    expect(await committer.commit(entries)).toEqual({ written: 0, negative: [] });
+
+    expect((await stockDoc('SUT-1L'))?.onHand).toBe(onHandOf('SUT-1L') - 2);
+    expect(await ledgerMismatches()).toEqual([]);
+  });
+
+  /** Stok belgesine yazip COMMIT ETMEDEN bekleyen ikinci istemcinin transaction'i (eldeki adede dokunmaz). */
+  async function holdStock(sku: string) {
+    const other = await MongoClient.connect(env.mongo.MONGO_URI);
+    const holder = other.startSession();
+    holder.startTransaction();
+    await other
+      .db(DB_NAME)
+      .collection<StockDocument>(COLLECTIONS.STOCK)
+      .updateOne(
+        { marketId: MIGROS, sku },
+        { $set: { updatedAt: new Date() } },
+        { session: holder },
+      );
+    return {
+      commit: () => holder.commitTransaction(),
+      abort: () => holder.abortTransaction(),
+      close: async () => {
+        await holder.endSession();
+        await other.close();
+      },
+    };
+  }
+
+  it('P3: es zamanli yazimda onay BEKLEYEREK yeniden dener ve basarir', async () => {
+    const lines: LogLine[] = [];
+    const committer = new MongoStockCommitter(
+      stores.mongo,
+      stores.repository,
+      stores.ledger,
+      recordingLogger(lines),
+    );
+    const held = await holdStock('SUT-1L');
+    try {
+      const writing = committer.commit(
+        commitEntries({
+          marketId: MIGROS,
+          orderId: ORDER,
+          lines: [{ sku: 'SUT-1L', quantity: 2 }],
+          at: new Date(),
+        }),
+      );
+      await vi.waitFor(() => {
+        expect(lines.some((line) => line.message.includes('yeniden deneniyor'))).toBe(true);
+      });
+      await held.commit();
+
+      await expect(writing).resolves.toEqual({ written: 1, negative: [] });
+      expect((await stockDoc('SUT-1L'))?.onHand).toBe(onHandOf('SUT-1L') - 2);
+      expect(await ledgerMismatches()).toEqual([]);
+    } finally {
+      await held.close();
+    }
+  });
+
+  it('P3: denemeler biterse CONFLICT; Redis izi durur, Mongo DEGISMEZ; ayni istegin tekrari onayi tamamlar (stok bir kez)', async () => {
+    const source = await openStockSource(env, silentLogger);
+    const { server, reserve, commit } = await serve(source);
+    const held = await holdStock('SUT-1L');
+    try {
+      await reserve();
+
+      const failed = await commit();
+      expect(failed.error?.code).toBe(GRPC_STATUS.ABORTED);
+      expect(appErrorOf(failed.error)?.code).toBe(ERROR_CODES.CONFLICT);
+      expect(await stores.redis.redis.hget(reservationKey(MIGROS, ORDER), 'state')).toBe(
+        'committed',
+      );
+      expect(await ledgerCollection().countDocuments({ orderId: ORDER })).toBe(0);
+      expect((await stockDoc('PEYNIR-500'))?.onHand).toBe(onHandOf('PEYNIR-500'));
+
+      await held.abort();
+      const retried = await commit();
+
+      expect(retried.response?.outcome).toBe(RESERVATION_OUTCOME_ALREADY_APPLIED);
+      expect((await stockDoc('SUT-1L'))?.onHand).toBe(onHandOf('SUT-1L') - 2);
+      expect((await stockDoc('PEYNIR-500'))?.onHand).toBe(onHandOf('PEYNIR-500') - 1);
+      expect(await ledgerMismatches()).toEqual([]);
+    } finally {
+      await held.close();
+      await server.stop();
+      await source.close();
+    }
+  });
+
+  it('defter denetimi (B24): seed sonrasi fark yok; defterden gecmeyen adet degisikligi raporlanir', async () => {
+    const check = createCheckLedger({
+      levels: stores.repository,
+      ledger: stores.ledger,
+      batchSize: 20,
+    });
+    expect(await check()).toEqual({ checked: 71, mismatches: [] });
+
+    await stores.mongo.db
+      .collection<StockDocument>(COLLECTIONS.STOCK)
+      .updateOne({ marketId: MIGROS, sku: 'SUT-1L' }, { $inc: { onHand: -1 } });
+
+    expect((await check()).mismatches).toEqual([
+      {
+        marketId: MIGROS,
+        sku: 'SUT-1L',
+        onHand: onHandOf('SUT-1L') - 1,
+        ledger: onHandOf('SUT-1L'),
+      },
+    ]);
   });
 });

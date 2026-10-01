@@ -14,17 +14,22 @@ import {
   OPENING_REASON,
   settlementOfKind,
 } from '../../domain/stock-ledger.js';
-import type { LedgerEntry, StockLedger } from '../../domain/stock-ledger.js';
+import type {
+  LedgerBalance,
+  LedgerBalanceSource,
+  LedgerEntry,
+  StockLedger,
+} from '../../domain/stock-ledger.js';
 import type { StockLevel } from '../../domain/stock.js';
 import { COLLECTIONS } from './documents.js';
 import type { StockLedgerDocument } from './documents.js';
 
 /** Siparisin sonucunu soyleyen turler (acilis bir siparis sonucu degildir). */
-const SETTLEMENT_KINDS = [LEDGER_KINDS.RELEASE];
+const SETTLEMENT_KINDS = [LEDGER_KINDS.RELEASE, LEDGER_KINDS.COMMIT];
 
 export class StockLedgerRepository
   extends MongoRepository<StockLedgerDocument>
-  implements StockLedger
+  implements StockLedger, LedgerBalanceSource
 {
   constructor(db: Db) {
     super(db, COLLECTIONS.STOCK_LEDGER);
@@ -58,6 +63,32 @@ export class StockLedgerRepository
       };
     });
     await this.run('record', () => this.collection.bulkWrite(operations, { ordered: false }));
+  }
+
+  /**
+   * Kaydi yoksa yazar ve true doner; varsa DOKUNMAZ ve false doner. Onay bunu
+   * eldeki adetle ayni transaction'da kullanir: kaydi olan kalemin adedi
+   * tekrar dusmez (ADR-18).
+   */
+  async insertIfAbsent(entry: LedgerEntry, options: SessionOption = {}): Promise<boolean> {
+    const { _id, ...fields } = toDocument(entry);
+    const session = options.session === undefined ? {} : { session: options.session };
+    const result = await this.run('insertIfAbsent', () =>
+      this.collection.updateOne({ _id }, { $setOnInsert: fields }, { upsert: true, ...session }),
+    );
+    return result.upsertedCount === 1;
+  }
+
+  /** Market x SKU basina delta toplami (defter = onHand denetimi, B24). */
+  async balances(): Promise<readonly LedgerBalance[]> {
+    return this.run('balances', () =>
+      this.collection
+        .aggregate<LedgerBalance>([
+          { $group: { _id: { marketId: '$marketId', sku: '$sku' }, total: { $sum: '$delta' } } },
+          { $project: { _id: 0, marketId: '$_id.marketId', sku: '$_id.sku', total: 1 } },
+        ])
+        .toArray(),
+    );
   }
 
   async settlementOf(

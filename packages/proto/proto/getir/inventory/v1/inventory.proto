@@ -47,7 +47,18 @@ service InventoryService {
   // Sepetin tamamini tek atomik adimda rezerve eder.
   rpc Reserve(ReserveRequest) returns (ReserveResponse);
 
-  // Rezerve edilmis adedi kalici dususe cevirir (odeme onaylandiktan sonra).
+  // Rezerve edilmis adedi kalici dususe cevirir (odeme onaylandiktan sonra):
+  // stok defterine kalem basina -adet yazilir ve eldeki adet AYNI transaction'da
+  // duser. Satilabilir adet (sayac) degismez; rezervasyonda zaten dusmustu.
+  //
+  // Sonuc hata degil ReservationOutcome'dur: APPLIED (bu cagri onayladi),
+  // ALREADY_APPLIED (daha once onaylanmisti; tekrar guvenlidir), NOT_FOUND
+  // (onaylanacak rezervasyon yok: birakilmis, suresi dolup geri alinmis ya da
+  // hic olmamis; order iade eder, B20). Eldeki adet eksiye duserse onay yine
+  // yapilir (odeme alinmistir) ve uyari yazilir. Ayni stok kaydina es zamanli
+  // yazimda en cok 3 kez beklemeli yeniden denenir (roadmap P3); denemeler
+  // biterse ABORTED / CONFLICT, Mongo erisilemezse UNAVAILABLE doner. Ikisinde
+  // de ayni istegin tekrari onayi tamamlar ve ALREADY_APPLIED alir.
   rpc Commit(CommitRequest) returns (CommitResponse);
 
   // Rezervasyonu serbest birakir ve sayaclari geri artirir; stok defterine

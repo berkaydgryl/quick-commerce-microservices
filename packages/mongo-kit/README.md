@@ -28,6 +28,20 @@ tekrar denemede geri çağrı güncel veriyi görür (örneğin sürüm koşulu 
 Deneme süresi dolarsa `WriteConflict` yine `CONFLICT` olarak döner. Geri çağrı bu yüzden
 **tekrar çalıştırılabilir** yazılmalıdır (transaction'ın içinde yan etkisiz).
 
+**Sınırlı yeniden deneme (roadmap P3, T10.2).** Sıcak bir kayda eşzamanlı yazımda sürücünün
+kendi denemesi beklemesizdir ve süre dolana kadar (120 sn) sürer. P3'ün kuralı "en çok 3 deneme,
+jitter'lı üstel bekleme"dir; bunu isteyen çağıran sürücünün denemesini kapatır ve yardımcıyı kullanır:
+
+```ts
+await retryOnConflict(
+  () => mongo.withTransaction(work, { retryTransientErrors: false }), // kaybeden hemen CONFLICT alır
+); // 50, 100, 200 ms (±%50) bekleyerek en çok 3 kez daha; sonra son CONFLICT
+```
+
+Yardımcı karar vermez: yalnızca `CONFLICT`'i yeniden dener, diğer hata hemen geçer; denemeler
+bitince ne yapılacağı (telafi) çağıranın işidir. İş her denemede baştan çalışır, bu yüzden
+güncel veriyi yeniden okumalı ve yan etkisiz olmalıdır. İlk kullanan stok onayı (T10.2).
+
 ## Repository tabanı
 
 ```ts

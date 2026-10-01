@@ -2,6 +2,7 @@
  * `stock` koleksiyonunun repository'si (ADR-05: yalnizca stok servisinde).
  */
 
+import { AppError } from '@getir/core';
 import type { SessionOption } from '@getir/mongo-kit';
 import { MongoRepository } from '@getir/mongo-kit';
 import type { Db, IndexDescription } from 'mongodb';
@@ -45,6 +46,40 @@ export class StockRepository extends MongoRepository<StockDocument> implements S
       updatedAt: at,
     }));
     await this.run('replaceAll.insert', () => this.collection.insertMany(documents, session));
+  }
+
+  /**
+   * Eldeki adedi dusurur (onay, T10.2 PR 2). IYIMSER KILIT (roadmap veri modeli):
+   * okunan surum yazimda kosuldur; eslesmezse CONFLICT (P3: cagiran sinirli
+   * yeniden dener). Eksiye dusmek reddedilmez: onay yapilmistir, iz gizlenmez.
+   * @returns Yeni eldeki adet.
+   */
+  async decrementOnHand(
+    marketId: string,
+    sku: string,
+    quantity: number,
+    at: Date,
+    options: SessionOption = {},
+  ): Promise<number> {
+    const current = await this.findById(stockDocumentId(marketId, sku), options);
+    if (current === null) {
+      throw AppError.internal('onaylanan kalemin stok kaydi yok', { details: { marketId, sku } });
+    }
+    const onHand = current.onHand - quantity;
+    const session = options.session === undefined ? {} : { session: options.session };
+    const result = await this.run('decrementOnHand', () =>
+      this.collection.updateOne(
+        { _id: current._id, version: current.version },
+        { $set: { onHand, updatedAt: at }, $inc: { version: 1 } },
+        session,
+      ),
+    );
+    if (result.matchedCount === 0) {
+      throw AppError.conflict('Stok kaydi ayni anda degisti', {
+        details: { marketId, sku, version: current.version },
+      });
+    }
+    return onHand;
   }
 
   /**

@@ -6,7 +6,7 @@
  */
 
 import type { ReservationStore } from './reservation.js';
-import type { StockLedger } from './stock-ledger.js';
+import type { StockCommitter, StockLedger } from './stock-ledger.js';
 import type { CounterRecovery, StockCounterReader } from './stock.js';
 
 export interface StockPorts {
@@ -14,6 +14,8 @@ export interface StockPorts {
   readonly reservations: ReservationStore;
   /** Stok defteri (T10.2): Mongo'da `stock_ledger`, MOCK'ta bellek (B16). */
   readonly ledger: StockLedger;
+  /** Onayin kalici yazimi: defter + eldeki adet, tek transaction (T10.2 PR 2). */
+  readonly committer: StockCommitter;
   /**
    * Sayac bulunamayinca: Redis bosalmissa sayaclari yeniden kurar (T10.1 PR 2,
    * ADR-17). Bellekte bosalma yoktur, hep false.

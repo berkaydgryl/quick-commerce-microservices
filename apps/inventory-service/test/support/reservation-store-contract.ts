@@ -1,6 +1,6 @@
 /**
- * Rezervasyon sozlesmesi (T10.1, birakma T10.2): bellek (MOCK) ve Redis
- * (reserve.lua, release.lua) uygulamalari AYNI senaryolardan gecer.
+ * Rezervasyon sozlesmesi (T10.1; birakma ve onay T10.2): bellek (MOCK) ve Redis
+ * (reserve.lua, release.lua, commit.lua) uygulamalari AYNI senaryolardan gecer.
  * Bellekteki birim testinde, Redis entegrasyon testinde kosar.
  *
  * Saat GERCEKTIR: Redis'te kullanici kilidi ve kayit gercek sureyle (PX,
@@ -287,6 +287,58 @@ export function describeReservationStoreContract(
         status: 'user-has-active',
         activeOrderId: orderId(2),
       });
+    });
+
+    const commit = (order: number, marketId = MARKET) =>
+      stock.reservations.commit({ orderId: orderId(order), marketId, nowMs: systemClock.now() });
+
+    it('onay: sayaclara DOKUNULMAZ (adet zaten dustu), kullanici kilidi kalkar; kalemler SKU sirasinda', async () => {
+      await reserve(1, 1, [
+        { sku: 'SUT-1L', quantity: 2 },
+        { sku: 'KOLA-1L', quantity: 1 },
+      ]);
+
+      expect(await commit(1)).toEqual({
+        status: 'committed',
+        lines: [
+          { sku: 'KOLA-1L', quantity: 1 },
+          { sku: 'SUT-1L', quantity: 2 },
+        ],
+      });
+      expect(await counts(MARKET, ['SUT-1L', 'KOLA-1L'])).toEqual({ 'SUT-1L': 3, 'KOLA-1L': 2 });
+      expect((await reserve(2, 1, [{ sku: 'SUT-1L', quantity: 1 }])).status).toBe('reserved');
+    });
+
+    it('ikinci onay: iz (settled, committed) doner; iz silinince absent', async () => {
+      await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 2 }]);
+      await commit(1);
+
+      expect(await commit(1)).toMatchObject({
+        status: 'settled',
+        settlement: 'committed',
+        lines: [{ sku: 'SUT-1L', quantity: 2 }],
+      });
+      await stock.reservations.forgetSettled(MARKET, orderId(1));
+      expect(await commit(1)).toEqual({ status: 'absent' });
+    });
+
+    it('onaylanan rezervasyon birakilamaz: birakma izi (committed) gorur, sayaclar ARTMAZ', async () => {
+      await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 2 }]);
+      await commit(1);
+
+      expect(await release(1)).toMatchObject({ status: 'settled', settlement: 'committed' });
+      expect(await counts(MARKET, ['SUT-1L'])).toEqual({ 'SUT-1L': 3 });
+    });
+
+    it('birakilan rezervasyon onaylanamaz: onay izi (released) gorur; hic olmamis ve baska market absent', async () => {
+      await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 2 }]);
+      await release(1);
+
+      expect(await commit(1)).toMatchObject({ status: 'settled', settlement: 'released' });
+      expect(await counts(MARKET, ['SUT-1L'])).toEqual({ 'SUT-1L': 5 });
+      await reserve(2, 2, [{ sku: 'KOLA-1L', quantity: 1 }]);
+      expect(await commit(2, OTHER_MARKET)).toEqual({ status: 'absent' });
+      expect(await commit(9)).toEqual({ status: 'absent' });
     });
 
     it('tekrar eden SKU depoya ulasirsa INTERNAL; hicbir sey yazilmaz (fazla satis olurdu)', async () => {

@@ -52,17 +52,24 @@ export const RESERVATION_TTL_MAX_SECONDS = 900;
 export const RESERVATION_HOLD_AFTER_EXPIRY_MS = 60_000;
 
 /**
- * Sonuclanan (birakilan) rezervasyonun Redis'teki izinin en uzun omru (T10.2,
+ * Sonuclanan (birakilan ya da onaylanan) rezervasyonun Redis'teki izinin en uzun omru (T10.2,
  * ADR-18). Iz, defter kaydi yazilinca hemen silinir; bu sure yalnizca Mongo
  * erisilemezken yarida kalan kaydin tekrar gelen istekle tamamlanabilecegi
  * pencereyi sinirlar (idempotency kaydinin 24 saati ile ayni olcek).
  */
 export const SETTLED_RESERVATION_TTL_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Defter denetiminde (reseed, B24) gunluge yazilan tutmayan kayit sayisi ust
+ * siniri; toplam sayi ayrica yazilir. Gunluk satiri sinirsiz buyumesin.
+ */
+export const LEDGER_MISMATCH_REPORT_LIMIT = 10;
+
 /** Lua script'lerinin adlari: lua/ klasorundeki dosya adi (uzantisiz). */
 export const LUA_SCRIPTS = {
   RESERVE: 'reserve',
   RELEASE: 'release',
+  COMMIT: 'commit',
 } as const;
 
 /**

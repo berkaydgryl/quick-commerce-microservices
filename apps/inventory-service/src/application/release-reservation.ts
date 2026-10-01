@@ -12,8 +12,8 @@
  * Sonuclar (inventory.proto ReservationOutcome):
  *  - applied: sahiplik bu cagrinin, sayaclar geri artti.
  *  - already-applied: birakma daha once yapilmisti; sayaclar tekrar artmadi.
- *  - not-found: birakilacak rezervasyon yok (hic olmamis ya da baska yoldan
- *    sonuclanmis). Hata degil; cagiran sonuca gore dallanir.
+ *  - not-found: birakilacak rezervasyon yok (hic olmamis ya da onaylanmis;
+ *    onaylanan stok geri verilmez). Hata degil; cagiran sonuca gore dallanir.
  */
 
 import type { Clock, Logger } from '@getir/core';
@@ -21,6 +21,7 @@ import type { Clock, Logger } from '@getir/core';
 import type { ReservationLine, ReservationStore } from '../domain/reservation.js';
 import { releaseEntries } from '../domain/stock-ledger.js';
 import type { StockLedger } from '../domain/stock-ledger.js';
+import type { ReservationResult } from './reservation-result.js';
 
 export interface ReleaseReservationDeps {
   readonly reservations: Pick<ReservationStore, 'release' | 'forgetSettled'>;
@@ -36,15 +37,7 @@ export interface ReleaseReservationInput {
   readonly reason: string;
 }
 
-export type ReleaseResultOutcome = 'applied' | 'already-applied' | 'not-found';
-
-export interface ReleaseReservationResult {
-  readonly outcome: ReleaseResultOutcome;
-}
-
-export type ReleaseReservation = (
-  input: ReleaseReservationInput,
-) => Promise<ReleaseReservationResult>;
+export type ReleaseReservation = (input: ReleaseReservationInput) => Promise<ReservationResult>;
 
 export function createReleaseReservation(deps: ReleaseReservationDeps): ReleaseReservation {
   /** Defteri yazar, sonra izi siler: sira tersine donerse iz defterden once kaybolurdu. */
@@ -57,7 +50,7 @@ export function createReleaseReservation(deps: ReleaseReservationDeps): ReleaseR
   };
 
   /** Ne aktif rezervasyon ne iz var: sonucu defter soyler. */
-  const fromLedger = async (input: ReleaseReservationInput): Promise<ReleaseReservationResult> => {
+  const fromLedger = async (input: ReleaseReservationInput): Promise<ReservationResult> => {
     const settlement = await deps.ledger.settlementOf(input.marketId, input.orderId);
     return { outcome: settlement === 'released' ? 'already-applied' : 'not-found' };
   };
@@ -78,8 +71,12 @@ export function createReleaseReservation(deps: ReleaseReservationDeps): ReleaseR
         await settle({ ...input, lines: outcome.lines }, new Date(nowMs));
         return { outcome: 'applied' };
       case 'settled':
-        // Onceki cagri sahipligi aldi; defteri yarida kalmis olabilir. Kayit
-        // onceki cagrinin gerekcesi ve aniyla tamamlanir (tekrar yazim zararsiz, B14).
+        // Onaylanmis rezervasyon birakilamaz; izine de dokunulmaz (onayin kendi
+        // tekrari tamamlar). Birakilmissa onceki cagri sahipligi aldi; defteri
+        // yarida kalmis olabilir: onceki gerekce ve anla tamamlanir (B14).
+        if (outcome.settlement !== 'released') {
+          return { outcome: 'not-found' };
+        }
         await settle(
           { orderId, marketId, reason: outcome.reason, lines: outcome.lines },
           new Date(outcome.settledAt),

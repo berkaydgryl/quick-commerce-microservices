@@ -21,6 +21,7 @@ import { connectMongo } from '../../src/client.js';
 import type { MongoConnection } from '../../src/client.js';
 import { MongoRepository } from '../../src/repository.js';
 import type { BaseDocument } from '../../src/repository.js';
+import { retryOnConflict } from '../../src/retry.js';
 
 /** infra/docker/docker-compose.dev.yml ile ayni surum. */
 const MONGO_IMAGE = 'mongo:7';
@@ -197,6 +198,73 @@ describe('withTransaction', () => {
     } finally {
       await holder.endSession();
       await other.close();
+    }
+  });
+
+  /** Ayni belgeye yazip COMMIT ETMEDEN bekleyen ikinci istemcinin transaction'i. */
+  async function holdWrite(id: string) {
+    const other = await MongoClient.connect(
+      `${container.getConnectionString()}/?directConnection=true`,
+    );
+    const holder = other.startSession();
+    holder.startTransaction();
+    await other
+      .db(DB_NAME)
+      .collection<ProductDoc>('test_products')
+      .updateOne({ _id: id }, { $set: { priceMinor: 1_000 } }, { session: holder });
+    return {
+      commit: () => holder.commitTransaction(),
+      close: async () => {
+        await holder.endSession();
+        await other.close();
+      },
+    };
+  }
+
+  it('retryTransientErrors false: surucu denemez, kaybeden hemen CONFLICT alir (P3 icin)', async () => {
+    await products.insertOne(product('prd_5', 'UN-1KG'));
+    const held = await holdWrite('prd_5');
+    try {
+      const contender = connection.withTransaction(
+        (session) => products.updateById('prd_5', { $inc: { priceMinor: 1 } }, { session }),
+        { retryTransientErrors: false },
+      );
+
+      await expect(contender).rejects.toMatchObject({ code: ERROR_CODES.CONFLICT });
+      await held.commit();
+      await expect(products.findById('prd_5')).resolves.toMatchObject({ priceMinor: 1_000 });
+    } finally {
+      await held.close();
+    }
+  });
+
+  it('retryOnConflict: kaybeden BEKLEYEREK yeniden dener ve basarir; digerinin yazimini gorur (P3)', async () => {
+    await products.insertOne(product('prd_6', 'SEKER-1KG'));
+    const held = await holdWrite('prd_6');
+    const retries: number[] = [];
+    try {
+      const contender = retryOnConflict(
+        () =>
+          connection.withTransaction(
+            (session) => products.updateById('prd_6', { $inc: { priceMinor: 1 } }, { session }),
+            { retryTransientErrors: false },
+          ),
+        {
+          // Ilk cakismada diger transaction commit edilir: ikinci deneme temiz gecer.
+          onRetry: (retry) => {
+            retries.push(retry);
+            if (retry === 1) {
+              void held.commit();
+            }
+          },
+        },
+      );
+
+      await expect(contender).resolves.toBe(true);
+      expect(retries[0]).toBe(1);
+      await expect(products.findById('prd_6')).resolves.toMatchObject({ priceMinor: 1_001 });
+    } finally {
+      await held.close();
     }
   });
 

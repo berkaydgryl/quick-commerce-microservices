@@ -8,14 +8,14 @@ hareket eder.
 Bu serviste **olmayanlar**, bilinçli: ürün adı, fiyatı ve kategorisi `catalog-service`'in;
 sipariş durumu ve rezervasyon süresinin **ne kadar** olacağı `order-service`'in işidir.
 
-## Bugünkü durum (T9.1 + T9.2 + T10.1 PR 1-2 + T10.2 PR 1)
+## Bugünkü durum (T9.1 + T9.2 + T10.1 + T10.2)
 
 | RPC                 | Durum                                                                                                             |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `CheckAvailability` | ✅ Toplu (en fazla 100 SKU, B27): satılabilir adetler + `unknown_skus` (bu markette kaydı olmayan ya da biçimsiz) |
 | `Reserve`           | ✅ Sepetin tamamı tek atomik adımda ya da hiç (`reserve.lua`, T10.1); aşağıda                                     |
 | `Release`           | ✅ Rezervasyonu bırakır, adetler sayaca döner; stok defterine yazar (`release.lua`, T10.2 PR 1); aşağıda          |
-| `Commit`            | ⏳ `NOT_IMPLEMENTED` — T10.2 PR 2 (`commit.lua`, eldeki adedin düşümü)                                            |
+| `Commit`            | ✅ Onay: eldeki adet kalıcı düşer, defterde −adet (`commit.lua` + tek Mongo transaction'ı, T10.2 PR 2); aşağıda   |
 | `ExtendReservation` | ⏳ `NOT_IMPLEMENTED` — T10                                                                                        |
 | `GetReservation`    | ⏳ `NOT_IMPLEMENTED` — T10                                                                                        |
 
@@ -76,8 +76,7 @@ giremez: kısmi rezervasyon imkânsızdır. Rezervasyonun kimliği siparişin ki
 - **Saat:** "şimdi" servisin saatidir (`Clock`); testler sabit saat verir.
 - **MOCK** (B16): bellekte aynı kurallar; sayaçlar ve rezervasyonlar aynı haritayı paylaşır, rezervasyon
   müsaitlikte hemen görünür. İki uygulama da `test/support/reservation-store-contract.ts` senaryolarından geçer.
-- **Henüz yok:**
-  - Onay (`commit.lua`, eldeki adedin düşümü) T10.2 PR 2'de. Bırakma geldi (aşağıda).
+- **Henüz yok:** uzatma (`ExtendReservation`, T11.3). Bırakma ve onay geldi (aşağıda).
   - Süresi dolan rezervasyonun stoğunu geri veren süpürücü T10.3'te; o gelene kadar süresi dolan
     rezervasyonun stoğu geri gelmez.
   - Order'ın `Reserve`'ü çağırması T11.2'de.
@@ -112,7 +111,7 @@ dener, yine değiştiyse `CONFLICT` (tekrar denenebilir).
 - **Stok defteri** eldeki adedin hesabıdır: bir market × SKU için `delta` toplamı `stock.onHand`'e eşittir.
   - `opening`: seed'in açılış kaydı, `delta = +onHand` (seed defteri stokla aynı transaction'da baştan yazar).
   - `release`: bırakma. Eldeki adet değişmez (`delta: 0`), adet `quantity`'de, çağıranın gerekçesi `reason`'da.
-  - Onay (`commit`, `delta = -adet`) T10.2 PR 2'de, süre dolumu (`expire`) T10.3'te.
+  - `commit`: onay, `delta = -adet` (T10.2 PR 2; aşağıda). Süre dolumu (`expire`) T10.3'te.
 - **Çift kayıt yok (B14):** kaydın `_id`'si doğal anahtardır (`sipariş/sku/tür`); aynı hareket ikinci kez
   yazılırsa değişmez. İndeksler: `orderId` (kısmi) ve `marketId + sku + createdAt`.
 - **Gerekçe** serbest metin değil, kısa anahtardır: küçük harf, rakam, alt çizgi, en fazla 64
@@ -126,6 +125,29 @@ dener, yine değiştiyse `CONFLICT` (tekrar denenebilir).
 - **MOCK** (B16): bırakma bellekte aynı kurallarla; defter de bellektedir (Mongo'ya yazılmaz). Bellek ve
   Redis `test/support/reservation-store-contract.ts` senaryolarından birlikte geçer.
 - **Olay yok:** `stock.released` olayını bugün dinleyen yok; gövdesi dinleyen gelince yazılır (T10.3, T12).
+
+## Onay (T10.2 PR 2, ADR-18)
+
+`Commit` ödeme onaylandıktan sonra ayrılan adedi **kalıcı** düşürür. Sıra bırakmayla aynı:
+
+1. **Sahiplik (Redis, `lua/commit.lua`):** `ZREM`; kullanıcı kilidi yalnızca bu siparişinse silinir; kayıt
+   `state: committed` olarak işaretlenir. Stok sayaçlarına **dokunulmaz**: adet rezervasyonda zaten düşmüştü.
+2. **Mongo, tek transaction:** kalem başına defter kaydı (`commit`, `delta = −adet`, gerekçe `order_paid`)
+   "yoksa yaz" ile eklenir; yeni eklendiyse o kalemin `onHand`'i sürüm koşuluyla (`version`) düşer. Kayıt ile
+   düşüm aynı transaction'da: tekrar gelen onay adedi iki kez düşüremez.
+3. **Başarılıysa** Redis'teki iz silinir → `APPLIED`.
+
+- **Eşzamanlı onay (roadmap P3):** aynı stok kaydına yazan iki onayda kaybeden `CONFLICT` alır ve
+  mongo-kit'in `retryOnConflict` yardımcısıyla 50 / 100 / 200 ms (±%50) bekleyerek en çok 3 kez daha dener.
+  Sürücünün beklemesiz kendi denemesi bu transaction'da kapalıdır (`retryTransientErrors: false`). Denemeler
+  biterse `ABORTED` / `CONFLICT`; Redis izi durduğu için aynı isteğin tekrarı onayı tamamlar
+  (`ALREADY_APPLIED`). Her yeniden deneme günlüğe bir bilgi satırı yazar.
+- **Eksiye düşen `onHand`:** onay yine yapılır (ödeme alınmıştır), kalem başına uyarı yazılır ("fazla satış
+  izi"); defterde görünür, gizlenmez.
+- **Çapraz çağrılar:** onaylanmış rezervasyona `Release` → `NOT_FOUND` (stok geri gelmez); bırakılmış
+  rezervasyona `Commit` → `NOT_FOUND` (order iade eder, B20). Karşı tarafın izine dokunulmaz.
+- **Mongo erişilemezse** `UNAVAILABLE`; iz kalır, tekrar gelen istek tamamlar (ADR-18).
+- **MOCK** (B16): eldeki adet ve defter bellekte, kurallar aynı.
 
 ## Redis boşalınca (T10.1 PR 2, ADR-17)
 
@@ -191,7 +213,9 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/inventory/v1/i
 - **`reseed`** bütün sayaçları Mongo'dan **baştan** yazar (bilinçli komut). Redis boşaldığında artık gerekmez:
   servis boşalmayı kendiliğinden fark edip eksik sayaçları yazar (yukarıda, T10.1 PR 2). **Dikkat:** aktif
   rezervasyon varken çalıştırılırsa ayrılmış stok geri satışa çıkar; Redis boşken ya da rezervasyon
-  yokken koşulur.
+  yokken koşulur. Sayaçlardan sonra **defter denetimi** (T10.2 PR 2, B24): her market × SKU için defter
+  toplamı `onHand` ile karşılaştırılır; tutarsa bilgi satırı, tutmazsa ilk 10 fark ve toplam sayıyla uyarı
+  (reseed düşmez).
 
 ## Demo stoğu
 
@@ -205,12 +229,13 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/inventory/v1/i
 ## Klasörler
 
 ```text
-lua/               reserve.lua (T10.1), release.lua (T10.2); imaja package.json "files" ile girer
+lua/               reserve.lua (T10.1), release.lua ve commit.lua (T10.2); imaja package.json "files" ile girer
 src/
-  application/     check-availability, reserve-stock, release-reservation, seed-stock, seed-counters,
-                   counter-recovery
+  application/     check-availability, reserve-stock, release-reservation, commit-reservation,
+                   reservation-result, seed-stock, seed-counters, counter-recovery, check-ledger
   domain/          stock.ts, reservation.ts, stock-ledger.ts, stock-ports.ts: kavramlar ve portlar (depo yok)
-  infrastructure/  fixtures, memory (MOCK: sayaçlar + rezervasyon + defter), mongo (stock, stock_ledger),
+  infrastructure/  fixtures, memory (MOCK: sayaçlar + rezervasyon + defter + onay yazımı),
+                   mongo (stock, stock_ledger, onay transaction'ı),
                    redis (sayaçlar, işaret, rezervasyon + hash ön okuması, Lua yükleyici, tahliye denetimi),
                    stock-stores (bağlantılar), stock-source (açılış)
   interfaces/grpc/ handler, şema (Zod), eşleyici

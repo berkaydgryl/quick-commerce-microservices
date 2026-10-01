@@ -44,6 +44,18 @@ export interface MongoConnectionOptions {
   readonly serverSelectionTimeoutMs?: number;
 }
 
+export interface WithTransactionOptions {
+  /**
+   * false: es zamanli yazimda (WriteConflict) surucu geri cagriyi KENDISI
+   * tekrar denemez; hata CONFLICT olarak doner ve cagiran sinirli, beklemeli
+   * yeniden denemeyi kendisi yapar (retryOnConflict, roadmap P3). Surucunun
+   * denemesi beklemesizdir ve sure dolana kadar (120 sn) surer; sicak bir
+   * kayitta P3'un "en cok 3 deneme" kurali ancak boyle uygulanir.
+   * Varsayilan true (T7.3 davranisi).
+   */
+  readonly retryTransientErrors?: boolean;
+}
+
 export interface MongoConnection {
   readonly client: MongoClient;
   readonly db: Db;
@@ -53,7 +65,10 @@ export interface MongoConnection {
    * Verilen isi tek transaction icinde calistirir.
    * Callback hata firlatirsa transaction geri alinir (rollback).
    */
-  withTransaction<T>(work: (session: ClientSession) => Promise<T>): Promise<T>;
+  withTransaction<T>(
+    work: (session: ClientSession) => Promise<T>,
+    options?: WithTransactionOptions,
+  ): Promise<T>;
   close(): Promise<void>;
 }
 
@@ -98,7 +113,11 @@ export async function connectMongo(options: MongoConnectionOptions): Promise<Mon
       }
     },
 
-    withTransaction: async <T>(work: (session: ClientSession) => Promise<T>): Promise<T> => {
+    withTransaction: async <T>(
+      work: (session: ClientSession) => Promise<T>,
+      options: WithTransactionOptions = {},
+    ): Promise<T> => {
+      const driverRetries = options.retryTransientErrors ?? true;
       const session = client.startSession();
       try {
         return await session.withTransaction(async () => {
@@ -108,7 +127,8 @@ export async function connectMongo(options: MongoConnectionOptions): Promise<Mon
             // Etiketli asil hata surucuye GERI verilir: surucu transaction'i
             // bastan tekrar dener (es zamanli yazimda kaybeden, yeniden
             // denemede guncel surumu gorur ve kendi CONFLICT'ini uretir).
-            throw retryableTransactionCause(error) ?? error;
+            // Istenmezse etiketsiz AppError gider: surucu denemez, cagiran dener.
+            throw driverRetries ? (retryableTransactionCause(error) ?? error) : error;
           }
         }, TRANSACTION_OPTIONS);
       } catch (error: unknown) {

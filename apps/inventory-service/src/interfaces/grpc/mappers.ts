@@ -4,13 +4,13 @@ import { inventoryV1 } from '@getir/proto';
 
 import type { CheckAvailabilityResult } from '../../application/check-availability.js';
 import type {
-  ReleaseReservationResult,
-  ReleaseResultOutcome,
-} from '../../application/release-reservation.js';
+  ReservationResult,
+  ReservationResultOutcome,
+} from '../../application/reservation-result.js';
 import type { ReserveStockResult } from '../../application/reserve-stock.js';
 
-/** Use-case sonucu -> sozlesmedeki ReservationOutcome (Commit de kullanacak, PR 2). */
-const RESERVATION_OUTCOMES: Record<ReleaseResultOutcome, inventoryV1.ReservationOutcome> = {
+/** Use-case sonucu -> sozlesmedeki ReservationOutcome (Release ve Commit). */
+const RESERVATION_OUTCOMES: Record<ReservationResultOutcome, inventoryV1.ReservationOutcome> = {
   applied: inventoryV1.ReservationOutcome.RESERVATION_OUTCOME_APPLIED,
   'already-applied': inventoryV1.ReservationOutcome.RESERVATION_OUTCOME_ALREADY_APPLIED,
   'not-found': inventoryV1.ReservationOutcome.RESERVATION_OUTCOME_NOT_FOUND,
@@ -29,6 +29,10 @@ export function toReserveResponse(result: ReserveStockResult): inventoryV1.Reser
   return { expiresAt: result.expiresAt, alreadyReserved: result.alreadyReserved };
 }
 
-export function toReleaseResponse(result: ReleaseReservationResult): inventoryV1.ReleaseResponse {
+export function toReleaseResponse(result: ReservationResult): inventoryV1.ReleaseResponse {
+  return { outcome: RESERVATION_OUTCOMES[result.outcome] };
+}
+
+export function toCommitResponse(result: ReservationResult): inventoryV1.CommitResponse {
   return { outcome: RESERVATION_OUTCOMES[result.outcome] };
 }

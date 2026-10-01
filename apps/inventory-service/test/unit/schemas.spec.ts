@@ -13,6 +13,7 @@ import {
 } from '../../src/config/constants.js';
 import {
   checkAvailabilityRequestSchema,
+  commitRequestSchema,
   releaseRequestSchema,
   reserveRequestSchema,
 } from '../../src/interfaces/grpc/schemas.js';
@@ -193,5 +194,30 @@ describe('Release istek semasi (T10.2)', () => {
     ]);
     expect(releaseProblems({ reason: 'a'.repeat(RELEASE_REASON_MAX_LENGTH) })).toEqual({});
     expect(releaseProblems({ reason: 'payment_failed_3ds' })).toEqual({});
+  });
+});
+
+describe('Commit istek semasi (T10.2 PR 2)', () => {
+  const valid = {
+    orderId: 'ord_00000000000000000000000000000001',
+    darkStoreId: '',
+    marketId: 'mkt_migros-jet-moda',
+  };
+
+  it('gecerli istek; deprecated dark_store_id ciktiya girmez', () => {
+    expect(commitRequestSchema.parse(valid)).toEqual({
+      orderId: valid.orderId,
+      marketId: valid.marketId,
+    });
+  });
+
+  it('siparis ve market zorunlu ve biciminde', () => {
+    const problems = (overrides: Record<string, unknown>) => {
+      const result = commitRequestSchema.safeParse({ ...valid, ...overrides });
+      return result.success ? {} : result.error.flatten().fieldErrors;
+    };
+    expect(problems({ orderId: '' }).orderId).toEqual(['zorunlu']);
+    expect(problems({ orderId: 'ord_1' }).orderId).toEqual(['ord_ onekli kimlik bekleniyor']);
+    expect(problems({ marketId: '' }).marketId).toEqual(['zorunlu']);
   });
 });

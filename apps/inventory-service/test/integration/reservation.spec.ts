@@ -12,6 +12,8 @@
  *   7. Gercek gRPC uzerinden: STOCK_INSUFFICIENT ayrintisi, dusumun musaitlikte gorunmesi.
  *   8. Birakma (release.lua, T10.2): iz, sahiplik yarisi, bozuk / eksik sayac,
  *      kaydi dusmus indeks uyesi, eskimis on okuma.
+ *   9. Onay (commit.lua, T10.2 PR 2): iz, sayaclara dokunmama, onay ile
+ *      birakmanin yarisi (tam biri kazanir, B3/B4).
  */
 
 import { ERROR_CODES, GRPC_STATUS, silentLogger, systemClock } from '@getir/core';
@@ -38,6 +40,7 @@ import {
   SETTLED_RESERVATION_TTL_MS,
 } from '../../src/config/constants.js';
 import type { ReservationLine } from '../../src/domain/reservation.js';
+import { InMemoryStockCommitter } from '../../src/infrastructure/memory/in-memory-stock-committer.js';
 import { InMemoryStockLedger } from '../../src/infrastructure/memory/in-memory-stock-ledger.js';
 import { loadInventoryScripts } from '../../src/infrastructure/redis/lua-scripts.js';
 import { RedisReservationStore } from '../../src/infrastructure/redis/redis-reservation-store.js';
@@ -60,6 +63,7 @@ let connection: RedisConnection;
 let counters: RedisStockCounters;
 let reservations: RedisReservationStore;
 let releaseScript: LuaScript;
+let commitScript: LuaScript;
 const loadLines: LogLine[] = [];
 
 beforeAll(async () => {
@@ -71,9 +75,14 @@ beforeAll(async () => {
   counters = new RedisStockCounters(connection.redis, silentLogger);
   const scripts = await loadInventoryScripts(connection.redis, recordingLogger(loadLines));
   releaseScript = scripts.get(LUA_SCRIPTS.RELEASE);
+  commitScript = scripts.get(LUA_SCRIPTS.COMMIT);
   reservations = new RedisReservationStore(
     connection.redis,
-    { reserve: scripts.get(LUA_SCRIPTS.RESERVE), release: scripts.get(LUA_SCRIPTS.RELEASE) },
+    {
+      reserve: scripts.get(LUA_SCRIPTS.RESERVE),
+      release: scripts.get(LUA_SCRIPTS.RELEASE),
+      commit: scripts.get(LUA_SCRIPTS.COMMIT),
+    },
     {
       holdAfterExpiryMs: RESERVATION_HOLD_AFTER_EXPIRY_MS,
       settledTtlMs: SETTLED_RESERVATION_TTL_MS,
@@ -407,9 +416,114 @@ describe('birakma (release.lua, T10.2)', () => {
   });
 });
 
+describe('onay (commit.lua, T10.2 PR 2)', () => {
+  beforeEach(() => seed({ 'SUT-1L': 5, 'KOLA-1L': 3 }));
+
+  const commit = (order: number) =>
+    reservations.commit({ orderId: orderId(order), marketId: MARKET, nowMs: systemClock.now() });
+  const release = (order: number) =>
+    reservations.release({
+      orderId: orderId(order),
+      marketId: MARKET,
+      reason: 'user_cancelled',
+      nowMs: systemClock.now(),
+    });
+  const counterValues = () =>
+    connection.redis.mget(stockAvailKey(MARKET, 'SUT-1L'), stockAvailKey(MARKET, 'KOLA-1L'));
+
+  it('iz: state committed, gerekce order_paid, iz omru; indeks uyesi ve kilit gider; sayaclar AYNI', async () => {
+    await reserve(1, 1, [
+      { sku: 'SUT-1L', quantity: 2 },
+      { sku: 'KOLA-1L', quantity: 1 },
+    ]);
+    const nowMs = systemClock.now();
+
+    await reservations.commit({ orderId: orderId(1), marketId: MARKET, nowMs });
+
+    const key = reservationKey(MARKET, orderId(1));
+    expect(await connection.redis.hgetall(key)).toMatchObject({
+      'qty:SUT-1L': '2',
+      'qty:KOLA-1L': '1',
+      state: 'committed',
+      reason: 'order_paid',
+      settledAt: String(nowMs),
+    });
+    const ttl = await connection.redis.pttl(key);
+    expect(ttl).toBeGreaterThan(SETTLED_RESERVATION_TTL_MS - TTL_TOLERANCE_MS);
+    expect(await connection.redis.zscore(reservationIndexKey(MARKET), orderId(1))).toBeNull();
+    expect(await connection.redis.exists(userReservationKey(userId(1)))).toBe(0);
+    expect(await counterValues()).toEqual(['3', '2']);
+  });
+
+  it('ayni rezervasyonu 10 cagri ayni anda onaylarsa sahipligi TEK cagri alir', async () => {
+    await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 2 }]);
+
+    const outcomes = await Promise.all(Array.from({ length: 10 }, () => commit(1)));
+
+    expect(outcomes.filter((outcome) => outcome.status === 'committed')).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome.status === 'settled')).toHaveLength(9);
+  });
+
+  it('onay ile birakma yarisi (B3/B4): tam BIRI kazanir; stok kazanana gore tam bir kez hareket eder', async () => {
+    await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 2 }]);
+
+    const outcomes = await Promise.all(
+      Array.from({ length: 20 }, (_, index) => (index % 2 === 0 ? commit(1) : release(1))),
+    );
+
+    const winners = outcomes.filter(
+      (outcome) => outcome.status === 'committed' || outcome.status === 'released',
+    );
+    expect(winners).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome.status === 'settled')).toHaveLength(19);
+    // Onay kazandiysa adet dusuk kalir, birakma kazandiysa geri doner.
+    expect(await connection.redis.get(stockAvailKey(MARKET, 'SUT-1L'))).toBe(
+      winners[0]?.status === 'committed' ? '3' : '5',
+    );
+  });
+
+  it('indekste olup kaydi dusmus rezervasyon: orphaned, indeks temizlenir', async () => {
+    await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 2 }]);
+    await connection.redis.del(reservationKey(MARKET, orderId(1)));
+
+    expect(await commit(1)).toEqual({ status: 'orphaned' });
+    expect(await connection.redis.zscore(reservationIndexKey(MARKET), orderId(1))).toBeNull();
+  });
+
+  it('eskimis on okuma (kullanici farkli) stale: HICBIR sey yazilmaz', async () => {
+    await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 2 }]);
+
+    const reply = await commitScript.run(
+      [
+        reservationKey(MARKET, orderId(1)),
+        reservationIndexKey(MARKET),
+        userReservationKey(userId(2)),
+      ],
+      [orderId(1), userId(2), 'order_paid', systemClock.now(), 60_000],
+    );
+
+    expect(reply).toEqual(['stale']);
+    expect(await connection.redis.zscore(reservationIndexKey(MARKET), orderId(1))).not.toBeNull();
+    expect(await connection.redis.hget(reservationKey(MARKET, orderId(1)), 'state')).toBeNull();
+  });
+
+  it('SCRIPT FLUSH sonrasi onay calisir; kullanici kilidi beyanli (yuklemede bir kez bilgi)', async () => {
+    await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 2 }]);
+    await connection.redis.script('FLUSH');
+
+    expect((await commit(1)).status).toBe('committed');
+    expect(
+      loadLines.filter(
+        (line) => line.level === 'info' && line.fields['script'] === LUA_SCRIPTS.COMMIT,
+      ),
+    ).toHaveLength(1);
+  });
+});
+
 describe('Reserve gercek gRPC ve Redis ile', () => {
   it('rezervasyon musaitlikte hemen gorunur; yetmeyen kalem ayrintiyla doner, hicbiri dusmez', async () => {
     await seed({ 'SUT-1L': 5, 'KOLA-1L': 1 });
+    const ledger = new InMemoryStockLedger();
     const server = await startTestGrpcServer({
       serviceName: 'inventory-resv-it',
       services: [
@@ -417,7 +531,8 @@ describe('Reserve gercek gRPC ve Redis ile', () => {
           stock: {
             counters,
             reservations,
-            ledger: new InMemoryStockLedger(),
+            ledger,
+            committer: new InMemoryStockCommitter([], ledger),
             recoverCounters: () => Promise.resolve(false),
           },
         }),

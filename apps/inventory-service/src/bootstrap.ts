@@ -11,6 +11,7 @@ import { inventoryV1 } from '@getir/proto';
 import type { GrpcServiceRegistration } from '@getir/service-kit';
 
 import { createCheckAvailability } from './application/check-availability.js';
+import { createCommitReservation } from './application/commit-reservation.js';
 import { createReleaseReservation } from './application/release-reservation.js';
 import { createReserveStock } from './application/reserve-stock.js';
 import { INVENTORY_SERVICE_FULL_NAME } from './config/constants.js';
@@ -21,7 +22,7 @@ import { createInventoryImplementation } from './interfaces/grpc/inventory-handl
 
 export interface BootstrapOptions {
   readonly logger?: Logger;
-  /** Sayaclar, rezervasyon ve defter. Verilmezse bellekteki demo stogu (MOCK modu). */
+  /** Sayaclar, rezervasyon, defter ve onay yazimi. Verilmezse bellekteki demo stogu (MOCK modu). */
   readonly stock?: StockPorts;
   /** Rezervasyonun "simdi"si; verilmezse sistem saati (testler sabit saat verir). */
   readonly clock?: Clock;
@@ -46,6 +47,13 @@ export function buildInventoryService(options: BootstrapOptions = {}): GrpcServi
     }),
     releaseReservation: createReleaseReservation({
       reservations: stock.reservations,
+      ledger: stock.ledger,
+      clock,
+      logger,
+    }),
+    commitReservation: createCommitReservation({
+      reservations: stock.reservations,
+      committer: stock.committer,
       ledger: stock.ledger,
       clock,
       logger,
