@@ -199,7 +199,8 @@ Redis boşalırsa (FLUSHALL, kalıcılık olmadan yeniden başlatma) sayaçları
 
 ## Açılış (T9.2)
 
-1. Mongo'ya bağlanır, `stock` ve `stock_ledger` indekslerini kurar; Redis'e bağlanır.
+1. Mongo'ya bağlanır, bekleyen göçleri uygular (T10.4, ADR-19; bugün göç yok, kayıtlar denetlenir),
+   `stock` ve `stock_ledger` indekslerini kurar; Redis'e bağlanır. Seed ve reseed göç çalıştırmaz.
 2. **Redis tahliye politikası** (`maxmemory-policy`) okunur: `noeviction` değilse ya da okunamıyorsa
    servis **açılmaz** (roadmap P1). Bellek dolunca sayacı silen bir Redis fazla satış demektir.
 3. Sayaçlar Mongo'dan yazılır, **yalnızca olmayanlar** (`SET NX`): var olan sayaç rezervasyonları

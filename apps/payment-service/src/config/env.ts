@@ -39,6 +39,18 @@ export function loadServiceEnv(): PaymentServiceEnv {
     : { ...base, mongo: loadEnvOrExit(mongoSchema), redis: loadEnvOrExit(redisEnvSchema) };
 }
 
+/** Goc komutunun ortami (T10.4): MOCK ne olursa olsun Mongo zorunlu (isi Mongo'dur). */
+const migrateSchema = z.object({
+  NODE_ENV: serviceEnvSchema.shape.NODE_ENV,
+  LOG_LEVEL: serviceEnvSchema.shape.LOG_LEVEL,
+});
+
+export type MigrateEnv = z.infer<typeof migrateSchema> & { readonly mongo: MongoEnv };
+
+export function loadMigrateEnv(): MigrateEnv {
+  return { ...loadEnvOrExit(migrateSchema), mongo: loadEnvOrExit(mongoSchema) };
+}
+
 /** Saglik kontrolu yalnizca portu bilir; baska degisken istemez. */
 const healthcheckSchema = z.object({
   PAYMENT_GRPC_PORT: grpcPort(DEFAULT_PAYMENT_GRPC_PORT),

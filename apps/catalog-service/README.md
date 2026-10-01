@@ -143,8 +143,10 @@ testinde gerçek Mongo. Veri kaynağını seçip açan tek yer `infrastructure/c
   `$lookup` ve N+1 olmadan listelenir. Kopyaları yalnızca catalog'un seeder'ı yazar.
 - **`searchTerms`:** ad ve açıklamanın normalize hali: Türkçe küçük harf ve Türkçe karakter katlama
   (T9.4: "Süt" → `sut`, "ÇİKOLATA" → `cikolata`). Mongo'nun regex `i` bayrağı `İ → i` eşlemesini
-  bilmez; normalizasyon `domain/searchKey` ile, bellek uygulamasıyla aynı. Terimleri seed yazar:
-  `searchKey` değişirse `pnpm seed`; açılış eski biçimdeki terimi görürse uyarı yazar.
+  bilmez; normalizasyon `domain/searchKey` ile, bellek uygulamasıyla aynı. Terimleri seed yazar.
+  T9.4 öncesi (katlanmamış) terimleri **göç 0001** (`src/migrations/0001-arama-terimlerini-katla.ts`,
+  T10.4) servis açılışında katlar; eski "pnpm seed çalıştırın" uyarısının yerini aldı. `searchKey`
+  yeniden değişirse yeni bir göç yazılır (ADR-19).
 - **Arama (T9.4):** sorgu kelimelere ayrılır (`searchWords`), her kelime `searchTerms` içinde
   kelime içi aranır ve **hepsi** geçmeli (sıra önemsiz; biri adda, biri açıklamada olabilir).
   "sut" → Süt ve Sütlü çikolata; "peynir beyaz" → Beyaz Peynir. Kelime içi eşleşmenin sonucu:

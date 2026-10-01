@@ -4,11 +4,12 @@
  */
 
 import type { Logger } from '@getir/core';
-import { connectMongo } from '@getir/mongo-kit';
+import { applyMigrations, connectMongo } from '@getir/mongo-kit';
 import type { MongoEnv } from '@getir/mongo-kit';
 
 import { SERVICE_NAME } from '../config/constants.js';
 import type { RiskEventRepository } from '../domain/risk-event-repository.js';
+import { MIGRATIONS } from '../migrations/index.js';
 import { InMemoryRiskEventStore } from './memory/in-memory-risk-event-store.js';
 import { RiskEventMongoStore } from './mongo/risk-event-mongo-store.js';
 import { RiskEventsCollection } from './mongo/risk-events-collection.js';
@@ -36,6 +37,8 @@ export async function openRiskEventStore(
 
   const events = new RiskEventsCollection(connection.db);
   try {
+    // Gocler indekslerden ONCE (T10.4, ADR-19): kod uygulanmamis semayla calismaz.
+    await applyMigrations(connection, MIGRATIONS, logger);
     await events.ensureIndexes();
   } catch (error: unknown) {
     await connection.close();

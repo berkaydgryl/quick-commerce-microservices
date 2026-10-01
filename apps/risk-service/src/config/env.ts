@@ -29,6 +29,18 @@ export function loadServiceEnv(): RiskServiceEnv {
   return { ...base, mongo: base.MOCK ? undefined : loadEnvOrExit(mongoSchema) };
 }
 
+/** Goc komutunun ortami (T10.4): MOCK ne olursa olsun Mongo zorunlu (isi Mongo'dur). */
+const migrateSchema = z.object({
+  NODE_ENV: serviceEnvSchema.shape.NODE_ENV,
+  LOG_LEVEL: serviceEnvSchema.shape.LOG_LEVEL,
+});
+
+export type MigrateEnv = z.infer<typeof migrateSchema> & { readonly mongo: MongoEnv };
+
+export function loadMigrateEnv(): MigrateEnv {
+  return { ...loadEnvOrExit(migrateSchema), mongo: loadEnvOrExit(mongoSchema) };
+}
+
 const healthcheckSchema = z.object({ RISK_GRPC_PORT: grpcPort(DEFAULT_RISK_GRPC_PORT) });
 
 export function loadHealthcheckEnv(): { readonly port: number } {

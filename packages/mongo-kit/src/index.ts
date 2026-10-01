@@ -11,3 +11,7 @@ export * from './env.js';
 export * from './errors.js';
 export * from './repository.js';
 export * from './retry.js';
+export * from './migration.js';
+export * from './migration-command.js';
+export * from './migration-lock.js';
+export * from './migration-runner.js';

@@ -53,6 +53,9 @@ export function loadSeedEnv(): SeedEnv {
   return { ...loadEnvOrExit(seedSchema), mongo: loadEnvOrExit(mongoSchema) };
 }
 
+/** Goc komutunun ortami (T10.4): seed'inkiyle ayni ihtiyac, MOCK ne olursa olsun Mongo. */
+export const loadMigrateEnv: () => SeedEnv = loadSeedEnv;
+
 const healthcheckSchema = z.object({ CATALOG_GRPC_PORT: grpcPort(DEFAULT_CATALOG_GRPC_PORT) });
 
 /**

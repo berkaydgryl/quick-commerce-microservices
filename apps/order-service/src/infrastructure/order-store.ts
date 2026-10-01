@@ -10,7 +10,7 @@
  */
 
 import type { Logger } from '@getir/core';
-import { connectMongo } from '@getir/mongo-kit';
+import { applyMigrations, connectMongo } from '@getir/mongo-kit';
 import type { MongoEnv } from '@getir/mongo-kit';
 
 import { SERVICE_NAME } from '../config/constants.js';
@@ -18,6 +18,7 @@ import type { OrderServiceEnv } from '../config/env.js';
 import type { OrderHistoryReader } from '../domain/order-history-reader.js';
 import type { OrderOutbox } from '../domain/order-outbox.js';
 import type { OrderRepository } from '../domain/order-repository.js';
+import { MIGRATIONS } from '../migrations/index.js';
 import { buildPersonaOrders } from './fixtures/persona-orders.js';
 import { InMemoryOrderStore } from './memory/in-memory-order-store.js';
 import { MongoOrderOutbox } from './mongo/mongo-order-outbox.js';
@@ -64,6 +65,8 @@ export async function openOrderStore(
   const orders = new OrdersCollection(connection.db);
   const outbox = new OutboxCollection(connection.db);
   try {
+    // Gocler indekslerden ONCE (T10.4, ADR-19): kod uygulanmamis semayla calismaz.
+    await applyMigrations(connection, MIGRATIONS, logger);
     // Indeksler acilista kurulur: ListMyOrders'in sirali okumasi ve yayincinin
     // "yayinlanmamis, sirali" okumasi onlara dayanir.
     await orders.ensureIndexes();

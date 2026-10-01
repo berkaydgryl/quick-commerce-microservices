@@ -88,6 +88,39 @@ hata ayıklamayı zorlaştırır.
 dayandığı sorgunun yanındaki dosyada görünür. `_id` string'dir (`ord_...`, `prd_...`),
 ObjectId değil — kimliğin türü log satırında ve Redis anahtarında çıplak gözle okunsun diye.
 
+## Göçler (T10.4, ADR-19)
+
+Şema ve veri değişikliği elle yapılmaz; sürümlü ve geri alınabilir göçle yapılır. Çalıştırıcı
+burada, göçler sahibi servisin kodunda (`apps/<servis>/src/migrations/`):
+
+```ts
+// apps/catalog-service/src/migrations/0001-arama-terimlerini-katla.ts
+export const foldSearchTerms: Migration = {
+  version: 1,
+  name: 'arama-terimlerini-katla',
+  up: (context) => ..., // context.db, context.session (transaction), context.logger
+  down: (context) => ...,
+};
+// apps/catalog-service/src/migrations/index.ts
+export const MIGRATIONS: readonly Migration[] = [foldSearchTerms];
+```
+
+- **Açılışta:** servis bağlanınca `applyMigrations(connection, MIGRATIONS, logger)` bekleyenleri
+  **indekslerden önce** uygular. Bekleyen yoksa kilit alınmaz (her açılışta yazım olmaz).
+- **Kayıt:** servisin kendi veritabanında `migrations` (`_id` = sürüm, ad, an, süre). Aynı göç iki
+  kez kaydedilemez.
+- **Kilit:** `migrations_lock` tek belge (sahip + bitiş anı, 10 dk). İki örnek aynı anda açılırsa
+  göç bir kez koşar; ikincisi bekler, sonra hepsini uygulanmış bulur. Çöken çalıştırmanın kilidi
+  ömrü dolunca devralınır; çalışan sahip her göç öncesi ömrü yeniler.
+- **Transaction:** varsayılan olarak göç ve kaydı tek transaction'da (ya ikisi ya hiçbiri).
+  Transaction'da yapılamayan iş için `transaction: false`; o göç yeniden çalıştırılabilir yazılır.
+- **Durdurur:** kayıtta olup kodda olmayan sürüm (kod geri alınmış), aynı sürüm farklı adla, en
+  yeni uygulanmıştan küçük bekleyen sürüm (sıra bozuk).
+- **Komut:** `pnpm --filter @getir/<servis> migrate up | down | status` (`migrateMain`); kökten
+  `pnpm migrate up | status`. `down` en son tek göçü geri alır, kökten çalışmaz.
+- **Kural:** göç o günün mantığının donmuş kopyasıdır (domain koduna, koleksiyon sabitine
+  bağlanmaz); uygulanmış göç değiştirilmez, düzeltme yeni göçtür. İndeksler göç değildir.
+
 ## Hata çevirisi
 
 | Mongo durumu                    | AppError              | Sonuç                          |
@@ -117,4 +150,5 @@ kapalıyken her toplu yazım tekrar denenebilir `SERVICE_UNAVAILABLE` yerine `IN
 benzersiz indeksin gerçekten ihlal edilmesi ve transaction'ın gerçekten geri alınması
 sahte istemciyle doğrulanamaz. `auth.spec.ts` kimlik doğrulamalı replica set'te (yerel compose
 ile aynı kurulum) servis kullanıcısının kendi veritabanında çalıştığını, başka veritabanında
-reddedildiğini ve yanlış parolanın mesajını sınar. `pnpm test:int`.
+reddedildiğini ve yanlış parolanın mesajını sınar. `migration.spec.ts` göç çalıştırıcısını sınar:
+sıra, transaction, up → down → up, aynı anda iki çalıştırıcı, kilit devri, tutarsızlık. `pnpm test:int`.

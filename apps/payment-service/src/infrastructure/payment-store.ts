@@ -6,11 +6,12 @@
  */
 
 import type { Logger } from '@getir/core';
-import { connectMongo } from '@getir/mongo-kit';
+import { applyMigrations, connectMongo } from '@getir/mongo-kit';
 import type { MongoEnv } from '@getir/mongo-kit';
 
 import { SERVICE_NAME } from '../config/constants.js';
 import type { PaymentRepository } from '../domain/payment-repository.js';
+import { MIGRATIONS } from '../migrations/index.js';
 import { InMemoryPaymentStore } from './memory/in-memory-payment-store.js';
 import { PaymentMongoStore } from './mongo/payment-mongo-store.js';
 import { PaymentsCollection } from './mongo/payments-collection.js';
@@ -39,6 +40,8 @@ export async function openPaymentStore(
 
   const payments = new PaymentsCollection(connection.db);
   try {
+    // Gocler indekslerden ONCE (T10.4, ADR-19): kod uygulanmamis semayla calismaz.
+    await applyMigrations(connection, MIGRATIONS, logger);
     // Unique indeksler acilista kurulur: siparis basina tek odeme ve
     // idempotency ona dayanir; indekssiz calismak kurali sessizce kapatirdi.
     await payments.ensureIndexes();
