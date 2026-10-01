@@ -14,6 +14,7 @@ import type { StockStoresEnv } from '../config/env.js';
 import { assertNoEviction } from './redis/eviction-policy.js';
 import { RedisCounterSetMarker } from './redis/redis-counter-set-marker.js';
 import { RedisStockCounters } from './redis/redis-stock-counters.js';
+import { MongoStockCommitter } from './mongo/mongo-stock-committer.js';
 import { StockLedgerRepository } from './mongo/stock-ledger-repository.js';
 import { StockRepository } from './mongo/stock-repository.js';
 
@@ -23,6 +24,8 @@ export interface StockStores {
   readonly repository: StockRepository;
   /** Stok defteri (T10.2, ADR-18). */
   readonly ledger: StockLedgerRepository;
+  /** Onayin yazimi: defter + eldeki adet, tek transaction (T10.2 PR 2). */
+  readonly committer: MongoStockCommitter;
   readonly counters: RedisStockCounters;
   /** Sayac kumesinin isareti (ADR-17); seed en son bunu yazar. */
   readonly marker: RedisCounterSetMarker;
@@ -64,6 +67,7 @@ export async function openStockStores(
       redis: opened,
       repository,
       ledger,
+      committer: new MongoStockCommitter(mongo, repository, ledger, logger),
       counters: new RedisStockCounters(opened.redis, logger),
       marker: new RedisCounterSetMarker(opened.redis),
       close: async () => {

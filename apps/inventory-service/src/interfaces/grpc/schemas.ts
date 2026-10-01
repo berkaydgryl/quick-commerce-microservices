@@ -96,3 +96,12 @@ export const releaseRequestSchema = z.object({
   marketId: requiredText.pipe(marketIdSchema),
   reason: requiredText.pipe(releaseReasonSchema),
 });
+
+/**
+ * Commit (T10.2 PR 2). Siparis kimligi bicimiyle dogrulanir (Redis anahtarina
+ * girer); gerekce yok: onay her zaman odeme onayidir.
+ */
+export const commitRequestSchema = z.object({
+  orderId: requiredText.pipe(orderIdSchema),
+  marketId: requiredText.pipe(marketIdSchema),
+});

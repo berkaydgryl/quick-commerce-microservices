@@ -6,9 +6,11 @@
  * toplami onHand'e esittir (T10.2 bitti tanimi).
  *   - opening: seed'in acilis kaydi; delta = +onHand.
  *   - release: rezervasyon birakildi. onHand DEGISMEZ (adet sayaca doner):
- *     delta 0, adet `quantity`'de. Kayit, siparisin nasil sonuclandigini da
- *     soyler (tekrar gelen birakma "zaten uygulandi" alir).
- * Onay (commit, delta = -adet) PR 2'de, sure dolumu (expire) T10.3'te eklenir.
+ *     delta 0, adet `quantity`'de.
+ *   - commit: odeme onaylandi, adet kalici dustu (T10.2 PR 2): delta = -adet.
+ *     Eldeki adet AYNI transaction'da duser (StockCommitter).
+ * Siparis kayitlari siparisin nasil sonuclandigini da soyler: tekrar gelen
+ * cagri "zaten uygulandi" alir. Sure dolumu (expire, delta 0) T10.3'te eklenir.
  *
  * Burada depo yoktur; yalnizca kavramlar, port ve kayit kurallari.
  */
@@ -18,12 +20,16 @@ import type { ReservationLine, ReservationSettlement } from './reservation.js';
 export const LEDGER_KINDS = {
   OPENING: 'opening',
   RELEASE: 'release',
+  COMMIT: 'commit',
 } as const;
 
 export type LedgerKind = (typeof LEDGER_KINDS)[keyof typeof LEDGER_KINDS];
 
 /** Acilis kaydinin gerekcesi: seed (demo stogu). */
 export const OPENING_REASON = 'seed';
+
+/** Onay kaydinin gerekcesi: Commit istekte gerekce tasimaz, odeme onayi demektir. */
+export const COMMIT_REASON = 'order_paid';
 
 export interface LedgerEntry {
   readonly marketId: string;
@@ -70,6 +76,21 @@ export interface ReleaseEntriesInput {
   readonly at: Date;
 }
 
+/** Onaylanan rezervasyonun kalem basina kaydi: eldeki adet duser (delta -adet). */
+export function commitEntries(input: Omit<ReleaseEntriesInput, 'reason'>): LedgerEntry[] {
+  const { marketId, orderId, lines, at } = input;
+  return lines.map(({ sku, quantity }) => ({
+    marketId,
+    sku,
+    kind: LEDGER_KINDS.COMMIT,
+    delta: -quantity,
+    quantity,
+    reason: COMMIT_REASON,
+    orderId,
+    at,
+  }));
+}
+
 /** Birakilan rezervasyonun kalem basina kaydi: onHand degismez (delta 0). */
 export function releaseEntries(input: ReleaseEntriesInput): LedgerEntry[] {
   const { marketId, orderId, reason, lines, at } = input;
@@ -87,5 +108,42 @@ export function releaseEntries(input: ReleaseEntriesInput): LedgerEntry[] {
 
 /** Defterdeki tur -> siparisin sonucu (acilis bir siparis sonucu degildir). */
 export function settlementOfKind(kind: LedgerKind): ReservationSettlement | undefined {
-  return kind === LEDGER_KINDS.RELEASE ? 'released' : undefined;
+  switch (kind) {
+    case LEDGER_KINDS.RELEASE:
+      return 'released';
+    case LEDGER_KINDS.COMMIT:
+      return 'committed';
+    case LEDGER_KINDS.OPENING:
+      return undefined;
+  }
+}
+
+/** Onayin kalici yaziminin sonucu. */
+export interface CommitWriteResult {
+  /** Bu cagrida yazilan kalem sayisi (kaydi zaten olan kalem sayilmaz). */
+  readonly written: number;
+  /** Eldeki adedi eksiye dusen kalemler (fazla satis izi; onay yine yapildi). */
+  readonly negative: readonly { readonly sku: string; readonly onHand: number }[];
+}
+
+/**
+ * Onayin kalici yazimi (T10.2 PR 2, ADR-18): kalem basina defter kaydi (-adet)
+ * ve eldeki adedin dusumu TEK transaction'da. Kaydi zaten olan kalem atlanir:
+ * tekrar guvenlidir, adet iki kez dusmez. Eksiye dusmek reddedilmez (onay
+ * yapilmistir; iz gizlenmez).
+ */
+export interface StockCommitter {
+  commit(entries: readonly LedgerEntry[]): Promise<CommitWriteResult>;
+}
+
+/** Bir market x SKU'nun defterdeki delta toplami. */
+export interface LedgerBalance {
+  readonly marketId: string;
+  readonly sku: string;
+  readonly total: number;
+}
+
+/** Defter toplamlarinin okunmasi (defter = onHand denetimi, B24). */
+export interface LedgerBalanceSource {
+  balances(): Promise<readonly LedgerBalance[]>;
 }

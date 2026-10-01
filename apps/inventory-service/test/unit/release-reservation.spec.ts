@@ -128,6 +128,19 @@ describe('createReleaseReservation', () => {
     ]);
   });
 
+  it('onay izi: onaylanan stok geri verilmez -> not-found; defter YAZILMAZ, ize dokunulmaz', async () => {
+    const { release, calls } = setup({
+      status: 'settled',
+      settlement: 'committed',
+      reason: 'order_paid',
+      settledAt: NOW - 1_000,
+      lines: LINES,
+    });
+
+    expect(await release(INPUT)).toEqual({ outcome: 'not-found' });
+    expect(calls).toEqual(['release']);
+  });
+
   it('ne rezervasyon ne iz var: defterde birakildiysa already-applied, kaydi yoksa not-found', async () => {
     const released = setup({ status: 'absent' }, { settlement: 'released' });
     const unknown = setup({ status: 'absent' });

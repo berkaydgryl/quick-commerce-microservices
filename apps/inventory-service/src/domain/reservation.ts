@@ -53,19 +53,48 @@ export type ReserveOutcome =
     };
 
 /**
- * Rezervasyonun nasil sonuclandigi (T10.2, ADR-18). Bu PR'da yalnizca birakma;
- * onay (PR 2) ve sure dolumu (supurucu, T10.3) buraya eklenir.
+ * Rezervasyonun nasil sonuclandigi (T10.2, ADR-18): birakma (PR 1) ya da onay
+ * (PR 2). Sure dolumu (supurucu, T10.3) buraya eklenir.
  */
-export type ReservationSettlement = 'released';
+export type ReservationSettlement = 'released' | 'committed';
 
-/** Birakma komutu (T10.2). */
-export interface ReleaseCommand {
+/** Onay komutu (T10.2 PR 2): odeme onaylandi, ayrilan adet kalici dusecek. */
+export interface CommitCommand {
   readonly orderId: string;
   readonly marketId: string;
-  /** Kisa anahtar (RELEASE_REASON_PATTERN); defter kaydina oldugu gibi yazilir. */
-  readonly reason: string;
   /** Istek ani (ms, servisin saati): sonuclanma ani olarak Redis izine yazilir. */
   readonly nowMs: number;
+}
+
+/** Birakma komutu (T10.2). */
+export interface ReleaseCommand extends CommitCommand {
+  /** Kisa anahtar (RELEASE_REASON_PATTERN); defter kaydina oldugu gibi yazilir. */
+  readonly reason: string;
+}
+
+/**
+ * Daha once sonuclanmis, izi hala duruyor: onceki cagrinin defter kaydi
+ * yarida kalmis olabilir (ADR-18). Sayaclar TEKRAR hareket etmedi.
+ */
+export interface SettledReservation {
+  readonly status: 'settled';
+  readonly settlement: ReservationSettlement;
+  readonly reason: string;
+  readonly settledAt: number;
+  readonly lines: readonly ReservationLine[];
+}
+
+/** Ne aktif rezervasyon ne iz var: hic olmamis ya da coktan sonuclanmis. */
+export interface AbsentReservation {
+  readonly status: 'absent';
+}
+
+/**
+ * Indekste vardi ama kaydi yoktu (adetler bilinmiyor): indeksten silindi,
+ * stok GERI VERILEMEDI. Normal akista olmaz; kayit indeksten once dusmez.
+ */
+export interface OrphanedReservation {
+  readonly status: 'orphaned';
 }
 
 /**
@@ -84,29 +113,29 @@ export type ReleaseOutcome =
       readonly lines: readonly ReservationLine[];
       readonly skippedCounters: number;
     }
-  /**
-   * Daha once sonuclanmis, izi hala duruyor: onceki cagrinin defter kaydi
-   * yarida kalmis olabilir (ADR-18). Sayaclar TEKRAR hareket etmedi.
-   */
-  | {
-      readonly status: 'settled';
-      readonly settlement: ReservationSettlement;
-      readonly reason: string;
-      readonly settledAt: number;
-      readonly lines: readonly ReservationLine[];
-    }
-  /** Ne aktif rezervasyon ne iz var: hic olmamis ya da coktan sonuclanmis. */
-  | { readonly status: 'absent' }
-  /**
-   * Indekste vardi ama kaydi yoktu (adetler bilinmiyor): indeksten silindi,
-   * stok GERI VERILEMEDI. Normal akista olmaz; kayit indeksten once dusmez.
-   */
-  | { readonly status: 'orphaned' };
+  | SettledReservation
+  | AbsentReservation
+  | OrphanedReservation;
 
-/** Rezervasyonun yazilmasi: Redis'te reserve.lua ve release.lua, MOCK'ta bellek. */
+/**
+ * Deponun onay cevabi (T10.2 PR 2). Sayaclara DOKUNULMAZ: adet rezervasyonda
+ * zaten dusulmustu; kalici dusum (eldeki adet) Mongo'dadir.
+ */
+export type CommitOutcome =
+  /** Sahiplik bu cagrinin; kaydin izi defter ve eldeki adet yazilinca silinir. */
+  | { readonly status: 'committed'; readonly lines: readonly ReservationLine[] }
+  | SettledReservation
+  | AbsentReservation
+  | OrphanedReservation;
+
+/**
+ * Rezervasyonun yazilmasi: Redis'te reserve.lua, release.lua ve commit.lua;
+ * MOCK'ta bellek.
+ */
 export interface ReservationStore {
   reserve(command: ReserveCommand): Promise<ReserveOutcome>;
   release(command: ReleaseCommand): Promise<ReleaseOutcome>;
+  commit(command: CommitCommand): Promise<CommitOutcome>;
   /** Defter yazildiktan sonra sonuclanan rezervasyonun izini siler (ADR-18). */
   forgetSettled(marketId: string, orderId: string): Promise<void>;
 }

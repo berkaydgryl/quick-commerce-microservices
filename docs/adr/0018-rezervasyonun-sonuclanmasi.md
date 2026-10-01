@@ -65,3 +65,20 @@ tasiyor, ikinci anahtar ayni bilgiyi kopyalar).
 
 ADR-01 (atomik rezervasyon), ADR-03 (stok gercegi Mongo, sayac Redis), ADR-08
 (idempotency), ADR-17 (sayac kumesinin isareti); gorev T10.2, B3, B4, B14.
+
+## Ek (T10.2 PR 2, 2026-10-01): onay
+
+Karar ayni desenle onaya uygulandi:
+
+- `commit.lua` sahipligi `ZREM` ile alir, stok sayaclarina DOKUNMAZ (adet rezervasyonda dusmustu),
+  kullanici kilidini yalnizca bu siparisinse siler, kaydi `state: committed` olarak isaretler.
+- Mongo'da TEK transaction: kalem basina defter kaydi (`commit`, delta -adet) "yoksa yaz" ile
+  eklenir; yeni eklendiyse o kalemin eldeki adedi surum kosuluyla duser. Kayit ile dusum ayni
+  transaction'da oldugu icin tekrar gelen onay adedi iki kez dusuremez.
+- Es zamanli onaylar ayni stok kaydina yazarsa (roadmap P3) surucunun beklemesiz ve sure dolana
+  kadar suren kendi yeniden denemesi kapatilir (`withTransaction(..., { retryTransientErrors: false })`);
+  mongo-kit'in `retryOnConflict` yardimcisi 50/100/200 ms (+-%50) bekleyerek en cok 3 kez daha
+  dener, sonra CONFLICT. Redis izi durdugu icin ayni istegin tekrari onayi tamamlar.
+- Eldeki adet eksiye duserse onay yine yazilir (odeme alinmistir) ve uyari verilir; iz gizlenmez.
+- Onaylanmis rezervasyona birakma, birakilmis rezervasyona onay NOT_FOUND alir; karsi tarafin izine
+  dokunulmaz (kendi tekrari tamamlar).

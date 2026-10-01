@@ -47,6 +47,7 @@ export async function openStockSource(
       counters: memory.counters,
       reservations: memory.reservations,
       ledger: memory.ledger,
+      committer: memory.committer,
       recoverCounters: memory.recoverCounters,
       name: 'bellek (MOCK)',
       seeded: undefined,
@@ -67,13 +68,18 @@ export async function openStockSource(
       counters: opened.counters,
       reservations: new RedisReservationStore(
         opened.redis.redis,
-        { reserve: scripts.get(LUA_SCRIPTS.RESERVE), release: scripts.get(LUA_SCRIPTS.RELEASE) },
+        {
+          reserve: scripts.get(LUA_SCRIPTS.RESERVE),
+          release: scripts.get(LUA_SCRIPTS.RELEASE),
+          commit: scripts.get(LUA_SCRIPTS.COMMIT),
+        },
         {
           holdAfterExpiryMs: RESERVATION_HOLD_AFTER_EXPIRY_MS,
           settledTtlMs: SETTLED_RESERVATION_TTL_MS,
         },
       ),
       ledger: opened.ledger,
+      committer: opened.committer,
       // Redis bosalirsa: acilistaki yolla, yalnizca eksik sayaclar (T10.1 PR 2).
       recoverCounters: createCounterRecovery({
         marker: opened.marker,

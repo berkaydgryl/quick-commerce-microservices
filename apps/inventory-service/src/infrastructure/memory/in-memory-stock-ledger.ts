@@ -13,12 +13,19 @@ export class InMemoryStockLedger implements StockLedger {
 
   record(entries: readonly LedgerEntry[]): Promise<void> {
     for (const entry of entries) {
-      const key = ledgerEntryId(entry);
-      if (!this.entries.has(key)) {
-        this.entries.set(key, entry);
-      }
+      this.insertIfAbsent(entry);
     }
     return Promise.resolve();
+  }
+
+  /** Kaydi yoksa yazar ve true doner; varsa dokunmaz (onayin tekrari icin). */
+  insertIfAbsent(entry: LedgerEntry): boolean {
+    const key = ledgerEntryId(entry);
+    if (this.entries.has(key)) {
+      return false;
+    }
+    this.entries.set(key, entry);
+    return true;
   }
 
   settlementOf(marketId: string, orderId: string): Promise<ReservationSettlement | undefined> {

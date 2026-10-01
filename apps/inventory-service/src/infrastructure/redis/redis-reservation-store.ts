@@ -1,6 +1,6 @@
 /**
- * Rezervasyonun Redis uygulamasi: lua/reserve.lua (T10.1) ve lua/release.lua
- * (T10.2; ADR-01, ADR-18).
+ * Rezervasyonun Redis uygulamasi: lua/reserve.lua (T10.1), lua/release.lua ve
+ * lua/commit.lua (T10.2; ADR-01, ADR-18).
  *
  * Anahtarlar redis-kit'in ureticilerinden gelir (bicim tek kaynakta); script'in
  * bekledigi sira B15'tedir: once stok sayaclari, sonra rezervasyon hash'i,
@@ -23,13 +23,17 @@ import { z } from 'zod';
 
 import { duplicateSku } from '../../domain/reservation.js';
 import type {
+  CommitCommand,
+  CommitOutcome,
   ReleaseCommand,
   ReleaseOutcome,
   ReservationLine,
   ReservationStore,
   ReserveCommand,
   ReserveOutcome,
+  SettledReservation,
 } from '../../domain/reservation.js';
+import { COMMIT_REASON } from '../../domain/stock-ledger.js';
 import { readReservationHash } from './reservation-hash.js';
 import type { ReservationHash } from './reservation-hash.js';
 
@@ -56,23 +60,38 @@ const reserveReplySchema = z.union([
 
 const quantityReply = integerReply.pipe(z.number().int().min(1));
 
+/** [sku, adet, sku, adet, ...] ciftleri (sira script'e gore). */
+const pairsReply = z.union([z.string().min(1), z.number()]);
+
+/** Daha once sonuclanmis kaydin izi: durum, gerekce, an, sonra ciftler. */
+const settledReplySchema = z
+  .tuple([z.literal('settled'), z.enum(['released', 'committed']), z.string().min(1), integerReply])
+  .rest(pairsReply);
+
 const releaseReplySchema = z.union([
   z.tuple([z.literal('released'), integerReply.pipe(z.number().int().min(0))]).rest(quantityReply),
-  z
-    .tuple([z.literal('settled'), z.literal('released'), z.string().min(1), integerReply])
-    .rest(z.union([z.string().min(1), z.number()])),
+  settledReplySchema,
   z.tuple([z.literal('absent')]),
   z.tuple([z.literal('orphaned')]),
   z.tuple([z.literal('stale')]),
   z.tuple([z.literal('corrupt'), lineIndex]),
 ]);
 
+const commitReplySchema = z.union([
+  z.tuple([z.literal('committed')]).rest(pairsReply),
+  settledReplySchema,
+  z.tuple([z.literal('absent')]),
+  z.tuple([z.literal('orphaned')]),
+  z.tuple([z.literal('stale')]),
+]);
+
 /** On okuma ile script arasinda kayit degisirse (on okuma eskidiyse) kac kez denenir. */
-const RELEASE_ATTEMPTS = 2;
+const SETTLE_ATTEMPTS = 2;
 
 export interface RedisReservationScripts {
   readonly reserve: LuaScript;
   readonly release: LuaScript;
+  readonly commit: LuaScript;
 }
 
 export interface RedisReservationStoreOptions {
@@ -156,18 +175,37 @@ export class RedisReservationStore implements ReservationStore {
     }
   }
 
+  release(command: ReleaseCommand): Promise<ReleaseOutcome> {
+    return this.withPreRead(command, (hash) => this.releaseOnce(command, hash));
+  }
+
+  commit(command: CommitCommand): Promise<CommitOutcome> {
+    return this.withPreRead(command, (hash) => this.commitOnce(command, hash));
+  }
+
+  /**
+   * Izi siler. Guvenli: iz dururken reserve.lua ayni siparisi yeniden acmaz
+   * (EXISTS), dolayisiyla bu anahtar ancak sonuclanmis kaydi tasiyabilir.
+   */
+  async forgetSettled(marketId: string, orderId: string): Promise<void> {
+    await this.redis.del(reservationKey(marketId, orderId));
+  }
+
   /**
    * Once hash okunur: script'in dokunacagi sayaclar ve kullanici kilidi
    * KEYS'te bildirilmelidir. Okuma ile script arasinda kayit degistiyse
    * ('stale') bir kez daha okunup denenir; yine degistiyse CONFLICT.
    */
-  async release(command: ReleaseCommand): Promise<ReleaseOutcome> {
-    for (let attempt = 1; attempt <= RELEASE_ATTEMPTS; attempt += 1) {
+  private async withPreRead<T>(
+    command: CommitCommand,
+    attempt: (hash: ReservationHash | undefined) => Promise<T | 'stale'>,
+  ): Promise<T> {
+    for (let tries = 1; tries <= SETTLE_ATTEMPTS; tries += 1) {
       const hash = readReservationHash(
         await this.redis.hgetall(reservationKey(command.marketId, command.orderId)),
         command,
       );
-      const outcome = await this.releaseOnce(command, hash);
+      const outcome = await attempt(hash);
       if (outcome !== 'stale') {
         return outcome;
       }
@@ -177,12 +215,41 @@ export class RedisReservationStore implements ReservationStore {
     });
   }
 
-  /**
-   * Izi siler. Guvenli: iz dururken reserve.lua ayni siparisi yeniden acmaz
-   * (EXISTS), dolayisiyla bu anahtar ancak sonuclanmis kaydi tasiyabilir.
-   */
-  async forgetSettled(marketId: string, orderId: string): Promise<void> {
-    await this.redis.del(reservationKey(marketId, orderId));
+  private async commitOnce(
+    command: CommitCommand,
+    hash: ReservationHash | undefined,
+  ): Promise<CommitOutcome | 'stale'> {
+    const { orderId, marketId, nowMs } = command;
+    const keys = [
+      reservationKey(marketId, orderId),
+      reservationIndexKey(marketId),
+      ...(hash === undefined ? [] : [userReservationKey(hash.userId)]),
+    ];
+    const args = [orderId, hash?.userId ?? '', COMMIT_REASON, nowMs, this.options.settledTtlMs];
+
+    const parsed = commitReplySchema.safeParse(await this.scripts.commit.run(keys, args));
+    if (!parsed.success) {
+      throw AppError.internal('commit script beklenmeyen cevap verdi', {
+        cause: parsed.error,
+        details: { orderId, marketId },
+      });
+    }
+
+    const reply = parsed.data;
+    switch (reply[0]) {
+      case 'committed': {
+        const [, ...pairs] = reply;
+        return { status: 'committed', lines: linesOf(pairs, command) };
+      }
+      case 'settled':
+        return settledOf(reply, command);
+      case 'absent':
+        return { status: 'absent' };
+      case 'orphaned':
+        return { status: 'orphaned' };
+      case 'stale':
+        return 'stale';
+    }
   }
 
   private async releaseOnce(
@@ -222,16 +289,8 @@ export class RedisReservationStore implements ReservationStore {
         }
         return { status: 'released', skippedCounters, lines };
       }
-      case 'settled': {
-        const [, settlement, settledReason, settledAt, ...pairs] = reply;
-        return {
-          status: 'settled',
-          settlement,
-          reason: settledReason,
-          settledAt,
-          lines: linesOf(pairs, command),
-        };
-      }
+      case 'settled':
+        return settledOf(reply, command);
       case 'absent':
         return { status: 'absent' };
       case 'orphaned':
@@ -257,8 +316,17 @@ export class RedisReservationStore implements ReservationStore {
   }
 }
 
-/** 'settled' cevabindaki [sku, adet, sku, adet, ...] -> kalemler (sku sirasinda). */
-function linesOf(pairs: readonly (string | number)[], command: ReleaseCommand): ReservationLine[] {
+/** 'settled' cevabi -> iz. */
+function settledOf(
+  reply: z.infer<typeof settledReplySchema>,
+  command: CommitCommand,
+): SettledReservation {
+  const [, settlement, reason, settledAt, ...pairs] = reply;
+  return { status: 'settled', settlement, reason, settledAt, lines: linesOf(pairs, command) };
+}
+
+/** Cevaptaki [sku, adet, sku, adet, ...] -> kalemler (sku sirasinda). */
+function linesOf(pairs: readonly (string | number)[], command: CommitCommand): ReservationLine[] {
   const parsed = z
     .array(z.tuple([z.string().min(1), quantityReply]))
     .safeParse(
@@ -267,7 +335,7 @@ function linesOf(pairs: readonly (string | number)[], command: ReleaseCommand): 
       ),
     );
   if (!parsed.success) {
-    throw AppError.internal('release script bozuk iz dondurdu', {
+    throw AppError.internal('script bozuk kalem listesi dondurdu', {
       cause: parsed.error,
       details: { orderId: command.orderId, marketId: command.marketId },
     });

@@ -47,7 +47,10 @@ function storeWith(hash: Record<string, string>, ...replies: unknown[]) {
     run: () => Promise.reject(new Error('reserve cagrilmamali')),
   };
   const redis = { hgetall: () => Promise.resolve(hash) } as unknown as RedisClient;
-  return { store: new RedisReservationStore(redis, { reserve: unused, release }, OPTIONS), calls };
+  return {
+    store: new RedisReservationStore(redis, { reserve: unused, release, commit: unused }, OPTIONS),
+    calls,
+  };
 }
 
 describe('RedisReservationStore.release', () => {
