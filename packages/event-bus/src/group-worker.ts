@@ -12,12 +12,16 @@
  * tuketiciye teslim edilmis kayit yarim birakilirsa hakki bosuna yanar. Tur
  * hatasi (Redis koptu) gunluge yazilir, beklenip devam edilir; grup
  * silinmisse (Redis verisiz yeniden basladi) yeniden kurulur.
+ *
+ * Metrikler (T10.5, #12; consumer-metrics.ts): her sonuclanan kayit sayilir,
+ * grubun gecikmesi ve bekleyeni GROUP_STATS_INTERVAL_MS'de bir okunur.
  */
 
 import { setTimeout as delay } from 'node:timers/promises';
 
 import type { Clock, Logger } from '@getir/core';
 
+import { recordGroupStats, recordSettlement, UNKNOWN_TOPIC } from './consumer-metrics.js';
 import type { DeliverySettings } from './delivery-settings.js';
 import { dispatchEntry } from './dispatch.js';
 import type { Settlement, StreamEntry } from './dispatch.js';
@@ -26,7 +30,15 @@ import type { StreamGroup } from './redis-stream-group.js';
 import { peekEnvelope } from './stream-fields.js';
 import type { EventHandler } from './subscriber.js';
 
+/**
+ * Grubun gecikme/bekleyen istatistiginin okunma araligi (ms). Bos akista tur
+ * blockMs'de bir doner; her turda XINFO gereksiz, kazima araligi (15 sn) zaten kaba.
+ */
+export const GROUP_STATS_INTERVAL_MS = 5_000;
+
 export interface GroupWorkerOptions {
+  /** Tuketici grubunun adi; metrik etiketi. */
+  readonly group: string;
   readonly stream: StreamGroup;
   /** Konu -> isleyici; dinleme basladiktan sonra degismez. */
   readonly handlers: ReadonlyMap<string, EventHandler>;
@@ -39,6 +51,7 @@ export interface GroupWorkerOptions {
 
 /** signal kesilene kadar calisir; hata firlatmaz (tur hatalari icerde karsilanir). */
 export async function runGroupWorker(options: GroupWorkerOptions): Promise<void> {
+  let statsReadAt = Number.NEGATIVE_INFINITY;
   while (!options.signal.aborted) {
     try {
       await reclaimStale(options);
@@ -49,6 +62,7 @@ export async function runGroupWorker(options: GroupWorkerOptions): Promise<void>
         await options.stream.readNew(options.settings.batchSize, options.settings.blockMs),
         options,
       );
+      statsReadAt = await refreshGroupStats(options, statsReadAt);
     } catch (error: unknown) {
       if (options.signal.aborted) {
         return;
@@ -105,6 +119,9 @@ async function settle(
     handlerFor: (topic) => options.handlers.get(topic),
     logger,
   });
+  if (settlement.kind !== 'skipped') {
+    recordSettlement(options.group, topicLabel(entry, options), settlement.kind);
+  }
 
   switch (settlement.kind) {
     case 'handled':
@@ -145,6 +162,34 @@ async function settle(
       break;
   }
   return settlement;
+}
+
+/**
+ * Grubun gecikmesini ve bekleyenini metrige yazar; son okumadan bu yana
+ * GROUP_STATS_INTERVAL_MS gecmediyse okumaz. Okuma hatasi turu durdurmaz:
+ * metrik eski degerinde kalir (Redis kopuksa okuma turu zaten uyari yazar).
+ * @returns Son okuma ani.
+ */
+async function refreshGroupStats(options: GroupWorkerOptions, lastReadAt: number): Promise<number> {
+  const now = options.clock.now();
+  if (now - lastReadAt < GROUP_STATS_INTERVAL_MS) {
+    return lastReadAt;
+  }
+  try {
+    const stats = await options.stream.stats();
+    if (stats !== undefined) {
+      recordGroupStats(options.group, stats);
+    }
+  } catch (error: unknown) {
+    options.logger.warn({ err: error }, 'grup istatistigi okunamadi; metrik eski degerinde');
+  }
+  return now;
+}
+
+/** Metrik etiketi: grubun dinledigi konu (kapali liste); okunamayan konu `unknown`. */
+function topicLabel(entry: StreamEntry, options: GroupWorkerOptions): string {
+  const { topic } = peekOf(entry);
+  return topic !== undefined && options.handlers.has(topic) ? topic : UNKNOWN_TOPIC;
 }
 
 async function recover(error: unknown, options: GroupWorkerOptions): Promise<void> {

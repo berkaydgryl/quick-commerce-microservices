@@ -87,6 +87,9 @@ tipten kurar, payment aynı şemadan geçirir. Gerekçe ve anahtar kuralı `Refu
 - **Grup ilk kez akışın başından okur:** payment kapalıyken bırakılan komut açılışta işlenir
   (28 Eylül kararı). Payment'ın kopyaları aynı gruptadır; bir komutu yalnızca biri işler.
 - **Tüketici adı** `<makine>-<pid>`; zarif kapanışta bekleyen kaydı yoksa gruptan silinir.
+- **Metrikler (T10.5, #12):** `localhost:51054/metrics`'te grubun sonuç sayacı
+  (`event_consumer_events_total{group="payment",…}`), gecikmesi (`event_consumer_lag`) ve onaylanmamış
+  kayıtları (`event_consumer_pending`). Tanımları `@getir/event-bus` README'sinde.
 - `MOCK=true` iken dinleme **kapalıdır** (Redis yok).
 
 ## Veri kaynağı: Mongo ya da MOCK

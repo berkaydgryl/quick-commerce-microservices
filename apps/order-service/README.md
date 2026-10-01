@@ -217,6 +217,10 @@ yayınlanmamış olayları sonra `stream:events`'e basar.
   durur (sonraki olay öncekini geçmesin); yalnızca yayınlananlar işaretlenir. Dolu parti çıkarsa
   beklemeden devam eder. Zincirli `setTimeout`: turlar üst üste binmez; kapanışta süren tur
   beklenir, sonra Redis, en son Mongo kapanır.
+- **Metrikler (T10.5, #12; `interfaces/workers/outbox-metrics.ts`):** `outbox_events_published_total`
+  (hatta yayınlanan), `outbox_relay_errors_total` (yarıda kalan ya da hiç yapılamayan tur) ve
+  `outbox_lag_seconds` (turun gördüğü en eski yayınlanmamış olayın yaşı). Sağlıklı yayında gecikme tur
+  aralığının (0,5 sn) altında kalır; büyümesi hattın takıldığını gösterir. Uç `localhost:51053/metrics`.
 - **En az bir kez teslim:** yayınla–işaretle arasında çökülürse olay tekrar gider; tüketici
   tekrar-güvenli yazılır (`eventId` ya da iş anahtarıyla; payment iadeyi kaydın durumundan tanır).
 - **Telafi komutu:** çekim başarılı ama sipariş `PAID` yazılamadıysa önce doğrudan iade denenir;
@@ -272,6 +276,7 @@ src/
 │   ├── mappers.ts     # domain → proto (durum, Order)
 │   └── order-handlers.ts
 ├── interfaces/workers/outbox-publisher.ts  # zamanlayıcı: turu aralıkla çalıştırır, kapanışta bekler
+├── interfaces/workers/outbox-metrics.ts    # yayın, hata ve gecikme metrikleri (T10.5)
 ├── config/            # env.ts (process.env yalnızca burada) + constants.ts
 ├── bootstrap.ts
 ├── main.ts

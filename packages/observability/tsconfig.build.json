@@ -1,0 +1,14 @@
+{
+  // Yalnizca derleme: src -> dist. Testler bilincli olarak disaridadir.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+
+    // paths BILEREK BOSALTILDI: aksi halde @getir/core'un KAYNAGI bu paketin
+    // derlemesine girer ve rootDir disinda dosya (TS6059) hatasi verir.
+    // Gerekcenin tamami packages/contracts/tsconfig.build.json icinde.
+    "paths": {}
+  },
+  "include": ["src"]
+}

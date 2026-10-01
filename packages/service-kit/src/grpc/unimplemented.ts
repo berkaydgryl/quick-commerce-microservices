@@ -27,7 +27,8 @@ const anyRequestSchema = z.unknown();
  * @param rpc    Metot adi ("GetProduct")
  * @param task   Hangi gorevde gelecegi ("T8.4") ya da yerine ne kullanilacagi;
  *               mesajda gorunur.
- * @param logger Verilirse cagri WARN olarak yazilir (beklenen is hatasi gibi).
+ * @param logger Verilirse cagri WARN olarak yazilir (NOT_IMPLEMENTED siradisi
+ *               durumdur: cagiran eski ya da erken; @getir/core ERROR_CODE_SEVERITY).
  */
 export function unimplemented(
   rpc: string,

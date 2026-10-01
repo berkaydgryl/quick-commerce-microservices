@@ -19,7 +19,11 @@
 import { commonEnvSchema, envInt, envString } from '@getir/core';
 import type { z } from 'zod';
 
-import { DEFAULT_GRPC_HOST, DEFAULT_SHUTDOWN_TIMEOUT_MS } from './constants.js';
+import {
+  DEFAULT_GRPC_HOST,
+  DEFAULT_SHUTDOWN_TIMEOUT_MS,
+  METRICS_PORT_OFFSET,
+} from './constants.js';
 
 /** Kapanis suresi ust siniri: bundan uzun bekleyen bir kapanis takilmis demektir. */
 const MAX_SHUTDOWN_TIMEOUT_MS = 120_000;
@@ -27,6 +31,9 @@ const MAX_SHUTDOWN_TIMEOUT_MS = 120_000;
 /** En kucuk ve en buyuk TCP port numarasi. */
 export const MIN_PORT = 1;
 export const MAX_PORT = 65_535;
+
+/** gRPC portunun ust siniri: metrik ucu (port + 1000) da gecerli bir port olmali (T10.5). */
+export const MAX_GRPC_PORT = MAX_PORT - METRICS_PORT_OFFSET;
 
 /** Ortak + gRPC ortam degiskenleri. Servisler bunu `.extend()` ile genisletir. */
 export const serviceEnvSchema = commonEnvSchema.extend({
@@ -47,7 +54,10 @@ export const serviceEnvSchema = commonEnvSchema.extend({
 /** serviceEnvSchema'nin urettigi nesne. Servisler kendi alanlariyla genisletir. */
 export type ServiceEnv = z.infer<typeof serviceEnvSchema>;
 
-/** Servis portu icin hazir sema parcasi: `CATALOG_GRPC_PORT: grpcPort(50051)`. */
+/**
+ * Servis portu icin hazir sema parcasi: `CATALOG_GRPC_PORT: grpcPort(50051)`.
+ * En fazla MAX_GRPC_PORT: metrik ucu bu portun 1000 ustunde acilir.
+ */
 export function grpcPort(defaultValue: number) {
-  return envInt({ min: MIN_PORT, max: MAX_PORT, defaultValue });
+  return envInt({ min: MIN_PORT, max: MAX_GRPC_PORT, defaultValue });
 }

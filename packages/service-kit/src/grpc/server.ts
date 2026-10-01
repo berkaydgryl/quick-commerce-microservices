@@ -2,18 +2,20 @@
  * gRPC sunucusunun ACILISI.
  *
  * Bir Node servisinin `bootstrap.ts` dosyasinin yaptigi is buraya iner:
- * sunucuyu kur, health servisini bagla, portu ac, durumu SERVING'e cevir ve
- * cagirana bir kapanis dugmesi (handle.shutdown) ver.
+ * sunucuyu kur, health servisini bagla, portu ac, metrik ucunu ac (T10.5),
+ * durumu SERVING'e cevir ve cagirana bir kapanis dugmesi (handle.shutdown) ver.
  *
  * Kapanisin KENDISI burada degil: graceful-shutdown.ts icindedir. Burasi
  * yalnizca onu tek seferlik calisacak sekilde baglar.
  */
 
 import { AppError } from '@getir/core';
+import type { MetricsServer } from '@getir/observability';
 import { Server, ServerCredentials } from '@grpc/grpc-js';
 
 import {
   DEFAULT_GRPC_HOST,
+  DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS,
   DEFAULT_SHUTDOWN_TIMEOUT_MS,
   OVERALL_HEALTH_KEY,
   SERVING_STATUS,
@@ -23,15 +25,17 @@ import { silentLogger } from '../logger.js';
 import { runGracefulShutdown } from './graceful-shutdown.js';
 import { routeGrpcJsLogs } from './grpc-logging.js';
 import { HealthGrpcService, healthServiceDefinition } from './health.js';
+import { openMetricsEndpoint } from './metrics-endpoint.js';
 import type { GrpcServerHandle, GrpcServerOptions } from './types.js';
 
-/** Sunucuyu kurar, portu acar ve health durumunu SERVING'e cevirir. */
+/** Sunucuyu kurar, gRPC portunu ve metrik ucunu acar, health durumunu SERVING'e cevirir. */
 export async function startGrpcServer(options: GrpcServerOptions): Promise<GrpcServerHandle> {
   const logger = (options.logger ?? silentLogger).child({ service: options.serviceName });
   // Portu acmadan ONCE: dolu porttaki grpc-js satiri da JSON olarak yazilsin (D5).
   routeGrpcJsLogs(logger);
   const host = options.host ?? DEFAULT_GRPC_HOST;
   const shutdownTimeoutMs = options.shutdownTimeoutMs ?? DEFAULT_SHUTDOWN_TIMEOUT_MS;
+  const hookTimeoutMs = options.shutdownHookTimeoutMs ?? DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS;
 
   const server = new Server();
   const health = new HealthRegistry(logger);
@@ -46,6 +50,12 @@ export async function startGrpcServer(options: GrpcServerOptions): Promise<GrpcS
   }
 
   const port = await bind(server, host, options.port);
+  const metrics = await openMetrics(server, {
+    serviceName: options.serviceName,
+    host,
+    grpcPort: options.port,
+    logger,
+  });
 
   health.setStatus(OVERALL_HEALTH_KEY, SERVING_STATUS.SERVING);
   for (const registration of options.services) {
@@ -53,7 +63,10 @@ export async function startGrpcServer(options: GrpcServerOptions): Promise<GrpcS
       health.setStatus(registration.name, SERVING_STATUS.SERVING);
     }
   }
-  logger.info({ host, port, services: options.services.length }, 'gRPC sunucusu dinlemede');
+  logger.info(
+    { host, port, metricsPort: metrics.port, services: options.services.length },
+    'gRPC sunucusu dinlemede',
+  );
 
   let shutdownPromise: Promise<void> | undefined;
 
@@ -65,15 +78,30 @@ export async function startGrpcServer(options: GrpcServerOptions): Promise<GrpcS
       health,
       healthGrpc,
       services: options.services,
+      metrics,
       logger,
       reason,
       timeoutMs: shutdownTimeoutMs,
+      hookTimeoutMs,
       ...(options.onShutdown === undefined ? {} : { onShutdown: options.onShutdown }),
     });
     return shutdownPromise;
   };
 
-  return { port, health, shutdown };
+  return { port, metricsPort: metrics.port, health, shutdown };
+}
+
+/** Metrik ucunu acar; acamazsa acilmis gRPC sunucusu askida kalmasin diye kapatir. */
+async function openMetrics(
+  server: Server,
+  options: Parameters<typeof openMetricsEndpoint>[0],
+): Promise<MetricsServer> {
+  try {
+    return await openMetricsEndpoint(options);
+  } catch (error: unknown) {
+    server.forceShutdown();
+    throw error;
+  }
 }
 
 /** bindAsync'i sozle sarar; port 0 verildiginde gercek portu dondurur. */

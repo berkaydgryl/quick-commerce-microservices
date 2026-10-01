@@ -7,11 +7,13 @@
  *   degilse aralik kadar beklenir.
  * - Kapanista (stop) yeni tur planlanmaz ve suren tur BEKLENIR: Redis ve
  *   Mongo baglantisi yarim kalmis bir yayinin altindan cekilmez.
+ * - Her tur metrige yazilir (T10.5, #12): outbox-metrics.ts.
  */
 
 import type { Logger } from '@getir/core';
 
 import type { RelayOutbox } from '../../application/relay-outbox.js';
+import { recordRelayFailure, recordRelayRound } from './outbox-metrics.js';
 
 export interface OutboxPublisherOptions {
   readonly relay: RelayOutbox;
@@ -39,11 +41,13 @@ export function startOutboxPublisher(options: OutboxPublisherOptions): OutboxPub
 
   const tick = (): void => {
     running = options.relay(logger).then(
-      (published) => {
-        schedule(published >= options.batchSize ? 0 : options.intervalMs);
+      (round) => {
+        recordRelayRound(round);
+        schedule(round.published >= options.batchSize ? 0 : options.intervalMs);
       },
       (error: unknown) => {
         // Tur beklenmedik bicimde dustu (orn. Mongo okunamadi): isci durmaz.
+        recordRelayFailure();
         logger.error({ err: error }, 'outbox turu basarisiz; aralik sonra tekrar');
         schedule(options.intervalMs);
       },

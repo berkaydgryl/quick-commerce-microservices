@@ -23,6 +23,7 @@
     "@getir/core": "workspace:*",
     "@getir/event-bus": "workspace:*",
     "@getir/mongo-kit": "workspace:*",
+    "@getir/observability": "workspace:*",
     "@getir/pricing": "workspace:*",
     "@getir/proto": "workspace:*",
     "@getir/redis-kit": "workspace:*",

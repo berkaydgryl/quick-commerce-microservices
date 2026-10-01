@@ -1,13 +1,16 @@
 import { AppError, ERROR_CODES, GRPC_STATUS } from '@getir/core';
 import { recordingLogger } from '@getir/core/testing';
-import type { LogLine } from '@getir/core/testing';
+import type { LogLine, RecordedLevel } from '@getir/core/testing';
+import { metricsRegistry } from '@getir/observability';
+import { histogramCount, metricSamples, metricValue } from '@getir/observability/testing';
 import { Metadata } from '@grpc/grpc-js';
 import type { handleUnaryCall, ServerUnaryCall, ServiceError } from '@grpc/grpc-js';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { REQUEST_ID_METADATA_KEY } from '../../src/config/constants.js';
 import { unaryHandler } from '../../src/grpc/handler.js';
+import { RPC_METRICS } from '../../src/grpc/rpc-metrics.js';
 import { appErrorOf } from '../../src/testing/index.js';
 
 const schema = z.object({
@@ -116,30 +119,117 @@ describe('unaryHandler', () => {
     expect(withId.response?.requestId).toBe('req_gateway');
     expect(withoutId.response?.requestId).toMatch(/^req_[0-9a-f]{32}$/);
   });
+});
 
-  it('is hatasini warn, beklenmeyen hatayi error seviyesinde gunluge yazar', async () => {
+describe('unaryHandler: gunluk seviyesi kodun agirligindan (#49)', () => {
+  it.each<[string, () => Error, RecordedLevel, string]>([
+    [
+      'beklenen is sonucu (STOCK_INSUFFICIENT)',
+      () => new AppError(ERROR_CODES.STOCK_INSUFFICIENT, 'Stok yetersiz'),
+      'info',
+      'rpc is hatasiyla dondu',
+    ],
+    [
+      // gRPC UNAUTHENTICATED (16) sayica INTERNAL'dan buyuk: numaradan secilseydi error olurdu.
+      'oturum yok (UNAUTHORIZED)',
+      () => new AppError(ERROR_CODES.UNAUTHORIZED, 'Oturum yok'),
+      'info',
+      'rpc is hatasiyla dondu',
+    ],
+    [
+      'bagimli servis yok (SERVICE_UNAVAILABLE)',
+      () => new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'Katalog servisine ulasilamadi'),
+      'warn',
+      'rpc siradisi hatayla dondu',
+    ],
+    [
+      'AppError INTERNAL',
+      () => AppError.internal('bozuk'),
+      'error',
+      'rpc beklenmeyen hatayla dondu',
+    ],
+    [
+      'AppError olmayan hata',
+      () => new TypeError('bozuk'),
+      'error',
+      'rpc beklenmeyen hatayla dondu',
+    ],
+  ])('%s: %s seviyesi', async (_case, makeError, level, message) => {
     const lines: LogLine[] = [];
-    const logger = recordingLogger(lines);
-    const business = unaryHandler({
+    const handler = unaryHandler({
       name: 'Reserve',
       schema,
-      logger,
+      logger: recordingLogger(lines),
       handle: () => {
-        throw AppError.conflict('Cakisma');
+        throw makeError();
       },
     });
-    const unexpected = unaryHandler({
+
+    await invoke(handler, { sku: 'SUT-1L', quantity: 1 });
+
+    expect(lines).toEqual([expect.objectContaining({ level, message })]);
+    // Beklenen is sonucu ariza degildir: hata nesnesi (yigin izi) yazilmaz.
+    expect('err' in (lines[0]?.fields ?? {})).toBe(level !== 'info');
+  });
+});
+
+describe('unaryHandler: metrikler (T10.5)', () => {
+  beforeEach(() => {
+    metricsRegistry.resetMetrics();
+  });
+
+  const valid = { sku: 'SUT-1L', quantity: 1 };
+
+  it('her cagriyi rpc ve sonuc koduyla sayar, suresini histograma yazar', async () => {
+    const ok = unaryHandler({ name: 'Reserve', schema, handle: () => ({ ok: true }) });
+    const noStock = unaryHandler({
       name: 'Reserve',
       schema,
-      logger,
+      handle: () => {
+        throw new AppError(ERROR_CODES.STOCK_INSUFFICIENT, 'Stok yetersiz');
+      },
+    });
+    const crash = unaryHandler({
+      name: 'Release',
+      schema,
       handle: () => {
         throw new TypeError('bozuk');
       },
     });
 
-    await invoke(business, { sku: 'SUT-1L', quantity: 1 });
-    await invoke(unexpected, { sku: 'SUT-1L', quantity: 1 });
+    await invoke(ok, valid);
+    await invoke(ok, valid);
+    await invoke(ok, { sku: 'X', quantity: 0 });
+    await invoke(noStock, valid);
+    await invoke(crash, valid);
 
-    expect(lines.map((line) => line.level)).toEqual(['warn', 'error']);
+    const requests = RPC_METRICS.REQUESTS;
+    expect(await metricValue(requests, { rpc: 'Reserve', code: 'OK' })).toBe(2);
+    expect(await metricValue(requests, { rpc: 'Reserve', code: 'VALIDATION_FAILED' })).toBe(1);
+    expect(await metricValue(requests, { rpc: 'Reserve', code: 'STOCK_INSUFFICIENT' })).toBe(1);
+    // AppError olmayan hata istemciye INTERNAL gider; etiket de odur.
+    expect(await metricValue(requests, { rpc: 'Release', code: 'INTERNAL' })).toBe(1);
+    expect(await metricValue(requests)).toBe(5);
+    expect(await histogramCount(RPC_METRICS.DURATION, { rpc: 'Reserve', code: 'OK' })).toBe(2);
+    expect(await histogramCount(RPC_METRICS.DURATION)).toBe(5);
+  });
+
+  it('etiketler yalnizca rpc ve code: requestId ya da istek verisi etikete girmez', async () => {
+    const handler = unaryHandler({ name: 'Reserve', schema, handle: () => ({ ok: true }) });
+    const metadata = new Metadata();
+    metadata.set(REQUEST_ID_METADATA_KEY, 'req_etiket_olmamali');
+
+    await invoke(handler, valid, metadata);
+
+    for (const name of [RPC_METRICS.REQUESTS, RPC_METRICS.DURATION]) {
+      for (const sample of await metricSamples(name)) {
+        // Histogram kovalari ek olarak `le` tasir (kova siniri; sabit liste).
+        expect(
+          Object.keys(sample.labels)
+            .filter((key) => key !== 'le')
+            .sort(),
+        ).toEqual(['code', 'rpc']);
+      }
+    }
   });
 });

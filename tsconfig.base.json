@@ -39,6 +39,7 @@
       "@getir/mongo-kit": ["packages/mongo-kit/src/index.ts"],
       "@getir/event-bus": ["packages/event-bus/src/index.ts"],
       "@getir/observability": ["packages/observability/src/index.ts"],
+      "@getir/observability/testing": ["packages/observability/src/testing/index.ts"],
       "@getir/service-kit": ["packages/service-kit/src/index.ts"],
       "@getir/service-kit/testing": ["packages/service-kit/src/testing/index.ts"],
       "@getir/testing": ["packages/testing/src/index.ts"]

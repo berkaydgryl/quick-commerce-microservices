@@ -73,6 +73,22 @@ Teslimat **en az bir kezdir**: işleyici aynı olayı iki kez görebilir, tekrar
 | `maxDeliveries` | 5           | Bir olay işleyiciye en fazla kaç kez verilir                                                                            |
 | `retryDelayMs`  | 1 000       | Tur hatasından (Redis koptu) sonra bekleme                                                                              |
 
+### Metrikler (T10.5, #12)
+
+Tüketici, servisin `/metrics` ucuna (gRPC portu + 1000) şunları yazar:
+
+| Metrik                                             | Anlamı                                                          |
+| -------------------------------------------------- | --------------------------------------------------------------- |
+| `event_consumer_events_total{group,topic,outcome}` | Sonuçlanan olay; `outcome`: `handled` · `retry` · `dead`        |
+| `event_consumer_lag{group}`                        | Gruba **hiç teslim edilmemiş** kayıt (`XINFO GROUPS` lag)       |
+| `event_consumer_pending{group}`                    | Teslim edilmiş ama onaylanmamış kayıt (işleniyor ya da takıldı) |
+
+Grubun dinlemediği konu (onaylanıp geçilen) sayılmaz. `topic` grubun dinlediği konudur; konusu
+okunamayan kayıt (kırpılmış, bozuk) `unknown` olur. Kimlik etiket olmaz. `lag` ve `pending` **grup
+geneldir**: aynı gruptaki her kopya aynı değeri yazar (Prometheus'ta `max` ile okunur). Döngü onları en
+fazla 5 sn'de bir okur (`GROUP_STATS_INTERVAL_MS`); okuma hatası turu durdurmaz, metrik eski
+değerinde kalır. Redis lag'i hesaplayamazsa (akıştan silme sonrası) son değer yerinde kalır.
+
 ## Ölü olaylar (`stream:events:dead`, ADR-16)
 
 Kayıt olayın **orijinal alanlarını aynen** taşır ve `dead.` önekli üst veri ekler:
@@ -102,5 +118,6 @@ entegrasyon testinde sınanır. Otomatik bir yeniden oynatma aracı henüz yok (
   kapanışta bekleyeni yoksa ad silinir.
 
 Testler: `test/unit` (tek kaydın kararı, ölü olay düzeni, sahte akışla grup döngüsü, kayıt ve
-ayar kuralları, zarf) ve `test/integration` (gerçek Redis: teslim, gruplar, yeniden teslim, ölü
-olaylar, çöken tüketicinin devri, kapanış, akışın silinmesi, yeniden oynatma).
+ayar kuralları, zarf, metrikler) ve `test/integration` (gerçek Redis: teslim, gruplar, yeniden teslim,
+ölü olaylar, çöken tüketicinin devri, kapanış, akışın silinmesi, yeniden oynatma, `XINFO GROUPS` ve
+tüketici metrikleri).

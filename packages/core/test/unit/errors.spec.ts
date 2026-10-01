@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   AppError,
   ERROR_CODES,
+  ERROR_SEVERITY,
+  errorSeverityFor,
   GRPC_STATUS,
   HTTP_STATUS,
   isAppError,
@@ -94,6 +96,21 @@ describe('AppError', () => {
     }
     expect(isErrorCode('BILINMEYEN')).toBe(false);
     expect(isErrorCode(undefined)).toBe(false);
+  });
+
+  it('agirlik (#49): yalnizca INTERNAL beklenmeyen; gecici bagimlilik ve yazilmamis uc siradisi', () => {
+    const byKind = (kind: string) =>
+      Object.values(ERROR_CODES).filter((code) => errorSeverityFor(code) === kind);
+
+    expect(byKind(ERROR_SEVERITY.UNEXPECTED)).toEqual([ERROR_CODES.INTERNAL]);
+    expect(byKind(ERROR_SEVERITY.UNUSUAL)).toEqual([
+      ERROR_CODES.SERVICE_UNAVAILABLE,
+      ERROR_CODES.NOT_IMPLEMENTED,
+    ]);
+    // gRPC numarasindan turetilmez: UNAUTHENTICATED (16) > INTERNAL (13) ama is sonucu.
+    expect(errorSeverityFor(ERROR_CODES.UNAUTHORIZED)).toBe(ERROR_SEVERITY.EXPECTED);
+    expect(errorSeverityFor(ERROR_CODES.STOCK_INSUFFICIENT)).toBe(ERROR_SEVERITY.EXPECTED);
+    expect(byKind(ERROR_SEVERITY.EXPECTED)).toHaveLength(Object.values(ERROR_CODES).length - 3);
   });
 
   it('isAppError sadece AppError icin true doner', () => {

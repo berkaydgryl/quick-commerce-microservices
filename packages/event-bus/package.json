@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@getir/core": "workspace:*",
+    "@getir/observability": "workspace:*",
     "@getir/redis-kit": "workspace:*",
     "zod": "^3.23.8"
   },

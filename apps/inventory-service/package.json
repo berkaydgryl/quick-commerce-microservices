@@ -24,6 +24,7 @@
     "@getir/contracts": "workspace:*",
     "@getir/core": "workspace:*",
     "@getir/mongo-kit": "workspace:*",
+    "@getir/observability": "workspace:*",
     "@getir/proto": "workspace:*",
     "@getir/redis-kit": "workspace:*",
     "@getir/service-kit": "workspace:*",

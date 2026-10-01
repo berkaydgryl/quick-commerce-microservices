@@ -148,6 +148,7 @@ export class RedisStreamsConsumer implements EventConsumer {
     }
     const logger = this.logger.child({ group });
     const done = runGroupWorker({
+      group,
       stream,
       handlers,
       settings: this.settings,

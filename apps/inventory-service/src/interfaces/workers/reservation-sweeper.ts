@@ -9,12 +9,17 @@
  * - Liderlik degisimi gunluge bir kez yazilir; geri verilen olan turda ozet.
  * - Kapanista (stop) yeni tur planlanmaz, suren tur BEKLENIR, lider kilidini
  *   birakir: diger ornek beklemeden devralir.
+ * - Liderlik, tur suresi ve sonuc metrige yazilir (T10.5, #12): sweeper-metrics.ts.
  */
 
 import type { Logger } from '@getir/core';
 
 import type { SweepExpired } from '../../application/sweep-expired.js';
 import type { LeaderLock } from '../../domain/leader-lock.js';
+import { recordLeadership, recordSweep, recordSweepFailure } from './sweeper-metrics.js';
+
+/** hrtime nanosaniye doner; metrige saniye yaziyoruz. */
+const NANOSECONDS_PER_SECOND = 1_000_000_000;
 
 export interface ReservationSweeperOptions {
   readonly lock: LeaderLock;
@@ -42,6 +47,7 @@ export function startReservationSweeper(options: ReservationSweeperOptions): Res
 
   const turn = async (): Promise<void> => {
     const holding = await options.lock.hold();
+    recordLeadership(holding);
     if (holding !== leader) {
       leader = holding;
       if (holding) {
@@ -53,7 +59,9 @@ export function startReservationSweeper(options: ReservationSweeperOptions): Res
     if (!holding) {
       return;
     }
+    const startedAt = process.hrtime.bigint();
     const result = await options.sweep();
+    recordSweep(result, Number(process.hrtime.bigint() - startedAt) / NANOSECONDS_PER_SECOND);
     if (result.expired > 0 || result.completed > 0 || result.pending > 0) {
       logger.info({ ...result }, 'suresi dolan rezervasyonlar geri verildi');
     }
@@ -62,6 +70,7 @@ export function startReservationSweeper(options: ReservationSweeperOptions): Res
   const tick = (): void => {
     running = turn().then(schedule, (error: unknown) => {
       // Tur beklenmedik bicimde dustu (orn. Redis erisilemez): isci durmaz.
+      recordSweepFailure();
       logger.error({ err: error }, 'supurucu turu basarisiz; aralik sonra tekrar');
       schedule();
     });
@@ -79,6 +88,7 @@ export function startReservationSweeper(options: ReservationSweeperOptions): Res
         await options.lock.release().catch((error: unknown) => {
           logger.warn({ err: error }, 'supurucu kilidi birakilamadi; omru dolunca duser');
         });
+        recordLeadership(false);
       }
     },
   };

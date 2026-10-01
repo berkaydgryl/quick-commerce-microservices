@@ -20,7 +20,7 @@ const EPHEMERAL_PORT = 0;
 
 export interface TestGrpcServerOptions extends Pick<
   GrpcServerOptions,
-  'services' | 'logger' | 'shutdownTimeoutMs' | 'onShutdown'
+  'services' | 'logger' | 'shutdownTimeoutMs' | 'onShutdown' | 'shutdownHookTimeoutMs'
 > {
   /** Gunlukteki kisa ad; verilmezse "test". */
   readonly serviceName?: string;
@@ -46,6 +46,9 @@ export async function startTestGrpcServer(options: TestGrpcServerOptions): Promi
       ? {}
       : { shutdownTimeoutMs: options.shutdownTimeoutMs }),
     ...(options.onShutdown === undefined ? {} : { onShutdown: options.onShutdown }),
+    ...(options.shutdownHookTimeoutMs === undefined
+      ? {}
+      : { shutdownHookTimeoutMs: options.shutdownHookTimeoutMs }),
   });
   const client = new Client(`${TEST_HOST}:${handle.port}`, credentials.createInsecure());
   return {
