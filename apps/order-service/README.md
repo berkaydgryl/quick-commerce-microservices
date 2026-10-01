@@ -212,6 +212,12 @@ yayınlanmamış olayları sonra `stream:events`'e basar.
 - **Zarf (ADR-07):** yayında `@getir/event-bus` zarfına çevrilir: `eventId` (`evt_…`),
   `topic`, `partitionKey` = `orderId`, `occurredAt`, `payload`. `version` realtime'ın soket
   `seq`'i olarak kullanılabilir.
+- **İsteğin izi (D16):** olayı yazan isteğin `requestId`'si ve iz bağlamı (`traceparent`, gRPC
+  handler'ının sunucu span'i) outbox satırına iki isteğe bağlı alan olarak yazılır (insert, update ve
+  telafi komutu `append`; bağlamdan altyapı okur, use-case değişmedi). Yayıncı ikisini zarfa kopyalar
+  ve yayını bu bağlamın çocuğu olan bir span'de yapar: `payment.refund_requested`'i işleyen tüketici
+  siparişi veren isteğin izinde ve aynı `requestId` ile görünür. İstek dışı yazımda (seed) ve eski
+  satırlarda alanlar yoktur; biçimsiz değer atılır, yayın durmaz.
 - **Yayıncı** (`interfaces/workers/outbox-publisher.ts` → `application/relay-outbox.ts`): 500 ms'de
   bir tur, turda en fazla 100 olay, yayın sırası `occurredAt`, eşitlikte `version`. İlk hatada tur
   durur (sonraki olay öncekini geçmesin); yalnızca yayınlananlar işaretlenir. Dolu parti çıkarsa

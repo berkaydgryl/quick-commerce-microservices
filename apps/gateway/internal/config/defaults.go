@@ -78,4 +78,9 @@ const (
 const (
 	minPort = 1
 	maxPort = 65535
+	// MetricsPortOffset, metrik ucunun portu: GATEWAY_PORT + 1000 (roadmap port
+	// kurali; Node servislerinde gRPC portu + 1000, T10.5). #29.
+	MetricsPortOffset = 1000
+	// maxGatewayPort, metrik portu da gecerli kalsin diye gateway portunun ust siniri.
+	maxGatewayPort = maxPort - MetricsPortOffset
 )

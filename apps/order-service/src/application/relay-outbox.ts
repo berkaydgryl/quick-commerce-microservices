@@ -14,11 +14,11 @@
  */
 
 import type { Clock, Logger } from '@getir/core';
-import { eventEnvelopeSchema } from '@getir/event-bus';
+import { eventEnvelopeSchema, validCorrelation } from '@getir/event-bus';
 import type { EventEnvelope, EventPublisher } from '@getir/event-bus';
 
 import type { OrderEvent } from '../domain/order-events.js';
-import type { OrderOutbox } from '../domain/order-outbox.js';
+import type { OrderOutbox, PendingEvent } from '../domain/order-outbox.js';
 
 export interface RelayOutboxDeps {
   readonly outbox: Pick<OrderOutbox, 'pending' | 'markPublished'>;
@@ -74,14 +74,17 @@ function lagOf(oldest: OrderEvent | undefined, nowMs: number): number {
 
 /**
  * Domain olayi -> hat zarfi (ADR-07). Zarf semadan gecer: bozuk olay hatta
- * girmez, tur durur ve hata gunlukte gorunur.
+ * girmez, tur durur ve hata gunlukte gorunur. Yazan istegin izi (D16) zarfa
+ * kopyalanir; bicimsiz olan atilir (korelasyon yuzunden yayin durmaz). Yayinci
+ * bu baglamin cocugu olan bir span acar, tuketici o span'in cocugu olur.
  */
-function toEnvelope(event: OrderEvent): EventEnvelope {
+function toEnvelope(event: PendingEvent): EventEnvelope {
   return eventEnvelopeSchema.parse({
     eventId: event.eventId,
     topic: event.topic,
     partitionKey: event.orderId,
     occurredAt: event.occurredAt.toISOString(),
     payload: event.payload,
+    ...validCorrelation(event.correlation ?? {}),
   });
 }

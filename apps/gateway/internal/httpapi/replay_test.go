@@ -170,9 +170,10 @@ func TestConcurrentSameKeyGetsRequestInProgress(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			orders := &blockingOrders{entered: make(chan struct{}, 1), release: make(chan struct{})}
+			recorder := &recordingMetrics{}
 			app := New(Deps{
 				Health: fakeReporter{report: healthyReport()}, CartReserver: orders, OrderPlacer: orders, CheckoutSignals: &fakeSignals{},
-				AccessTokens: testTokens(), Idempotency: testIdempotency(), Logger: silentLogger(),
+				AccessTokens: testTokens(), Idempotency: testIdempotency(), Logger: silentLogger(), Metrics: recorder,
 			})
 
 			first := make(chan rawResult, 1)
@@ -203,6 +204,11 @@ func TestConcurrentSameKeyGetsRequestInProgress(t *testing.T) {
 			_, header, again := exchangeRaw(t, app, orderRequest(t, http.MethodPost, tc.path, tc.body, nil))
 			if string(again) != string(done.body) || header.Get(IdempotentReplayedHeader) != "true" || orders.calls != 1 {
 				t.Errorf("bittikten sonra ilk cevap tekrar edilmeli: %s / %s (%d cagri)", again, done.body, orders.calls)
+			}
+			// #29: isleniyorken gelen 409 ve sonraki tekrar metrikte ayri gorunur.
+			if len(recorder.keyRejections) != 1 || recorder.keyRejections[0] != tc.path+" "+keyRejectedInProgress ||
+				len(recorder.replays) != 1 || recorder.replays[0] != tc.path {
+				t.Errorf("in_progress ve tekrar sayilmali: %v %v", recorder.keyRejections, recorder.replays)
 			}
 		})
 	}
@@ -405,9 +411,10 @@ func TestOversizedResponseIsNotReplayedAndNoNewKeyIsSuggested(t *testing.T) {
 	// 16 KB'yi asan cevap saklanmaz (bugunku uclarda olmaz). Tekrar istegi ucu
 	// ikinci kez CALISTIRMAZ; 409 alir ve yeni anahtar onerilmez (istek
 	// tamamlanmistir; yeni anahtar ikinci siparis olurdu).
-	app := fiber.New(fiber.Config{ErrorHandler: errorHandler(silentLogger())})
+	recorder := &recordingMetrics{}
+	app := fiber.New(fiber.Config{ErrorHandler: errorHandler(silentLogger(), recorder)})
 	calls := 0
-	app.Post("/buyuk", idempotent(testIdempotency(), mutationPolicy, silentLogger()), func(c fiber.Ctx) error {
+	app.Post("/buyuk", idempotent(testIdempotency(), mutationPolicy, silentLogger(), recorder), func(c fiber.Ctx) error {
 		calls++
 		return c.Status(http.StatusCreated).SendString(strings.Repeat("a", idempotencyMaxStoredBody+1))
 	})
@@ -426,15 +433,18 @@ func TestOversizedResponseIsNotReplayedAndNoNewKeyIsSuggested(t *testing.T) {
 	if calls != 1 {
 		t.Errorf("uc bir kez calismali, %d kez calisti", calls)
 	}
+	if len(recorder.keyRejections) != 1 || recorder.keyRejections[0] != "/buyuk "+keyRejectedReplayUnhandled {
+		t.Errorf("tekrar edilemeyen cevap replay_unavailable sayilmali: %v", recorder.keyRejections)
+	}
 }
 
 func TestProtectedHandlerFinishesBeforeItsRecordExpires(t *testing.T) {
 	// "Isleniyor" kaydi (30 sn) uc calisirken dusmemeli: ucun baglami ondan
 	// kisa bir son tarih tasir, GATEWAY_REQUEST_TIMEOUT_MS ne olursa olsun.
-	app := fiber.New(fiber.Config{ErrorHandler: errorHandler(silentLogger())})
+	app := fiber.New(fiber.Config{ErrorHandler: errorHandler(silentLogger(), noMetrics{})})
 	var deadline time.Time
 	var hasDeadline bool
-	app.Post("/sure", idempotent(testIdempotency(), mutationPolicy, silentLogger()), func(c fiber.Ctx) error {
+	app.Post("/sure", idempotent(testIdempotency(), mutationPolicy, silentLogger(), noMetrics{}), func(c fiber.Ctx) error {
 		deadline, hasDeadline = c.Context().Deadline()
 		return c.Status(http.StatusCreated).SendString(`{}`)
 	})

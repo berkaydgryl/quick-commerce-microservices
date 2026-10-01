@@ -85,10 +85,12 @@ func normalizeIP(raw string) string {
 type rateLimiter struct {
 	settings RateLimit
 	warning  *failOpenWarning
+	// recorder, 429'lari rota basina sayar (#29); rota hangi sinirin oldugunu da soyler.
+	recorder RequestMetrics
 }
 
-func newRateLimiter(settings RateLimit, logger *slog.Logger) rateLimiter {
-	return rateLimiter{settings: settings, warning: &failOpenWarning{logger: logger, now: time.Now}}
+func newRateLimiter(settings RateLimit, logger *slog.Logger, recorder RequestMetrics) rateLimiter {
+	return rateLimiter{settings: settings, warning: &failOpenWarning{logger: logger, now: time.Now}, recorder: recorder}
 }
 
 // limit, verilen sinir ve ozneyle ara katman; sinir kapaliysa istegi gecirir.
@@ -109,6 +111,7 @@ func (r rateLimiter) limit(limit int, subject rateSubject) fiber.Handler {
 			return c.Next()
 		}
 		if !decision.Allowed {
+			r.recorder.CountRateLimited(metricRoute(c))
 			seconds := retryAfterSeconds(decision.RetryAfter)
 			c.Set(fiber.HeaderRetryAfter, strconv.Itoa(seconds))
 			return &apperror.Error{Code: apperror.CodeRateLimited, Details: map[string]any{"retryAfterSeconds": seconds}}

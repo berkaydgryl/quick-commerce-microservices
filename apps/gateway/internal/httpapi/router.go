@@ -18,6 +18,7 @@ package httpapi
 //   params.go     - sorgu parametresinin tipine cevrilmesi
 //   middleware.go - istek gunlugu
 //   tracing.go    - istek span'i (D15; izin listeli nitelikler)
+//   metrics.go    - istek metrikleri (#29; kapali etiket kumeleri)
 //   recover.go    - panik kurtarma (T8.3)
 //   errors.go     - hata -> zarf cevirisi
 //   requestid.go  - korelasyon kimligi (bicim, baslik, gRPC metadata'si)
@@ -179,14 +180,21 @@ type Deps struct {
 	// (bos izleyici) ve W3C yayici kullanilir; testlerin cogu izsizdir.
 	Tracer     trace.Tracer
 	Propagator propagation.TextMapPropagator
+	// Metrics, istek, tekrar korumasi ve hiz siniri metrikleri (#29). Verilmezse
+	// yazilmaz.
+	Metrics RequestMetrics
 }
 
 // New, Fiber uygulamasini kurar.
 func New(deps Deps) *fiber.App {
+	recorder := deps.Metrics
+	if recorder == nil {
+		recorder = noMetrics{}
+	}
 	app := fiber.New(fiber.Config{
 		// Kendi zarfimizi yaziyoruz; Fiber'in varsayilan duz metin hatasi
 		// sozlesmeyi bozardi.
-		ErrorHandler: errorHandler(deps.Logger),
+		ErrorHandler: errorHandler(deps.Logger, recorder),
 		// Sunucu adini disariya bildirmek gereksiz bilgi sizdirir.
 		ServerHeader: "",
 		JSONEncoder:  encodeJSON,
@@ -194,11 +202,12 @@ func New(deps Deps) *fiber.App {
 		BodyLimit: maxBodyBytes,
 	})
 
-	// Sira onemli: kimlik -> iz -> istek gunlugu -> panik kurtarma (T8.3,
-	// D15). Panik hataya gunlugun ICINDE doner; boylece istek gunlugu de 500'u
-	// ve ayni requestId'yi yazar. Span kimlikten sonra acilir (requestId
-	// niteligi) ve istek gunlugunu sarar: hatayi cevaba gunluk cevirir, span
-	// cevabin SON durum koduyla kapanir (disarida kalsaydi 200 kaydederdi).
+	// Sira onemli: kimlik -> iz -> metrik -> istek gunlugu -> panik kurtarma
+	// (T8.3, D15, #29). Panik hataya gunlugun ICINDE doner; boylece istek
+	// gunlugu de 500'u ve ayni requestId'yi yazar. Span kimlikten sonra acilir
+	// (requestId niteligi); span ve metrik istek gunlugunu sarar: hatayi cevaba
+	// gunluk cevirir, ikisi cevabin SON durum koduyla yazilir (disarida
+	// kalsalar 200 kaydederlerdi).
 	tracer, propagator := deps.Tracer, deps.Propagator
 	if tracer == nil {
 		tracer = noop.NewTracerProvider().Tracer("")
@@ -208,6 +217,7 @@ func New(deps Deps) *fiber.App {
 	}
 	app.Use(requestIDMiddleware)
 	app.Use(tracingMiddleware(tracer, propagator))
+	app.Use(metricsMiddleware(recorder))
 	app.Use(requestLogger(deps.Logger))
 	app.Use(recoverPanics())
 
@@ -215,7 +225,7 @@ func New(deps Deps) *fiber.App {
 
 	// Hiz siniri (T8.2) ROTA BASINA: kimliksiz uclarda IP, korumali uclarda
 	// kimlikten SONRA kullanici sayilir. /healthz sinirsiz.
-	limits := newRateLimiter(deps.RateLimit, deps.Logger)
+	limits := newRateLimiter(deps.RateLimit, deps.Logger, recorder)
 	generalByIP := limits.limit(deps.RateLimit.General, byClientIP)
 	authByIP := limits.limit(deps.RateLimit.Auth, byClientIP)
 	generalByUser := limits.limit(deps.RateLimit.General, byUser)
@@ -235,9 +245,9 @@ func New(deps Deps) *fiber.App {
 	// Tekrar korumasi (T8.2) ROTA BASINA: yalnizca Idempotency-Key isteyen
 	// mutasyon uclarinda. Korumali uclarda kimlikten SONRA: kayit kullanicinin
 	// kapsamindadir (idem:{usr_...}:anahtar).
-	register := idempotent(deps.Idempotency, registerPolicy, deps.Logger)
-	mutation := idempotent(deps.Idempotency, mutationPolicy, deps.Logger)
-	checkout := idempotent(deps.Idempotency, checkoutPolicy, deps.Logger)
+	register := idempotent(deps.Idempotency, registerPolicy, deps.Logger, recorder)
+	mutation := idempotent(deps.Idempotency, mutationPolicy, deps.Logger, recorder)
+	checkout := idempotent(deps.Idempotency, checkoutPolicy, deps.Logger, recorder)
 	v1.Post("/auth/register", authByIP, register, registerHandler(deps.UserRegistrar, devices, sessions))
 	v1.Post("/auth/login", authByIP, loginHandler(deps.UserAuthenticator, devices, sessions))
 	// Yenileme ve cikis GENEL sinirda (T8.5): web her acilista sessizce yeniler;

@@ -215,6 +215,27 @@ func TestAssetBaseURLReportedWithOtherProblems(t *testing.T) {
 	}
 }
 
+func TestMetricsPortIsGatewayPortPlusOffset(t *testing.T) {
+	cfg, err := Load(minimalEnv(map[string]string{"GATEWAY_PORT": "8098"}))
+	if err != nil {
+		t.Fatalf("yuklenemedi: %v", err)
+	}
+	if cfg.MetricsPort() != 9098 || cfg.MetricsAddr() != ":9098" {
+		t.Errorf("metrik portu GATEWAY_PORT + 1000 olmali: %d %q", cfg.MetricsPort(), cfg.MetricsAddr())
+	}
+}
+
+func TestLoadRejectsGatewayPortWhoseMetricsPortOverflows(t *testing.T) {
+	// 64535 + 1000 = 65535 son gecerli port; bir fazlasinda metrik portu tasar.
+	if _, err := Load(minimalEnv(map[string]string{"GATEWAY_PORT": "64535"})); err != nil {
+		t.Fatalf("64535 kabul edilmeli: %v", err)
+	}
+	_, err := Load(minimalEnv(map[string]string{"GATEWAY_PORT": "64536"}))
+	if err == nil || !strings.Contains(err.Error(), "GATEWAY_PORT") {
+		t.Fatalf("64536 GATEWAY_PORT adiyla reddedilmeli: %v", err)
+	}
+}
+
 func TestLoadOTLPEndpointIsOptional(t *testing.T) {
 	cfg, err := Load(minimalEnv(nil))
 	if err != nil {

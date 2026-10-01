@@ -1,6 +1,7 @@
 /**
  * Outbox SOZLESME testi (T7.3, ADR-04): ayni senaryolar bellekte (unit) ve
- * gercek Mongo'da (integration, gercek transaction) kosar.
+ * gercek Mongo'da (integration, gercek transaction) kosar. D16: yazan istegin
+ * izi (requestId, traceparent) olayin yaninda saklanir; kaynagi test verir.
  *
  * Mongo'da outbox koleksiyonu dosya boyunca paylasilir: her test once
  * bekleyenleri bosaltir (drain), boylece yalnizca kendi olaylarini gorur.
@@ -15,7 +16,11 @@ import {
   statusChangedEvents,
 } from '../../src/domain/order-events.js';
 import type { OrderEvent } from '../../src/domain/order-events.js';
-import type { OrderOutbox } from '../../src/domain/order-outbox.js';
+import type {
+  CorrelationSource,
+  EventCorrelation,
+  OrderOutbox,
+} from '../../src/domain/order-outbox.js';
 import type { OrderRepository } from '../../src/domain/order-repository.js';
 import { createDraftOrder, transitionOrder } from '../../src/domain/order.js';
 import type { Order } from '../../src/domain/order.js';
@@ -29,7 +34,22 @@ export interface OutboxPorts {
 
 const DRAIN_LIMIT = 10_000;
 
-export function describeOrderOutboxContract(name: string, getPorts: () => OutboxPorts): void {
+/** Istegin izi (D16): bicimce gecerli sabit degerler. */
+const REQUEST_CORRELATION: EventCorrelation = {
+  requestId: `req_${'a'.repeat(32)}`,
+  traceparent: `00-${'b'.repeat(32)}-${'c'.repeat(16)}-01`,
+};
+
+/**
+ * @param getCorrelatedPorts ayni depoyu verilen iz kaynagiyla kurar (uretimde
+ *   kaynak aktif baglamdir; testte sabit). Varsayilan portlar istek disinda
+ *   yazar: olaylarda iz yoktur.
+ */
+export function describeOrderOutboxContract(
+  name: string,
+  getPorts: () => OutboxPorts,
+  getCorrelatedPorts: (source: CorrelationSource) => OutboxPorts,
+): void {
   describe(`OrderOutbox sozlesmesi: ${name}`, () => {
     let ports: OutboxPorts;
     let userCounter = 0;
@@ -176,6 +196,47 @@ export function describeOrderOutboxContract(name: string, getPorts: () => Outbox
       );
 
       expect(ids(await ports.outbox.pending(10))).toEqual([secondEvent?.eventId]);
+    });
+
+    it('yazan istegin izi (D16): insert, update ve append olayin yaninda saklanir', async () => {
+      const correlated = getCorrelatedPorts(() => REQUEST_CORRELATION);
+      const draft = draftAt(START_MS);
+      await correlated.repository.insert(draft, orderCreatedEvents(draft));
+      const checked = transitionOrder(draft, ORDER_STATUS.RISK_CHECK, fixedClock(START_MS + 1));
+      await correlated.repository.update(
+        checked,
+        draft.version,
+        statusChangedEvents(draft, checked),
+      );
+      const command = refundRequestedEvent(
+        checked,
+        { reason: 'order_changed_during_payment', idempotencyKey: `refund-${draft.id}` },
+        new Date(START_MS + 2),
+      );
+      await correlated.outbox.append([command]);
+
+      const pending = await correlated.outbox.pending(10);
+
+      expect(pending.map((event) => event.topic)).toEqual([
+        'order.created',
+        'order.status_changed',
+        'payment.refund_requested',
+      ]);
+      expect(pending.map((event) => event.correlation)).toEqual([
+        REQUEST_CORRELATION,
+        REQUEST_CORRELATION,
+        REQUEST_CORRELATION,
+      ]);
+    });
+
+    it('istek disi yazim (D16): olayda iz alani hic yok', async () => {
+      const draft = draftAt(START_MS);
+      await ports.repository.insert(draft, orderCreatedEvents(draft));
+
+      const [pending] = await ports.outbox.pending(10);
+
+      expect(pending).toBeDefined();
+      expect(pending && 'correlation' in pending).toBe(false);
     });
 
     it('append: siparis degismeden olay yazilir (telafi komutu)', async () => {

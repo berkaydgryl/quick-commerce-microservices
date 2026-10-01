@@ -87,6 +87,9 @@ tipten kurar, payment aynı şemadan geçirir. Gerekçe ve anahtar kuralı `Refu
 - **Grup ilk kez akışın başından okur:** payment kapalıyken bırakılan komut açılışta işlenir
   (28 Eylül kararı). Payment'ın kopyaları aynı gruptadır; bir komutu yalnızca biri işler.
 - **Tüketici adı** `<makine>-<pid>`; zarif kapanışta bekleyen kaydı yoksa gruptan silinir.
+- **İz ve `requestId` (D16):** komutun zarfı order'daki isteğin `requestId`'sini ve iz bağlamını
+  taşır. İşleme bir span'dir (`process payment.refund_requested`), siparişi veren isteğin izinde;
+  `iade komutu: ...` satırı aynı `requestId`'yi ve `traceId`'yi taşır (`@getir/event-bus` README).
 - **Metrikler (T10.5, #12):** `localhost:51054/metrics`'te grubun sonuç sayacı
   (`event_consumer_events_total{group="payment",…}`), gecikmesi (`event_consumer_lag`) ve onaylanmamış
   kayıtları (`event_consumer_pending`). Tanımları `@getir/event-bus` README'sinde.

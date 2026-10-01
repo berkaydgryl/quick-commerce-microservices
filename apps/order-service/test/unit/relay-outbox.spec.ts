@@ -43,6 +43,44 @@ function failingAt(failIndex: number): { publisher: EventPublisher; sent: EventE
   };
 }
 
+const REQUEST_ID = `req_${'d'.repeat(32)}`;
+const TRACEPARENT = `00-${'e'.repeat(32)}-${'f'.repeat(16)}-01`;
+
+describe('relayOutbox: yazan istegin izi (D16)', () => {
+  it('outbox satirindaki requestId ve traceparent zarfa kopyalanir', async () => {
+    store = new InMemoryOrderStore(() => ({ requestId: REQUEST_ID, traceparent: TRACEPARENT }));
+    await insertDraft(store, clock);
+
+    await relayWith(publisher)(silentLogger);
+
+    // Saglayici yok: yayinci span acamaz, zarftaki baglam aynen gider.
+    expect(publisher.published[0]).toMatchObject({
+      requestId: REQUEST_ID,
+      traceparent: TRACEPARENT,
+    });
+  });
+
+  it('bicimsiz iz atilir; olay yine yayinlanir (yayin durmaz)', async () => {
+    store = new InMemoryOrderStore(() => ({ requestId: 'kimlik-degil', traceparent: 'bozuk' }));
+    await insertDraft(store, clock);
+
+    const result = await relayWith(publisher)(silentLogger);
+
+    expect(result.published).toBe(1);
+    expect(publisher.published[0]).not.toHaveProperty('requestId');
+    expect(publisher.published[0]).not.toHaveProperty('traceparent');
+  });
+
+  it('iz yoksa zarfta korelasyon alani yok', async () => {
+    await insertDraft(store, clock);
+
+    await relayWith(publisher)(silentLogger);
+
+    expect(publisher.published[0]).not.toHaveProperty('requestId');
+    expect(publisher.published[0]).not.toHaveProperty('traceparent');
+  });
+});
+
 describe('relayOutbox', () => {
   it('bekleyenleri sirayla zarf olarak yayinlar ve isaretler', async () => {
     const order = await insertAwaitingPayment(store, clock);

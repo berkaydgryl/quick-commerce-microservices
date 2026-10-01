@@ -7,12 +7,14 @@
 
 import { isAppError } from '@getir/core';
 import type { Logger } from '@getir/core';
+import { resolveRequestId } from '@getir/observability';
 
 import { DEAD_LETTER_REASON } from './dead-letter.js';
 import type { DeadLetterReason } from './dead-letter.js';
 import type { EventEnvelope } from './envelope.js';
 import { fromStreamFields, peekEnvelope } from './stream-fields.js';
 import type { EventHandler } from './subscriber.js';
+import { endConsumerSpan, runInConsumerSpan, startConsumerSpan } from './tracing.js';
 
 export interface StreamEntry {
   /** Redis akis kimligi ("1790580376790-0"). */
@@ -40,6 +42,8 @@ export interface DispatchContext {
   readonly attempt: number;
   readonly maxDeliveries: number;
   readonly handlerFor: (topic: string) => EventHandler | undefined;
+  /** Tuketici grubu: isleme span'inin niteligi. */
+  readonly group: string;
   /** Grup bagli gunlukcu; isleyiciye olay alanlari eklenerek verilir. */
   readonly logger: Logger;
 }
@@ -81,17 +85,32 @@ export async function dispatchEntry(
     );
   }
 
+  // Olayi doguran istegin kimligi (D16); zarfta yoksa (eski kayit, istek disi
+  // uretici) burada uretilir: RPC'deki "gelmezse uretilir" kurali.
+  const requestId = resolveRequestId(envelope.requestId);
   const logger = context.logger.child({
     eventId: envelope.eventId,
     topic: envelope.topic,
     attempt: context.attempt,
+    requestId,
+  });
+  const consumer = startConsumerSpan(envelope, {
+    group: context.group,
+    attempt: context.attempt,
+    requestId,
   });
   try {
-    const outcome = await handler(envelope, { attempt: context.attempt, logger });
-    return outcome.kind === 'handled'
-      ? HANDLED
-      : dead(DEAD_LETTER_REASON.REJECTED, context.attempt, rejectionText(outcome));
+    const outcome = await runInConsumerSpan(consumer, () =>
+      handler(envelope, { attempt: context.attempt, logger }),
+    );
+    if (outcome.kind === 'handled') {
+      endConsumerSpan(consumer.span);
+      return HANDLED;
+    }
+    endConsumerSpan(consumer.span, { status: 'reddedildi', error: outcome.cause });
+    return dead(DEAD_LETTER_REASON.REJECTED, context.attempt, rejectionText(outcome));
   } catch (error: unknown) {
+    endConsumerSpan(consumer.span, { status: 'islenemedi', error });
     return context.attempt >= context.maxDeliveries
       ? dead(DEAD_LETTER_REASON.EXHAUSTED, context.attempt, describeError(error))
       : { kind: 'retry', error };

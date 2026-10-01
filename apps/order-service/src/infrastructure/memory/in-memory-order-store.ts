@@ -8,6 +8,7 @@
  */
 
 import { AppError, ORDER_STATUS } from '@getir/core';
+import { currentCorrelation } from '@getir/observability';
 
 import type { OrderEvent } from '../../domain/order-events.js';
 import { comesBefore, cursorOf } from '../../domain/order-history-cursor.js';
@@ -18,19 +19,28 @@ import type {
   RiskHistory,
 } from '../../domain/order-history-reader.js';
 import { PAID_ORDER_STATUSES, toRiskHistory } from '../../domain/order-history-reader.js';
-import type { OrderOutbox } from '../../domain/order-outbox.js';
+import type {
+  CorrelationSource,
+  EventCorrelation,
+  OrderOutbox,
+  PendingEvent,
+} from '../../domain/order-outbox.js';
 import type { OrderRepository } from '../../domain/order-repository.js';
 import { orderAlreadyExists, orderVersionConflict } from '../../domain/order-repository.js';
 import type { Order } from '../../domain/order.js';
 
 interface StoredEvent {
   readonly event: OrderEvent;
+  /** Yazan istegin izi (D16); Mongo'daki iki istege bagli alanin karsiligi. */
+  readonly correlation: EventCorrelation;
   publishedAt?: Date;
 }
 
 export class InMemoryOrderStore implements OrderRepository, OrderHistoryReader, OrderOutbox {
   private readonly orders = new Map<string, Order>();
   private readonly events: StoredEvent[] = [];
+
+  constructor(private readonly correlation: CorrelationSource = currentCorrelation) {}
 
   // Siparis ve olaylari ayni senkron adimda yazilir: arada baska kod kosamaz,
   // bellekte "transaction" budur. Hata halinde ikisi de yazilmaz.
@@ -69,10 +79,10 @@ export class InMemoryOrderStore implements OrderRepository, OrderHistoryReader, 
     return Promise.resolve();
   }
 
-  pending(limit: number): Promise<readonly OrderEvent[]> {
+  pending(limit: number): Promise<readonly PendingEvent[]> {
     const unpublished = this.events
       .filter((stored) => stored.publishedAt === undefined)
-      .map((stored) => stored.event)
+      .map(toPendingEvent)
       .sort(
         (left, right) =>
           left.occurredAt.getTime() - right.occurredAt.getTime() || left.version - right.version,
@@ -109,7 +119,8 @@ export class InMemoryOrderStore implements OrderRepository, OrderHistoryReader, 
   }
 
   private record(events: readonly OrderEvent[]): void {
-    this.events.push(...events.map((event) => ({ event })));
+    const correlation = this.correlation();
+    this.events.push(...events.map((event) => ({ event, correlation })));
   }
 
   findById(orderId: string): Promise<Order | null> {
@@ -148,4 +159,11 @@ export class InMemoryOrderStore implements OrderRepository, OrderHistoryReader, 
   get size(): number {
     return this.orders.size;
   }
+}
+
+/** Mongo okumasiyla ayni bicim: iz yoksa `correlation` alani hic yoktur. */
+function toPendingEvent(stored: StoredEvent): PendingEvent {
+  return Object.keys(stored.correlation).length === 0
+    ? stored.event
+    : { ...stored.event, correlation: stored.correlation };
 }

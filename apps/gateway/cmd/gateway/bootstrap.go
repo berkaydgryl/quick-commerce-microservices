@@ -35,7 +35,7 @@ import (
 // ctx acilisin baglamidir: Mongo'ya ya da Redis'e baglanirken sinyal gelirse
 // acilis durur. Donen cleanup havuzu, Mongo ve Redis baglantilarini kapatir;
 // cagiran, sunucu durduktan SONRA calistirir.
-func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, tracing *telemetry.Tracing) (*fiber.App, func(), error) {
+func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, tracing *telemetry.Tracing, recorder httpapi.RequestMetrics) (*fiber.App, func(), error) {
 	targets := make([]clients.Target, 0, len(cfg.Services))
 	for _, service := range cfg.Services {
 		targets = append(targets, clients.Target{Name: service.Name, Address: service.Address})
@@ -158,6 +158,7 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 		// Istek span'leri (D15).
 		Tracer:     tracing.Tracer,
 		Propagator: tracing.Propagator,
+		Metrics:    recorder,
 	})
 
 	return app, cleanup, nil

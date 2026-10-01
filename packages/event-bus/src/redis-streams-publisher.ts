@@ -5,6 +5,9 @@
  * kirpmadir: Redis tam sayiya inmek icin her yazimda kirpmaz, dugum boyunda
  * keser - maliyet sabit kalir. Sinir, kalici kayit degil TASIMA icindir:
  * olaylarin kalici kaydi ureten servisin outbox'indadir (ADR-04).
+ *
+ * Her yazim bir PRODUCER span'idir (D16, tracing.ts): akistaki kaydin
+ * traceparent'i o span'inkidir.
  */
 
 import { AppError } from '@getir/core';
@@ -15,6 +18,7 @@ import { eventEnvelopeSchema } from './envelope.js';
 import type { EventEnvelope } from './envelope.js';
 import type { EventPublisher } from './publisher.js';
 import { toStreamFields } from './stream-fields.js';
+import { MESSAGING_SYSTEM, publishInSpan } from './tracing.js';
 
 /** Akisin tuttugu en fazla kayit (yaklasik). */
 export const EVENTS_STREAM_MAX_LENGTH = 10_000;
@@ -45,13 +49,15 @@ export class RedisStreamsPublisher implements EventPublisher {
         details: { eventId: envelope.eventId, topic: envelope.topic },
       });
     }
-    await this.redis.xadd(
-      this.streamKey,
-      'MAXLEN',
-      '~',
-      String(this.maxLength),
-      '*',
-      ...toStreamFields(parsed.data),
-    );
+    await publishInSpan(parsed.data, MESSAGING_SYSTEM.REDIS, async (traced) => {
+      await this.redis.xadd(
+        this.streamKey,
+        'MAXLEN',
+        '~',
+        String(this.maxLength),
+        '*',
+        ...toStreamFields(traced),
+      );
+    });
   }
 }

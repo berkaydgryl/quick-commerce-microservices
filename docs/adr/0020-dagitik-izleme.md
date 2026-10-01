@@ -47,6 +47,10 @@ yasaklar; izler de ayni depoya (goruntuleyici) yazilan telemetridir.
 - **Gunluk korelasyonu**: span icinde yazilan her satir `traceId` ve `spanId` tasir
   (Node: pino mixin; gateway: slog isleyicisi). `requestId` AYRI kalir ve span'e
   `app.request_id` olarak yazilir: REST hatasindaki kimlikle iz bulunur.
+- **Olay hatti (D16, ADR-07 eki)**: zarf `requestId` ve `traceparent` tasir. Outbox
+  satiri olayi yazan istegin baglamini saklar; yayin PRODUCER (`publish <konu>`), isleme
+  CONSUMER (`process <konu>`) span'idir ve tuketici yayinin cocugudur. Nitelikler
+  `messaging.*`, `app.request_id`, `app.delivery_attempt`; govde yazilmaz.
 - **Kapanis**: bekleyen span'ler en son, en cok 2 sn'de gonderilir.
 - **Goruntuleyici**: Jaeger v2 (`jaegertracing/jaeger`), docker-compose.dev.yml'de;
   izler bellekte.
@@ -74,10 +78,10 @@ yasaklar; izler de ayni depoya (goruntuleyici) yazilan telemetridir.
 - Olumsuz: veritabani cagrilari izde tek tek gorunmez (servis span'inin suresine dahil).
   Her istek orneklendigi icin yuksek yukte oran ayari gerekir. Izler bellekte: Jaeger
   yeniden baslayinca gider.
-- Kapsam disi: olay hattinda iz (outbox -> tuketici) D16'dir (ADR-07 guncellenir).
-  Gateway metrikleri (#29) ayri is.
+- Olay hattinda iz D16'da eklendi (ADR-07 eki). Gateway metrikleri (#29) iz degil, metrik
+  isidir (`internal/metrics`).
 
 ## Ilgili
 
-ADR-07 (olay zarfi, D16), ADR-10; gorevler D15, T10.5 (#49); proje kurallari
+ADR-07 (olay zarfi ve D16 eki), ADR-10; gorevler D15, D16, T10.5 (#49); proje kurallari
 "Gozlemlenebilirlik".

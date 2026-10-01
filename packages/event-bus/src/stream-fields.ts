@@ -1,12 +1,13 @@
 /**
  * Zarf <-> Redis Streams alanlari. Stream kaydi duz alan/deger ciftleridir;
  * payload JSON metni olarak tasinir. Ceviri tek yerde: yayinci yazar, tuketici
- * (T7.4) ayni fonksiyonla okur.
+ * (T7.4) ayni fonksiyonla okur. Korelasyon alanlari (D16) yalnizca varsa yazilir:
+ * eski kayitlarda yoktur, okuma onlarsiz da gecerlidir.
  */
 
 import { AppError } from '@getir/core';
 
-import { eventEnvelopeSchema } from './envelope.js';
+import { eventEnvelopeSchema, validCorrelation } from './envelope.js';
 import type { EventEnvelope } from './envelope.js';
 
 const FIELD = {
@@ -15,6 +16,8 @@ const FIELD = {
   PARTITION_KEY: 'partitionKey',
   OCCURRED_AT: 'occurredAt',
   PAYLOAD: 'payload',
+  REQUEST_ID: 'requestId',
+  TRACEPARENT: 'traceparent',
 } as const;
 
 /** XADD icin duz alan listesi: [ad, deger, ad, deger, ...]. */
@@ -30,13 +33,16 @@ export function toStreamFields(envelope: EventEnvelope): string[] {
     envelope.occurredAt,
     FIELD.PAYLOAD,
     JSON.stringify(envelope.payload),
+    ...(envelope.requestId === undefined ? [] : [FIELD.REQUEST_ID, envelope.requestId]),
+    ...(envelope.traceparent === undefined ? [] : [FIELD.TRACEPARENT, envelope.traceparent]),
   ];
 }
 
-/** Kaydin kimlik ve konu alanlari, DOGRULAMADAN (yonlendirme ve gunluk icin). */
+/** Kaydin kimlik, konu ve istek alanlari, DOGRULAMADAN (yonlendirme ve gunluk icin). */
 export interface EnvelopePeek {
   readonly eventId: string | undefined;
   readonly topic: string | undefined;
+  readonly requestId: string | undefined;
 }
 
 /**
@@ -46,7 +52,11 @@ export interface EnvelopePeek {
  */
 export function peekEnvelope(fields: readonly string[]): EnvelopePeek {
   const values = fieldMap(fields);
-  return { eventId: values.get(FIELD.EVENT_ID), topic: values.get(FIELD.TOPIC) };
+  return {
+    eventId: values.get(FIELD.EVENT_ID),
+    topic: values.get(FIELD.TOPIC),
+    requestId: values.get(FIELD.REQUEST_ID),
+  };
 }
 
 /**
@@ -62,6 +72,12 @@ export function fromStreamFields(fields: readonly string[]): EventEnvelope {
     partitionKey: values.get(FIELD.PARTITION_KEY),
     occurredAt: values.get(FIELD.OCCURRED_AT),
     payload: payloadText === undefined ? undefined : parseJson(payloadText),
+    // Bicimsiz korelasyon alani atilir, olay yine islenir: istege bagli ust veri
+    // yuzunden gecerli bir olay olu olaylara gitmesin.
+    ...validCorrelation({
+      requestId: values.get(FIELD.REQUEST_ID),
+      traceparent: values.get(FIELD.TRACEPARENT),
+    }),
   });
   if (!parsed.success) {
     throw AppError.internal('Stream kaydi olay zarfina uymuyor', {

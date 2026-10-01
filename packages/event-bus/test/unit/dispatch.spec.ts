@@ -26,6 +26,7 @@ function contextFor(
     attempt: 1,
     maxDeliveries: MAX_DELIVERIES,
     handlerFor: (topic) => (topic === EVENTS.PAYMENT_REFUND_REQUESTED ? handler : undefined),
+    group: 'payment',
     logger: silentLogger,
     ...overrides,
   };
@@ -46,9 +47,9 @@ describe('dispatchEntry: isleyiciye giden kayit', () => {
     expect(handler).toHaveBeenCalledWith(envelope, expect.objectContaining({ attempt: 1 }));
   });
 
-  it('isleyicinin gunlukcusu olay kimligi, konu ve deneme tasir', async () => {
+  it('isleyicinin gunlukcusu olay kimligi, konu, deneme ve olayi doguran istegin kimligini tasir', async () => {
     const lines: LogLine[] = [];
-    const envelope = envelopeOf();
+    const envelope = { ...envelopeOf(), requestId: `req_${'7'.repeat(32)}` as const };
     const handler: EventHandler = (_envelope, { logger }) => {
       logger.info({}, 'isleniyor');
       return Promise.resolve(EVENT_HANDLED);
@@ -64,7 +65,20 @@ describe('dispatchEntry: isleyiciye giden kayit', () => {
       eventId: envelope.eventId,
       topic: envelope.topic,
       attempt: 2,
+      requestId: envelope.requestId,
     });
+  });
+
+  it('zarfta requestId yoksa (eski kayit, istek disi uretici) tuketici yenisini uretir (D16)', async () => {
+    const lines: LogLine[] = [];
+    const handler: EventHandler = (_envelope, { logger }) => {
+      logger.info({}, 'isleniyor');
+      return Promise.resolve(EVENT_HANDLED);
+    };
+
+    await dispatchEntry(entryOf('1-0'), contextFor(handler, { logger: recordingLogger(lines) }));
+
+    expect(lines[0]?.fields['requestId']).toMatch(/^req_[0-9a-f]{32}$/);
   });
 });
 

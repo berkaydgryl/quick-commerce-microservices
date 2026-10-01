@@ -119,7 +119,7 @@ func idempotencyKeyOf(c fiber.Ctx, errs fieldErrors) string {
 // Kaydedilmeyen cevaplar (anahtar birakilir, istemci ayni anahtarla yeniden
 // dener): 5xx, 400 (dogrulama: ucun yan etkisi yok), 401 (oturum; yeniden
 // girisle duzelir) ve 429 (hiz siniri).
-func idempotent(settings Idempotency, policy idempotencyPolicy, logger *slog.Logger) fiber.Handler {
+func idempotent(settings Idempotency, policy idempotencyPolicy, logger *slog.Logger, recorder RequestMetrics) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		raw := strings.TrimSpace(c.Get(IdempotencyKeyHeader))
 		if raw == "" {
@@ -138,7 +138,7 @@ func idempotent(settings Idempotency, policy idempotencyPolicy, logger *slog.Log
 			return &apperror.Error{Code: apperror.CodeServiceUnavailable, Cause: err}
 		}
 		if !claimed {
-			return answerExisting(c, existing, fingerprint, policy)
+			return answerExisting(c, existing, fingerprint, policy, recorder)
 		}
 
 		// Uc, kaydin omrunden kisa bir son tarihle calisir; kayit ust baglamla
@@ -205,12 +205,16 @@ func release(c fiber.Ctx, store idempotency.Store, key, token string, logger *sl
 	}
 }
 
-// answerExisting, anahtar doluyken cevap verir.
-func answerExisting(c fiber.Ctx, existing idempotency.Record, fingerprint string, policy idempotencyPolicy) error {
+// answerExisting, anahtar doluyken cevap verir. Ret ve tekrar ayri sayilir
+// (#29): 409'larin anahtardan mi isten mi geldigi metrikte ayrilir.
+func answerExisting(c fiber.Ctx, existing idempotency.Record, fingerprint string, policy idempotencyPolicy, recorder RequestMetrics) error {
+	route := metricRoute(c)
 	if !hmac.Equal([]byte(existing.Fingerprint), []byte(fingerprint)) {
+		recorder.CountKeyRejection(route, keyRejectedReused)
 		return apperror.New(apperror.CodeConflict, map[string]string{IdempotencyKeyHeader: keyReusedReason})
 	}
 	if existing.State == idempotency.StateInProgress {
+		recorder.CountKeyRejection(route, keyRejectedInProgress)
 		return apperror.New(apperror.CodeRequestInProgress, map[string]string{IdempotencyKeyHeader: keyInProgressReason})
 	}
 	if !policy.replay {
@@ -218,8 +222,10 @@ func answerExisting(c fiber.Ctx, existing idempotency.Record, fingerprint string
 		return c.Next()
 	}
 	if existing.Body == nil {
+		recorder.CountKeyRejection(route, keyRejectedReplayUnhandled)
 		return apperror.New(apperror.CodeConflict, map[string]string{IdempotencyKeyHeader: replayUnavailableReason})
 	}
+	recorder.CountReplay(route)
 	return replay(c, existing)
 }
 

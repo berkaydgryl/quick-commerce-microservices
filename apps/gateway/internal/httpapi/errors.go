@@ -19,7 +19,7 @@ import (
 // servis hatasi), Fiber'in kendi hatalari (bilinmeyen yol, yanlis fiil) ve
 // ucta yakalanan panik (recover.go, T8.3). Hepsi sozlukteki bir koda iner;
 // ic mesaj, sebep ve yigin izi istemciye GITMEZ, yalnizca gunluge yazilir.
-func errorHandler(logger *slog.Logger) fiber.ErrorHandler {
+func errorHandler(logger *slog.Logger, recorder RequestMetrics) fiber.ErrorHandler {
 	return func(c fiber.Ctx, err error) error {
 		appErr := toAppError(err)
 		requestID := ensureRequestID(c)
@@ -67,8 +67,10 @@ func errorHandler(logger *slog.Logger) fiber.ErrorHandler {
 			c.Locals(pendingRequestLogKey{}, nil)
 			logRequest(logger, c, startedAt)
 		}
-		// Ayni on geciste istek span'i de bekletildi (tracing.go): son durumla kapanir.
+		// Ayni on geciste istek span'i ve metrigi de bekletildi (tracing.go,
+		// metrics.go): son durumla kapanir ve yazilir.
 		endPendingSpan(c)
+		observePendingRequest(c, recorder)
 		return written
 	}
 }
