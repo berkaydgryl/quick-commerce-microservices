@@ -14,6 +14,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "dev": "node --env-file-if-exists=../../.env --watch dist/main.js",
     "start": "node --env-file-if-exists=../../.env dist/main.js",
+    "migrate": "node --env-file-if-exists=../../.env dist/migrate.js",
     "healthcheck": "node dist/healthcheck.js",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "seed": "node --env-file-if-exists=../../.env dist/seed.js",

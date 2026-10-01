@@ -19,12 +19,6 @@ function escapeRegex(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/**
- * Katlanmamis (T9.4 oncesi bicimdeki) arama terimini ele veren harfler:
- * searchKey bunlari hic uretmez. Saklanan terimde goruluyorsa terimler eskidir.
- */
-const UNFOLDED_SEARCH_TERM = '[çğıöşüâîû]';
-
 export class OfferRepository extends ReplaceableRepository<OfferDocument> implements OfferReader {
   constructor(db: Db) {
     super(db, COLLECTIONS.OFFERS);
@@ -80,21 +74,6 @@ export class OfferRepository extends ReplaceableRepository<OfferDocument> implem
     const last = items.at(-1);
 
     return { items, nextPageToken: hasMore && last !== undefined ? last.id : '', totalSize };
-  }
-
-  /**
-   * Eski bicimde (Turkce karakterleri katlanmamis) arama terimi tasiyan teklif
-   * var mi? searchKey degisince saklanan terimler eskir ve katlanmis sorgu
-   * onlari bulamaz; pnpm seed yeniden yazar. Acilista bir kez sorulur.
-   */
-  async hasStaleSearchTerms(): Promise<boolean> {
-    const count = await this.run('hasStaleSearchTerms', () =>
-      this.collection.countDocuments(
-        { searchTerms: { $regex: UNFOLDED_SEARCH_TERM } },
-        { limit: 1 },
-      ),
-    );
-    return count > 0;
   }
 
   /**

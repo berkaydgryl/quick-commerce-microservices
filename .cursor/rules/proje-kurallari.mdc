@@ -200,7 +200,12 @@ Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicid
   adresi, `infra/docker/mongo/init/service-users.js`'e onekini ekler.
 - N+1 sorgu yasak: capraz veri toplu uclarla alinir (`BatchGetProducts`,
   `CheckAvailability(store, sku[])` - B27).
-- Sema degisikligi elle yapilmaz; versiyonlanmis ve geri alinabilir migration ile yapilir.
+- Sema degisikligi elle yapilmaz; versiyonlanmis ve geri alinabilir migration ile yapilir
+  (T10.4, ADR-19): goc sahibi servisin `src/migrations/000N-kisa-ad.ts` dosyasi + `index.ts`
+  listesi; servis acilista bekleyenleri kilit altinda uygular, elle `pnpm migrate up|status`
+  ve servis bazinda `migrate down`. Uygulanmis goc degistirilmez; goc domain koduna baglanmaz
+  (o gunun mantiginin donmus kopyasi). Varsayilan tek transaction; degilse `transaction: false`
+  ve yeniden calistirilabilir.
 - Indeksler koda BILDIRILIR (`MongoRepository.indexes()`), elle `mongosh` ile acilmaz.
   Sik sorgulanan alana indeks eklenir; gereksiz indeks yazma maliyetini artirir.
 - Is kritigi veride fiziksel silme yerine durum alani kullanilir (`products.isActive`:

@@ -5,8 +5,8 @@
  */
 
 import type { Logger } from '@getir/core';
-import { connectMongo } from '@getir/mongo-kit';
-import type { MongoConnection } from '@getir/mongo-kit';
+import { applyMigrations, connectMongo } from '@getir/mongo-kit';
+import type { Migration, MongoConnection } from '@getir/mongo-kit';
 import { connectRedis } from '@getir/redis-kit';
 import type { RedisConnection } from '@getir/redis-kit';
 
@@ -33,15 +33,27 @@ export interface StockStores {
   close(): Promise<void>;
 }
 
+export interface OpenStockStoresOptions {
+  /**
+   * Servis acilisi gocleri verir (T10.4, ADR-19): indekslerden ONCE uygulanir.
+   * Seed ve reseed vermez: gocler servisin acilisinda ve `migrate` komutunda.
+   */
+  readonly migrations?: readonly Migration[];
+}
+
 export async function openStockStores(
   stores: StockStoresEnv,
   logger: Logger,
   appName: string,
+  options: OpenStockStoresOptions = {},
 ): Promise<StockStores> {
   const mongo = await connectMongo({ ...stores.mongo, appName, logger });
 
   let redis: RedisConnection | undefined;
   try {
+    if (options.migrations !== undefined) {
+      await applyMigrations(mongo, options.migrations, logger);
+    }
     const repository = new StockRepository(mongo.db);
     const ledger = new StockLedgerRepository(mongo.db);
     await repository.ensureIndexes();

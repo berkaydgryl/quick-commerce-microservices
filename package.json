@@ -25,6 +25,7 @@
     "demo": "node -e \"console.log('TODO Gun 15 (T15.1): uctan uca demo senaryosu henuz yok. Siparis-odeme-kurye akisini tek komutta kosturacak.')\"",
     "seed": "turbo run build --filter=@getir/catalog-service... --filter=@getir/inventory-service... && pnpm --filter @getir/catalog-service seed && pnpm --filter @getir/inventory-service seed",
     "seed:personas": "turbo run build --filter=@getir/order-service... && pnpm --filter @getir/order-service seed:personas && node scripts/seed-gateway-personas.mjs",
+    "migrate": "node scripts/migrate.mjs",
     "web:bundle:check": "node scripts/check-web-bundle.mjs",
     "codes:go": "node scripts/write-go-error-codes.mjs",
     "codes:go:check": "node scripts/write-go-error-codes.mjs --check",

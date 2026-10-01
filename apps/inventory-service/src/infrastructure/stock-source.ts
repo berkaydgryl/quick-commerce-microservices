@@ -28,6 +28,7 @@ import type { StockStoresEnv } from '../config/env.js';
 import type { LeaderLock } from '../domain/leader-lock.js';
 import type { StockPorts } from '../domain/stock-ports.js';
 import type { StockMarketSource } from '../domain/stock.js';
+import { MIGRATIONS } from '../migrations/index.js';
 import { STOCK_LEVELS } from './fixtures/stock-levels.js';
 import { InMemoryLeaderLock } from './memory/in-memory-leader-lock.js';
 import { createInMemoryStock } from './memory/in-memory-stock.js';
@@ -76,7 +77,7 @@ export async function openStockSource(
     };
   }
 
-  const opened = await openStockStores(stores, logger, SERVICE_NAME);
+  const opened = await openStockStores(stores, logger, SERVICE_NAME, { migrations: MIGRATIONS });
   try {
     const seedCounters = createSeedCounters({
       levels: opened.repository,

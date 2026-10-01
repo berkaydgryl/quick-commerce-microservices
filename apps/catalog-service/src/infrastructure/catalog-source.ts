@@ -7,13 +7,14 @@
  */
 
 import type { Logger } from '@getir/core';
-import { connectMongo } from '@getir/mongo-kit';
+import { applyMigrations, connectMongo } from '@getir/mongo-kit';
 import type { MongoEnv } from '@getir/mongo-kit';
 
 import { SERVICE_NAME } from '../config/constants.js';
 import type { CategoryReader } from '../domain/category-reader.js';
 import type { MarketReader } from '../domain/market-reader.js';
 import type { OfferReader } from '../domain/offer-reader.js';
+import { MIGRATIONS } from '../migrations/index.js';
 import { createInMemoryReaders } from './memory/in-memory-catalog.js';
 import { createMongoCatalogRepositories, ensureCatalogIndexes } from './mongo/mongo-catalog.js';
 
@@ -33,9 +34,10 @@ export interface CatalogSource {
 }
 
 /**
- * Mongo modunda indeksler acilista olusturulur: sorgular (ozellikle
- * 2dsphere) indekse dayanir ve indeks yoksa ilk istek hata ile doner. Saklanan
- * arama terimlerinin bicimi de denetlenir (T9.4): eskiyse uyari, acilis durmaz.
+ * Mongo modunda once bekleyen gocler uygulanir (T10.4, ADR-19; eski bicimli
+ * arama terimleri goc 0001 ile katlanir), sonra indeksler olusturulur:
+ * sorgular (ozellikle 2dsphere) indekse dayanir ve indeks yoksa ilk istek hata
+ * ile doner.
  */
 export async function openCatalogSource(
   mongo: MongoEnv | undefined,
@@ -53,15 +55,8 @@ export async function openCatalogSource(
 
   const repositories = createMongoCatalogRepositories(connection.db);
   try {
+    await applyMigrations(connection, MIGRATIONS, logger);
     await ensureCatalogIndexes(repositories);
-    // Arama terimleri seed'de yazilir (T9.4: Turkce karakter katlama). Eski
-    // bicimde kalmislarsa arama sessizce eksik sonuc verir: uyari yazilir.
-    if (await repositories.offers.hasStaleSearchTerms()) {
-      logger.warn(
-        {},
-        'arama terimleri eski bicimde (Turkce karakterler katlanmamis); aramanin dogru calismasi icin pnpm seed calistirin',
-      );
-    }
   } catch (error: unknown) {
     // Baglanti acik kalirsa process kapanmaz ve hata gizlenir.
     await connection.close();

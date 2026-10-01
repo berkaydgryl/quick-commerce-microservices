@@ -260,28 +260,6 @@ describe('arama - gercek Mongo (T9.4)', () => {
     expect(executionStats.nReturned).toBe(1);
     expect(executionStats.totalDocsExamined).toBeLessThanOrEqual(marketOffers);
   });
-
-  it('eski bicimdeki arama terimi acilis denetimine yakalanir; katlanmis sorgu onu bulamaz', async () => {
-    expect(await repositories.offers.hasStaleSearchTerms()).toBe(false);
-    await connection.db
-      .collection<OfferDocument>(COLLECTIONS.OFFERS)
-      .updateOne(
-        { _id: 'ofr_migros-jet-moda-sut-1l' },
-        { $set: { searchTerms: ['süt 1 l', 'günlük pastörize tam yağlı süt'] } },
-      );
-    try {
-      expect(await repositories.offers.hasStaleSearchTerms()).toBe(true);
-      const found = await repositories.offers.listOffers(
-        { marketId: MODA, query: 'süt 1' },
-        { size: 50, token: '' },
-      );
-      expect(found.items.map((offer) => offer.product.sku)).not.toContain('SUT-1L');
-    } finally {
-      // pnpm seed'in yaptigi: terimler yeniden yazilir.
-      await seed();
-    }
-    expect(await repositories.offers.hasStaleSearchTerms()).toBe(false);
-  });
 });
 
 /**

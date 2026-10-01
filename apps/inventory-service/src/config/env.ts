@@ -99,6 +99,13 @@ export function loadCommandEnv(): CommandEnv {
   return { ...loadEnvOrExit(commandSchema), ...loadStoresEnv() };
 }
 
+export type MigrateEnv = z.infer<typeof commandSchema> & { readonly mongo: MongoEnv };
+
+/** Goc komutunun ortami (T10.4): yalnizca Mongo (seed'in aksine Redis gerekmez). */
+export function loadMigrateEnv(): MigrateEnv {
+  return { ...loadEnvOrExit(commandSchema), mongo: loadEnvOrExit(mongoSchema) };
+}
+
 const healthcheckSchema = z.object({
   INVENTORY_GRPC_PORT: grpcPort(DEFAULT_INVENTORY_GRPC_PORT),
 });

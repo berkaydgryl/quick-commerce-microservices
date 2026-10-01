@@ -15,7 +15,8 @@
     "start": "node --env-file-if-exists=../../.env dist/main.js",
     "healthcheck": "node dist/healthcheck.js",
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
-    "seed": "node --env-file-if-exists=../../.env dist/seed.js"
+    "seed": "node --env-file-if-exists=../../.env dist/seed.js",
+    "migrate": "node --env-file-if-exists=../../.env dist/migrate.js"
   },
   "dependencies": {
     "@getir/contracts": "workspace:*",
