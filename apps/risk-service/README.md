@@ -105,7 +105,7 @@ kırmızı olur. Gerçek hesaplar T8.1 seed'inde, demo T15.1'de.
 ## Çalıştırma
 
 ```bash
-pnpm --filter @getir/risk-service build && pnpm --filter @getir/risk-service start   # :50055 (kok .env: MOCK, MONGO_URI)
+pnpm --filter @getir/risk-service build && pnpm --filter @getir/risk-service start   # :50055 (kok .env: MOCK, RISK_MONGO_URI)
 pnpm test:int   # gercek Mongo: sozlesme, indeksler, Evaluate -> risk_events -> GetLastEvaluation
 
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/risk/v1/risk.proto \

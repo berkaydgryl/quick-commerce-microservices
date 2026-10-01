@@ -11,6 +11,12 @@ export const ORDER_SERVICE_FULL_NAME = 'getir.order.v1.OrderService';
 /** Roadmap'teki port haritasindan: order 50053. */
 export const DEFAULT_ORDER_GRPC_PORT = 50_053;
 
+/**
+ * Servisin kendi veritabani (D14, ADR-05): ORDER_MONGO_DB verilmezse.
+ * Kullanicisi (ORDER_MONGO_URI) yalnizca burada yetkilidir.
+ */
+export const DEFAULT_MONGO_DB = 'getir_order';
+
 // Idempotency anahtari ve sepet sinirlari burada TEKRAR YAZILMAZ: REST sozlesmesiyle
 // ayni kaynaktan (@getir/contracts) gelir; iki kapida iki farkli sinir olmasin.
 

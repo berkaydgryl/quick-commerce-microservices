@@ -67,9 +67,9 @@ let stores: StockStores;
 function storesEnv(redisUrl: string): StockStoresEnv {
   return {
     mongo: {
-      MONGO_URI: `${mongoContainer.getConnectionString()}?directConnection=true`,
-      MONGO_DB: DB_NAME,
-      MONGO_SERVER_SELECTION_TIMEOUT_MS: 5_000,
+      uri: `${mongoContainer.getConnectionString()}?directConnection=true`,
+      dbName: DB_NAME,
+      serverSelectionTimeoutMs: 5_000,
     },
     redis: { REDIS_URL: redisUrl, REDIS_CONNECT_TIMEOUT_MS: 5_000 },
   };
@@ -677,7 +677,7 @@ describe('stok defteri (T10.2, ADR-18)', () => {
 
   /** Stok belgesine yazip COMMIT ETMEDEN bekleyen ikinci istemcinin transaction'i (eldeki adede dokunmaz). */
   async function holdStock(sku: string) {
-    const other = await MongoClient.connect(env.mongo.MONGO_URI);
+    const other = await MongoClient.connect(env.mongo.uri);
     const holder = other.startSession();
     holder.startTransaction();
     await other

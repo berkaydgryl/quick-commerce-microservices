@@ -59,13 +59,7 @@ export async function openOrderStore(
     };
   }
 
-  const connection = await connectMongo({
-    uri: mongo.MONGO_URI,
-    dbName: mongo.MONGO_DB,
-    serverSelectionTimeoutMs: mongo.MONGO_SERVER_SELECTION_TIMEOUT_MS,
-    appName: SERVICE_NAME,
-    logger,
-  });
+  const connection = await connectMongo({ ...mongo, appName: SERVICE_NAME, logger });
 
   const orders = new OrdersCollection(connection.db);
   const outbox = new OutboxCollection(connection.db);

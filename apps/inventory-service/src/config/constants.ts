@@ -13,6 +13,12 @@ export const INVENTORY_SERVICE_FULL_NAME = 'getir.inventory.v1.InventoryService'
 export const DEFAULT_INVENTORY_GRPC_PORT = 50_052;
 
 /**
+ * Servisin kendi veritabani (D14, ADR-05): INVENTORY_MONGO_DB verilmezse.
+ * Kullanicisi (INVENTORY_MONGO_URI) yalnizca burada yetkilidir.
+ */
+export const DEFAULT_MONGO_DB = 'getir_inventory';
+
+/**
  * CheckAvailability tek cagrida en fazla bu kadar SKU kabul eder
  * (inventory.proto sozlesmesi). Sepet en fazla 50 kalem, urun listesi sayfasi
  * en fazla 50 teklif; fazlasi VALIDATION_FAILED.

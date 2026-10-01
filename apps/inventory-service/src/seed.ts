@@ -47,7 +47,7 @@ try {
     counters: stores.counters,
     marker: stores.marker,
   })('overwrite');
-  logger.info({ db: env.mongo.MONGO_DB, ...stock, counters }, 'stok seed tamamlandi');
+  logger.info({ db: env.mongo.dbName, ...stock, counters }, 'stok seed tamamlandi');
 } catch (error: unknown) {
   logger.error({ err: error }, 'stok seed basarisiz');
   process.exitCode = SEED_FAILURE_EXIT_CODE;

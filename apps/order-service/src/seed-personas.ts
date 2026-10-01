@@ -29,14 +29,7 @@ const logger = createLogger({ name: `${SERVICE_NAME}-seed`, level: env.LOG_LEVEL
 
 // Baglanti try'in DISINDA: ulasilamazsa kapatilacak baglanti yoktur.
 const connection = await startOrExit(
-  () =>
-    connectMongo({
-      uri: env.MONGO_URI,
-      dbName: env.MONGO_DB,
-      serverSelectionTimeoutMs: env.MONGO_SERVER_SELECTION_TIMEOUT_MS,
-      appName: `${SERVICE_NAME}-seed`,
-      logger,
-    }),
+  () => connectMongo({ ...env.mongo, appName: `${SERVICE_NAME}-seed`, logger }),
   { logger, message: 'seed icin mongo baglantisi kurulamadi' },
 );
 
@@ -53,7 +46,7 @@ try {
   });
   const counts = await seed();
 
-  logger.info({ db: env.MONGO_DB, ...counts }, 'persona siparis gecmisi yazildi');
+  logger.info({ db: env.mongo.dbName, ...counts }, 'persona siparis gecmisi yazildi');
 } catch (error: unknown) {
   logger.error({ err: error }, 'persona seed basarisiz');
   process.exitCode = SEED_FAILURE_EXIT_CODE;

@@ -6,7 +6,8 @@
  *   pnpm --filter @getir/inventory-service start      (kok .env varsa okunur)
  *
  * Kaynak MOCK ile secilir: MOCK=true -> bellek (Mongo ve Redis gerekmez),
- * aksi halde MONGO_URI ve REDIS_URL zorunlu. Stogu yazmak icin: pnpm seed
+ * aksi halde INVENTORY_MONGO_URI (kendi veritabani ve kullanicisi, D14) ve
+ * REDIS_URL zorunlu. Stogu yazmak icin: pnpm seed
  *
  * Dogrulama (grpcurl):
  *   grpcurl -plaintext -import-path packages/proto/proto \

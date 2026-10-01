@@ -158,7 +158,8 @@ Süresi dolan rezervasyonun stoğunu geri verir. Keyspace notification kullanıl
   (varsayılan 1 sn, `SWEEPER_INTERVAL_MS`) önce liderliği alır ya da yeniler; **yalnızca lider süpürür**.
 - **Liderlik kilidi** `lock:reconcile` (`lua/leader.lua`): tek Redis düğümünde Redlock'un tek örnekli hâli.
   Değer örneğe özgü belirteçtir (`randomUUID`); yalnızca sahibi yeniler ya da bırakır. Ömrü 3 sn
-  (`SWEEPER_LOCK_TTL_SECONDS`), her turda yenilenir: lider çökerse en geç 3 sn'de başka örnek devralır (B25).
+  (`SWEEPER_LOCK_TTL_SECONDS`), her turda yenilenir: lider çökerse kilit en geç 3 sn'de boşalır ve başka örnek
+  bir sonraki turunda devralır (B25).
   Kapanışta lider kilidi bırakır, devralma beklemeden olur. Ömür en az iki tur olmalı (ortam doğrular).
 - **Tur:** her market için (Mongo `stock`'tan, dakikada bir tazelenir) bitiş anı gelmiş en çok 100 sipariş
   (`ZRANGEBYSCORE ... LIMIT`, en eskisi önce) `release.lua`'nın **süre dolumu kipiyle** bırakılır:
@@ -208,7 +209,9 @@ Redis boşalırsa (FLUSHALL, kalıcılık olmadan yeniden başlatma) sayaçları
    patlamaz. Redis yeniden başlayıp script'i unutursa ilk çağrı yeniden yükler (redis-kit, `NOSCRIPT`).
 5. gRPC portu **ancak bundan sonra** açılır: sayaçlar yazılmadan servis hazır görünmez.
 
-`MOCK=true` iken Mongo ve Redis'e hiç dokunulmaz; demo stoğu bellektedir.
+`MOCK=true` iken Mongo ve Redis'e hiç dokunulmaz; demo stoğu bellektedir. Değilse
+`INVENTORY_MONGO_URI` ve `REDIS_URL` zorunludur: servis kendi veritabanına (`getir_inventory`) kendi
+Mongo kullanıcısıyla bağlanır, kullanıcı yalnızca orada yetkilidir (D14, ADR-05).
 
 ## Komutlar
 

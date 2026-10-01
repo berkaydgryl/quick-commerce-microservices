@@ -4,7 +4,8 @@
  *
  * Uc giris noktasi var ve ihtiyaclari farkli:
  *   - servis (main.ts): MOCK=true ise Mongo ve Redis'e HIC dokunmaz (stok
- *     bellekte); aksi halde MONGO_URI ve REDIS_URL zorunludur.
+ *     bellekte); aksi halde INVENTORY_MONGO_URI (kendi veritabani ve
+ *     kullanicisi, D14) ve REDIS_URL zorunludur.
  *   - seed (seed.ts) ve reseed (reseed.ts): isleri Mongo ve Redis'e yazmaktir;
  *     MOCK ne olursa olsun ikisi de zorunludur (.env.example'da MOCK=true).
  *
@@ -14,7 +15,7 @@
 
 import { envInt, loadEnvOrExit } from '@getir/core';
 import type { MongoEnv } from '@getir/mongo-kit';
-import { mongoEnvSchema } from '@getir/mongo-kit';
+import { mongoEnvSchemaFor } from '@getir/mongo-kit';
 import type { RedisEnv } from '@getir/redis-kit';
 import { redisEnvSchema } from '@getir/redis-kit';
 import { grpcPort, serviceEnvSchema } from '@getir/service-kit';
@@ -22,6 +23,7 @@ import { z } from 'zod';
 
 import {
   DEFAULT_INVENTORY_GRPC_PORT,
+  DEFAULT_MONGO_DB,
   DEFAULT_SWEEPER_INTERVAL_MS,
   DEFAULT_SWEEPER_LOCK_TTL_SECONDS,
   MS_PER_SECOND,
@@ -78,8 +80,11 @@ export function loadServiceEnv(): InventoryServiceEnv {
   return { ...base, stores: base.MOCK ? undefined : loadStoresEnv() };
 }
 
+/** Servisin kendi veritabani ve kullanicisi (D14): INVENTORY_MONGO_URI, INVENTORY_MONGO_DB. */
+const mongoSchema = mongoEnvSchemaFor({ prefix: 'INVENTORY', defaultDb: DEFAULT_MONGO_DB });
+
 function loadStoresEnv(): StockStoresEnv {
-  return { mongo: loadEnvOrExit(mongoEnvSchema), redis: loadEnvOrExit(redisEnvSchema) };
+  return { mongo: loadEnvOrExit(mongoSchema), redis: loadEnvOrExit(redisEnvSchema) };
 }
 
 const commandSchema = z.object({

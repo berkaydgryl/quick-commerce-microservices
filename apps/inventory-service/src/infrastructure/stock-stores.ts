@@ -38,13 +38,7 @@ export async function openStockStores(
   logger: Logger,
   appName: string,
 ): Promise<StockStores> {
-  const mongo = await connectMongo({
-    uri: stores.mongo.MONGO_URI,
-    dbName: stores.mongo.MONGO_DB,
-    serverSelectionTimeoutMs: stores.mongo.MONGO_SERVER_SELECTION_TIMEOUT_MS,
-    appName,
-    logger,
-  });
+  const mongo = await connectMongo({ ...stores.mongo, appName, logger });
 
   let redis: RedisConnection | undefined;
   try {

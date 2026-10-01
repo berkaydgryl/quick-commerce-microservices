@@ -36,8 +36,35 @@ degisikliginde yazma kadar kirilgan oldugu ortaya cikar.
   onlemek icin uclar toplu (batch) surumleriyle birlikte tasarlanir. Veritabani
   seviyesinde join yapilamaz, birlestirme cagiran serviste yapilir.
 - Kabul edilen borc: sahiplik bugun sozlesmeye dayali bir kuraldir, ayri kullanici veya
-  ayri veritabani ile teknik olarak zorlanmaz.
+  ayri veritabani ile teknik olarak zorlanmaz. **D14 ile kapandi (asagidaki ek).**
 
 ## Ilgili
 
-ADR-03, ADR-04, ADR-07, ADR-09; gorev T1.5.
+ADR-03, ADR-04, ADR-07, ADR-09; gorev T1.5; denetim duzeltmesi D14.
+
+## Ek (D14, 2026-10-01): sahiplik teknik olarak zorlanir
+
+Borc kapandi: her servisin kendi mantiksal veritabani ve kendi Mongo kullanicisi var. Kullanici
+yalnizca kendi veritabaninda `readWrite` yetkilidir; baska servisin koleksiyonunu okumak da yazmak
+da Mongo tarafindan reddedilir (`Unauthorized`). Sahiplik artik kod incelemesine degil yetkiye dayanir.
+
+| Servis    | Veritabani        | Koleksiyonlar                                 |
+| --------- | ----------------- | --------------------------------------------- |
+| catalog   | `getir_catalog`   | `categories`, `products`, `markets`, `offers` |
+| inventory | `getir_inventory` | `stock`, `stock_ledger`                       |
+| order     | `getir_order`     | `orders`, `outbox`                            |
+| payment   | `getir_payment`   | `payments`                                    |
+| risk      | `getir_risk`      | `risk_events`                                 |
+| gateway   | `getir_gateway`   | `users`, `sessions`                           |
+
+- Adres servis onekli degiskende durur (`CATALOG_MONGO_URI`, kullanici ve parolayi tasir),
+  veritabani `CATALOG_MONGO_DB` (varsayilani `getir_catalog`). Ortak `MONGO_URI` / `MONGO_DB`
+  kaldirildi: servis baska bir kullaniciyla ya da ortak veritabanina sessizce baglanamaz.
+- Kullanicilar `admin` veritabaninda tanimlidir (`authSource=admin`). Yerelde compose, kok
+  kullaniciyi ve servis kullanicilarini kok `.env`'den olusturur (`infra/docker/mongo`); kok
+  kullanici servislerce kullanilmaz.
+- Ayni Mongo ornegi paylasilmaya devam eder (tek dugumlu replica set). Ayri ornekler uretim
+  topolojisi kararidir ve kapsam disidir.
+- Veritabani seviyesinde join zaten yasakti; artik mumkun de degil. Capraz veri ihtiyaci gRPC
+  uclariyla karsilanir (ADR-09); toplu uclar n+1'i onler.
+- Sema gocleri (T10.4) her servisin kendi veritabaninda kosar; uygulanan gocler orada tutulur.

@@ -101,5 +101,15 @@ export default tseslint.config(
     },
   },
 
+  {
+    // Mongo imajinin ilk acilista mongosh ile calistirdigi betikler (D14):
+    // kabugun kendi globalleri vardir (process Node'dan gelir).
+    name: 'getir/mongosh-scripts',
+    files: ['infra/docker/mongo/**/*.js'],
+    languageOptions: {
+      globals: { db: 'readonly', print: 'readonly' },
+    },
+  },
+
   prettier,
 );

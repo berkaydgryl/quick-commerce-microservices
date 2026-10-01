@@ -18,15 +18,30 @@ services:
   # NEDEN replica set? Cok belgeli ACID transaction (siparis olusturma akisinda
   # gerekiyor) MongoDB'de yalnizca replica set uzerinde calisir. Tek dugum de
   # olsa replica set olarak baslatmak zorundayiz.
+  #
+  # KIMLIK DOGRULAMA (D14, ADR-05): her servisin KENDI kullanicisi vardir ve
+  # yalnizca kendi veritabaninda (getir_catalog, getir_order...) yetkilidir.
+  # Kullanicilar kok .env'den gelir (env_file): kok kullanici MONGO_ROOT_*,
+  # servis kullanicilari <SERVIS>_MONGO_URI adreslerinden. Ilk acilista (bos
+  # hacim) mongo/init/service-users.js olusturur; mongo/entrypoint.sh replica
+  # set'in istedigi anahtar dosyasini (keyFile) her acilista uretir.
   mongo:
     image: mongo:7
     container_name: getir-mongo
     restart: unless-stopped
+    env_file:
+      - path: ../../.env
+        required: false
+    entrypoint: ["bash", "/opt/getir/mongo/entrypoint.sh"]
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     ports:
       - "27017:27017"
     volumes:
-      - getir-mongo-data:/data/db
+      # D14 ile yeni hacim: D14 oncesi kimlik dogrulamasiz hacim (getir-mongo-data)
+      # oldugu gibi kalir; istenirse elle silinir (infra/docker/README.md).
+      - getir-mongo-auth-data:/data/db
+      - ./mongo/entrypoint.sh:/opt/getir/mongo/entrypoint.sh:ro
+      - ./mongo/init:/docker-entrypoint-initdb.d:ro
     networks:
       - getir-net
     # -------------------------------------------------------------------------
@@ -43,7 +58,7 @@ services:
     #
     # KRITIK KARAR - member host'u NEDEN "localhost:27017"?
     # Node servisleri konteyner icinde DEGIL, host makinede calisir ve
-    # MONGO_URI = mongodb://localhost:27017/getir?directConnection=true
+    # <SERVIS>_MONGO_URI = mongodb://<kullanici>:<parola>@localhost:27017/?directConnection=true&authSource=admin
     # ile baglanir. Replica set uyesini "mongo:27017" (konteyner adi) diye
     # kaydedersek, surucu replica set topolojisini kesfedip bu adrese yeniden
     # baglanmaya calisir ve host'tan "mongo" adi cozulemedigi icin transaction'lar
@@ -53,11 +68,14 @@ services:
     #
     # NOT: directConnection=true ile replicaSet=rs0 ayni baglanti dizesinde
     # BIRLIKTE KULLANILAMAZ; bu yuzden URI'de sadece directConnection vardir.
+    #
+    # Yoklama kok kullaniciyla baglanir: kimlik dogrulama acikken rs.status ve
+    # rs.initiate yetki ister. ("$$": compose degiskeni degil, konteynerin ortami.)
     healthcheck:
       test:
         - "CMD-SHELL"
         - >-
-          mongosh --quiet --eval "try { quit(rs.status().myState === 1 ? 0 : 1) } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'localhost:27017'}]}); quit(1) }"
+          mongosh --quiet -u "$$MONGO_ROOT_USERNAME" -p "$$MONGO_ROOT_PASSWORD" --authenticationDatabase admin --eval "try { quit(rs.status().myState === 1 ? 0 : 1) } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'localhost:27017'}]}); quit(1) }"
       interval: 5s
       retries: 20
       start_period: 10s
@@ -86,8 +104,8 @@ services:
       start_period: 5s
 
 volumes:
-  getir-mongo-data:
-    name: getir-mongo-data
+  getir-mongo-auth-data:
+    name: getir-mongo-auth-data
   getir-redis-data:
     name: getir-redis-data
 

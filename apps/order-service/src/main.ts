@@ -6,9 +6,9 @@
  *   pnpm --filter @getir/order-service start      (kok .env varsa okunur)
  *
  * Depo MOCK ile secilir: MOCK=true -> bellek (Mongo ve Redis gerekmez, olay
- * yayinci kapali), aksi halde MONGO_URI ve REDIS_URL zorunlu: siparisler
- * `orders`'a, olaylari ayni transaction'da `outbox`'a yazilir ve yayinci
- * onlari stream:events'e basar (T7.3).
+ * yayinci kapali), aksi halde ORDER_MONGO_URI ve REDIS_URL zorunlu: siparisler
+ * kendi veritabaninin (D14) `orders`'ina, olaylari ayni transaction'da
+ * `outbox`'a yazilir ve yayinci onlari stream:events'e basar (T7.3).
  *
  * Dogrulama (grpcurl):
  *   grpcurl -plaintext -import-path packages/proto/proto \

@@ -60,15 +60,20 @@ func readLogLevel(getenv Getenv) (slog.Level, error) {
 	}
 }
 
-// mongoURIExample, eksik MONGO_URI hatasinda gosterilen ornek (.env.example).
-const mongoURIExample = "mongodb://localhost:27017/getir?directConnection=true"
+// mongoURIExample, eksik GATEWAY_MONGO_URI hatasinda gosterilen ornek
+// (.env.example bicimi; parola yerine yer tutucu).
+const mongoURIExample = "mongodb://gateway:<parola>@localhost:27017/?directConnection=true&authSource=admin"
 
 // readMongoURI, MOCK disinda ZORUNLU Mongo adresini okur (T8.1). MOCK'ta kimlik
 // kayitlari bellekte tutulur; adres verilse de kullanilmaz.
+//
+// Adres gateway'in KENDI kullanicisini tasir (D14, ADR-05): yalnizca kendi
+// veritabaninda (users, sessions) yetkili. Hata metni adresi ICERMEZ: parola
+// tasir.
 func readMongoURI(getenv Getenv, mock bool) (string, error) {
-	uri := readString(getenv, "MONGO_URI", "")
+	uri := readString(getenv, "GATEWAY_MONGO_URI", "")
 	if uri == "" && !mock {
-		return "", fmt.Errorf("MONGO_URI: MOCK=true degilse zorunlu, ornek: %s", mongoURIExample)
+		return "", fmt.Errorf("GATEWAY_MONGO_URI: MOCK=true degilse zorunlu, ornek: %s", mongoURIExample)
 	}
 	return uri, nil
 }

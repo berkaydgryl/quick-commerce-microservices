@@ -6,9 +6,10 @@
  *   pnpm --filter @getir/payment-service start      (kok .env varsa okunur)
  *
  * Depo MOCK ile secilir: MOCK=true -> bellek (Mongo ve Redis gerekmez, yeniden
- * baslayinca unutur, olay dinleme kapali), aksi halde MONGO_URI ve REDIS_URL
- * zorunlu: odemeler `payments` koleksiyonuna yazilir, siparis saga'sinin iade
- * komutlari (payment.refund_requested) stream:events'ten dinlenir (T7.4).
+ * baslayinca unutur, olay dinleme kapali), aksi halde PAYMENT_MONGO_URI ve
+ * REDIS_URL zorunlu: odemeler kendi veritabaninin (D14) `payments`
+ * koleksiyonuna yazilir, siparis saga'sinin iade komutlari
+ * (payment.refund_requested) stream:events'ten dinlenir (T7.4).
  * Saglayici her iki modda mock'tur: test kartlari README'de.
  *
  * Dogrulama (grpcurl):

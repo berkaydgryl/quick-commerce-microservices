@@ -109,8 +109,10 @@ ikisiyle birden yapmak yasaktır.
 
 > Metrics portu sihirli sayı değildir, kural şudur: **servis portu + 1000**, `/metrics` yolundan
 > HTTP ile sunulur (gateway 9080, realtime 4001, catalog 51051, ...). Mongo tek düğümlü replica set
-> olduğu için bağlantı dizesi `mongodb://localhost:27017/getir?directConnection=true` şeklindedir —
-> `replicaSet` parametresi ile `directConnection` aynı dizede **birlikte kullanılamaz**.
+> olduğu için bağlantı dizesi `mongodb://<kullanıcı>:<parola>@localhost:27017/?directConnection=true&authSource=admin`
+> şeklindedir — `replicaSet` parametresi ile `directConnection` aynı dizede **birlikte kullanılamaz**.
+> Her servisin kendi veritabanı ve kendi Mongo kullanıcısı vardır (D14, ADR-05):
+> [infra/docker/README.md](infra/docker/README.md#2a-mongo-kullanicilari-d14).
 
 ---
 
@@ -202,17 +204,19 @@ Değerler Zod şemasına göre doğrulanır: eksik değişkende process **başla
 yapılandırmayla çalışan servis olmaz. Yerel geliştirme için varsayılanlar hazırdır, ilk kurulumda
 düzenleme gerekmez.
 
-| Değişken                              | Varsayılan                                              | Anlamı                                                                               |
-| ------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `MONGO_URI`                           | `mongodb://localhost:27017/getir?directConnection=true` | Tek düğümlü replica set bağlantısı                                                   |
-| `REDIS_URL`                           | `redis://localhost:6379`                                | Stok sayacı, rezervasyon indeksi, olay omurgası                                      |
-| `MOCK`                                | `true`                                                  | Dış dünyaya çıkılmaz: ödeme, SMS ve harita deterministik sahte uygulamalarla değişir |
-| `RESERVATION_TTL_SECONDS`             | `600`                                                   | Normal rezervasyon ömrü                                                              |
-| `RESERVATION_TTL_MEDIUM_RISK_SECONDS` | `120`                                                   | Orta riskli siparişte kısaltılmış ömür                                               |
-| `SWEEPER_INTERVAL_MS`                 | `1000`                                                  | Süresi dolan rezervasyonların tarama aralığı                                         |
-| `COURIER_TICK_MS`                     | `2000`                                                  | Kurye konum güncelleme aralığı                                                       |
-| `COURIER_SPEED_KMH`                   | `20`                                                    | Rota simülasyonu hızı, ETA hesabının girdisi                                         |
-| `JWT_TTL`                             | `3600`                                                  | Erişim jetonu ömrü (saniye)                                                          |
+| Değişken                              | Varsayılan                               | Anlamı                                                                               |
+| ------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------ |
+| `<SERVİS>_MONGO_URI`                  | `mongodb://catalog:…@localhost:27017/?…` | Servisin kendi kullanıcısıyla bağlantı (D14); `CATALOG_`, `ORDER_`, `GATEWAY_`, ...  |
+| `<SERVİS>_MONGO_DB`                   | `getir_<servis>`                         | Servisin kendi veritabanı; kullanıcı yalnızca burada yetkili                         |
+| `MONGO_ROOT_USERNAME` / `_PASSWORD`   | `root` / `root-dev-only`                 | Yalnızca yerel compose ve elle yönetim (`pnpm infra:mongosh`); servisler kullanmaz   |
+| `REDIS_URL`                           | `redis://localhost:6379`                 | Stok sayacı, rezervasyon indeksi, olay omurgası                                      |
+| `MOCK`                                | `true`                                   | Dış dünyaya çıkılmaz: ödeme, SMS ve harita deterministik sahte uygulamalarla değişir |
+| `RESERVATION_TTL_SECONDS`             | `600`                                    | Normal rezervasyon ömrü                                                              |
+| `RESERVATION_TTL_MEDIUM_RISK_SECONDS` | `120`                                    | Orta riskli siparişte kısaltılmış ömür                                               |
+| `SWEEPER_INTERVAL_MS`                 | `1000`                                   | Süresi dolan rezervasyonların tarama aralığı                                         |
+| `COURIER_TICK_MS`                     | `2000`                                   | Kurye konum güncelleme aralığı                                                       |
+| `COURIER_SPEED_KMH`                   | `20`                                     | Rota simülasyonu hızı, ETA hesabının girdisi                                         |
+| `JWT_TTL`                             | `3600`                                   | Erişim jetonu ömrü (saniye)                                                          |
 
 Tam ve açıklamalı liste `.env.example` içindedir; yukarıdaki tablo yalnızca sistemin davranışını
 doğrudan değiştiren kritik değerleri gösterir.
@@ -290,33 +294,34 @@ Ayrıntı: [`infra/seed/README.md`](infra/seed/README.md).
 Hepsi depo kökünden `pnpm <komut>` ile çalışır. `make` bu projede zorunlu değildir; Windows'ta
 `make` kurulu olmadığı için Makefile hedeflerinin karşılığı pnpm script'i olarak tanımlanmıştır.
 
-| Komut          | Arkasındaki iş                                                                                        | Ne yapar                                                           | Durum                                   |
-| -------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------------- |
-| `dev`          | `turbo run dev`                                                                                       | Tüm uygulamaları izleme modunda paralel başlatır                   | Çalışıyor (T3.1: catalog; önce `build`) |
-| `build`        | `turbo run build`                                                                                     | Tüm paketleri derler                                               | Çalışıyor                               |
-| `typecheck`    | `turbo run typecheck`                                                                                 | Çıktı üretmeden tip denetimi                                       | Çalışıyor                               |
-| `lint`         | `eslint .`                                                                                            | ESLint 9 flat config ile tüm depo                                  | Çalışıyor                               |
-| `lint:fix`     | `eslint . --fix`                                                                                      | Otomatik düzeltilebilen lint hatalarını giderir                    | Çalışıyor                               |
-| `lint:style`   | `stylelint "apps/web/**/*.css"`                                                                       | CSS denetimi; `--allow-empty-input` ile dosya yokken de yeşil      | Çalışıyor                               |
-| `lint:proto`   | `buf lint` + `buf format --diff --exit-code`                                                          | gRPC sözleşmesinin kural ve biçim kapısı (`buf` kurulu olmalı)     | Çalışıyor                               |
-| `format`       | `prettier --write .`                                                                                  | Tüm depoyu biçimlendirir                                           | Çalışıyor                               |
-| `format:check` | `prettier --check .`                                                                                  | Biçim farkı varsa hata verir                                       | Çalışıyor                               |
-| `test`         | `pnpm run test:unit`                                                                                  | Birim testleri (tek koşucu: kökteki vitest yapılandırması)         | Çalışıyor                               |
-| `test:unit`    | `vitest run`                                                                                          | Birim testleri; altyapı gerektirmez                                | Çalışıyor (`--passWithNoTests`)         |
-| `test:int`     | `vitest run --config vitest.integration.config.ts`                                                    | Testcontainers ile Mongo/Redis entegrasyon testleri                | Çalışıyor (T2.5)                        |
-| `race`         | `node -e "..."`                                                                                       | Yarış koşulu senaryosu: aynı stok için eş zamanlı rezervasyon      | **Placeholder — Gün 11 (T11.1)**        |
-| `demo`         | `node -e "..."`                                                                                       | Uçtan uca demo: sipariş → ödeme → kurye akışı                      | **Placeholder — Gün 15 (T15.1)**        |
-| `seed`         | `turbo run build` (catalog + inventory) `&& … seed` (ikisi)                                           | Katalogu ve stoğu Mongo'ya baştan yazar; stok sayaçları Redis'te   | Çalışıyor (T4.1 katalog, T9.1 stok)     |
-| `proto:gen`    | `pnpm --filter @getir/proto generate`                                                                 | `.proto` dosyalarından **TS ve Go** kodu üretir (Go kurulu olmalı) | Çalışıyor (T2.3)                        |
-| `proto:gen:ts` | `pnpm --filter @getir/proto generate:ts`                                                              | Yalnızca TypeScript çıktısı; Go gerektirmez                        | Çalışıyor (T2.3)                        |
-| `proto:check`  | `generate:ts && typecheck && check:go`                                                                | Üretilen kodun **iki dilde de** derlendiğini doğrular              | Çalışıyor (T2.3)                        |
-| `verify`       | `proto:gen:ts && lint && lint:style && lint:proto && format:check && typecheck && build && test:unit` | CI'daki `quality` işinin birebir aynısı                            | Çalışıyor                               |
-| `infra:up`     | `docker compose -f infra/docker/… up -d`                                                              | Mongo (replica set) + Redis'i başlatır                             | Çalışıyor                               |
-| `infra:ps`     | `docker compose … ps`                                                                                 | Konteyner ve sağlık durumu                                         | Çalışıyor                               |
-| `infra:logs`   | `docker compose … logs -f`                                                                            | Altyapı günlüklerini izler                                         | Çalışıyor                               |
-| `infra:down`   | `docker compose … down`                                                                               | Konteynerleri durdurur (veri kalır)                                | Çalışıyor                               |
-| `infra:reset`  | `docker compose … down -v`                                                                            | Konteyner **ve** veriyi siler, sıfırdan kurar                      | Çalışıyor                               |
-| `clean`        | `turbo run clean`                                                                                     | Derleme çıktılarını ve önbellekleri siler                          | Çalışıyor                               |
+| Komut           | Arkasındaki iş                                                                                        | Ne yapar                                                           | Durum                                   |
+| --------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------------- |
+| `dev`           | `turbo run dev`                                                                                       | Tüm uygulamaları izleme modunda paralel başlatır                   | Çalışıyor (T3.1: catalog; önce `build`) |
+| `build`         | `turbo run build`                                                                                     | Tüm paketleri derler                                               | Çalışıyor                               |
+| `typecheck`     | `turbo run typecheck`                                                                                 | Çıktı üretmeden tip denetimi                                       | Çalışıyor                               |
+| `lint`          | `eslint .`                                                                                            | ESLint 9 flat config ile tüm depo                                  | Çalışıyor                               |
+| `lint:fix`      | `eslint . --fix`                                                                                      | Otomatik düzeltilebilen lint hatalarını giderir                    | Çalışıyor                               |
+| `lint:style`    | `stylelint "apps/web/**/*.css"`                                                                       | CSS denetimi; `--allow-empty-input` ile dosya yokken de yeşil      | Çalışıyor                               |
+| `lint:proto`    | `buf lint` + `buf format --diff --exit-code`                                                          | gRPC sözleşmesinin kural ve biçim kapısı (`buf` kurulu olmalı)     | Çalışıyor                               |
+| `format`        | `prettier --write .`                                                                                  | Tüm depoyu biçimlendirir                                           | Çalışıyor                               |
+| `format:check`  | `prettier --check .`                                                                                  | Biçim farkı varsa hata verir                                       | Çalışıyor                               |
+| `test`          | `pnpm run test:unit`                                                                                  | Birim testleri (tek koşucu: kökteki vitest yapılandırması)         | Çalışıyor                               |
+| `test:unit`     | `vitest run`                                                                                          | Birim testleri; altyapı gerektirmez                                | Çalışıyor (`--passWithNoTests`)         |
+| `test:int`      | `vitest run --config vitest.integration.config.ts`                                                    | Testcontainers ile Mongo/Redis entegrasyon testleri                | Çalışıyor (T2.5)                        |
+| `race`          | `node -e "..."`                                                                                       | Yarış koşulu senaryosu: aynı stok için eş zamanlı rezervasyon      | **Placeholder — Gün 11 (T11.1)**        |
+| `demo`          | `node -e "..."`                                                                                       | Uçtan uca demo: sipariş → ödeme → kurye akışı                      | **Placeholder — Gün 15 (T15.1)**        |
+| `seed`          | `turbo run build` (catalog + inventory) `&& … seed` (ikisi)                                           | Katalogu ve stoğu Mongo'ya baştan yazar; stok sayaçları Redis'te   | Çalışıyor (T4.1 katalog, T9.1 stok)     |
+| `proto:gen`     | `pnpm --filter @getir/proto generate`                                                                 | `.proto` dosyalarından **TS ve Go** kodu üretir (Go kurulu olmalı) | Çalışıyor (T2.3)                        |
+| `proto:gen:ts`  | `pnpm --filter @getir/proto generate:ts`                                                              | Yalnızca TypeScript çıktısı; Go gerektirmez                        | Çalışıyor (T2.3)                        |
+| `proto:check`   | `generate:ts && typecheck && check:go`                                                                | Üretilen kodun **iki dilde de** derlendiğini doğrular              | Çalışıyor (T2.3)                        |
+| `verify`        | `proto:gen:ts && lint && lint:style && lint:proto && format:check && typecheck && build && test:unit` | CI'daki `quality` işinin birebir aynısı                            | Çalışıyor                               |
+| `infra:up`      | `docker compose -f infra/docker/… up -d`                                                              | Mongo (replica set) + Redis'i başlatır                             | Çalışıyor                               |
+| `infra:ps`      | `docker compose … ps`                                                                                 | Konteyner ve sağlık durumu                                         | Çalışıyor                               |
+| `infra:logs`    | `docker compose … logs -f`                                                                            | Altyapı günlüklerini izler                                         | Çalışıyor                               |
+| `infra:down`    | `docker compose … down`                                                                               | Konteynerleri durdurur (veri kalır)                                | Çalışıyor                               |
+| `infra:reset`   | `docker compose … down -v`                                                                            | Konteyner **ve** veriyi siler, sıfırdan kurar                      | Çalışıyor                               |
+| `infra:mongosh` | `docker exec -it getir-mongo … mongosh`                                                               | Kök kullanıcıyla `mongosh` (parola konteynerin ortamından, D14)    | Çalışıyor                               |
+| `clean`         | `turbo run clean`                                                                                     | Derleme çıktılarını ve önbellekleri siler                          | Çalışıyor                               |
 
 ### Servisleri çalıştırma
 
@@ -345,9 +350,9 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/cat
 | [`gateway`](apps/gateway/README.md) (Go, T7.5)             | 8080  | Katalog uçları (stoksuz) ve sipariş uçları: `POST /v1/cart/reserve`, `POST /v1/orders`, `/3ds`, `GET /v1/orders/{id}` |
 
 Katalog T4.1'den beri Mongo'dan okur: `MOCK=true` ise aynı demo verisini bellekten döndürür
-ve Mongo istemez, değilse `MONGO_URI` zorunludur (yoksa açılışta ölür). Kök `.env` varsa okunur;
+ve Mongo istemez, değilse `CATALOG_MONGO_URI` zorunludur (yoksa açılışta ölür). Kök `.env` varsa okunur;
 `.env.example`'da `MOCK=true`'dur. Sipariş, ödeme ve risk servisleri de aynı kurala uyar (`MOCK=true` →
-bellek, değilse Mongo; order ve payment ayrıca Redis ister).
+bellek, değilse kendi `<SERVİS>_MONGO_URI`'si; order ve payment ayrıca Redis ister).
 
 ### Entegrasyon testleri ve Docker
 

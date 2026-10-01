@@ -22,10 +22,10 @@ skor önerir.
 
 ## Veri kaynağı: Mongo ya da MOCK
 
-| `MOCK` | Kaynak                                                      | Gerekenler                                                                                       |
-| ------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `true` | Bellek (`infrastructure/memory`); olaylar bellekte          | Yok; yeniden başlayınca unutur, **olay yayını kapalı**; persona geçmişi açılışta yüklenir (T8.1) |
-| değil  | `orders` + `outbox` koleksiyonları (`infrastructure/mongo`) | `MONGO_URI` ve `REDIS_URL` zorunlu (yayın `stream:events`'e)                                     |
+| `MOCK` | Kaynak                                                      | Gerekenler                                                                                               |
+| ------ | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `true` | Bellek (`infrastructure/memory`); olaylar bellekte          | Yok; yeniden başlayınca unutur, **olay yayını kapalı**; persona geçmişi açılışta yüklenir (T8.1)         |
+| değil  | `orders` + `outbox` koleksiyonları (`infrastructure/mongo`) | `ORDER_MONGO_URI` (kendi veritabanı `getir_order`, D14) ve `REDIS_URL` zorunlu (yayın `stream:events`'e) |
 
 İki uygulama **aynı sözleşme testinden** geçer (`test/support/order-store-contract.ts`): birim
 testinde bellek, entegrasyon testinde gerçek Mongo. Depoyu seçip açan tek yer
@@ -310,9 +310,7 @@ pnpm --filter @getir/order-service build
 MOCK=true pnpm --filter @getir/order-service start    # 50053, Mongo'suz (bellek)
 
 pnpm infra:up                                         # ya da Mongo + Redis ile:
-MONGO_URI="mongodb://localhost:27017/getir?directConnection=true" \
-REDIS_URL="redis://localhost:6379" \
-  pnpm --filter @getir/order-service start
+MOCK=false pnpm --filter @getir/order-service start   # adresler kok .env'de (ORDER_MONGO_URI, REDIS_URL)
 
 # Yayınlanan olaylar (T7.3): taslak aç / sipariş ver, sonra
 docker exec getir-redis redis-cli XRANGE stream:events - +

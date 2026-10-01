@@ -4,10 +4,27 @@ MongoDB'ye bakan üç şey burada: **bağlantı**, **repository tabanı** ve **h
 Hangi koleksiyonun hangi alanları taşıdığı bu pakette yazmaz — o, sahibi servisin işidir
 (ADR-05).
 
+## Ortam: servis başına veritabanı ve kullanıcı (D14)
+
+Her servisin **kendi veritabanı** ve **kendi Mongo kullanıcısı** vardır; kullanıcı yalnızca kendi
+veritabanında yetkilidir (ADR-05). Bütün servisler aynı kök `.env`'i okuduğu için değişkenler servis
+önekiyle ayrılır (portlarla aynı desen):
+
+```ts
+// apps/catalog-service/src/config/env.ts
+const mongoSchema = mongoEnvSchemaFor({ prefix: 'CATALOG', defaultDb: 'getir_catalog' });
+// CATALOG_MONGO_URI (zorunlu; kullanıcı ve parolayı taşır), CATALOG_MONGO_DB (varsayılanı
+// getir_catalog), MONGO_SERVER_SELECTION_TIMEOUT_MS (ortak) -> { uri, dbName, serverSelectionTimeoutMs }
+```
+
+Eksik değişkenin **adı** hatada görünür (`CATALOG_MONGO_URI: ...`). D14 öncesi ortak `MONGO_URI` ve
+`MONGO_DB` okunmaz: servis başka bir kullanıcıyla ya da ortak veritabanına sessizce bağlanmaz.
+Bağlantı adresi günlüğe parolası maskelenerek yazılır (`redactConnectionString`).
+
 ## Bağlantı ve transaction
 
 ```ts
-const mongo = await connectMongo({ uri: env.MONGO_URI, dbName: env.MONGO_DB, logger });
+const mongo = await connectMongo({ ...env.mongo, appName: SERVICE_NAME, logger });
 
 await mongo.withTransaction(async (session) => {
   await orders.insertOne(order, { session });
@@ -77,7 +94,14 @@ ObjectId değil — kimliğin türü log satırında ve Redis anahtarında çıp
 | ------------------------------- | --------------------- | ------------------------------ |
 | Benzersiz indeks ihlali (11000) | `CONFLICT`            | 409 / gRPC ABORTED             |
 | Ağ / sunucu seçimi hatası       | `SERVICE_UNAVAILABLE` | 503 / gRPC UNAVAILABLE         |
+| Yetkisiz erişim (13, D14)       | `INTERNAL`            | "Veritabani yetkisi yok"       |
 | Diğer                           | `INTERNAL`            | 500, özgün mesaj dışarı çıkmaz |
+
+**Kimlik doğrulama (D14).** Yanlış kullanıcı ya da parolada (`AuthenticationFailed`, 18)
+`connectMongo` "tekrar denenebilir" `SERVICE_UNAVAILABLE` yerine `INTERNAL` ve
+"Mongo kimlik dogrulamasi reddedildi" der: beklemek düzeltmez, sebebi ağ sorunu sanılmasın.
+Mesajdaki adresin parolası maskelidir. Servis başka servisin veritabanına erişmeye kalkarsa Mongo
+reddeder (`Unauthorized`, 13); hata adıyla `INTERNAL` olur.
 
 Çakışan **değer** dışarı verilmez, yalnızca alan adı: `keyValue` müşteri verisi
 taşıyabilir (telefon, adres) ve hata zarfı istemciye gider.
@@ -91,4 +115,6 @@ kapalıyken her toplu yazım tekrar denenebilir `SERVICE_UNAVAILABLE` yerine `IN
 
 `test/integration` gerçek Mongo ile koşar (Testcontainers, tek düğümlü replica set):
 benzersiz indeksin gerçekten ihlal edilmesi ve transaction'ın gerçekten geri alınması
-sahte istemciyle doğrulanamaz. `pnpm test:int`.
+sahte istemciyle doğrulanamaz. `auth.spec.ts` kimlik doğrulamalı replica set'te (yerel compose
+ile aynı kurulum) servis kullanıcısının kendi veritabanında çalıştığını, başka veritabanında
+reddedildiğini ve yanlış parolanın mesajını sınar. `pnpm test:int`.

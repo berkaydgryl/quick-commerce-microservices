@@ -9,6 +9,12 @@ export const PAYMENT_SERVICE_FULL_NAME = 'getir.payment.v1.PaymentService';
 export const DEFAULT_PAYMENT_GRPC_PORT = 50_054;
 
 /**
+ * Servisin kendi veritabani (D14, ADR-05): PAYMENT_MONGO_DB verilmezse.
+ * Kullanicisi (PAYMENT_MONGO_URI) yalnizca burada yetkilidir.
+ */
+export const DEFAULT_MONGO_DB = 'getir_payment';
+
+/**
  * 3DS dogrulama jetonunun omru. Suresi dolan jetonla Confirm3Ds kabul
  * edilmez (T5.2); rezervasyon uzatmasi da bu sureye gore hesaplanmistir (B21).
  */

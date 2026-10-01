@@ -26,6 +26,15 @@ const DUPLICATE_KEY_CODE = 11_000;
  */
 const WRITE_CONFLICT_CODE = 112;
 
+/** Kullanici adi ya da parola reddedildi (AuthenticationFailed). */
+const AUTHENTICATION_FAILED_CODE = 18;
+
+/**
+ * Kullanicinin bu veritabaninda yetkisi yok (Unauthorized). Servis basina
+ * kullanicida (D14) baska servisin veritabanina erisim boyle doner (ADR-05).
+ */
+const UNAUTHORIZED_CODE = 13;
+
 export interface MongoErrorContext {
   /** Hangi islem: "insertOne", "findById"... */
   readonly operation?: string;
@@ -38,6 +47,7 @@ export interface MongoErrorContext {
  * - benzersiz indeks ihlali -> CONFLICT (cagiran taraf yeniden deneyebilir)
  * - transaction yazim cakismasi (WriteConflict) -> CONFLICT
  * - ag / sunucu secimi hatasi -> SERVICE_UNAVAILABLE (gecici, yeniden denenebilir)
+ * - yetkisiz erisim (Unauthorized) -> INTERNAL, sebebi adiyla: yeniden deneme duzeltmez
  * - digerleri -> INTERNAL (mesaji disari sizmaz)
  */
 export function toMongoAppError(error: unknown, context: MongoErrorContext = {}): AppError {
@@ -89,6 +99,10 @@ export function toMongoAppError(error: unknown, context: MongoErrorContext = {})
     });
   }
 
+  if (error instanceof MongoServerError && error.code === UNAUTHORIZED_CODE) {
+    return AppError.internal('Veritabani yetkisi yok', { details, cause: error });
+  }
+
   if (error instanceof MongoServerSelectionError || error instanceof MongoNetworkError) {
     return new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'Veritabanina ulasilamiyor', {
       details,
@@ -109,6 +123,14 @@ function wrappedBulkCause(error: unknown): MongoError | undefined {
   }
   const inner: unknown = error.errorResponse;
   return inner instanceof MongoError && inner !== error ? inner : undefined;
+}
+
+/**
+ * Baglanti kimlik dogrulamasinda mi reddedildi (yanlis kullanici ya da parola)?
+ * Yeniden denemek duzeltmez: yapilandirma hatasidir (D14).
+ */
+export function isAuthenticationError(error: unknown): boolean {
+  return error instanceof MongoServerError && error.code === AUTHENTICATION_FAILED_CODE;
 }
 
 /** Deger, benzersiz indeks ihlali mi? (upsert yerine "varsa gec" akislari icin.) */
