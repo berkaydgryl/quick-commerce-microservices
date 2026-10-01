@@ -9,6 +9,7 @@ import {
   commonEnvSchema,
   envBoolean,
   envInt,
+  envOptionalHttpUrl,
   envString,
   fixedClock,
   isAppError,
@@ -205,6 +206,34 @@ describe('envString', () => {
 
     expect(() => loadEnv(schema, {})).toThrowError(/MONGO_URI/);
     expect(() => loadEnv(schema, { MONGO_URI: '' })).toThrowError(/MONGO_URI/);
+  });
+});
+
+describe('envOptionalHttpUrl (D15)', () => {
+  const schema = z.object({ OTEL_EXPORTER_OTLP_ENDPOINT: envOptionalHttpUrl() });
+
+  it('tanimsiz ya da bos: undefined (ozellik kapali)', () => {
+    expect(loadEnv(schema, {}).OTEL_EXPORTER_OTLP_ENDPOINT).toBeUndefined();
+    expect(
+      loadEnv(schema, { OTEL_EXPORTER_OTLP_ENDPOINT: '  ' }).OTEL_EXPORTER_OTLP_ENDPOINT,
+    ).toBeUndefined();
+  });
+
+  it('http/https adresi kabul edilir; sondaki egik cizgi atilir', () => {
+    const read = (value: string) => loadEnv(schema, { OTEL_EXPORTER_OTLP_ENDPOINT: value });
+
+    expect(read('http://localhost:4318').OTEL_EXPORTER_OTLP_ENDPOINT).toBe('http://localhost:4318');
+    expect(read(' https://iz.ornek:4318/ ').OTEL_EXPORTER_OTLP_ENDPOINT).toBe(
+      'https://iz.ornek:4318',
+    );
+  });
+
+  it('gecersiz adres ya da baska sema reddedilir; deger mesaja yazilmaz', () => {
+    const read = (value: string) => () => loadEnv(schema, { OTEL_EXPORTER_OTLP_ENDPOINT: value });
+
+    expect(read('localhost:4318')).toThrowError(/OTEL_EXPORTER_OTLP_ENDPOINT/);
+    expect(read('grpc://localhost:4317')).toThrowError(/http:\/\/ ya da https:\/\//);
+    expect(read('http://kullanici:gizli@')).not.toThrowError(/gizli/);
   });
 });
 

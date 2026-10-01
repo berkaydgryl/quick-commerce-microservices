@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Gozlemlenebilirlik: pino gunlukcusu, korelasyon kimligi (request-id), Prometheus kayit defteri ve HTTP /metrics ucu",
+  "description": "Gozlemlenebilirlik: pino gunlukcusu, korelasyon kimligi (request-id), dagitik izleme (OpenTelemetry), Prometheus kayit defteri ve HTTP /metrics ucu",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -27,6 +27,12 @@
   },
   "dependencies": {
     "@getir/core": "workspace:*",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/core": "^2.11.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
+    "@opentelemetry/resources": "^2.11.0",
+    "@opentelemetry/sdk-trace-node": "^2.11.0",
+    "@opentelemetry/semantic-conventions": "^1.43.0",
     "@prometheus-io/client": "^0.16.1",
     "pino": "^10.3.1"
   }

@@ -23,9 +23,15 @@ interface HandlerResult<TResponse> {
   readonly response: TResponse | undefined;
 }
 
+/** Sahte cagrinin metot yolu (span adi; D15). */
+const RESERVE_PATH = '/getir.test.v1.StockService/Reserve';
+
 /** gRPC'nin handler'a gecirdigi cagri nesnesinin testte yeten kadari. */
 function fakeCall(request: unknown, metadata: Metadata): ServerUnaryCall<unknown, unknown> {
-  return { request, metadata } as unknown as ServerUnaryCall<unknown, unknown>;
+  return { request, metadata, getPath: () => RESERVE_PATH } as unknown as ServerUnaryCall<
+    unknown,
+    unknown
+  >;
 }
 
 function invoke<TResponse>(

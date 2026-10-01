@@ -1,8 +1,8 @@
 # @getir/observability
 
-Gözlemlenebilirliğin üç parçası burada: **günlük** (pino), **korelasyon kimliği** (request-id) ve
-**metrik** (Prometheus). gRPC'ye bağlı değildir. Metadata'dan kimlik okumak, RPC metrikleri ve metrik
-ucunun port kuralı `@getir/service-kit`'tedir. Servisler bu paketi çoğunlukla service-kit üzerinden
+Gözlemlenebilirliğin dört parçası burada: **günlük** (pino), **korelasyon kimliği** (request-id),
+**iz** (OpenTelemetry, D15) ve **metrik** (Prometheus). gRPC'ye bağlı değildir. Metadata'dan kimlik
+okumak, RPC span'leri ve metrikleri ve metrik ucunun port kuralı `@getir/service-kit`'tedir. Servisler bu paketi çoğunlukla service-kit üzerinden
 kullanır; işçi metrikleri (outbox, tüketici, süpürücü) için doğrudan import eder.
 
 | Parça           | Dosya                     | Ne yapar                                                        |
@@ -10,9 +10,10 @@ kullanır; işçi metrikleri (outbox, tüketici, süpürücü) için doğrudan i
 | Günlükçü        | `src/logger.ts`           | `createLogger`: tek satır JSON, ISO zaman, seviye adı           |
 | stdout hedefi   | `src/log-destination.ts`  | Eşli yazar; yazamazsa günlüğü bırakır (#56)                     |
 | Korelasyon      | `src/request-id.ts`       | `x-request-id` anahtarı, `resolveRequestId` (kullan ya da üret) |
+| İz sağlayıcısı  | `src/tracing/provider.ts` | `startTracing`: OTLP/HTTP, W3C `traceparent`, sınırlı boşaltma  |
 | Metrik defteri  | `src/metrics/registry.ts` | Sürecin tek defteri, `counter` / `gauge` / `histogram`          |
 | `/metrics` ucu  | `src/metrics/server.ts`   | Node `http`; yalnızca `GET /metrics`                            |
-| Test yardımcısı | `src/testing/` (alt yol)  | `@getir/observability/testing`: metrik değeri okuma             |
+| Test yardımcısı | `src/testing/` (alt yol)  | `@getir/observability/testing`: metrik okuma, bellek içi span   |
 
 T10.5'te açıldı: günlükçü ve request-id service-kit'ten taşındı. service-kit ikisini **yeniden dışa
 verir**; servisler `createLogger`'ı `@getir/service-kit`'ten almaya devam eder, servis kodu değişmedi.
@@ -34,6 +35,29 @@ yeniden üretildi; süreç `Atomics.wait` içinde takılı). Eşli hedefte tampo
 bir şey kalmaz. İlk yazım hatasında günlük **bırakılır**, stderr'e bir kez not düşülür
 (`stdout'a yazilamiyor; gunluk birakildi`), süreç işine ve kapanışına devam eder. Bedeli satır başına
 bir `write` çağrısı; servisler `info` seviyesinde başarılı istek başına satır yazmaz.
+
+## İz (D15, ADR-20)
+
+`startTracing({ serviceName, otlpEndpoint, logger })` sürecin iz sağlayıcısını kurar; servisler bunu
+`startGrpcServer` üzerinden alır (`OTEL_EXPORTER_OTLP_ENDPOINT`). Sağlayıcı süreçte **tektir**: ikinci
+çağrı ilk kurulumu kullanır.
+
+- **Bağlam W3C `traceparent` ile taşınır** (yalnızca trace context). Her istek örneklenir
+  (ParentBased(AlwaysOn)); üst span'in kararı korunur.
+- **Adres yoksa** span'ler yine oluşur ve servisten servise taşınır, yalnızca dışarı gönderilmez.
+  Adres varsa OTLP/HTTP ile `<adres>/v1/traces`'e toplu gönderilir (yerelde Jaeger, `pnpm infra:up`).
+- **Span'i açan kod yalnızca `@opentelemetry/api`'yi kullanır** (service-kit). Sağlayıcısız API hiçbir
+  şey yapmaz; SDK ve OTLP gönderici yalnızca bu pakette.
+- **Günlük satırı iz kimliğini taşır:** pino `mixin`'i aktif span'in `traceId` ve `spanId`'sini her
+  satıra ekler. Bir RPC'nin bütün satırları (use-case, giden çağrı dahil) izle eşleşir; span dışındaki
+  satır (açılış, işçi turu) bu alanları taşımaz.
+- **Kapanış:** `tracing.flush()` bekleyen span'leri en çok 2 sn bekler, hata fırlatmaz (service-kit
+  zarif kapanışın son adımı).
+- **Hata satırı seyrek:** OpenTelemetry'nin hataları (örn. Jaeger kapalı: her parti düşer) JSON
+  günlüğe WARN olarak, dakikada en çok bir kez yazılır; aradakiler `suppressed` alanında.
+
+Testte: `recordSpans()` (`@getir/observability/testing`) sağlayıcıyı bellek içi göndericiyle kurar.
+Sunucudan **önce** çağrılmalıdır.
 
 ## Korelasyon kimliği
 

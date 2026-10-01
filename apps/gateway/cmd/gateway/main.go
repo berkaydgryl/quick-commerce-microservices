@@ -15,13 +15,16 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/config"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/redisdb"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/telemetry"
 )
 
 // Yapilandirma hatasinda donen cikis kodu (Node tarafiyla ayni: 1).
@@ -44,7 +47,8 @@ func main() {
 		os.Exit(runHealthcheck(context.Background(), cfg.Port))
 	}
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel})).
+	// Istek kapsamindaki satir (InfoContext...) span'in traceId'sini tasir (D15).
+	logger := slog.New(telemetry.NewLogHandler(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel}))).
 		With(slog.String("service", "gateway"))
 	// Redis surucusunun gunlugu de JSON olsun (baglanti hatalari dahil). Surucu
 	// gunlugu paket geneli bir degiskendir: surec basinda, hicbir istemci
@@ -69,7 +73,17 @@ func run(cfg config.Config, logger *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	app, cleanup, err := bootstrap(ctx, cfg, logger)
+	// Izler (D15): adres yoksa olusur ve tasinir, disari gonderilmez.
+	tracing, err := telemetry.Setup(ctx, cfg.OTLPEndpoint)
+	if err != nil {
+		return fmt.Errorf("izleme: %w", err)
+	}
+	tracing.Install(logger)
+	// EN SON (defer sirasi ters): sunucu ve baglantilar kapandiktan sonra
+	// bekleyen span'ler gonderilir; sure sinirli, kapanisi uzatmaz.
+	defer flushTraces(tracing, logger)
+
+	app, cleanup, err := bootstrap(ctx, cfg, logger, tracing)
 	if err != nil {
 		return err
 	}
@@ -81,4 +95,17 @@ func run(cfg config.Config, logger *slog.Logger) error {
 		slog.Int("services", len(cfg.Services)),
 	)
 	return serve(ctx, app, cfg.Addr(), cfg.ShutdownTimeout, logger)
+}
+
+// traceFlushTimeout, kapanista bekleyen span'leri gondermek icin taninan en
+// uzun sure (Node servisleriyle ayni: 2 sn).
+const traceFlushTimeout = 2 * time.Second
+
+// flushTraces, bekleyen span'leri gonderir; hata kapanisi durdurmaz.
+func flushTraces(tracing *telemetry.Tracing, logger *slog.Logger) {
+	ctx, cancel := context.WithTimeout(context.Background(), traceFlushTimeout)
+	defer cancel()
+	if err := tracing.Shutdown(ctx); err != nil {
+		logger.Warn("izler suresinde gonderilemedi", slog.Any("err", err))
+	}
 }

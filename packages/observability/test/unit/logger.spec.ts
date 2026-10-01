@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { STDOUT_LOST_MESSAGE } from '../../src/log-destination.js';
 
 const CHILD = fileURLToPath(new URL('./fixtures/logger-child.mjs', import.meta.url));
+const TRACE_CHILD = fileURLToPath(new URL('./fixtures/logger-trace-child.mjs', import.meta.url));
 /** Cikis icin beklenen en uzun sure; takilan surec bu surede cikmaz (#56). */
 const EXIT_WAIT_MS = 5_000;
 
@@ -100,6 +101,29 @@ describe('createLogger', () => {
     expect(await within(exited)).toEqual({ code: 0, signal: null });
     expect(stdout()).toContain('"msg":"kapanis 1"');
     expect(stdout()).toContain('"msg":"kapanis 2"');
+  });
+});
+
+describe('iz baglami (D15)', () => {
+  it("span icinde yazilan satir aktif span'in traceId ve spanId'sini tasir; disindaki tasimaz", async () => {
+    const child = spawn(process.execPath, [TRACE_CHILD], { stdio: ['ignore', 'pipe', 'pipe'] });
+    running.push(child);
+    let stdout = '';
+    child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
+    const exited = new Promise<Exit>((resolve) =>
+      child.once('exit', (code, signal) => resolve({ code, signal })),
+    );
+
+    expect(await within(exited)).toEqual({ code: 0, signal: null });
+    const [inside, outside] = stdout
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(inside?.['traceId']).toBe(inside?.['beklenenTraceId']);
+    expect(inside?.['spanId']).toBe(inside?.['beklenenSpanId']);
+    expect(inside?.['traceId']).toMatch(/^[0-9a-f]{32}$/);
+    expect(outside).not.toHaveProperty('traceId');
+    expect(outside).not.toHaveProperty('spanId');
   });
 });
 

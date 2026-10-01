@@ -8,6 +8,11 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
 )
 
+// healthPath, altyapi yoklamasinin yolu (Docker HEALTHCHECK her 15 sn'de).
+// Iz acilmaz (D15, ADR-20): her yoklama bir iz olsaydi goruntuleyici
+// gurultuyle dolardi.
+const healthPath = "/healthz"
+
 // healthzHandler, bagimli servislerin durumunu doner.
 //
 // HTTP KODU SOZLESMESI: hepsi ayaktaysa 200, biri bile degilse 503. Probe'lar

@@ -17,6 +17,7 @@ package httpapi
 //   body.go       - JSON govdenin kati cozulmesi
 //   params.go     - sorgu parametresinin tipine cevrilmesi
 //   middleware.go - istek gunlugu
+//   tracing.go    - istek span'i (D15; izin listeli nitelikler)
 //   recover.go    - panik kurtarma (T8.3)
 //   errors.go     - hata -> zarf cevirisi
 //   requestid.go  - korelasyon kimligi (bicim, baslik, gRPC metadata'si)
@@ -29,6 +30,9 @@ import (
 	"log/slog"
 
 	"github.com/gofiber/fiber/v3"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/catalog"
@@ -171,6 +175,10 @@ type Deps struct {
 	// gelistirme http://localhost uzerinden calisir).
 	SecureCookies bool
 	Logger        *slog.Logger
+	// Tracer ve Propagator, istek span'leri (D15). Verilmezse span acilmaz
+	// (bos izleyici) ve W3C yayici kullanilir; testlerin cogu izsizdir.
+	Tracer     trace.Tracer
+	Propagator propagation.TextMapPropagator
 }
 
 // New, Fiber uygulamasini kurar.
@@ -186,14 +194,24 @@ func New(deps Deps) *fiber.App {
 		BodyLimit: maxBodyBytes,
 	})
 
-	// Sira onemli: kimlik -> istek gunlugu -> panik kurtarma (T8.3). Panik
-	// hataya gunlugun ICINDE doner; boylece istek gunlugu de 500'u ve ayni
-	// requestId'yi yazar.
+	// Sira onemli: kimlik -> iz -> istek gunlugu -> panik kurtarma (T8.3,
+	// D15). Panik hataya gunlugun ICINDE doner; boylece istek gunlugu de 500'u
+	// ve ayni requestId'yi yazar. Span kimlikten sonra acilir (requestId
+	// niteligi) ve istek gunlugunu sarar: hatayi cevaba gunluk cevirir, span
+	// cevabin SON durum koduyla kapanir (disarida kalsaydi 200 kaydederdi).
+	tracer, propagator := deps.Tracer, deps.Propagator
+	if tracer == nil {
+		tracer = noop.NewTracerProvider().Tracer("")
+	}
+	if propagator == nil {
+		propagator = propagation.TraceContext{}
+	}
 	app.Use(requestIDMiddleware)
+	app.Use(tracingMiddleware(tracer, propagator))
 	app.Use(requestLogger(deps.Logger))
 	app.Use(recoverPanics())
 
-	app.Get("/healthz", healthzHandler(deps.Health))
+	app.Get(healthPath, healthzHandler(deps.Health))
 
 	// Hiz siniri (T8.2) ROTA BASINA: kimliksiz uclarda IP, korumali uclarda
 	// kimlikten SONRA kullanici sayilir. /healthz sinirsiz.

@@ -28,7 +28,8 @@ import (
 const testWindow = time.Minute
 
 // limitedApp, butun uclari tasiyan ve verilen sinirlarla calisan uygulama.
-func limitedApp(t *testing.T, limits RateLimit, orders *fakeOrders, logger *slog.Logger) *fiber.App {
+// adjust, kurulan Deps'i degistirir (orn. izleyici, D15); verilmezse oldugu gibi.
+func limitedApp(t *testing.T, limits RateLimit, orders *fakeOrders, logger *slog.Logger, adjust ...func(*Deps)) *fiber.App {
 	t.Helper()
 	passwords, err := auth.NewPasswordHasher(bcrypt.MinCost)
 	if err != nil {
@@ -39,7 +40,7 @@ func limitedApp(t *testing.T, limits RateLimit, orders *fakeOrders, logger *slog
 		Tokens: testTokens(), Locator: auth.NoLocator{}, RefreshTTL: testRefresh, Now: time.Now,
 	})
 	markets := &fakeCatalog{}
-	return New(Deps{
+	deps := Deps{
 		Health:            fakeReporter{report: healthyReport()},
 		Categories:        &fakeLister{list: catalog.CategoryList{Items: []catalog.Category{}}},
 		NearbyMarkets:     markets,
@@ -62,7 +63,11 @@ func limitedApp(t *testing.T, limits RateLimit, orders *fakeOrders, logger *slog
 		Idempotency:       testIdempotency(),
 		RateLimit:         limits,
 		Logger:            logger,
-	})
+	}
+	for _, change := range adjust {
+		change(&deps)
+	}
+	return New(deps)
 }
 
 // memoryLimits, verilen saatle bellek sayacli sinirlar.

@@ -156,6 +156,6 @@ func (w *failOpenWarning) warn(c fiber.Ctx, err error) {
 	if !w.last.CompareAndSwap(last, now) {
 		return
 	}
-	w.logger.Warn("hiz siniri uygulanamadi, istek gecirildi (fail-open)",
+	w.logger.WarnContext(c.Context(), "hiz siniri uygulanamadi, istek gecirildi (fail-open)",
 		slog.String("requestId", requestIDOf(c)), slog.Any("err", err))
 }

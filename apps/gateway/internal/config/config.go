@@ -45,6 +45,11 @@ type Config struct {
 	// liste stoksuz doner; RequestTimeout'tan kisadir.
 	StockTimeout time.Duration
 	Services     []ServiceTarget
+	// OTLPEndpoint, izlerin gonderilecegi OTLP/HTTP taban adresi (D15; ornek
+	// http://localhost:4318). Bossa span'ler yine olusur ve servislere
+	// tasinir (gunlukte traceId), yalnizca disari gonderilmez.
+	OTLPEndpoint string
+
 	// AssetBaseURL, gorsellerin mutlak adresinin koku. Veri gorseli GORELI yol
 	// olarak saklar ("/img/cat/sut.png"); gateway (BFF) istemciye giden cevapta
 	// bu koku ekler. Sonunda "/" yoktur.
@@ -145,6 +150,11 @@ func Load(getenv Getenv) (Config, error) {
 		problems = append(problems, err)
 	}
 
+	otlpEndpoint, err := readOptionalHTTPURL(getenv, "OTEL_EXPORTER_OTLP_ENDPOINT")
+	if err != nil {
+		problems = append(problems, err)
+	}
+
 	// Kimlik (T8.1): Mongo MOCK disinda zorunlu, sir her zaman zorunlu.
 	mongoURI, err := readMongoURI(getenv, mock)
 	if err != nil {
@@ -236,6 +246,7 @@ func Load(getenv Getenv) (Config, error) {
 		StockTimeout:                stockTimeout,
 		Services:                    services,
 		AssetBaseURL:                assetBaseURL,
+		OTLPEndpoint:                otlpEndpoint,
 		MongoURI:                    mongoURI,
 		MongoDB:                     readString(getenv, "GATEWAY_MONGO_DB", defaultMongoDB),
 		MongoServerSelectionTimeout: mongoTimeout,

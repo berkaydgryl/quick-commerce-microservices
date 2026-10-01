@@ -214,3 +214,35 @@ func TestAssetBaseURLReportedWithOtherProblems(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadOTLPEndpointIsOptional(t *testing.T) {
+	cfg, err := Load(minimalEnv(nil))
+	if err != nil {
+		t.Fatalf("beklenmeyen hata: %v", err)
+	}
+	// D15: adres yoksa izler olusur ve tasinir, yalnizca disari gonderilmez.
+	if cfg.OTLPEndpoint != "" {
+		t.Errorf("varsayilan bos olmali, %q geldi", cfg.OTLPEndpoint)
+	}
+
+	cfg, err = Load(minimalEnv(map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": " http://localhost:4318/ "}))
+	if err != nil {
+		t.Fatalf("gecerli adresle hata beklenmiyordu: %v", err)
+	}
+	if cfg.OTLPEndpoint != "http://localhost:4318" {
+		t.Errorf("bosluk ve sondaki egik cizgi atilmali: %q", cfg.OTLPEndpoint)
+	}
+}
+
+func TestLoadRejectsInvalidOTLPEndpointWithoutEchoingIt(t *testing.T) {
+	for _, value := range []string{"jaeger:4318", "grpc://localhost:4317", "http://gizli-kullanici@"} {
+		_, err := Load(minimalEnv(map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": value}))
+		if err == nil || !strings.Contains(err.Error(), "OTEL_EXPORTER_OTLP_ENDPOINT") {
+			t.Errorf("%q icin degiskenin adini tasiyan hata bekleniyordu: %v", value, err)
+			continue
+		}
+		if strings.Contains(err.Error(), value) {
+			t.Errorf("hata metni degeri icermemeli: %v", err)
+		}
+	}
+}

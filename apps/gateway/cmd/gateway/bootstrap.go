@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/gofiber/fiber/v3"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
 	catalogv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/catalog/v1"
@@ -21,7 +22,9 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/httpapi"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/inventory"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rpc"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/storefront"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/telemetry"
 )
 
 // bootstrap, parcalari BAGLAR: baglanti havuzu, kimlik servisi (T8.1), tekrar
@@ -32,13 +35,15 @@ import (
 // ctx acilisin baglamidir: Mongo'ya ya da Redis'e baglanirken sinyal gelirse
 // acilis durur. Donen cleanup havuzu, Mongo ve Redis baglantilarini kapatir;
 // cagiran, sunucu durduktan SONRA calistirir.
-func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (*fiber.App, func(), error) {
+func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, tracing *telemetry.Tracing) (*fiber.App, func(), error) {
 	targets := make([]clients.Target, 0, len(cfg.Services))
 	for _, service := range cfg.Services {
 		targets = append(targets, clients.Target{Name: service.Name, Address: service.Address})
 	}
 
-	pool, err := clients.NewPool(targets)
+	// Giden her gRPC cagrisi istemci span'i acar ve traceparent'i tasir (D15).
+	pool, err := clients.NewPool(targets,
+		grpc.WithChainUnaryInterceptor(rpc.TracingInterceptor(tracing.Tracer, tracing.Propagator)))
 	if err != nil {
 		return nil, nil, fmt.Errorf("baglanti havuzu: %w", err)
 	}
@@ -150,6 +155,9 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger) (*fi
 		// Cihaz cerezi yalnizca production'da Secure: gelistirme http://localhost.
 		SecureCookies: cfg.NodeEnv == config.EnvProduction,
 		Logger:        logger,
+		// Istek span'leri (D15).
+		Tracer:     tracing.Tracer,
+		Propagator: tracing.Propagator,
 	})
 
 	return app, cleanup, nil

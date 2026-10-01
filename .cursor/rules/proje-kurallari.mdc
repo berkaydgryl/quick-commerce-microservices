@@ -110,8 +110,9 @@ ya hatayi cevirir; ucunu birden degil.
 - Buyuk veri bellege tek seferde alinmaz; akis (stream) ile islenir.
 - Her servis SIGTERM ve SIGINT yakalar ve zarif kapanir: health NOT_SERVING -> acik akislar
   kapanir -> devam eden cagrilar beklenir -> sure asiminda zorla kapanir -> metrik ucu kapanir ->
-  EN SON isciler ve veritabani baglantilari kapanir (`service-kit/src/grpc/graceful-shutdown.ts`).
-  Her adim sinirlidir: son adim 10 sn'de bitmezse beklenmez ve surec cikar (#56, T10.5).
+  isciler ve veritabani baglantilari kapanir -> EN SON bekleyen izler gonderilir
+  (`service-kit/src/grpc/graceful-shutdown.ts`). Her adim sinirlidir: isci/baglanti adimi 10 sn'de,
+  iz gonderimi 2 sn'de bitmezse beklenmez ve surec cikar (#56, T10.5, D15).
 
 ## Go
 
@@ -247,6 +248,19 @@ Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicid
   hata kodu, olay konusu, grup); kimlik (siparis, kullanici, istek), telefon, adres etiket olmaz.
   Kutuphane (`@prometheus-io/client`) dogrudan import edilmez: `@getir/observability`
   ureticileri (`counter`, `gauge`, `histogram`) kullanilir.
+- Dagitik iz OpenTelemetry'dir; baglam W3C `traceparent` ile tasinir: gateway'e HTTP basliginda,
+  servisler arasinda gRPC metadata'sinda (D15, ADR-20). Span RPC sinirinda acilir (gateway HTTP
+  istegi ve giden gRPC cagrisi; service-kit `unaryHandler` ve `callUnary`); servis kodu span
+  acmaz. Saglik yoklamalari (`/healthz`, gRPC health) ve `/metrics` izlenmez.
+- Span nitelikleri IZIN LISTESIYLE yazilir: yontem, rota kalibi, yol, durum kodu, `rpc.*`,
+  `app.request_id`, `app.error_code`. Sorgu dizesi (konum, arama metni), istemci IP'si, kullanici
+  ajani ve govde yazilmaz; span adi ham yol degil rota kalibidir. Hata isareti agirliktan gelir:
+  beklenen is sonucu span'i hatali isaretlemez (HTTP'de yalnizca 5xx).
+- Kutuphane kodu yalnizca izleme API'sini kullanir (`@opentelemetry/api`; gateway'de parametre
+  olarak `trace.Tracer`). SDK ve OTLP gondericisi tek yerde kurulur: `@getir/observability`
+  `startTracing` (service-kit cagirir) ve gateway `internal/telemetry` (yalnizca `main`; testler
+  kuresel duruma dokunmaz). Span icinde yazilan gunluk satiri `traceId` ve `spanId` tasir;
+  `requestId` ayri kalir ve span'e `app.request_id` olarak yazilir.
 
 ## Test
 

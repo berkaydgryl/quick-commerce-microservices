@@ -11,6 +11,26 @@ import (
 // assetBaseURLExample, eksik ASSET_BASE_URL hatasinda gosterilen ornek.
 const assetBaseURLExample = "http://localhost:5173"
 
+// otlpEndpointExample, gecersiz OTEL_EXPORTER_OTLP_ENDPOINT hatasinda gosterilen
+// ornek (docker-compose.dev.yml'deki Jaeger).
+const otlpEndpointExample = "http://localhost:4318"
+
+// readOptionalHTTPURL, ISTEGE BAGLI bir http(s) adresini okur (D15: izlerin
+// gonderilecegi OTLP/HTTP taban adresi). Bossa "" (ozellik kapali). Sondaki
+// "/" atilir ki yol eklenince "//" olusmasin. Hata metni degeri ICERMEZ: adres
+// kimlik bilgisi tasiyabilir.
+func readOptionalHTTPURL(getenv Getenv, name string) (string, error) {
+	raw := strings.TrimSpace(getenv(name))
+	if raw == "" {
+		return "", nil
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return "", fmt.Errorf("%s: http:// ya da https:// ile baslayan bir adres olmali, ornek: %s", name, otlpEndpointExample)
+	}
+	return strings.TrimRight(raw, "/"), nil
+}
+
 // readBaseURL, ZORUNLU bir mutlak http(s) kok adresini okur.
 //
 // NEDEN VARSAYILAN YOK: gorsellerin nerede barinacagi (web'in public/ klasoru,

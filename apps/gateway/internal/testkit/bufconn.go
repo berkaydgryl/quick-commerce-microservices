@@ -24,7 +24,9 @@ const bufconnSize = 1 << 20
 //
 // Sunucu ve baglanti test bitince kapatilir. Normal kapanis disindaki her hata
 // testi dusurur; yutulan bir Serve hatasi testin neden takildigini gizlerdi.
-func BufconnClient(t *testing.T, register func(*grpc.Server)) *grpc.ClientConn {
+//
+// extra, istemci baglantisina eklenen secenekler (orn. iz ara katmani, D15).
+func BufconnClient(t *testing.T, register func(*grpc.Server), extra ...grpc.DialOption) *grpc.ClientConn {
 	t.Helper()
 
 	listener := bufconn.Listen(bufconnSize)
@@ -41,12 +43,13 @@ func BufconnClient(t *testing.T, register func(*grpc.Server)) *grpc.ClientConn {
 		}
 	})
 
-	conn, err := grpc.NewClient("passthrough:///bufnet",
+	options := append([]grpc.DialOption{
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			return listener.DialContext(ctx)
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+	}, extra...)
+	conn, err := grpc.NewClient("passthrough:///bufnet", options...)
 	if err != nil {
 		t.Fatalf("gRPC istemcisi kurulamadi: %v", err)
 	}

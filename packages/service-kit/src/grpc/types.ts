@@ -43,6 +43,12 @@ export interface GrpcServerOptions {
    * kapanis biter. Varsayilan DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS.
    */
   readonly shutdownHookTimeoutMs?: number;
+  /**
+   * OTLP/HTTP taban adresi (D15; OTEL_EXPORTER_OTLP_ENDPOINT, orn.
+   * http://localhost:4318). Verilmezse span'ler yine olusur ve servisten
+   * servise tasinir (gunlukte traceId), yalnizca disari gonderilmez.
+   */
+  readonly otlpEndpoint?: string | undefined;
 }
 
 export interface GrpcServerHandle {

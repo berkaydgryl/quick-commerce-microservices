@@ -16,7 +16,7 @@
  * ile duserdi.
  */
 
-import { commonEnvSchema, envInt, envString } from '@getir/core';
+import { commonEnvSchema, envInt, envOptionalHttpUrl, envString } from '@getir/core';
 import type { z } from 'zod';
 
 import {
@@ -49,6 +49,13 @@ export const serviceEnvSchema = commonEnvSchema.extend({
     max: MAX_SHUTDOWN_TIMEOUT_MS,
     defaultValue: DEFAULT_SHUTDOWN_TIMEOUT_MS,
   }),
+
+  /**
+   * Izlerin gonderilecegi OTLP/HTTP taban adresi (D15, ADR-20), orn.
+   * http://localhost:4318 (Jaeger). Bossa izler yine olusur ve tasinir
+   * (gunlukte traceId) ama disari gonderilmez. Ad OpenTelemetry'nin standart adi.
+   */
+  OTEL_EXPORTER_OTLP_ENDPOINT: envOptionalHttpUrl(),
 });
 
 /** serviceEnvSchema'nin urettigi nesne. Servisler kendi alanlariyla genisletir. */

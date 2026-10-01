@@ -51,6 +51,17 @@ describe('serviceEnvSchema', () => {
     expect(() => loadEnv(schema, { CATALOG_GRPC_PORT: '64536' })).toThrow(/CATALOG_GRPC_PORT/);
   });
 
+  it('OTLP adresi istege bagli (D15): yoksa undefined, varsa http(s) olmali', () => {
+    expect(loadEnv(schema, {}).OTEL_EXPORTER_OTLP_ENDPOINT).toBeUndefined();
+    expect(
+      loadEnv(schema, { OTEL_EXPORTER_OTLP_ENDPOINT: 'http://localhost:4318/' })
+        .OTEL_EXPORTER_OTLP_ENDPOINT,
+    ).toBe('http://localhost:4318');
+    expect(() => loadEnv(schema, { OTEL_EXPORTER_OTLP_ENDPOINT: 'jaeger:4318' })).toThrow(
+      /OTEL_EXPORTER_OTLP_ENDPOINT/,
+    );
+  });
+
   it('gecersiz kapanis suresini reddeder', () => {
     expect(() => loadEnv(schema, { GRPC_SHUTDOWN_TIMEOUT_MS: '-1' })).toThrow(
       /GRPC_SHUTDOWN_TIMEOUT_MS/,

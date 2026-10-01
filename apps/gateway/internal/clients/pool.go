@@ -40,21 +40,24 @@ type Pool struct {
 // bilincli bir tercih - gateway, bagimli servis henuz ayaga kalkmamis olsa bile
 // baslayabilmeli ve bunu /healthz uzerinden bildirebilmelidir. Aksi halde acilis
 // sirasi bir bagimlilik zinciri olurdu.
-func NewPool(targets []Target) (*Pool, error) {
+//
+// extra, her baglantiya eklenen secenekler (D15: giden cagrinin istemci span'i,
+// rpc.TracingInterceptor); havuz ne olduklarini bilmez.
+func NewPool(targets []Target, extra ...grpc.DialOption) (*Pool, error) {
 	pool := &Pool{
 		conns: make(map[string]*grpc.ClientConn, len(targets)),
 	}
 
 	for _, target := range targets {
-		conn, err := grpc.NewClient(
-			target.Address,
+		options := append([]grpc.DialOption{
 			// TLS YOK: servisler yalnizca ic agda konusur, disariya acilmaz.
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithKeepaliveParams(keepalive.ClientParameters{
 				Time:    keepaliveTime,
 				Timeout: keepaliveTimeout,
 			}),
-		)
+		}, extra...)
+		conn, err := grpc.NewClient(target.Address, options...)
 		if err != nil {
 			// Acilan baglantilari birakmadan cik: yarim havuz sizinti demektir.
 			// Kapanis da hata verirse o hata yutulmaz; asil hatayla birlikte doner

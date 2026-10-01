@@ -10,7 +10,8 @@ tekrarlanacak olan dört parça durur:
 | gRPC bootstrap            | `src/grpc/server.ts`            | Sunucuyu kurar, portu açar, SERVING'e çevirir            |
 | Metrik ucu (T10.5)        | `src/grpc/metrics-endpoint.ts`  | gRPC portu + 1000'de HTTP `/metrics`                     |
 | RPC metrikleri (T10.5)    | `src/grpc/rpc-metrics.ts`       | İstek sayacı ve süre histogramı (`rpc`, `code`)          |
-| Zarif kapanış             | `src/grpc/graceful-shutdown.ts` | Altı adımlık kapanış sırası, drenaj ve üst süre          |
+| RPC izleri (D15)          | `src/grpc/tracing.ts`           | Sunucu ve istemci span'i, `traceparent` metadata'da      |
+| Zarif kapanış             | `src/grpc/graceful-shutdown.ts` | Yedi adımlık kapanış sırası, drenaj ve üst süre          |
 | Health durumu             | `src/health/registry.ts`        | Kim ayakta? Durum tablosu + abonelik (gRPC'den bağımsız) |
 | Health RPC                | `src/grpc/health.ts`            | Standart `grpc.health.v1.Health` (Check + Watch)         |
 | Zod doğrulama ara katmanı | `src/grpc/handler.ts`           | Gelen mesajı doğrular, handler'a **tipli** veri verir    |
@@ -44,6 +45,7 @@ packages/service-kit/
 │   │   ├── request.ts             # parseRequest: unary ve Watch aynı kapıdan (D5)
 │   │   ├── rpc-metrics.ts         # grpc_server_requests_total + süre histogramı (T10.5)
 │   │   ├── server.ts              # startGrpcServer (açılış)
+│   │   ├── tracing.ts             # sunucu/istemci span'i, traceparent (D15)
 │   │   ├── status.ts              # toServiceError / fromServiceError
 │   │   ├── types.ts               # sunucu seçenekleri ve tutamağı
 │   │   └── unimplemented.ts       # yazılmamış RPC: NOT_IMPLEMENTED (D5)
@@ -206,6 +208,22 @@ curl -s localhost:51051/metrics | grep grpc_server_requests_total
 README'sinde. İşçi metrikleri (outbox, tüketici, süpürücü) aynı uçtan görünür; tanımları sahibi
 olan servistedir.
 
+## İzler (D15, ADR-20)
+
+`startGrpcServer` iz sağlayıcısını kurar (`otlpEndpoint`; servislerde `OTEL_EXPORTER_OTLP_ENDPOINT`).
+Adres yoksa span'ler yine oluşur ve taşınır, yalnızca dışarı gönderilmez.
+
+- **Sunucu span'i** (`unaryHandler`): üst span gelen `traceparent` metadata'sından. Ad tam metot
+  (`getir.order.v1.OrderService/CreateOrder`); nitelikler `rpc.system`, `rpc.service`, `rpc.method`,
+  `rpc.grpc.status_code`, `app.request_id`, hata varsa `app.error_code`. Handler span'in bağlamında
+  koşar: günlük satırı `traceId` taşır, giden çağrı bu span'in çocuğu olur.
+- **İstemci span'i** (`callUnary`'nin çağrı ara katmanı): `traceparent` metadata'ya yazılır; karşı
+  servisin sunucu span'i bunun çocuğu olur. Çağıranların kodu değişmedi.
+- **Hata işareti ağırlıktan:** beklenen iş sonucu (stok yok, doğrulama) span'i hatalı işaretlemez;
+  sıradışı ve beklenmeyen `ERROR`, beklenmeyenin istisnası da kaydedilir. İstemci tarafında karşı
+  tarafın `x-app-error` kodu okunur.
+- Yalnızca `@opentelemetry/api` kullanılır; SDK `@getir/observability`'dedir. Health RPC'leri izlenmez.
+
 ## Zarif kapanış sırası
 
 1. Health → `NOT_SERVING` (gateway/probe yeni çağrı göndermeyi keser)
@@ -213,15 +231,16 @@ olan servistedir.
 3. `tryShutdown`: **devam eden** çağrıların bitmesi beklenir
 4. Süre aşımında `forceShutdown` (varsayılan 10 sn, `GRPC_SHUTDOWN_TIMEOUT_MS`)
 5. Metrik ucu kapanır (T10.5): drenaj boyunca açıktı, son kazıma kapanışı da görür
-6. `onShutdown`: işçiler ve Mongo/Redis bağlantıları **en son** kapanır; 10 sn'de
+6. `onShutdown`: işçiler ve Mongo/Redis bağlantıları kapanır; 10 sn'de
    (`DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS`) bitmezse **beklenmez** (#56)
+7. Bekleyen span'ler gönderilir (D15; en çok 2 sn)
 
 (6) sonda, çünkü (3) sırasında devam eden çağrılar hâlâ veritabanına yazıyor olabilir;
 bağlantıyı önce kapatmak tam da önlemeye çalıştığımız yarım işlemi üretirdi.
 
 **Üst süre (#56):** her adım sınırlıdır. Kapanış en geç drenaj (`GRPC_SHUTDOWN_TIMEOUT_MS`), metrik
-ucu (1 sn) ve kanca (10 sn) toplamında biter ve süreç çıkar: varsayılanlarla 21 sn, Kubernetes'in 30
-sn'lik penceresinin içinde. Takılmış bir Mongo kapanışı ya da işçi turu süreci ayakta tutmaz: kanca
+ucu (1 sn), kanca (10 sn) ve izler (2 sn) toplamında biter ve süreç çıkar: varsayılanlarla 23 sn,
+Kubernetes'in 30 sn'lik penceresinin içinde. Takılmış bir Mongo kapanışı ya da işçi turu süreci ayakta tutmaz: kanca
 süresinde bitmezse `kapanis kancasi suresinde bitmedi; beklenmiyor` (ERROR) yazılır, son satır
 `zarif kapanis bitti` `hook: "timed-out"` taşır. stdout'un okuyucusu gitse de kapanış sürer: günlük
 eşli yazılır ve yazım hatasında bırakılır (`@getir/observability`, #56).
@@ -278,7 +297,6 @@ gerçek istemci, dış bağımlılık yok.
 
 - **Günlükçü ve request-id kuralı** T10.5'ten beri `@getir/observability`'de; buradan yeniden dışa
   verilir (`createLogger`, `REQUEST_ID_METADATA_KEY`), çağıran taraflar değişmedi.
-- **Dağıtık izleme** (OpenTelemetry): D15.
 - **Mongo/Redis istemcileri**: T2.5 (`mongo-kit`, `redis-kit`).
 - **Sunucu yansıması (reflection)**: grpcurl şimdilik `-proto` ile çağrılıyor. Gerçek
   servisler geldiğinde `buf build` ile üretilen tanımlayıcı kümesi üzerinden eklenebilir.
