@@ -16,7 +16,8 @@ yeni ADR oner.
 - Gorev bitince "Bitti sayilir" olcutunu kendin dogrula, sonra `pnpm verify` calistir. Yesil degilse bitmis sayilmaz.
 - Proto degisikliginde ek olarak: `pnpm lint:proto` ve PR'da `buf breaking` (CI yapar).
 - Kodu yazmadan once kisa bir plan yaz: hangi dosyalar, hangi ciktilar, nasil dogrulanacak.
-- Placeholder script'leri (`proto:gen`, `seed`, `race`, `demo`) ilgili gorevde gercek komuta baglanir.
+- Placeholder script'leri (`proto:gen`, `seed`, `race`, `demo`) ilgili gorevde gercek komuta baglanir
+  (`race` T11.1'de: `race.spec.ts`; `demo` T15.1'de).
 
 ## Git
 

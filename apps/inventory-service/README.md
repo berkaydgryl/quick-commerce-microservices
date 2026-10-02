@@ -8,7 +8,7 @@ hareket eder.
 Bu serviste **olmayanlar**, bilinçli: ürün adı, fiyatı ve kategorisi `catalog-service`'in;
 sipariş durumu ve rezervasyon süresinin **ne kadar** olacağı `order-service`'in işidir.
 
-## Bugünkü durum (T9.1 + T9.2 + T10.1 + T10.2 + T10.3)
+## Bugünkü durum (T9.1 + T9.2 + T10.1 + T10.2 + T10.3 + T11.1)
 
 | RPC                 | Durum                                                                                                             |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------- |
@@ -78,6 +78,23 @@ giremez: kısmi rezervasyon imkânsızdır. Rezervasyonun kimliği siparişin ki
   müsaitlikte hemen görünür. İki uygulama da `test/support/reservation-store-contract.ts` senaryolarından geçer.
 - **Henüz yok:** uzatma (`ExtendReservation`, T11.3); order'ın `Reserve`'ü çağırması (T11.2). Bırakma, onay
   ve süre dolumu (süpürücü) geldi (aşağıda).
+
+## Stok yarışı (T11.1)
+
+Roadmap'in "Garantiler" tablosundaki ilk satır: **aynı anda 100 rezervasyon, stok 1 → tam 1 başarı.**
+`test/integration/race.spec.ts` bunu gerçek gRPC sunucusu ve gerçek Redis (Testcontainers) ile sınar; `pnpm race`
+yalnızca bu dosyayı koşar (Docker gerekir; CI'da `test:int` içinde de koşar).
+
+- **Yarış ürünü** demo stoğundan: Migros Jet – Moda'da çikolata, 1 adet. Yarışanlar 100 **farklı** kullanıcı;
+  aynı kullanıcının ikinci isteği zaten `RESERVATION_ACTIVE` alır (B22).
+- **Sonuç:** 1 OK, 99 `FAILED_PRECONDITION` / `STOCK_INSUFFICIENT` (`requested: 1`, `available: 0`).
+- **Redis'in son durumu:** sayaç 0 (eksiye düşmez), indekste tek üye, tek rezervasyon kaydı ve tek kullanıcı
+  kilidi. Kaybedenler hiçbir anahtar yazmaz. Kazanan bırakınca sayaç 1'e döner, kaybedenlerden biri alır.
+- **Yatay ölçek:** aynı Redis'e bağlı iki sunucu, istekler ikisine dağıtılır: yine tam 1 başarı.
+- **Günlük (#49):** her kaybeden iş sonucu olarak `info` "rpc is hatasiyla dondu"; uyarı ya da hata satırı yok.
+- **Kontrol deneyi:** aynı yük kilitsiz bir rezervasyonla (önce `GET`, sonra `DECRBY`, iki ayrı komut) birden fazla
+  başarı ve eksiye düşen sayaç verir. Yani senaryo gerçekten eşzamanlılık üretiyor; garantiyi `reserve.lua`'nın
+  atomikliği sağlıyor.
 
 ## Bırakma ve stok defteri (T10.2 PR 1, ADR-18)
 
@@ -223,6 +240,7 @@ Mongo kullanıcısıyla bağlanır, kullanıcı yalnızca orada yetkilidir (D14,
 ```bash
 pnpm seed                                            # kokten: katalog + stok ve defter (Mongo), sayaçlar (Redis) baştan
 pnpm --filter @getir/inventory-service reseed         # Redis sayaçlarını Mongo'dan BAŞTAN yazar
+pnpm race                                            # kokten: 100 eş zamanlı rezervasyon, stok 1 (T11.1; Docker)
 pnpm --filter @getir/inventory-service build && MOCK=true pnpm --filter @getir/inventory-service start  # :50052
 
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/inventory/v1/inventory.proto \
