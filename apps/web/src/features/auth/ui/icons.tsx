@@ -42,3 +42,37 @@ export function UserIcon() {
     </svg>
   );
 }
+
+export function UserPlusIcon() {
+  return (
+    <svg {...STROKE_PROPS}>
+      <circle cx="10" cy="8" r="4" />
+      <path d="M3 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1" />
+      <path d="M19 8v6M16 11h6" />
+    </svg>
+  );
+}
+
+export function ChevronDownIcon() {
+  return (
+    <svg {...STROKE_PROPS}>
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+export function ArrowRightIcon() {
+  return (
+    <svg {...STROKE_PROPS}>
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+export function CloseIcon() {
+  return (
+    <svg {...STROKE_PROPS}>
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}

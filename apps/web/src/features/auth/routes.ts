@@ -1,5 +1,7 @@
-/** Kimlik ekranlarinin adresleri (T8.5). */
+/** Kimlik ekranlarinin adresleri (T8.5; T11.6). */
 export const AUTH_ROUTES = {
+  /** Karsilama ekrani: oturumsuz ziyaretcinin ana sayfasi (T11.6). */
+  welcome: '/',
   login: '/giris',
   register: '/kayit',
   account: '/hesabim',

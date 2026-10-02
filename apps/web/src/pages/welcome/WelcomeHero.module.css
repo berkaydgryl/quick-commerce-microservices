@@ -1,0 +1,55 @@
+/*
+ * Taban (telefon ve 1440 px'e kadar): gorsel tam genislik, kendi oraninda
+ * (width/height oznitelikleri yeri onceden ayirir); kart altinda ortada.
+ */
+.c-welcome-hero {
+  display: grid;
+}
+
+.c-welcome-hero__image {
+  width: 100%;
+  height: auto;
+}
+
+.c-welcome-hero__card {
+  padding-block: var(--space-4);
+}
+
+.c-welcome-hero__slot {
+  display: flex;
+  justify-content: center;
+}
+
+/*
+ * 1440 px ve ustu: gorsel ve kart ayni hucrede ust uste. Satir yuksekligi
+ * gorselin dogal yuksekligi (en fazla --size-welcome-hero-max) ile kartin
+ * yuksekliginden buyuk olanidir; gorsel hucreyi doldurur (cover), afis solda
+ * kalsin diye soldan hizalanir, cok genis ekranda ustten ve alttan kirpilir.
+ * Kart genis kapsayicinin sag kenarinda: ust barin dugmeleriyle ayni hizada.
+ */
+@media (--bp-xl) {
+  .c-welcome-hero {
+    grid-template-areas: 'stack';
+  }
+
+  .c-welcome-hero__title,
+  .c-welcome-hero__card {
+    grid-area: stack;
+  }
+
+  .c-welcome-hero__image {
+    height: 100%;
+    max-height: var(--size-welcome-hero-max);
+    object-fit: cover;
+    object-position: left center;
+  }
+
+  .c-welcome-hero__card {
+    align-self: center;
+    padding-block: var(--space-6);
+  }
+
+  .c-welcome-hero__slot {
+    justify-content: flex-end;
+  }
+}

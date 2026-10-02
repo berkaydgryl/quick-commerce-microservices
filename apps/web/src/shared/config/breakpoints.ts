@@ -10,6 +10,7 @@
 export const BREAKPOINTS_REM = {
   md: 48,
   lg: 64,
+  xl: 90,
 } as const;
 
 export type Breakpoint = keyof typeof BREAKPOINTS_REM;

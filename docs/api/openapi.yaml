@@ -2197,16 +2197,16 @@ components:
     LoginCardContent:
       type: object
       description: |
-        Giriş kartı: telefon adımı, ardından aynı kartta şifre (giriş) ya da ad
-        soyad + şifre (kayıt) adımı. Geliştirmeye özel demo hesap listesinin
-        metni burada yoktur: o araç production paketine girmez.
+        Karşılama kartı (telefon + "Devam Et") ile giriş ve kayıt penceresinin
+        metinleri. Geliştirmeye özel demo hesap listesinin metni burada yoktur:
+        o araç production paketine girmez.
       required:
         - title
         - countryLabel
         - phoneLabel
         - phonePlaceholder
         - continueLabel
-        - editPhoneLabel
+        - closeLabel
         - showPasswordLabel
         - countries
         - login
@@ -2217,7 +2217,7 @@ components:
         phoneLabel: { $ref: "#/components/schemas/ContentText" }
         phonePlaceholder: { $ref: "#/components/schemas/ContentText" }
         continueLabel: { $ref: "#/components/schemas/ContentText" }
-        editPhoneLabel: { $ref: "#/components/schemas/ContentText" }
+        closeLabel: { $ref: "#/components/schemas/ContentText" }
         showPasswordLabel: { $ref: "#/components/schemas/ContentText" }
         countries:
           type: array

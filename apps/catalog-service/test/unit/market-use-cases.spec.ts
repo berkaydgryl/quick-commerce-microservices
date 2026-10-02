@@ -75,7 +75,9 @@ describe('listMarketCategories', () => {
   it('kategoriler vitrin sirasinda (sortOrder)', async () => {
     const categories = await listMarketCategories('mkt_migros-jet-moda');
 
-    expect(categories.map((category) => category.sortOrder)).toEqual([1, 2, 3, 4, 5]);
+    // Yalnizca teklifi olan kategoriler, vitrin sirasinda; aradaki numaralar urunsuz
+    // kategorilerin (T11.6: firindan, temel gida, et-tavuk, dondurma).
+    expect(categories.map((category) => category.sortOrder)).toEqual([1, 2, 6, 7, 9]);
   });
 
   it('bilinmeyen market NOT_FOUND (bos liste degil)', async () => {

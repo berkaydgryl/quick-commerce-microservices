@@ -1,26 +1,23 @@
+/* Yazi logosu (T11.6'dan beri rozetsiz). Beyaz zemin: marka mor, servis koyu mor. */
 .c-logo {
   display: inline-flex;
-  gap: var(--space-2);
-  align-items: center;
-  color: var(--color-brand-primary);
-}
-
-.c-logo__word {
-  font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-extrabold);
   letter-spacing: var(--letter-spacing-logo);
 }
 
-.c-logo__word--strong {
-  font-weight: var(--font-weight-extrabold);
+.c-logo__brand {
+  color: var(--color-brand-primary);
 }
 
-.c-logo__badge {
-  display: grid;
-  place-items: center;
-  width: var(--size-logo-badge);
-  aspect-ratio: 1;
-  padding: var(--space-logo-badge-inset);
-  color: var(--text-on-accent);
-  background: var(--color-brand-accent);
-  border-radius: var(--radius-pill);
+.c-logo__service {
+  color: var(--color-brand-primary-strong);
+}
+
+/* Mor zemin (karsilama, giris, kayit ekraninin ust bari): marka sari, servis beyaz. */
+.c-logo--inverse .c-logo__brand {
+  color: var(--color-brand-accent);
+}
+
+.c-logo--inverse .c-logo__service {
+  color: var(--text-on-brand);
 }

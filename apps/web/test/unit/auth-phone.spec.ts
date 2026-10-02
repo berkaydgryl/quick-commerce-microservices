@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatNationalPhone,
   formatPhone,
+  formatWithDialCode,
   fromE164,
   nationalDigits,
   toE164,
@@ -46,5 +47,10 @@ describe('telefon alani (T8.5)', () => {
     expect(toE164('5321234567')).toBe('+905321234567');
     expect(fromE164('+905321234567')).toBe('5321234567');
     expect(formatPhone('+905550000001')).toBe('+90 555 000 00 01');
+  });
+
+  it('ulke kodu seciciden gelir (T11.6): kod ve rakamlar birlesir, ozet satirinda okunur', () => {
+    expect(toE164('5321234567', '+90')).toBe('+905321234567');
+    expect(formatWithDialCode('+90', '5321234567')).toBe('+90 532 123 45 67');
   });
 });

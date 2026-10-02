@@ -1,9 +1,11 @@
 /**
- * Telefon alani (T8.5): "+90" sabit onektir, kullanici yalnizca sonraki 10
- * rakami yazar ve alan onlari "5XX XXX XX XX" duzeninde gosterir. Gateway'e
- * sozlesmenin E.164 bicimi gider: "+905321234567" (PHONE_PATTERN).
+ * Telefon alani (T8.5; T11.6'dan beri ulke kodu ayri seciciden gelir):
+ * kullanici yalnizca koddan sonraki 10 rakami yazar ve alan onlari
+ * "5XX XXX XX XX" duzeninde gosterir. Gateway'e sozlesmenin E.164 bicimi
+ * gider: "+905321234567" (PHONE_PATTERN, bugun yalnizca +90).
  */
 
+/** Varsayilan ulke kodu: profilde ve kayitli numarada gosterim (PHONE_PATTERN). */
 export const PHONE_COUNTRY_PREFIX = '+90';
 
 /** Onekten sonraki rakam sayisi (PHONE_PATTERN: +90 ve 10 rakam). */
@@ -42,9 +44,9 @@ export function formatNationalPhone(digits: string): string {
   return groups.join(' ');
 }
 
-/** Formdaki 10 rakam -> sozlesmenin bicimi: "5321234567" -> "+905321234567". */
-export function toE164(digits: string): string {
-  return `${PHONE_COUNTRY_PREFIX}${digits}`;
+/** Formdaki rakamlar + ulke kodu -> sozlesmenin bicimi: "5321234567" -> "+905321234567". */
+export function toE164(digits: string, dialCode: string = PHONE_COUNTRY_PREFIX): string {
+  return `${dialCode}${digits}`;
 }
 
 /** "+905321234567" -> "5321234567": kayitli numarayla formu doldururken. */
@@ -54,7 +56,12 @@ export function fromE164(phone: string): string {
   );
 }
 
+/** Ulke koduyla gosterim: ("+90", "5321234567") -> "+90 532 123 45 67". */
+export function formatWithDialCode(dialCode: string, digits: string): string {
+  return `${dialCode} ${formatNationalPhone(digits)}`;
+}
+
 /** Profilde gosterim: "+905321234567" -> "+90 532 123 45 67". */
 export function formatPhone(phone: string): string {
-  return `${PHONE_COUNTRY_PREFIX} ${formatNationalPhone(fromE164(phone))}`;
+  return formatWithDialCode(PHONE_COUNTRY_PREFIX, fromE164(phone));
 }

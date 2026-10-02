@@ -1,22 +1,24 @@
-import type { LoginRequest } from '@getir/contracts';
+import type { LoginCardContent, LoginRequest } from '@getir/contracts';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Controller, useForm } from 'react-hook-form';
-import { Link } from 'react-router-dom';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 
 import { useLogin } from '../hooks/useLogin';
-import { EMPTY_LOGIN_FORM, LOGIN_FIELDS, loginFormSchema } from '../services/form-schemas';
-import type { LoginFormValues } from '../services/form-schemas';
-import { fromE164 } from '../services/phone';
+import { countryByCode, countryByDialCode, countryOfPhone } from '../services/country';
+import { LOGIN_FIELDS, loginFormSchema } from '../services/form-schemas';
+import type { LoginField, LoginFormValues } from '../services/form-schemas';
+import type { PhoneEntry } from '../services/auth-route-state';
 import { formFeedback } from '../services/server-errors';
 
 import styles from './AuthForm.module.css';
+import { CountryCodeSelect } from './CountryCodeSelect';
 import { focusFirstInvalid, showServerErrors } from './form-errors';
 import { PasswordField } from './PasswordField';
 import { PhoneField } from './PhoneField';
+import { PhoneRow } from './PhoneRow';
 
-/** Formu disaridan dolduran bilgiler (gelistirmede persona secici). */
+/** Formu disaridan dolduran bilgiler (gelistirmede demo hesaplar). */
 export interface LoginCredentials {
   /** E.164: "+905550000001". */
   readonly phone: string;
@@ -24,21 +26,43 @@ export interface LoginCredentials {
 }
 
 interface LoginFormProps {
-  /** Kayit ekraninin adresi; donus adresini tasir. */
-  readonly registerPath: string;
+  readonly content: LoginCardContent;
+  /** Karsilama kartindan ya da kayit penceresinden gelen numara: form dolu acilir. */
+  readonly initialEntry: PhoneEntry | null;
+  /** Karsilama kartindaki demo hesaplardan acilinca demo sifresi (gelistirme); yoksa bos. */
+  readonly initialPassword: string;
+  /** Yazilan numara (bossa null): pencerenin alt bandi kayit penceresine tasir. */
+  readonly onPhoneChange: (entry: PhoneEntry | null) => void;
   /** Formun altina eklenen parca; verilen fonksiyon formu doldurur, giris yapmaz. */
   readonly renderPrefill?:
     ((fill: (credentials: LoginCredentials) => void) => ReactNode) | undefined;
 }
 
 /**
- * Giris formu (T8.5): telefon ve sifre. Kurallar ve alan mesajlari sozlesmeden
- * (form-schemas.ts), sunucu hatasi sozlukten (server-errors.ts). Basarili giris
- * oturumu acar; yonlendirmeyi sayfa yapar.
+ * Giris formu (T8.5; T11.6'dan beri giris penceresinde, ulke kodu seciciyle):
+ * telefon ve sifre. Numara geldiyse sifreye, gelmediyse telefona odaklanir.
+ * Basarili giris oturumu acar; yonlendirmeyi sayfa yapar.
  */
-export function LoginForm({ registerPath, renderPrefill }: LoginFormProps) {
+export function LoginForm({
+  content,
+  initialEntry,
+  initialPassword,
+  onPhoneChange,
+  renderPrefill,
+}: LoginFormProps) {
   const login = useLogin();
   const [formMessage, setFormMessage] = useState<string | null>(null);
+  const [countryCode, setCountryCode] = useState(
+    () =>
+      (initialEntry === null
+        ? undefined
+        : countryByDialCode(content.countries, initialEntry.dialCode)?.code) ??
+      content.countries[0]?.code ??
+      '',
+  );
+  const [firstField] = useState<LoginField>(() => (initialEntry === null ? 'phone' : 'password'));
+  const dialCode = countryByCode(content.countries, countryCode)?.dialCode ?? '';
+  const schema = useMemo(() => loginFormSchema(dialCode), [dialCode]);
   const {
     control,
     register,
@@ -48,11 +72,20 @@ export function LoginForm({ registerPath, renderPrefill }: LoginFormProps) {
     setValue,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues, unknown, LoginRequest>({
-    resolver: zodResolver(loginFormSchema),
-    defaultValues: EMPTY_LOGIN_FORM,
+    resolver: zodResolver(schema),
+    defaultValues: { phone: initialEntry?.digits ?? '', password: initialPassword },
     // Odak sirasi form-errors.ts'te: react-hook-form kayit sirasiyla gezer.
     shouldFocusError: false,
   });
+  const phoneDigits = useWatch({ control, name: 'phone' });
+
+  useEffect(() => {
+    setFocus(firstField);
+  }, [firstField, setFocus]);
+
+  useEffect(() => {
+    onPhoneChange(phoneDigits === '' ? null : { dialCode, digits: phoneDigits });
+  }, [phoneDigits, dialCode, onPhoneChange]);
 
   const submit = async (request: LoginRequest): Promise<void> => {
     setFormMessage(null);
@@ -66,20 +99,26 @@ export function LoginForm({ registerPath, renderPrefill }: LoginFormProps) {
   };
 
   const fill = (credentials: LoginCredentials): void => {
+    const country = countryOfPhone(content.countries, credentials.phone);
+    if (country === undefined) {
+      return;
+    }
     setFormMessage(null);
-    setValue('phone', fromE164(credentials.phone), { shouldValidate: true });
+    setCountryCode(country.code);
+    setValue('phone', credentials.phone.slice(country.dialCode.length), { shouldValidate: true });
     setValue('password', credentials.password, { shouldValidate: true });
   };
 
+  const { login: text } = content;
   return (
     <>
       <form
         className={styles['c-auth-form']}
         noValidate
         onSubmit={(event) =>
-          void handleSubmit(submit, (errors) => focusFirstInvalid(LOGIN_FIELDS, errors, setFocus))(
-            event,
-          )
+          void handleSubmit(submit, (invalid) =>
+            focusFirstInvalid(LOGIN_FIELDS, invalid, setFocus),
+          )(event)
         }
       >
         {formMessage !== null && (
@@ -87,40 +126,44 @@ export function LoginForm({ registerPath, renderPrefill }: LoginFormProps) {
             {formMessage}
           </p>
         )}
-        <Controller
-          name="phone"
-          control={control}
-          render={({ field, fieldState }) => (
-            <PhoneField
-              ref={field.ref}
-              id="giris-telefon"
-              name={field.name}
-              label="Telefon numaran"
-              placeholder="5XX XXX XX XX"
-              autoComplete="tel-national"
-              value={field.value}
-              onChange={field.onChange}
-              onBlur={field.onBlur}
-              error={fieldState.error?.message}
-            />
-          )}
-        />
+        <PhoneRow>
+          <CountryCodeSelect
+            id="giris-ulke"
+            label={content.countryLabel}
+            countries={content.countries}
+            value={countryCode}
+            onChange={setCountryCode}
+          />
+          <Controller
+            name="phone"
+            control={control}
+            render={({ field, fieldState }) => (
+              <PhoneField
+                ref={field.ref}
+                id="giris-telefon"
+                name={field.name}
+                label={content.phoneLabel}
+                placeholder={content.phonePlaceholder}
+                autoComplete="tel-national"
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                error={fieldState.error?.message}
+              />
+            )}
+          />
+        </PhoneRow>
         <PasswordField
           id="giris-sifre"
-          label="Şifren"
+          label={text.passwordLabel}
+          toggleLabel={content.showPasswordLabel}
           autoComplete="current-password"
           error={errors.password?.message}
           {...register('password')}
         />
         <button type="submit" className={styles['c-auth-form__submit']} disabled={isSubmitting}>
-          {isSubmitting ? 'Giriş yapılıyor…' : 'Giriş yap'}
+          {isSubmitting ? text.pendingLabel : text.submitLabel}
         </button>
-        <p className={styles['c-auth-form__switch']}>
-          Henüz üye değil misin?{' '}
-          <Link to={registerPath} className={styles['c-auth-form__switch-link']}>
-            Şimdi kaydol
-          </Link>
-        </p>
       </form>
       {renderPrefill?.(fill)}
     </>

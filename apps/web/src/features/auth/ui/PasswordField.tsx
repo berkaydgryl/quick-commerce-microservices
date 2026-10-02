@@ -5,11 +5,14 @@ import type { AuthFieldProps } from './AuthField';
 import styles from './PasswordField.module.css';
 import { EyeIcon, EyeOffIcon, LockIcon } from './icons';
 
-type PasswordFieldProps = Omit<AuthFieldProps, 'type' | 'icon' | 'action' | 'prefix'>;
+type PasswordFieldProps = Omit<AuthFieldProps, 'type' | 'icon' | 'action' | 'prefix'> & {
+  /** Goster/gizle dugmesinin erisilebilir adi; durum aria-pressed ile duyurulur (icerikten, T11.6). */
+  readonly toggleLabel: string;
+};
 
 /** Sifre alani: kilit ikonu ve "goster / gizle" dugmesi (referans ekran). */
 export const PasswordField = forwardRef<HTMLInputElement, PasswordFieldProps>(
-  function PasswordField(props, ref) {
+  function PasswordField({ toggleLabel, ...props }, ref) {
     const [visible, setVisible] = useState(false);
     return (
       <AuthField
@@ -21,7 +24,7 @@ export const PasswordField = forwardRef<HTMLInputElement, PasswordFieldProps>(
           <button
             type="button"
             className={styles['c-password-toggle']}
-            aria-label="Şifreyi göster"
+            aria-label={toggleLabel}
             aria-pressed={visible}
             aria-controls={props.id}
             onClick={() => setVisible((current) => !current)}

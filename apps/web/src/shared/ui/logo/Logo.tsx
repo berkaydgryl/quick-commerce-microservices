@@ -1,22 +1,29 @@
 import styles from './Logo.module.css';
 
+interface LogoProps {
+  /** Logonun iki parcasi: "getir" + "market". Karsilama ekrani icerikten verir (T11.6). */
+  readonly brand?: string;
+  readonly service?: string;
+  /** "inverse": mor zemin (karsilama, giris, kayit ekraninin ust bari): marka sari, servis beyaz. */
+  readonly tone?: 'brand' | 'inverse';
+}
+
 /**
- * Yazi logosu: "getir" + "market" ve sari sepet rozeti. Gorsel dosya yerine
- * yazi tipiyle cizilir; renkler token'dan gelir, boyut cevresindeki yazi
- * boyutunu izler (rozet em ile olculur).
+ * Yazi logosu: "getir" + "market" (T11.6'dan beri rozetsiz: kullanicinin
+ * karari, "logomuz bu kadar"). Gorsel dosya yerine yazi tipiyle cizilir;
+ * renkler token'dan gelir, boyut cevresindeki yazi boyutunu izler. Beyaz
+ * zeminde marka mor, servis koyu mor; mor zeminde marka sari, servis beyaz.
  */
-export function Logo() {
+export function Logo({ brand = 'getir', service = 'market', tone = 'brand' }: LogoProps) {
+  const className =
+    tone === 'inverse' ? `${styles['c-logo']} ${styles['c-logo--inverse']}` : styles['c-logo'];
   return (
-    <span className={styles['c-logo']} role="img" aria-label="getirmarket">
-      <span className={styles['c-logo__word']} aria-hidden="true">
-        getir<span className={styles['c-logo__word--strong']}>market</span>
+    <span className={className} role="img" aria-label={`${brand}${service}`}>
+      <span className={styles['c-logo__brand']} aria-hidden="true">
+        {brand}
       </span>
-      <span className={styles['c-logo__badge']} aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-          <path d="M3 4h2.5l2.2 10.2a1.5 1.5 0 0 0 1.5 1.2h8.1a1.5 1.5 0 0 0 1.5-1.1L20.5 8H6.4" />
-          <circle cx="9.5" cy="19.5" r="1.4" />
-          <circle cx="17" cy="19.5" r="1.4" />
-        </svg>
+      <span className={styles['c-logo__service']} aria-hidden="true">
+        {service}
       </span>
     </span>
   );

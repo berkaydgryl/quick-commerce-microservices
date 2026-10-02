@@ -1,0 +1,91 @@
+/*
+ * Giris ve kayit penceresi (T11.6; referans: getir.com): beyaz, kavisli, ortada;
+ * ustte baslik ve X, altta gri bantta karsi pencereye gecis. Mobilde ekran
+ * genisliginde (kenar boslugu kalir), uzun icerikte kendi icinde kayar.
+ * margin: auto tarayicinin ortalamasidir; global.css'teki sifirlama
+ * (* { margin: 0 }) onu ezerdi ve pencere sol uste yapisirdi (canli testte bulundu).
+ */
+.c-auth-dialog {
+  width: min(100% - var(--space-gutter) * 2, var(--container-max-dialog));
+  max-width: none;
+  margin: auto;
+  max-height: calc(100dvh - var(--space-gutter) * 2);
+  padding: 0;
+  overflow: auto;
+  color: inherit;
+  background: var(--bg-surface);
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-raised);
+}
+
+.c-auth-dialog::backdrop {
+  background: var(--bg-overlay);
+}
+
+.c-auth-dialog[open] {
+  animation: dialog-in var(--duration-fast) var(--easing-standard);
+}
+
+/* Pencere acikken arkadaki sayfa kaymaz. */
+html:has(.c-auth-dialog[open]) {
+  overflow: hidden;
+}
+
+.c-auth-dialog__panel {
+  display: grid;
+}
+
+/* Baslik ortada; X sagda, solda ayni genislikte bos sutun baslik ortalansin diye. */
+.c-auth-dialog__header {
+  display: grid;
+  grid-template-columns: var(--size-dialog-close) 1fr var(--size-dialog-close);
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-5) var(--space-5) 0;
+}
+
+.c-auth-dialog__title {
+  grid-column: 2;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-extrabold);
+  color: var(--color-brand-primary);
+  text-align: center;
+}
+
+.c-auth-dialog__close {
+  display: grid;
+  grid-column: 3;
+  place-items: center;
+  width: var(--size-dialog-close);
+  aspect-ratio: 1;
+  padding: var(--space-2);
+  color: var(--text-default);
+  cursor: pointer;
+  background: var(--bg-page);
+  border: none;
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast) var(--easing-standard);
+}
+
+.c-auth-dialog__close:hover {
+  background: var(--border-subtle);
+}
+
+.c-auth-dialog__body {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.c-auth-dialog__footer {
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-page);
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--space-3));
+  }
+}

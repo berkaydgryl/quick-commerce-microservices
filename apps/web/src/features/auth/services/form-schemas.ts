@@ -1,11 +1,13 @@
 /**
- * Kayit ve giris formlarinin semalari (T8.5). Kurallar ve mesajlar sozlesmeden
- * gelir (@getir/contracts auth.ts); gateway ayni kurallari ayni cumlelerle
- * uygular (rules_contract_test.go iki tarafi karsilastirir).
+ * Kimlik formlarinin semalari (T8.5; T11.6'dan beri ulke kodu seciciden).
+ * Kurallar ve mesajlar sozlesmeden gelir (@getir/contracts auth.ts); gateway
+ * ayni kurallari ayni cumlelerle uygular (rules_contract_test.go iki tarafi
+ * karsilastirir).
  *
- * Telefon alani onekten sonraki 10 rakami tutar: dogrulamadan once "+90"
- * eklenir ve sozlesmenin E.164 kuralina bakilir. Formun gonderdigi deger
- * dogrudan istek govdesidir (LoginRequest, RegisterRequest).
+ * Telefon alani koddan sonraki 10 rakami tutar: dogrulamadan once secili
+ * ulkenin kodu eklenir ve sozlesmenin E.164 kuralina bakilir. Giris ve kayit
+ * formunun gonderdigi deger dogrudan istek govdesidir (LoginRequest,
+ * RegisterRequest).
  */
 
 import { fullNameSchema, passwordSchema, phoneSchema } from '@getir/contracts';
@@ -14,29 +16,42 @@ import { z } from 'zod';
 
 import { toE164 } from './phone';
 
-const formPhoneSchema = z.string().transform(toE164).pipe(phoneSchema);
+function formPhoneSchema(dialCode: string) {
+  return z
+    .string()
+    .transform((digits) => toE164(digits, dialCode))
+    .pipe(phoneSchema);
+}
 
-export const loginFormSchema = z.object({
-  phone: formPhoneSchema,
-  password: passwordSchema,
-}) satisfies z.ZodType<LoginRequest, z.ZodTypeDef, unknown>;
+/** Karsilama kartinin telefon formu: gecerli numara giris ekranina tasinir. */
+export function phoneEntrySchema(dialCode: string) {
+  return z.object({ phone: formPhoneSchema(dialCode) });
+}
 
-export const registerFormSchema = z.object({
-  fullName: fullNameSchema,
-  phone: formPhoneSchema,
-  password: passwordSchema,
-}) satisfies z.ZodType<RegisterRequest, z.ZodTypeDef, unknown>;
+export function loginFormSchema(dialCode: string) {
+  return z.object({
+    phone: formPhoneSchema(dialCode),
+    password: passwordSchema,
+  }) satisfies z.ZodType<LoginRequest, z.ZodTypeDef, unknown>;
+}
 
-/** Formun tuttugu degerler: telefon 10 rakam. */
-export type LoginFormValues = z.input<typeof loginFormSchema>;
-export type RegisterFormValues = z.input<typeof registerFormSchema>;
+export function registerFormSchema(dialCode: string) {
+  return z.object({
+    fullName: fullNameSchema,
+    phone: formPhoneSchema(dialCode),
+    password: passwordSchema,
+  }) satisfies z.ZodType<RegisterRequest, z.ZodTypeDef, unknown>;
+}
+
+/** Formlarin tuttugu degerler: telefon 10 rakam. */
+export type PhoneEntryValues = z.input<ReturnType<typeof phoneEntrySchema>>;
+export type PhoneEntryOutput = z.output<ReturnType<typeof phoneEntrySchema>>;
+export type LoginFormValues = z.input<ReturnType<typeof loginFormSchema>>;
+export type RegisterFormValues = z.input<ReturnType<typeof registerFormSchema>>;
 
 export type LoginField = keyof LoginFormValues;
 export type RegisterField = keyof RegisterFormValues;
 
-/** Sunucu hatasinin baglanabilecegi alanlar (server-errors.ts). */
+/** Sunucu hatasinin baglanabilecegi alanlar, EKRANDAKI sirayla (server-errors.ts, form-errors.ts). */
 export const LOGIN_FIELDS: readonly LoginField[] = ['phone', 'password'];
 export const REGISTER_FIELDS: readonly RegisterField[] = ['fullName', 'phone', 'password'];
-
-export const EMPTY_LOGIN_FORM: LoginFormValues = { phone: '', password: '' };
-export const EMPTY_REGISTER_FORM: RegisterFormValues = { fullName: '', phone: '', password: '' };

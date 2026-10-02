@@ -40,7 +40,7 @@ const WELCOME: WelcomeContent = {
     phoneLabel: 'Telefon numarası',
     phonePlaceholder: '5XX XXX XX XX',
     continueLabel: 'Devam Et',
-    editPhoneLabel: 'Numarayı değiştir',
+    closeLabel: 'Kapat',
     showPasswordLabel: 'Şifreyi göster',
     countries: [TURKIYE],
     login: {
