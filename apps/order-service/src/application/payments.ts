@@ -1,5 +1,6 @@
 /**
- * payment-svc PORTU (T7.1): cekim, 3DS onayi ve telafi iadesi. Uygulamasi
+ * payment-svc PORTU (T7.1): cekim, 3DS onayi, telafi iadesi ve odeme kaydinin
+ * okunmasi (T11.2 PR 2: iptal ve supurucu "para alindi mi?" diye sorar). Uygulamasi
  * infrastructure/payment'ta (gRPC); testlerde sahtesi verilir.
  *
  * Kart reddi HATA DEGILDIR: sonuc FAILED + failureCode olarak doner ve saga
@@ -9,6 +10,7 @@
  */
 
 import type { PaymentMethod, PaymentResult } from '../domain/checkout-payment.js';
+import type { PaymentSnapshot } from '../domain/payment-standing.js';
 import type { RequestScope } from './request-scope.js';
 
 export interface ChargeRequest {
@@ -41,4 +43,6 @@ export interface Payments {
   charge(request: ChargeRequest, scope: RequestScope): Promise<PaymentResult>;
   confirmThreeDs(request: ConfirmThreeDsRequest, scope: RequestScope): Promise<PaymentResult>;
   refund(request: RefundRequest, scope: RequestScope): Promise<void>;
+  /** Siparisin odeme kaydi; hic cekim istenmediyse null. */
+  getPayment(orderId: string, scope: RequestScope): Promise<PaymentSnapshot | null>;
 }

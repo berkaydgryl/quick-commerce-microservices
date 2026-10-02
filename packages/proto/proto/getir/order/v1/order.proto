@@ -51,7 +51,9 @@ service OrderService {
   // Kullanicinin siparis gecmisi, sayfali.
   rpc ListMyOrders(ListMyOrdersRequest) returns (ListMyOrdersResponse);
 
-  // Kullanici iptali. Rezervasyon varsa serbest birakilir.
+  // Kullanici iptali. Rezervasyon varsa serbest birakilir. Odeme bekleyen
+  // sipariste para alinmissa ya da kart cekimi suruyorsa iptal edilmez
+  // (T11.2 PR 2; cevap asagida).
   rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse);
 }
 
@@ -373,6 +375,10 @@ message CancelOrderRequest {
 //
 // Iptal edilemeyecek bir durumdan (ornegin DELIVERED) iptal denenirse durum
 // makinesi hata firlatir: FAILED_PRECONDITION doner, siparis degismez.
+// Odeme bekleyen sipariste once odeme kaydina bakilir (T11.2 PR 2): para
+// alinmissa ya da kart cekimi suruyorsa ABORTED + "REQUEST_IN_PROGRESS"
+// (ayrinti: orderId, paymentStatus) doner, siparis degismez; saga siparisi
+// tamamlar ya da kilit dolunca para iade edilir.
 message CancelOrderResponse {
   OrderStatus status = 1;
 }

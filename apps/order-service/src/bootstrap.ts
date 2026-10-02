@@ -16,15 +16,19 @@ import { createCreateOrder } from './application/create-order.js';
 import { createGetOrder } from './application/get-order.js';
 import { createListMyOrders } from './application/list-my-orders.js';
 import { createRelayOutbox } from './application/relay-outbox.js';
+import { createSweepExpiredReservations } from './application/sweep-expired-reservations.js';
 import type { Payments } from './application/payments.js';
 import type { RiskAssessment } from './application/risk-assessment.js';
 import type { StockReservations } from './application/stock-reservations.js';
 import {
   DEFAULT_RESERVATION_TTL_SECONDS,
   ORDER_SERVICE_FULL_NAME,
+  DEFAULT_ORDER_SWEEPER_INTERVAL_MS,
+  ORDER_SWEEPER_BATCH_SIZE,
   OUTBOX_BATCH_SIZE,
   OUTBOX_POLL_INTERVAL_MS,
 } from './config/constants.js';
+import type { ExpiredOrderFinder } from './domain/expired-order-finder.js';
 import type { OrderHistoryReader } from './domain/order-history-reader.js';
 import type { OrderOutbox } from './domain/order-outbox.js';
 import type { OrderRepository } from './domain/order-repository.js';
@@ -32,6 +36,8 @@ import { InMemoryOrderStore } from './infrastructure/memory/in-memory-order-stor
 import { createOrderImplementation } from './interfaces/grpc/order-handlers.js';
 import { startOutboxPublisher } from './interfaces/workers/outbox-publisher.js';
 import type { OutboxPublisherWorker } from './interfaces/workers/outbox-publisher.js';
+import { startReservationSweeper } from './interfaces/workers/reservation-sweeper.js';
+import type { ReservationSweeper } from './interfaces/workers/reservation-sweeper.js';
 
 /** Servisin kullandigi portlar; main.ts bunlari openOrderStore'dan verir. */
 export interface OrderPorts {
@@ -96,7 +102,7 @@ export function buildOrderService(options: BootstrapOptions): GrpcServiceRegistr
     }),
     getOrder: createGetOrder({ repository }),
     listMyOrders: createListMyOrders({ history }),
-    cancelOrder: createCancelOrder({ repository, stock, clock }),
+    cancelOrder: createCancelOrder({ repository, payments: options.payments, stock, clock }),
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
 
@@ -134,6 +140,39 @@ export function startEventPublishing(options: EventPublishingOptions): OutboxPub
     relay,
     intervalMs: options.intervalMs ?? OUTBOX_POLL_INTERVAL_MS,
     batchSize,
+    logger: options.logger,
+  });
+}
+
+export interface ReservationSweepingOptions {
+  readonly expired: ExpiredOrderFinder;
+  readonly repository: OrderRepository;
+  readonly payments: Payments;
+  readonly stock: StockReservations;
+  /** Iade komutu: dogrudan iade basarisizsa kalici olarak yazilir (T7.3). */
+  readonly outbox: OrderOutbox;
+  readonly logger: Logger;
+  readonly clock?: Clock;
+  readonly intervalMs?: number;
+}
+
+/**
+ * Kilidi dolan siparisleri kapatan supurucuyu kurar ve baslatir (T11.2 PR 2).
+ * Depo hangisi olursa olsun calisir (MOCK'ta bellek); Redis gerekmez.
+ */
+export function startReservationSweeping(options: ReservationSweepingOptions): ReservationSweeper {
+  const sweep = createSweepExpiredReservations({
+    expired: options.expired,
+    repository: options.repository,
+    payments: options.payments,
+    stock: options.stock,
+    outbox: options.outbox,
+    clock: options.clock ?? systemClock,
+    batchSize: ORDER_SWEEPER_BATCH_SIZE,
+  });
+  return startReservationSweeper({
+    sweep,
+    intervalMs: options.intervalMs ?? DEFAULT_ORDER_SWEEPER_INTERVAL_MS,
     logger: options.logger,
   });
 }

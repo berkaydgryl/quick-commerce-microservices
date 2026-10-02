@@ -7,8 +7,12 @@
  *
  * Iptalden sonra stok kilidi birakilir (T11.2, inventory Release): stok
  * baskasina acilir. Birakilamazsa kilit suresi dolunca inventory geri verir.
- * Odeme bekleyen siparisin odeme durumunu kontrol edip gerekirse iade etmek
- * T11.2 PR 2'de.
+ *
+ * ODEME BEKLEYEN siparis (T11.2 PR 2, karar 5a): once payment-svc'deki kayda
+ * bakilir. Para alinmissa ya da kart cekimi suruyorsa iptal EDILMEZ
+ * (REQUEST_IN_PROGRESS): saga siparisi tamamlar ya da kilit dolunca supurucu
+ * iade eder. Boylece parasi alinmis siparisle kullanici iptali yarismaz.
+ * payment-svc'ye ulasilamazsa iptal yapilmaz (SERVICE_UNAVAILABLE).
  */
 
 import { AppError, ERROR_CODES, ORDER_STATUS } from '@getir/core';
@@ -19,14 +23,18 @@ import type { OrderRepository } from '../domain/order-repository.js';
 import type { Order } from '../domain/order.js';
 import { TIMELINE_NOTE, transitionOrder } from '../domain/order.js';
 import { USER_CANCELLABLE } from '../domain/order-state-machine.js';
+import { PAYMENT_STANDING, paymentStandingOf } from '../domain/payment-standing.js';
 import { RELEASE_REASON } from '../domain/stock-reservation.js';
 import { findOwnOrder } from './own-order.js';
+import type { Payments } from './payments.js';
 import type { RequestScope } from './request-scope.js';
 import { releaseStock } from './stock-step.js';
 import type { StockStepDeps } from './stock-step.js';
 
 export interface CancelOrderDeps extends StockStepDeps {
   readonly repository: OrderRepository;
+  /** Odeme bekleyen sipariste "para alindi mi?" sorusu (T11.2 PR 2). */
+  readonly payments: Pick<Payments, 'getPayment'>;
   readonly clock: Clock;
 }
 
@@ -55,6 +63,10 @@ export function createCancelOrder(deps: CancelOrderDeps): CancelOrder {
       );
     }
 
+    if (order.status === ORDER_STATUS.AWAITING_PAYMENT) {
+      await assertNoPaymentTaken(deps, order, scope);
+    }
+
     const cancelled = transitionOrder(
       order,
       ORDER_STATUS.CANCELLED,
@@ -65,4 +77,24 @@ export function createCancelOrder(deps: CancelOrderDeps): CancelOrder {
     await releaseStock(deps, order, RELEASE_REASON.USER_CANCELLED, scope);
     return cancelled;
   };
+}
+
+/**
+ * @throws AppError REQUEST_IN_PROGRESS - para alindi ya da kart cekimi suruyor.
+ * @throws AppError SERVICE_UNAVAILABLE - payment-svc'ye ulasilamadi (iptal yapilmaz).
+ */
+async function assertNoPaymentTaken(
+  deps: CancelOrderDeps,
+  order: Order,
+  scope: RequestScope,
+): Promise<void> {
+  const payment = await deps.payments.getPayment(order.id, scope);
+  if (payment === null || paymentStandingOf(payment) === PAYMENT_STANDING.NONE) {
+    return;
+  }
+  throw new AppError(
+    ERROR_CODES.REQUEST_IN_PROGRESS,
+    'Odeme isleniyor; siparis tamamlaninca ya da suresi dolunca iade edilir',
+    { details: { orderId: order.id, paymentStatus: payment.status } },
+  );
 }

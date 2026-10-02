@@ -158,13 +158,51 @@ describe('PaymentService/Confirm3Ds', () => {
 
     expect(error?.code).toBe(GRPC_STATUS.NOT_FOUND);
   });
+});
 
-  it('henuz yazilmayan GetPayment UNIMPLEMENTED; x-app-error NOT_IMPLEMENTED (D5)', async () => {
-    const { error } = await call(paymentV1.PaymentServiceService.getPayment, { orderId: 'ord_1' });
+describe('PaymentService/GetPayment (T11.2 PR 2)', () => {
+  it('siparisin odeme kaydini yontem ve durumuyla doner', async () => {
+    const charged = chargeRequest('tok_test_4242');
+    await call(paymentV1.PaymentServiceService.charge, charged);
 
-    expect(error?.code).toBe(GRPC_STATUS.UNIMPLEMENTED);
-    // grpc-js'in kendi cevabi degil, standart hata yolu: gateway 501 gosterir.
-    expect(appErrorOf(error)?.code).toBe(ERROR_CODES.NOT_IMPLEMENTED);
+    const { error, response } = await call(paymentV1.PaymentServiceService.getPayment, {
+      orderId: charged.orderId,
+    });
+
+    expect(error).toBeUndefined();
+    expect(response?.payment).toMatchObject({
+      orderId: charged.orderId,
+      method: paymentV1.PaymentMethod.PAYMENT_METHOD_CARD,
+      status: paymentV1.PaymentStatus.PAYMENT_STATUS_SUCCEEDED,
+      amount: { amountMinor: 12_990, currency: 'TRY' },
+    });
+  });
+
+  it('3DS bekleyen cekim REQUIRES_3DS okunur (order bunu "para alinmadi" sayar)', async () => {
+    const challenged = chargeRequest('tok_test_3184');
+    await call(paymentV1.PaymentServiceService.charge, challenged);
+
+    const { response } = await call(paymentV1.PaymentServiceService.getPayment, {
+      orderId: challenged.orderId,
+    });
+
+    expect(response?.payment?.status).toBe(paymentV1.PaymentStatus.PAYMENT_STATUS_REQUIRES_3DS);
+  });
+
+  it('hic cekim istenmemis sipariste NOT_FOUND', async () => {
+    const { error } = await call(paymentV1.PaymentServiceService.getPayment, {
+      orderId: 'ord_cekimsiz',
+    });
+
+    expect(error?.code).toBe(GRPC_STATUS.NOT_FOUND);
+    expect(errorCodeOf(error)).toBe(ERROR_CODES.NOT_FOUND);
+  });
+
+  it('siparis kimligi bossa INVALID_ARGUMENT', async () => {
+    const { error } = await call(paymentV1.PaymentServiceService.getPayment, { orderId: ' ' });
+
+    expect(error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
+    expect(errorCodeOf(error)).toBe(ERROR_CODES.VALIDATION_FAILED);
   });
 });
 

@@ -11,6 +11,7 @@ import type { MongoConnection } from '@getir/mongo-kit';
 import { currentCorrelation } from '@getir/observability';
 import type { ClientSession } from 'mongodb';
 
+import type { ExpiredOrderFinder } from '../../domain/expired-order-finder.js';
 import type { OrderEvent } from '../../domain/order-events.js';
 import { cursorOf } from '../../domain/order-history-cursor.js';
 import type {
@@ -24,7 +25,10 @@ import type { CorrelationSource } from '../../domain/order-outbox.js';
 import type { OrderRepository } from '../../domain/order-repository.js';
 import { orderAlreadyExists, orderVersionConflict } from '../../domain/order-repository.js';
 import type { Order } from '../../domain/order.js';
-import { SYSTEM_CANCELLATION_NOTES } from '../../domain/stock-reservation.js';
+import {
+  EXPIRY_SWEPT_STATUSES,
+  SYSTEM_CANCELLATION_NOTES,
+} from '../../domain/stock-reservation.js';
 import type { OutboxDocument } from './documents.js';
 import { fromOrderDocument, toOrderDocument } from './mappers.js';
 import type { OrdersCollection } from './orders-collection.js';
@@ -38,7 +42,7 @@ import { toOutboxDocument } from './outbox-mappers.js';
  * olarak calisir - transaction'in on kosulu.) Outbox satiri yazan istegin izini
  * (requestId, traceparent; D16) tasir.
  */
-export class OrderMongoStore implements OrderRepository, OrderHistoryReader {
+export class OrderMongoStore implements OrderRepository, OrderHistoryReader, ExpiredOrderFinder {
   constructor(
     private readonly orders: OrdersCollection,
     private readonly outbox: OutboxCollection,
@@ -127,5 +131,10 @@ export class OrderMongoStore implements OrderRepository, OrderHistoryReader {
       byStatus.get(ORDER_STATUS.CANCELLED)?.count ?? 0,
       delivered?.totalMinor ?? 0,
     );
+  }
+
+  async findExpiredReservations(now: Date, limit: number): Promise<readonly Order[]> {
+    const documents = await this.orders.findExpiredReservations(EXPIRY_SWEPT_STATUSES, now, limit);
+    return documents.map(fromOrderDocument);
   }
 }

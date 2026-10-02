@@ -6,7 +6,7 @@
  * fromServiceError ile KODU ve AYRINTISI korunarak AppError'a doner.
  */
 
-import { AppError, ERROR_CODES, isErrorCode } from '@getir/core';
+import { AppError, ERROR_CODES, isAppError, isErrorCode } from '@getir/core';
 import type { ErrorCode } from '@getir/core';
 import { paymentV1 } from '@getir/proto';
 import { callUnary } from '@getir/service-kit';
@@ -21,10 +21,19 @@ import type {
 import type { RequestScope } from '../../application/request-scope.js';
 import { PAYMENT_METHOD, PAYMENT_STATUS } from '../../domain/checkout-payment.js';
 import type { PaymentMethod, PaymentResult, PaymentStatus } from '../../domain/checkout-payment.js';
+import type { PaymentSnapshot } from '../../domain/payment-standing.js';
 
 const METHOD_TO_PROTO: Readonly<Record<PaymentMethod, paymentV1.PaymentMethod>> = {
   [PAYMENT_METHOD.CARD]: paymentV1.PaymentMethod.PAYMENT_METHOD_CARD,
   [PAYMENT_METHOD.CASH_ON_DELIVERY]: paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY,
+};
+
+/** Proto yontem -> domain. UNSPECIFIED/UNRECOGNIZED: yontemi bilinmeyen kayitla karar verilmez. */
+const METHOD_FROM_PROTO: Readonly<Record<paymentV1.PaymentMethod, PaymentMethod | undefined>> = {
+  [paymentV1.PaymentMethod.PAYMENT_METHOD_UNSPECIFIED]: undefined,
+  [paymentV1.PaymentMethod.PAYMENT_METHOD_CARD]: PAYMENT_METHOD.CARD,
+  [paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY]: PAYMENT_METHOD.CASH_ON_DELIVERY,
+  [paymentV1.PaymentMethod.UNRECOGNIZED]: undefined,
 };
 
 /** Proto durum -> domain. UNSPECIFIED/UNRECOGNIZED: durumsuz odemeyle siparis ilerletilmez. */
@@ -92,6 +101,28 @@ export class GrpcPayments implements Payments {
     );
   }
 
+  /**
+   * Odeme kaydini okur (T11.2 PR 2). Kayit yoksa payment-svc NOT_FOUND doner:
+   * o siparis icin hic cekim istenmemistir (null).
+   */
+  async getPayment(orderId: string, scope: RequestScope): Promise<PaymentSnapshot | null> {
+    let response: paymentV1.GetPaymentResponse;
+    try {
+      response = await callUnary<paymentV1.GetPaymentRequest, paymentV1.GetPaymentResponse>(
+        (message, metadata, options, callback) =>
+          this.client.getPayment(message, metadata, options, callback),
+        { orderId },
+        this.options(scope),
+      );
+    } catch (error: unknown) {
+      if (isAppError(error) && error.code === ERROR_CODES.NOT_FOUND) {
+        return null;
+      }
+      throw error;
+    }
+    return toSnapshot(orderId, response.payment);
+  }
+
   /** Kapanista cagrilir: acik HTTP/2 baglantisi process'i ayakta tutmasin. */
   close(): void {
     this.client.close();
@@ -116,6 +147,17 @@ function toPaymentResult(
     ...(status === PAYMENT_STATUS.FAILED ? { failureCode: failureCodeOf(payment) } : {}),
     ...(challengeId === '' ? {} : { challengeId }),
   };
+}
+
+function toSnapshot(orderId: string, payment: paymentV1.Payment | undefined): PaymentSnapshot {
+  const status = payment === undefined ? undefined : STATUS_FROM_PROTO[payment.status];
+  const method = payment === undefined ? undefined : METHOD_FROM_PROTO[payment.method];
+  if (status === undefined || method === undefined) {
+    throw AppError.internal('Odeme servisi durumu ya da yontemi bilinmeyen kayit dondu', {
+      details: { orderId },
+    });
+  }
+  return { status, method };
 }
 
 /** Sozlukte olmayan ya da bos neden: kart reddi sayilir (para cekilmedi). */

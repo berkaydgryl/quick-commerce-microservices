@@ -10,6 +10,7 @@
 import { AppError, ORDER_STATUS } from '@getir/core';
 import { currentCorrelation } from '@getir/observability';
 
+import type { ExpiredOrderFinder } from '../../domain/expired-order-finder.js';
 import type { OrderEvent } from '../../domain/order-events.js';
 import { comesBefore, cursorOf } from '../../domain/order-history-cursor.js';
 import type {
@@ -28,7 +29,7 @@ import type {
 import type { OrderRepository } from '../../domain/order-repository.js';
 import { orderAlreadyExists, orderVersionConflict } from '../../domain/order-repository.js';
 import type { Order } from '../../domain/order.js';
-import { isSystemCancellation } from '../../domain/stock-reservation.js';
+import { hasExpiredReservation, isSystemCancellation } from '../../domain/stock-reservation.js';
 
 interface StoredEvent {
   readonly event: OrderEvent;
@@ -37,7 +38,9 @@ interface StoredEvent {
   publishedAt?: Date;
 }
 
-export class InMemoryOrderStore implements OrderRepository, OrderHistoryReader, OrderOutbox {
+export class InMemoryOrderStore
+  implements OrderRepository, OrderHistoryReader, OrderOutbox, ExpiredOrderFinder
+{
   private readonly orders = new Map<string, Order>();
   private readonly events: StoredEvent[] = [];
 
@@ -160,10 +163,27 @@ export class InMemoryOrderStore implements OrderRepository, OrderHistoryReader, 
     return Promise.resolve(toRiskHistory(delivered.length, cancelled.length, deliveredTotal));
   }
 
+  findExpiredReservations(now: Date, limit: number): Promise<readonly Order[]> {
+    const expired = [...this.orders.values()]
+      .filter((order) => hasExpiredReservation(order, now))
+      .sort(byReservationExpiry);
+    return Promise.resolve(expired.slice(0, limit));
+  }
+
   /** Yalnizca test icin: kayitli siparis sayisi. */
   get size(): number {
     return this.orders.size;
   }
+}
+
+/** Mongo sirasiyla ayni: kilidi once dolan once, esitlikte kimlik. */
+function byReservationExpiry(left: Order, right: Order): number {
+  const byExpiry =
+    (left.reservation?.expiresAt.getTime() ?? 0) - (right.reservation?.expiresAt.getTime() ?? 0);
+  if (byExpiry !== 0) {
+    return byExpiry;
+  }
+  return left.id < right.id ? -1 : 1;
 }
 
 /** Mongo okumasiyla ayni bicim: iz yoksa `correlation` alani hic yoktur. */

@@ -19,6 +19,9 @@ import { COLLECTIONS } from './documents.js';
 /** Gecmis sirasi: yeniden eskiye, esitlikte kimlik azalan (domain comesBefore ile ayni). */
 const HISTORY_SORT = { createdAt: -1, _id: -1 } as const;
 
+/** Supurucu sirasi (T11.2 PR 2): kilidi once dolan once, esitlikte kimlik. */
+const EXPIRY_SORT = { 'reservation.expiresAt': 1, _id: 1 } as const;
+
 export class OrdersCollection extends MongoRepository<OrderDocument> {
   constructor(db: Db) {
     super(db, COLLECTIONS.ORDERS);
@@ -26,10 +29,17 @@ export class OrdersCollection extends MongoRepository<OrderDocument> {
 
   protected override indexes(): readonly IndexDescription[] {
     // ListMyOrders: esitlik (userId) + siralama (createdAt, _id) tek indeksten;
-    // bellekte siralama (SORT asamasi) olmaz. `status` indeksi, durumu sorgulayan
-    // ilk is (rezervasyon supurucusu, T11.x) geldiginde eklenir: bugun onu
-    // kullanan sorgu yok ve gereksiz indeks her yazimi pahalilastirir.
-    return [{ key: { userId: 1, createdAt: -1, _id: -1 }, name: 'userId_createdAt_id' }];
+    // bellekte siralama (SORT asamasi) olmaz.
+    // Supurucu (T11.2 PR 2): durum ($in, iki deger) + kilidin bitisi araligi ve
+    // ayni siraya gore okuma; durum basina indeks araliklari birlestirilir
+    // (SORT_MERGE), bellekte siralama olmaz.
+    return [
+      { key: { userId: 1, createdAt: -1, _id: -1 }, name: 'userId_createdAt_id' },
+      {
+        key: { status: 1, 'reservation.expiresAt': 1, _id: 1 },
+        name: 'status_reservationExpiresAt_id',
+      },
+    ];
   }
 
   /**
@@ -61,6 +71,25 @@ export class OrdersCollection extends MongoRepository<OrderDocument> {
       this.collection
         .find({ userId, ...afterFilter(after) })
         .sort(HISTORY_SORT)
+        .limit(limit)
+        .toArray(),
+    );
+  }
+
+  /**
+   * Verilen durumlarda kilidi `now` itibariyla dolmus belgeler, kilidi once dolan
+   * once, en fazla `limit` tane (status_reservationExpiresAt_id indeksi). Kilidi
+   * olmayan belge `$lte` ile eslesmez.
+   */
+  async findExpiredReservations(
+    statuses: readonly OrderStatus[],
+    now: Date,
+    limit: number,
+  ): Promise<OrderDocument[]> {
+    return this.run('findExpiredReservations', () =>
+      this.collection
+        .find({ status: { $in: [...statuses] }, 'reservation.expiresAt': { $lte: now } })
+        .sort(EXPIRY_SORT)
         .limit(limit)
         .toArray(),
     );

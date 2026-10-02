@@ -6,8 +6,10 @@ import { AppError, ERROR_CODES, fixedClock, ORDER_STATUS, silentLogger } from '@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createCancelOrder } from '../../src/application/cancel-order.js';
+import { PAYMENT_METHOD, PAYMENT_STATUS } from '../../src/domain/checkout-payment.js';
 import { transitionOrder } from '../../src/domain/order.js';
 import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-order-store.js';
+import { FakePayments } from '../support/fake-payments.js';
 import { FakeStockReservations } from '../support/fake-stock-reservations.js';
 import { insertAwaitingPayment, insertDraft } from '../support/order-builders.js';
 
@@ -16,12 +18,14 @@ const scope = { requestId: 'req_iptal_1', logger: silentLogger };
 
 let repository: InMemoryOrderStore;
 let stock: FakeStockReservations;
+let payments: FakePayments;
 let cancel: ReturnType<typeof createCancelOrder>;
 
 beforeEach(() => {
   repository = new InMemoryOrderStore();
   stock = new FakeStockReservations();
-  cancel = createCancelOrder({ repository, stock, clock });
+  payments = new FakePayments();
+  cancel = createCancelOrder({ repository, payments, stock, clock });
 });
 
 describe('cancelOrder use-case', () => {
@@ -129,6 +133,55 @@ describe('cancelOrder use-case', () => {
       AppError,
     );
     expect(stock.releases).toEqual([]);
+  });
+
+  it.each([
+    ['para alinmis', PAYMENT_STATUS.SUCCEEDED],
+    ['kart cekimi suruyor', PAYMENT_STATUS.PENDING],
+  ])(
+    'odeme bekleyen siparis, %s: iptal EDILMEZ (REQUEST_IN_PROGRESS); siparis ve kilit degismez (T11.2 PR 2)',
+    async (_name, status) => {
+      const awaiting = await insertAwaitingPayment(repository, clock);
+      payments.payments.set(awaiting.id, { status, method: PAYMENT_METHOD.CARD });
+
+      await expect(cancel({ orderId: awaiting.id, userId: 'usr_1' }, scope)).rejects.toMatchObject({
+        code: ERROR_CODES.REQUEST_IN_PROGRESS,
+        details: { orderId: awaiting.id, paymentStatus: status },
+      });
+      await expect(repository.findById(awaiting.id)).resolves.toEqual(awaiting);
+      expect(stock.releases).toEqual([]);
+    },
+  );
+
+  it.each([
+    ['3DS bekliyor', PAYMENT_STATUS.REQUIRES_3DS, PAYMENT_METHOD.CARD],
+    ['kart reddedildi', PAYMENT_STATUS.FAILED, PAYMENT_METHOD.CARD],
+    ['kapida odeme (tutar teslimatta)', PAYMENT_STATUS.PENDING, PAYMENT_METHOD.CASH_ON_DELIVERY],
+  ])('odeme bekleyen siparis, para alinmamis (%s): iptal edilir', async (_name, status, method) => {
+    const awaiting = await insertAwaitingPayment(repository, clock);
+    payments.payments.set(awaiting.id, { status, method });
+
+    const order = await cancel({ orderId: awaiting.id, userId: 'usr_1' }, scope);
+
+    expect(order.status).toBe(ORDER_STATUS.CANCELLED);
+  });
+
+  it('payment-svc kapali: odeme bekleyen siparis iptal EDILMEZ (SERVICE_UNAVAILABLE)', async () => {
+    const awaiting = await insertAwaitingPayment(repository, clock);
+    payments.getPaymentFailure = new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'payment kapali');
+
+    await expect(cancel({ orderId: awaiting.id, userId: 'usr_1' }, scope)).rejects.toMatchObject({
+      code: ERROR_CODES.SERVICE_UNAVAILABLE,
+    });
+    await expect(repository.findById(awaiting.id)).resolves.toEqual(awaiting);
+  });
+
+  it('taslakta odeme sorulmaz (cekim olamaz)', async () => {
+    const { id } = await insertDraft(repository, clock);
+
+    await cancel({ orderId: id, userId: 'usr_1' }, scope);
+
+    expect(payments.lookups).toEqual([]);
   });
 
   it('baskasinin siparisi NOT_FOUND (varlik bilgisi sizmasin)', async () => {

@@ -1,7 +1,8 @@
 /**
  * order -> payment gRPC istemcisi (T7.1), GERCEK tel uzerinden: sahte bir
  * payment sunucusu ayaga kalkar. Istek/sonuc cevirisi, is hatasinin kodu ve
- * AYRINTISIYLA korunmasi (3DS kalan hak) ve requestId iletimi denenir.
+ * AYRINTISIYLA korunmasi (3DS kalan hak) ve requestId iletimi denenir. Kaydin
+ * okunmasi (GetPayment, T11.2 PR 2): yontem ve durum, kayit yoksa null.
  */
 
 import { AppError, ERROR_CODES, silentLogger } from '@getir/core';
@@ -21,6 +22,7 @@ const S = paymentV1.PaymentStatus;
 const seenCharges: paymentV1.ChargeRequest[] = [];
 const seenRefunds: paymentV1.RefundRequest[] = [];
 const seenRequestIds: unknown[] = [];
+const seenLookups: { orderId: string; requestId: unknown }[] = [];
 
 function payment(status: paymentV1.PaymentStatus, failureCode = ''): paymentV1.Payment {
   return paymentV1.Payment.fromPartial({ id: 'pay_1', orderId: 'ord_1', status, failureCode });
@@ -34,6 +36,25 @@ const CHARGE_RESPONSES: Readonly<Record<string, paymentV1.ChargeResponse>> = {
   tok_3ds: { payment: payment(S.PAYMENT_STATUS_REQUIRES_3DS), challengeId: 'tds_1' },
   tok_durumsuz: { payment: payment(S.PAYMENT_STATUS_UNSPECIFIED), challengeId: '' },
   '': { payment: payment(S.PAYMENT_STATUS_PENDING), challengeId: '' },
+};
+
+/** GetPayment'in siparise gore kaydi; olmayan siparis NOT_FOUND. */
+const RECORDS: Readonly<Record<string, paymentV1.Payment | 'kapali'>> = {
+  ord_kart_cekildi: paymentV1.Payment.fromPartial({
+    orderId: 'ord_kart_cekildi',
+    method: paymentV1.PaymentMethod.PAYMENT_METHOD_CARD,
+    status: S.PAYMENT_STATUS_SUCCEEDED,
+  }),
+  ord_kapida: paymentV1.Payment.fromPartial({
+    orderId: 'ord_kapida',
+    method: paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY,
+    status: S.PAYMENT_STATUS_PENDING,
+  }),
+  ord_yontemsiz: paymentV1.Payment.fromPartial({
+    orderId: 'ord_yontemsiz',
+    status: S.PAYMENT_STATUS_SUCCEEDED,
+  }),
+  ord_kapali: 'kapali',
 };
 
 const implementation = {
@@ -61,6 +82,25 @@ const implementation = {
       return;
     }
     callback(null, { payment: payment(S.PAYMENT_STATUS_SUCCEEDED) });
+  },
+  getPayment: (
+    call: ServerUnaryCall<paymentV1.GetPaymentRequest, paymentV1.GetPaymentResponse>,
+    callback: sendUnaryData<paymentV1.GetPaymentResponse>,
+  ): void => {
+    seenLookups.push({
+      orderId: call.request.orderId,
+      requestId: call.metadata.get(REQUEST_ID_METADATA_KEY)[0],
+    });
+    const recorded = RECORDS[call.request.orderId];
+    if (recorded === undefined) {
+      callback(toServiceError(new AppError(ERROR_CODES.NOT_FOUND, 'odeme yok')));
+      return;
+    }
+    if (recorded === 'kapali') {
+      callback(toServiceError(new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'payment kapali')));
+      return;
+    }
+    callback(null, { payment: recorded });
   },
   refund: (
     call: ServerUnaryCall<paymentV1.RefundRequest, paymentV1.RefundResponse>,
@@ -194,5 +234,35 @@ describe('GrpcPayments.confirmThreeDs ve refund', () => {
       reason: 'order_changed_during_payment',
       idempotencyKey: 'refund-ord_1',
     });
+  });
+});
+
+describe('GrpcPayments.getPayment (T11.2 PR 2)', () => {
+  it('kaydin durumu ve yontemi domain sozlugune cevrilir; requestId AYNEN iletilir', async () => {
+    await expect(payments.getPayment('ord_kart_cekildi', scope)).resolves.toEqual({
+      status: PAYMENT_STATUS.SUCCEEDED,
+      method: PAYMENT_METHOD.CARD,
+    });
+    await expect(payments.getPayment('ord_kapida', scope)).resolves.toEqual({
+      status: PAYMENT_STATUS.PENDING,
+      method: PAYMENT_METHOD.CASH_ON_DELIVERY,
+    });
+    expect(seenLookups.at(-1)).toEqual({ orderId: 'ord_kapida', requestId: scope.requestId });
+  });
+
+  it('kayit yoksa (NOT_FOUND) null: o siparis icin hic cekim istenmedi', async () => {
+    await expect(payments.getPayment('ord_cekimsiz', scope)).resolves.toBeNull();
+  });
+
+  it('yontemi bilinmeyen kayitla karar verilmez: INTERNAL', async () => {
+    const error = await rejectionOf(payments.getPayment('ord_yontemsiz', scope));
+
+    expect(error.code).toBe(ERROR_CODES.INTERNAL);
+  });
+
+  it('payment-svc hatasi AYNEN yukari gider (iptal ve supurucu karar vermez)', async () => {
+    const error = await rejectionOf(payments.getPayment('ord_kapali', scope));
+
+    expect(error.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
   });
 });

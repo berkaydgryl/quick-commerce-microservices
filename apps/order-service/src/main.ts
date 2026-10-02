@@ -27,7 +27,7 @@ import {
   startOrExit,
 } from '@getir/service-kit';
 
-import { buildOrderService, startEventPublishing } from './bootstrap.js';
+import { buildOrderService, startEventPublishing, startReservationSweeping } from './bootstrap.js';
 import type { OrderOutbox } from './domain/order-outbox.js';
 import {
   CATALOG_CALL_TIMEOUT_MS,
@@ -107,6 +107,16 @@ const { handle, store, events } = await startOrExit(
     // Stok kilidi (T11.2): tembel baglanir; inventory kapaliysa taslak ve siparis
     // SERVICE_UNAVAILABLE alir, acilis durmaz.
     const stock = new GrpcStockReservations(env.INVENTORY_GRPC_ADDR, INVENTORY_CALL_TIMEOUT_MS);
+    // Kilidi dolan siparisleri kapatan supurucu (T11.2 PR 2): her depoda calisir.
+    const sweeper = startReservationSweeping({
+      expired: opened.expired,
+      repository: opened.repository,
+      payments,
+      stock,
+      outbox: opened.outbox,
+      logger,
+      intervalMs: env.ORDER_SWEEPER_INTERVAL_MS,
+    });
     const server = await startGrpcServer({
       serviceName: SERVICE_NAME,
       host: env.GRPC_HOST,
@@ -129,8 +139,10 @@ const { handle, store, events } = await startOrExit(
       // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti
       // kesilmesin. Once giden istemci, veritabani EN SON (proje kurali).
       onShutdown: async () => {
-        // Once olay yayini (suren tur biter, Redis kapanir), sonra istemciler,
+        // Once supurucu (suren tur biter; istemcileri ve Mongo'yu kullanir), sonra
+        // olay yayini (suren tur biter, Redis kapanir), sonra istemciler,
         // veritabani EN SON: yayinci outbox'i Mongo'dan okur.
+        await sweeper.stop();
         await publishing.stop();
         catalog.close();
         risk.close();
@@ -157,6 +169,8 @@ logger.info(
     catalog: env.CATALOG_GRPC_ADDR,
     risk: env.RISK_GRPC_ADDR,
     payment: env.PAYMENT_GRPC_ADDR,
+    inventory: env.INVENTORY_GRPC_ADDR,
+    sweeperIntervalMs: env.ORDER_SWEEPER_INTERVAL_MS,
   },
   'siparis servisi hazir',
 );

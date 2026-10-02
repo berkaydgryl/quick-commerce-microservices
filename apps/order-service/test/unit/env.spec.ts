@@ -68,3 +68,28 @@ describe('order ortami: stok kilidi (T11.2)', () => {
     },
   );
 });
+
+describe('order ortami: supurucu (T11.2 PR 2)', () => {
+  it('verilmezse 10 sn; verilen aralik okunur', () => {
+    vi.stubEnv('MOCK', 'true');
+    expect(loadServiceEnv().ORDER_SWEEPER_INTERVAL_MS).toBe(10_000);
+
+    vi.stubEnv('ORDER_SWEEPER_INTERVAL_MS', '2500');
+    expect(loadServiceEnv().ORDER_SWEEPER_INTERVAL_MS).toBe(2_500);
+  });
+
+  it.each(['999', '600001', 'sik'])('aralik disi deger (%s) acilista reddedilir', (value) => {
+    vi.stubEnv('MOCK', 'true');
+    vi.stubEnv('ORDER_SWEEPER_INTERVAL_MS', value);
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const written: string[] = [];
+    vi.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => {
+      written.push(String(chunk));
+      return true;
+    });
+
+    expect(() => loadServiceEnv()).toThrow();
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(written.join('')).toContain('ORDER_SWEEPER_INTERVAL_MS');
+  });
+});

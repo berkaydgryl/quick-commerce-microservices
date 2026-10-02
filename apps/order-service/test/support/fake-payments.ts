@@ -4,6 +4,8 @@
  *   tok_test_4242 onay, tok_test_0002 red, tok_test_3184 3DS; kapida odeme PENDING;
  *   requireThreeDs onaylanacak karti 3DS'e cevirir.
  * payment-svc gibi idempotent: ayni anahtarla ikinci cekim ilk sonucu doner.
+ * Odeme kaydi (getPayment) cekimlerden kurulur: son sonuc ve yontem; iade
+ * kaydi REFUNDED yapar. Test kaydi `payments` ile dogrudan da kurabilir.
  */
 
 import { ERROR_CODES } from '@getir/core';
@@ -17,6 +19,7 @@ import type {
 } from '../../src/application/payments.js';
 import { PAYMENT_METHOD, PAYMENT_STATUS } from '../../src/domain/checkout-payment.js';
 import type { PaymentResult } from '../../src/domain/checkout-payment.js';
+import type { PaymentSnapshot } from '../../src/domain/payment-standing.js';
 
 export const TEST_CARD = {
   APPROVED: 'tok_test_4242',
@@ -53,6 +56,11 @@ export class FakePayments implements Payments {
   /** 3DS onayinin sonucu; hata verilirse onay onunla basarisiz olur. */
   confirmOutcome: PaymentResult | AppError = { status: PAYMENT_STATUS.SUCCEEDED };
   refundFailure: AppError | undefined;
+  /** Siparis -> odeme kaydi (payment-svc'nin goruntusu). */
+  readonly payments = new Map<string, PaymentSnapshot>();
+  readonly lookups: string[] = [];
+  /** Doluysa kayit okumasi bu hatayla basarisiz olur. */
+  getPaymentFailure: AppError | undefined;
 
   async charge(request: ChargeRequest): Promise<PaymentResult> {
     this.charges.push(request);
@@ -61,21 +69,40 @@ export class FakePayments implements Payments {
     }
     const result = this.byKey.get(request.idempotencyKey) ?? fakeChargeResult(request);
     this.byKey.set(request.idempotencyKey, result);
+    this.payments.set(request.orderId, { status: result.status, method: request.method });
     await this.beforeChargeReturns?.();
     return result;
   }
 
   confirmThreeDs(request: ConfirmThreeDsRequest): Promise<PaymentResult> {
     this.confirmations.push(request);
-    return 'status' in this.confirmOutcome
-      ? Promise.resolve(this.confirmOutcome)
-      : Promise.reject(this.confirmOutcome);
+    if (!('status' in this.confirmOutcome)) {
+      return Promise.reject(this.confirmOutcome);
+    }
+    const recorded = this.payments.get(request.orderId);
+    if (recorded !== undefined) {
+      this.payments.set(request.orderId, { ...recorded, status: this.confirmOutcome.status });
+    }
+    return Promise.resolve(this.confirmOutcome);
   }
 
   refund(request: RefundRequest): Promise<void> {
     this.refunds.push(request);
-    return this.refundFailure === undefined
-      ? Promise.resolve()
-      : Promise.reject(this.refundFailure);
+    if (this.refundFailure !== undefined) {
+      return Promise.reject(this.refundFailure);
+    }
+    const recorded = this.payments.get(request.orderId);
+    if (recorded !== undefined) {
+      this.payments.set(request.orderId, { ...recorded, status: PAYMENT_STATUS.REFUNDED });
+    }
+    return Promise.resolve();
+  }
+
+  getPayment(orderId: string): Promise<PaymentSnapshot | null> {
+    this.lookups.push(orderId);
+    if (this.getPaymentFailure !== undefined) {
+      return Promise.reject(this.getPaymentFailure);
+    }
+    return Promise.resolve(this.payments.get(orderId) ?? null);
   }
 }

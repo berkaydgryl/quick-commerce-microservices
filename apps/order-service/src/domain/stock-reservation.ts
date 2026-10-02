@@ -42,6 +42,28 @@ export function hasLiveReservation(order: Order, now: Date): boolean {
 }
 
 /**
+ * Kilidi dolunca supurucunun KAPATTIGI durumlar (T11.2 PR 2): kilit tutan ve
+ * kayitta kalabilen iki durum. RISK_CHECK ve RESERVED tek yazimda gecilir,
+ * kayitta durmaz.
+ */
+export const EXPIRY_SWEPT_STATUSES: readonly OrderStatus[] = [
+  ORDER_STATUS.DRAFT,
+  ORDER_STATUS.AWAITING_PAYMENT,
+];
+
+/**
+ * Siparisin kilidi `now` itibariyla dolmus mu ve supurucu onu kapatir mi?
+ * Kilidi hic olmayan eski (T11.2 oncesi) siparis supurulmez.
+ */
+export function hasExpiredReservation(order: Order, now: Date): boolean {
+  return (
+    EXPIRY_SWEPT_STATUSES.includes(order.status) &&
+    order.reservation !== undefined &&
+    order.reservation.expiresAt.getTime() <= now.getTime()
+  );
+}
+
+/**
  * Saga'nin kilidi BIRAKTIGI durumlar: iptal, ret, inceleme, odeme hatasi, sure
  * dolumu. Birakma en iyi gayretle yapilir (application/stock-step.ts); basarisiz
  * kaldiysa kilit inventory'de durur ve kullaniciyi suresi dolana kadar yeni
