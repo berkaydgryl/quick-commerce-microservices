@@ -19,6 +19,7 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/clients"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/config"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/content"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/geo"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/httpapi"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/inventory"
@@ -137,6 +138,9 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 	// Tek siparis adaptoru dort siparis ucunu karsilar (T7.5).
 	orderService := order.New(orderv1.NewOrderServiceClient(orderConn), cfg.RequestTimeout)
 
+	// Harita adres servisi (T11.8): Nominatim'e tek sira ve onbellekle gider.
+	places := geo.New(geo.Options{BaseURL: cfg.GeoBaseURL, UserAgent: cfg.GeoUserAgent, Timeout: cfg.GeoTimeout})
+
 	app := httpapi.New(httpapi.Deps{
 		Health:           health.New(healthClients, mergePingers(identity.pingers, shared.pingers), cfg.RequestTimeout, cfg.Mock, logger),
 		Categories:       catalogService,
@@ -158,8 +162,11 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 		SessionRevoker:    identity.service,
 		ProfileGetter:     identity.service,
 		AddressBook:       identity.service,
+		AddressAdder:      identity.service,
 		CheckoutSignals:   identity.service,
 		AccessTokens:      identity.tokens,
+		GeoReverser:       places,
+		GeoSearcher:       places,
 		// Tekrar korumasi ve hiz siniri (T8.2): Redis ya da MOCK'ta bellek.
 		Idempotency: buildIdempotency(cfg, shared.client),
 		RateLimit:   buildRateLimit(cfg, shared.client),

@@ -34,6 +34,11 @@ func (f *fakeProfiles) Addresses(_ context.Context, userID string) (auth.Address
 	return auth.AddressBook{Items: []auth.AddressEntry{{Title: "Ev", Line: "Moda Cad. 12", Location: rest.GeoPoint{Lat: 40.9885, Lng: 29.0262}}}}, nil
 }
 
+func (f *fakeProfiles) AddAddress(_ context.Context, userID string, input auth.AddressInput) (auth.AddressBook, error) {
+	f.called, f.userID = true, userID
+	return auth.User{Addresses: []auth.SavedAddress{input.Address()}}.AddressBook(), nil
+}
+
 // protectedApp, korumali uclarin hepsini (siparis + /v1/me) tasiyan uygulama.
 func protectedApp(orders *fakeOrders, profiles *fakeProfiles, logger *slog.Logger) *fiber.App {
 	return New(Deps{
@@ -44,6 +49,9 @@ func protectedApp(orders *fakeOrders, profiles *fakeProfiles, logger *slog.Logge
 		OrderGetter:      orders,
 		ProfileGetter:    profiles,
 		AddressBook:      profiles,
+		AddressAdder:     profiles,
+		GeoReverser:      &fakeGeo{},
+		GeoSearcher:      &fakeGeo{},
 		CheckoutSignals:  &fakeSignals{},
 		AccessTokens:     testTokens(),
 		Idempotency:      testIdempotency(),
@@ -55,6 +63,9 @@ func protectedApp(orders *fakeOrders, profiles *fakeProfiles, logger *slog.Logge
 var protectedRoutes = []struct{ method, path, body string }{
 	{http.MethodGet, "/v1/me", ""},
 	{http.MethodGet, "/v1/me/addresses", ""},
+	{http.MethodPost, "/v1/me/addresses", validAddressBody},
+	{http.MethodGet, "/v1/geo/reverse?lat=41&lng=29", ""},
+	{http.MethodGet, "/v1/geo/search?q=Moda", ""},
 	{http.MethodPost, "/v1/cart/reserve", validReserveBody},
 	{http.MethodPost, "/v1/orders", validPlaceBody},
 	{http.MethodPost, "/v1/orders/" + testOrderID + "/3ds", `{"challengeId":"tds_1","otp":"123456"}`},

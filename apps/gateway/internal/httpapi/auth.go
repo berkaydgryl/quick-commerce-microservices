@@ -79,6 +79,34 @@ func loginHandler(authenticator UserAuthenticator, devices deviceCookies, sessio
 	}
 }
 
+// addAddressHandler, POST /v1/me/addresses (T11.8): oturumdaki kullanicinin
+// adres defterine yeni adres; cevap guncel defter (201). Kalici kayit:
+// Idempotency-Key ister (ADR-08); eksik anahtar ve govde sorunlari tek cevapta.
+// Kisisel veri: onbelleklenmez.
+func addAddressHandler(adder AddressAdder) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if err := rejectUnknownQuery(c); err != nil {
+			return err
+		}
+		var body addressCreateBody
+		if err := decodeJSONBody(c, &body); err != nil {
+			return err
+		}
+		errs := fieldErrors{}
+		idempotencyKeyOf(c, errs)
+		input := body.toInput(errs)
+		if len(errs) > 0 {
+			return apperror.New(apperror.CodeValidationFailed, errs)
+		}
+
+		book, err := adder.AddAddress(c.Context(), userIDOf(c), input)
+		if err != nil {
+			return err
+		}
+		return private(c, http.StatusCreated, book)
+	}
+}
+
 // phoneCheckHandler, POST /v1/auth/phone-check (T11.7): numarayla kayitli bir
 // hesap var mi. Numara govdededir, adreste degil: kisisel veri adres
 // gunluklerine ve izlere yazilmasin. Kalici bir sey degistirmez; bu yuzden

@@ -6,6 +6,40 @@ import { createHttpClient } from '../../src/shared/api/http-client';
 
 const ASSET = 'http://localhost:5173';
 
+const ADDRESS_SETUP = {
+  title: 'Teslimat Adresi Ekle',
+  backLabel: 'Geri',
+  pinHint: "Adresini seçmek için Pin'i sürükle",
+  searchLabel: 'Adres ara',
+  searchPlaceholder: 'Sokağını veya posta kodunu arat',
+  searchSubmitLabel: 'Ara',
+  searchEmptyNotice: 'Sonuç bulunamadı.',
+  useAddressLabel: 'Bu adresi kullan',
+  resolvingLabel: 'Adres bulunuyor…',
+  unresolvedNotice: 'Bu nokta için adres bulunamadı; adresini kendin yazabilirsin.',
+  kindLabel: 'Adres türü',
+  kinds: [
+    { kind: 'HOME' as const, label: 'Ev', icon: '🏠' },
+    { kind: 'WORK' as const, label: 'İş', icon: '🏢' },
+    { kind: 'OTHER' as const, label: 'Diğer', icon: '📍' },
+  ],
+  titleLabel: 'Başlık (Ev, işyeri)',
+  lineLabel: 'Adres',
+  buildingLabel: 'Bina',
+  floorLabel: 'Kat',
+  apartmentLabel: 'Daire',
+  noteLabel: 'Adres Tarifi',
+  saveLabel: 'Kaydet',
+  savingLabel: 'Kaydediliyor…',
+  noMarketNotice: 'Bu adrese şu an hizmet veren market yok; yine de kaydedebilirsin.',
+  map: {
+    tileUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '© OpenStreetMap katkıcıları',
+    center: { lat: 40.9885, lng: 29.027 },
+    zoom: 15,
+  },
+};
+
 const welcome = {
   header: { brand: 'getir', service: 'market', loginLabel: 'Giriş yap', registerLabel: 'Kayıt ol' },
   hero: {
@@ -64,6 +98,7 @@ const welcome = {
       text: 'Siparişin dakikalar içinde kapında!',
     },
   ],
+  addressSetup: ADDRESS_SETUP,
 };
 
 function clientReturning(body: unknown) {

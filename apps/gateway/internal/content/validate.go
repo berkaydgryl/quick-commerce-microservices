@@ -6,8 +6,11 @@ import (
 	"net/url"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf16"
+
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
 )
 
 // Bicim kurallari (@getir/contracts constants.ts DIAL_CODE_PATTERN ve
@@ -32,6 +35,7 @@ func validateWelcome(welcome Welcome) error {
 		checkCountries(welcome.LoginCard.Countries),
 		checkAppDownload(welcome.AppDownload),
 		checkFeatures(welcome.Features),
+		checkAddressSetup(welcome.AddressSetup),
 	)
 }
 
@@ -145,6 +149,51 @@ func checkFeatures(features []Feature) error {
 	problems := make([]error, 0, len(features))
 	for index, feature := range features {
 		problems = append(problems, checkImage(fmt.Sprintf("features[%d].image", index), feature.Image))
+	}
+	return errors.Join(problems...)
+}
+
+// checkAddressSetup: adres turleri sozlesmedeki turlerden, her biri en fazla
+// bir kez (secicide anahtar); harita gecerli.
+func checkAddressSetup(setup AddressSetup) error {
+	const path = "addressSetup"
+	allowed := []string{auth.AddressKindHome, auth.AddressKindWork, auth.AddressKindOther}
+	problems := []error{checkMap(path+".map", setup.Map)}
+	if count := len(setup.Kinds); count == 0 || count > len(allowed) {
+		problems = append(problems, fmt.Errorf("%s.kinds %d satir, 1-%d olmali", path, count, len(allowed)))
+	}
+	seen := make(map[string]struct{}, len(setup.Kinds))
+	for index, option := range setup.Kinds {
+		if !slices.Contains(allowed, option.Kind) {
+			problems = append(problems, fmt.Errorf("%s.kinds[%d].kind %q: %s olmali", path, index, option.Kind, strings.Join(allowed, ", ")))
+		}
+		if _, duplicate := seen[option.Kind]; duplicate {
+			problems = append(problems, fmt.Errorf("%s.kinds[%d].kind %q iki kez yazilmis", path, index, option.Kind))
+		}
+		seen[option.Kind] = struct{}{}
+	}
+	return errors.Join(problems...)
+}
+
+// checkMap: karo adresi mutlak https ve {z}, {x}, {y} yer tutuculu (disari
+// gider: "javascript:" ya da goreli yol istemciye gitmesin); merkez gecerli
+// koordinat; yakinlastirma MinMapZoom-MaxMapZoom.
+func checkMap(path string, m Map) error {
+	var problems []error
+	parsed, err := url.Parse(m.TileURL)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		problems = append(problems, fmt.Errorf("%s.tileUrl %q: mutlak https adresi olmali", path, m.TileURL))
+	}
+	for _, part := range []string{"{z}", "{x}", "{y}"} {
+		if !strings.Contains(m.TileURL, part) {
+			problems = append(problems, fmt.Errorf("%s.tileUrl %q: %s yer tutucusu yok", path, m.TileURL, part))
+		}
+	}
+	if m.Center.Lat < -90 || m.Center.Lat > 90 || m.Center.Lng < -180 || m.Center.Lng > 180 {
+		problems = append(problems, fmt.Errorf("%s.center %v,%v: gecerli koordinat olmali", path, m.Center.Lat, m.Center.Lng))
+	}
+	if m.Zoom < MinMapZoom || m.Zoom > MaxMapZoom {
+		problems = append(problems, fmt.Errorf("%s.zoom %d: %d-%d olmali", path, m.Zoom, MinMapZoom, MaxMapZoom))
 	}
 	return errors.Join(problems...)
 }

@@ -24,6 +24,8 @@ import {
 import {
   ADDRESS_LINE_MAX_LENGTH,
   ADDRESS_NOTE_MAX_LENGTH,
+  ADDRESS_TITLE_MAX_LENGTH,
+  ADDRESS_UNIT_MAX_LENGTH,
   CART_ITEM_MAX_QUANTITY,
   CART_ITEM_MIN_QUANTITY,
   CART_MAX_ITEMS,
@@ -75,10 +77,62 @@ export const deliveryAddressSchema = z.object({
  * (apps/gateway/internal/persona/addresses.json) bu bicimdedir. Siparise giderken yalnizca
  * teslimat adresi kismi (line, location) tasinir.
  */
+/** Adres turu (T11.8): adres defterinde ikonu belirler. T11.8'den once yazilan kayitlarda yok. */
+export const addressKindSchema = z.enum(['HOME', 'WORK', 'OTHER']);
+
 export const savedAddressSchema = deliveryAddressSchema.extend({
   /** Kullanicinin verdigi ad ("Ev", "Is"). */
   title: z.string().trim().min(1),
+  kind: addressKindSchema.optional(),
+  /** Bina, kat, daire (T11.8): kisa serbest metin; bossa alan yok. */
+  building: z.string().max(ADDRESS_UNIT_MAX_LENGTH).optional(),
+  floor: z.string().max(ADDRESS_UNIT_MAX_LENGTH).optional(),
+  apartment: z.string().max(ADDRESS_UNIT_MAX_LENGTH).optional(),
+  /** Adres tarifi. */
   note: z.string().max(ADDRESS_NOTE_MAX_LENGTH).optional(),
+});
+
+/** Bina, kat ve daire alaninin kurali; mesaj alanin adiyla (gateway ayni cumleyi doner). */
+function addressUnitSchema(label: string) {
+  return z
+    .string()
+    .trim()
+    .max(ADDRESS_UNIT_MAX_LENGTH, `${label} en fazla ${ADDRESS_UNIT_MAX_LENGTH} karakter olabilir`)
+    .optional();
+}
+
+/**
+ * POST /v1/me/addresses (T11.8): adres defterine yeni adres. Kalici kayit:
+ * Idempotency-Key ister (ADR-08). Cevap guncel adres defteridir
+ * (savedAddressListSchema). Gateway ayrica iki kurali uygular: ayni adla
+ * ikinci adres olmaz (secici adla secer) ve defter SAVED_ADDRESSES_MAX'i
+ * asmaz; ikisi de VALIDATION_FAILED. Mesajlar Turkce ve gateway'le ayni
+ * (rules_contract_test).
+ */
+export const createAddressRequestSchema = z.object({
+  title: z
+    .string()
+    .trim()
+    .min(1, 'Başlık boş olamaz')
+    .max(ADDRESS_TITLE_MAX_LENGTH, `Başlık en fazla ${ADDRESS_TITLE_MAX_LENGTH} karakter olabilir`),
+  kind: addressKindSchema,
+  line: z
+    .string()
+    .trim()
+    .min(1, 'Adres boş olamaz')
+    .max(ADDRESS_LINE_MAX_LENGTH, `Adres en fazla ${ADDRESS_LINE_MAX_LENGTH} karakter olabilir`),
+  location: geoPointSchema,
+  building: addressUnitSchema('Bina'),
+  floor: addressUnitSchema('Kat'),
+  apartment: addressUnitSchema('Daire'),
+  note: z
+    .string()
+    .trim()
+    .max(
+      ADDRESS_NOTE_MAX_LENGTH,
+      `Adres tarifi en fazla ${ADDRESS_NOTE_MAX_LENGTH} karakter olabilir`,
+    )
+    .optional(),
 });
 
 /**
@@ -156,6 +210,8 @@ export const reservationReleaseSchema = z.object({
 export type CartItemInput = z.infer<typeof cartItemInputSchema>;
 export type DeliveryAddress = z.infer<typeof deliveryAddressSchema>;
 export type SavedAddress = z.infer<typeof savedAddressSchema>;
+export type AddressKind = z.infer<typeof addressKindSchema>;
+export type CreateAddressRequest = z.infer<typeof createAddressRequestSchema>;
 export type SavedAddressList = z.infer<typeof savedAddressListSchema>;
 export type ReserveCartRequest = z.infer<typeof reserveCartRequestSchema>;
 export type ReservationLine = z.infer<typeof reservationLineSchema>;

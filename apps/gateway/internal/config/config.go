@@ -10,7 +10,8 @@
 //	defaults.go - varsayilanlar ve sabit adlar (port haritasi, NODE_ENV, servisler)
 //	env.go      - genel okuyucular: metin, tam sayi, bool, sure, secenek
 //	policy.go   - kendi kurali olan okuyucular: gorsel kok adresi, log seviyesi,
-//	              Mongo adresi, JWT sirri (T8.1), Redis adresi (T8.2)
+//	              Mongo adresi, JWT sirri (T8.1), Redis adresi (T8.2), harita
+//	              adres servisi (T11.8)
 //	seed.go     - persona seed komutunun dar yapilandirmasi (T8.1)
 package config
 
@@ -80,6 +81,15 @@ type Config struct {
 	RateLimitGeneral int
 	RateLimitAuth    int
 	RateLimitOrder   int
+
+	// GeoBaseURL, harita adres servisinin (Nominatim) kok adresi (T11.8).
+	// Sonunda "/" yoktur.
+	GeoBaseURL *url.URL
+	// GeoUserAgent, Nominatim'e kendini tanitan ad (kullanim kosulu).
+	GeoUserAgent string
+	// GeoTimeout, tek adres sorusunun ust siniri: sirada bekleme (saniyede
+	// bir istek) + Nominatim cevabi.
+	GeoTimeout time.Duration
 }
 
 // Secret, gunluge ya da hata metnine yazilmamasi gereken deger. fmt (%v, %s,
@@ -233,6 +243,17 @@ func Load(getenv Getenv) (Config, error) {
 		problems = append(problems, err)
 	}
 
+	// Harita adres servisi (T11.8): varsayilan OpenStreetMap'in genel sunucusu.
+	geoBaseURL, err := readGeoBaseURL(getenv)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
+	geoTimeout, err := readDuration(getenv, "GEO_TIMEOUT_MS", defaultGeoTimeout)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
 	// Servis listesi sabittir: gateway'in dogrudan konustugu uc servis (stok
 	// T8.4'ten beri). Yeni servis geldiginde buraya bir satir eklenir; adres yine
 	// ortamdan gelir. /healthz listedeki her servisi yoklar.
@@ -271,5 +292,8 @@ func Load(getenv Getenv) (Config, error) {
 		RateLimitGeneral:            rateLimitGeneral,
 		RateLimitAuth:               rateLimitAuth,
 		RateLimitOrder:              rateLimitOrder,
+		GeoBaseURL:                  geoBaseURL,
+		GeoUserAgent:                readString(getenv, "GEO_USER_AGENT", defaultGeoUserAgent),
+		GeoTimeout:                  geoTimeout,
 	}, nil
 }

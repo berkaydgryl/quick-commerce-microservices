@@ -47,3 +47,43 @@ func TestReasonsMatchContractMessages(t *testing.T) {
 		}
 	}
 }
+
+const contractCartPath = "../../../../packages/contracts/src/cart.ts"
+
+func TestAddressRulesMatchContract(t *testing.T) {
+	// T11.8: adres ekleme formunun sinirlari ve cumleleri (createAddressRequestSchema).
+	constants := testkit.ReadContract(t, testkit.ContractConstantsPath)
+	limits := map[string]int{
+		"ADDRESS_TITLE_MAX_LENGTH": AddressTitleMaxLength,
+		"ADDRESS_UNIT_MAX_LENGTH":  AddressUnitMaxLength,
+		"ADDRESS_LINE_MAX_LENGTH":  addressLineMaxLength,
+		"ADDRESS_NOTE_MAX_LENGTH":  addressNoteMaxLength,
+	}
+	messages := testkit.ReadContract(t, contractCartPath)
+	for name, goValue := range limits {
+		contractValue := testkit.NumberConstant(t, constants, name)
+		if contractValue != goValue {
+			t.Errorf("%s: sozlesme %d, gateway %d", name, contractValue, goValue)
+		}
+		messages = strings.ReplaceAll(messages, "${"+name+"}", strconv.Itoa(contractValue))
+	}
+
+	for _, reason := range []string{addressTitleRequiredReason, addressTitleMaxReason, addressLineRequiredReason, addressLineMaxReason, addressNoteMaxReason} {
+		if !strings.Contains(messages, reason) {
+			t.Errorf("sebep sozlesmede yok ya da farkli: %q", reason)
+		}
+	}
+	// Bina, kat ve daire ayni sablonu paylasir: "${label} en fazla N karakter olabilir".
+	for _, label := range []string{"Bina", "Kat", "Daire"} {
+		if !strings.Contains(messages, "addressUnitSchema('"+label+"')") {
+			t.Errorf("sozlesmede %q alani yok", label)
+		}
+	}
+	if !strings.Contains(messages, "${label} en fazla "+strconv.Itoa(AddressUnitMaxLength)+" karakter olabilir") {
+		t.Error("bina/kat/daire sablonu gateway'in cumlesiyle ayni olmali")
+	}
+	// Dolu defter yalnizca sunucunun kuralidir; sayi SAVED_ADDRESSES_MAX ile ayni olmali.
+	if !strings.Contains(addressBookFullReason, strconv.Itoa(MaxSavedAddresses)) {
+		t.Errorf("dolu defter cumlesi sinirla ayni sayiyi soylemeli: %q", addressBookFullReason)
+	}
+}

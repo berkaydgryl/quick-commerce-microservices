@@ -2,6 +2,7 @@ package authstore
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 
@@ -73,6 +74,29 @@ func (m *MemoryUsers) RecordLogin(_ context.Context, userID string, login auth.L
 	}
 	m.byID[userID] = user
 	return previous, nil
+}
+
+// AddAddress, adresi tek kilit altinda ekler; kurallar Mongo'dakiyle ayni
+// (ayni ad yok, defter max'in altinda).
+func (m *MemoryUsers) AddAddress(_ context.Context, userID string, address auth.SavedAddress, max int) (auth.User, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	user, found := m.byID[userID]
+	if !found {
+		return auth.User{}, auth.ErrUserNotFound
+	}
+	for _, existing := range user.Addresses {
+		if existing.Title == address.Title {
+			return auth.User{}, auth.ErrAddressTitleTaken
+		}
+	}
+	if len(user.Addresses) >= max {
+		return auth.User{}, auth.ErrAddressBookFull
+	}
+	// Yeni dilim: onceki okuyucularin elindeki User'in defteri degismez.
+	user.Addresses = append(slices.Clone(user.Addresses), address)
+	m.byID[userID] = user
+	return user, nil
 }
 
 // CountByRegistrationDevice, cihazdan acilmis hesap sayisi.

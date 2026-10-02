@@ -64,6 +64,8 @@ tags:
     description: Kategori ve ürün listeleme
   - name: content
     description: Ekran metinleri ve görselleri (T11.6)
+  - name: geo
+    description: Harita adres çözümleme ve arama (T11.8)
   - name: darkstore
     description: Konumdan karanlık mağaza çözümleme
   - name: cart
@@ -524,6 +526,221 @@ paths:
           $ref: "#/components/responses/RateLimited"
         "500":
           $ref: "#/components/responses/InternalError"
+    post:
+      tags: [auth]
+      operationId: createSavedAddress
+      summary: Adres defterine adres ekle (T11.8)
+      description: |
+        Oturumdaki kullanıcının defterine yeni adres; cevap GÜNCEL defterdir
+        (kayıt sırasında). Web, kayıtlı adresi olmayan kullanıcıya adres ekleme
+        penceresini açar (harita + detay) ve kaydedince market listesine geçer.
+
+        Metinler baştaki ve sondaki boşluklardan arındırılır. Aynı adla ikinci
+        adres olmaz (seçici adla seçer) ve defter en fazla 10 adres tutar
+        (`SAVED_ADDRESSES_MAX`); iki kural da tek atomik yazımda uygulanır, eş
+        zamanlı iki istek sınırı aşamaz. `Idempotency-Key` zorunludur.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAddressRequest"
+      responses:
+        "201":
+          description: Adres eklendi; güncel defter
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            Idempotent-Replayed:
+              $ref: "#/components/headers/IdempotentReplayed"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            maxItems: 10
+                            items:
+                              $ref: "#/components/schemas/SavedAddress"
+        "400":
+          description: |
+            Biçim ya da kural hatası; hepsi tek cevapta. `details` alanı
+            gövdedeki adla gösterir (`title`, `location.lat`, `Idempotency-Key`).
+            Aynı adla kayıtlı adres `title`, dolu defter `addresses` alanındadır.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                titleTaken:
+                  summary: VALIDATION_FAILED (aynı ad)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        title: "Bu adla kayıtlı bir adresin var"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                bookFull:
+                  summary: VALIDATION_FAILED (dolu defter)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        addresses: "En fazla 10 adres kaydedebilirsin"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "409":
+          description: |
+            Aynı `Idempotency-Key` ile ilk istek hâlâ işleniyor
+            (`REQUEST_IN_PROGRESS`) ya da anahtar farklı bir gövdeyle geldi
+            (`CONFLICT`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                inProgress:
+                  $ref: "#/components/examples/IdempotencyRequestInProgress"
+                keyReused:
+                  $ref: "#/components/examples/IdempotencyKeyReused"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /v1/geo/reverse:
+    get:
+      tags: [geo]
+      operationId: reverseGeocode
+      summary: Noktanın adres satırı (T11.8)
+      description: |
+        Adres ekleme penceresinde pinin olduğu noktanın Türkçe adres satırı
+        ("Osmanağa Mahallesi, Nail Bey Sokağı 23, 34710 Kadıköy/İstanbul,
+        Türkiye"); satır doğrudan adres formuna yazılır.
+
+        Kaynak OpenStreetMap Nominatim'dir; tarayıcı ona gitmez. Kullanım koşulu
+        gereği gateway bütün istekleri tek sıraya dizer (saniyede en fazla bir)
+        ve cevapları 24 saat önbellekler (~1 m içindeki nokta aynı sorudur).
+        Sıra `GEO_TIMEOUT_MS` içinde ilerlemezse ya da Nominatim cevap vermezse
+        `503`: kullanıcı satırı kendisi yazar. Konum kişisel veridir: cevap
+        önbelleğe alınmaz.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema: { type: number, minimum: -90, maximum: 90 }
+        - name: lng
+          in: query
+          required: true
+          schema: { type: number, minimum: -180, maximum: 180 }
+      responses:
+        "200":
+          description: Adres satırı
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/ReverseGeocodeResult"
+        "400":
+          description: Eksik ya da aralık dışı koordinat, bilinmeyen parametre (VALIDATION_FAILED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          description: Noktada adres yok (deniz, orman); satırı kullanıcı yazar (NOT_FOUND).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /v1/geo/search:
+    get:
+      tags: [geo]
+      operationId: searchPlaces
+      summary: Sokak, mahalle ya da posta kodu ara (T11.8)
+      description: |
+        Türkiye içinde arama; en fazla 5 sonuç, aynı satır bir kez. Sonuç
+        yoksa boş liste. Sıra, önbellek ve `503` kuralları `reverseGeocode`
+        ile aynıdır; büyük-küçük harf ve boşluk farkı aynı soru sayılır.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 3, maxLength: 100 }
+          description: Baştaki, sondaki ve tekrarlanan boşluklar sayılmaz.
+      responses:
+        "200":
+          description: Sonuçlar
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/GeoSearchResult"
+        "400":
+          description: Çok kısa ya da uzun arama, bilinmeyen parametre (VALIDATION_FAILED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /v1/categories:
     get:
@@ -2174,7 +2391,7 @@ components:
       description: |
         Karşılama ekranı (T11.6). Form KURALLARI ve hata cümleleri burada
         değildir; onlar kimlik şemalarından gelir.
-      required: [header, hero, loginCard, categories, appDownload, features]
+      required: [header, hero, loginCard, categories, appDownload, features, addressSetup]
       properties:
         header:
           type: object
@@ -2209,6 +2426,8 @@ components:
           description: Tanıtım kutuları (T11.7); kategorilerin altında.
           items:
             $ref: "#/components/schemas/FeatureContent"
+        addressSetup:
+          $ref: "#/components/schemas/AddressSetupContent"
 
     ContentImage:
       type: object
@@ -2262,6 +2481,104 @@ components:
         image:
           $ref: "#/components/schemas/ContentImage"
         text: { $ref: "#/components/schemas/ContentText" }
+
+    AddressSetupContent:
+      type: object
+      description: |
+        Adres ekleme penceresi (T11.8): oturum açık ama kayıtlı adres yoksa
+        karşılama ekranının üstünde açılır. 1. adım harita + arama + "Bu adresi
+        kullan"; 2. adım detay formu + "Kaydet". Form kuralları ve hata
+        cümleleri `CreateAddressRequest`'tedir.
+      required:
+        - title
+        - backLabel
+        - pinHint
+        - searchLabel
+        - searchPlaceholder
+        - searchSubmitLabel
+        - searchEmptyNotice
+        - useAddressLabel
+        - resolvingLabel
+        - unresolvedNotice
+        - kindLabel
+        - kinds
+        - titleLabel
+        - lineLabel
+        - buildingLabel
+        - floorLabel
+        - apartmentLabel
+        - noteLabel
+        - saveLabel
+        - savingLabel
+        - noMarketNotice
+        - map
+      properties:
+        title: { $ref: "#/components/schemas/ContentText" }
+        backLabel:
+          $ref: "#/components/schemas/ContentText"
+          description: 2. adımdaki geri düğmesinin erişilebilir adı.
+        pinHint: { $ref: "#/components/schemas/ContentText" }
+        searchLabel: { $ref: "#/components/schemas/ContentText" }
+        searchPlaceholder: { $ref: "#/components/schemas/ContentText" }
+        searchSubmitLabel: { $ref: "#/components/schemas/ContentText" }
+        searchEmptyNotice: { $ref: "#/components/schemas/ContentText" }
+        useAddressLabel: { $ref: "#/components/schemas/ContentText" }
+        resolvingLabel: { $ref: "#/components/schemas/ContentText" }
+        unresolvedNotice:
+          $ref: "#/components/schemas/ContentText"
+          description: Pinin olduğu yer için adres bulunamadı; satırı kullanıcı yazar.
+        kindLabel: { $ref: "#/components/schemas/ContentText" }
+        kinds:
+          type: array
+          minItems: 1
+          maxItems: 3
+          description: Adres türleri tekildir.
+          items:
+            $ref: "#/components/schemas/AddressKindOption"
+        titleLabel: { $ref: "#/components/schemas/ContentText" }
+        lineLabel: { $ref: "#/components/schemas/ContentText" }
+        buildingLabel: { $ref: "#/components/schemas/ContentText" }
+        floorLabel: { $ref: "#/components/schemas/ContentText" }
+        apartmentLabel: { $ref: "#/components/schemas/ContentText" }
+        noteLabel: { $ref: "#/components/schemas/ContentText" }
+        saveLabel: { $ref: "#/components/schemas/ContentText" }
+        savingLabel: { $ref: "#/components/schemas/ContentText" }
+        noMarketNotice:
+          $ref: "#/components/schemas/ContentText"
+          description: Seçilen yere hizmet veren market yok; uyarıdır, kaydı engellemez.
+        map:
+          $ref: "#/components/schemas/MapContent"
+
+    AddressKindOption:
+      type: object
+      required: [kind, label, icon]
+      properties:
+        kind:
+          $ref: "#/components/schemas/AddressKind"
+        label: { $ref: "#/components/schemas/ContentText" }
+        icon:
+          $ref: "#/components/schemas/ContentText"
+          description: Emoji ("🏠").
+
+    MapContent:
+      type: object
+      description: |
+        OpenStreetMap karoları. Karo adresi dışarı giden https adresidir;
+        gateway çözmez. Atıf metni lisans gereği haritada görünür.
+      required: [tileUrl, attribution, center, zoom]
+      properties:
+        tileUrl:
+          type: string
+          pattern: "^https://"
+          description: "`{z}`, `{x}` ve `{y}` yer tutucularını taşır."
+          example: "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution: { $ref: "#/components/schemas/ContentText" }
+        center:
+          $ref: "#/components/schemas/GeoPoint"
+        zoom:
+          type: integer
+          minimum: 1
+          maximum: 19
 
     Banner:
       type: object
@@ -2730,9 +3047,91 @@ components:
           maxLength: 240
         location:
           $ref: "#/components/schemas/GeoPoint"
+        kind:
+          $ref: "#/components/schemas/AddressKind"
+        building:
+          type: string
+          maxLength: 20
+        floor:
+          type: string
+          maxLength: 20
+        apartment:
+          type: string
+          maxLength: 20
         note:
           type: string
           maxLength: 240
+
+    AddressKind:
+      type: string
+      description: Adres türü (seçicideki ikon); eski kayıtlarda olmayabilir.
+      enum: [HOME, WORK, OTHER]
+
+    CreateAddressRequest:
+      type: object
+      description: |
+        Yeni kayıtlı adres (T11.8). Bilinmeyen alan reddedilir. Boş bırakılan
+        isteğe bağlı alan kaydedilmez.
+      required: [title, kind, line, location]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 40
+          description: Adres adı ("Ev", "İş"); defterde tekildir.
+        kind:
+          $ref: "#/components/schemas/AddressKind"
+        line:
+          type: string
+          minLength: 1
+          maxLength: 240
+          description: Haritadan gelen ya da kullanıcının yazdığı adres satırı.
+        location:
+          $ref: "#/components/schemas/GeoPoint"
+        building:
+          type: string
+          maxLength: 20
+        floor:
+          type: string
+          maxLength: 20
+        apartment:
+          type: string
+          maxLength: 20
+        note:
+          type: string
+          maxLength: 240
+          description: Adres tarifi (kurye için).
+
+    ReverseGeocodeResult:
+      type: object
+      required: [line]
+      properties:
+        line:
+          type: string
+          minLength: 1
+          maxLength: 240
+
+    GeoPlace:
+      type: object
+      required: [line, location]
+      properties:
+        line:
+          type: string
+          minLength: 1
+          maxLength: 240
+        location:
+          $ref: "#/components/schemas/GeoPoint"
+
+    GeoSearchResult:
+      type: object
+      description: Sınırlı liste (sayfalanmaz); sonuç yoksa boş.
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/GeoPlace"
 
     CreateOrderRequest:
       type: object

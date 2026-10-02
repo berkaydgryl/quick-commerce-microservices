@@ -138,3 +138,22 @@ func readJWTSecret(getenv Getenv, nodeEnv string) (Secret, error) {
 	}
 	return Secret(value), nil
 }
+
+// readGeoBaseURL, harita adres servisinin (Nominatim) kok adresi (T11.8).
+// Verilmezse OpenStreetMap'in genel sunucusu: demo icin ucretsiz ve hesapsiz.
+// Kendi Nominatim'ini kuran ortam (ya da test) degistirir. Kok adres sorgu
+// ve parca tasiyamaz; sondaki "/" atilir.
+func readGeoBaseURL(getenv Getenv) (*url.URL, error) {
+	const name = "GEO_BASE_URL"
+	raw := strings.TrimSpace(getenv(name))
+	if raw == "" {
+		raw = defaultGeoBaseURL
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" ||
+		parsed.RawQuery != "" || parsed.Fragment != "" {
+		return nil, fmt.Errorf("%s: http(s) ile baslayan, sorgusuz bir kok adres olmali, ornek: %s", name, defaultGeoBaseURL)
+	}
+	parsed.Path = strings.TrimRight(parsed.Path, "/")
+	return parsed, nil
+}

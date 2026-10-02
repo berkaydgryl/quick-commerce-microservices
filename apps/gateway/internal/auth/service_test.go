@@ -546,3 +546,120 @@ func TestAccountsOnDeviceCountsRegistrationsNotLogins(t *testing.T) {
 		}
 	}
 }
+
+// detailOf, is hatasinin bir alanindaki sebep; yoksa bos.
+func detailOf(err error, field string) string {
+	var appErr *apperror.Error
+	if !errors.As(err, &appErr) {
+		return ""
+	}
+	reason, _ := appErr.Details[field].(string)
+	return reason
+}
+
+func homeInput(title string) auth.AddressInput {
+	return auth.AddressInput{
+		Title: title, Kind: auth.AddressKindHome, Line: "Acıbadem, 34660 Üsküdar/İstanbul, Türkiye",
+		Location: &auth.GeoPoint{Lat: 40.9885, Lng: 29.027}, Building: "19C3", Floor: "3", Apartment: "12",
+	}
+}
+
+func TestAddAddressAppendsAndReturnsTheBook(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	registered := f.register(t)
+
+	book, err := f.service.AddAddress(ctx, registered.User.ID, homeInput("Ev"))
+	if err != nil {
+		t.Fatalf("adres eklenmeli: %v", err)
+	}
+	encoded, err := json.Marshal(book)
+	if err != nil {
+		t.Fatalf("JSON: %v", err)
+	}
+	want := `{"items":[{"title":"Ev","kind":"HOME","line":"Acıbadem, 34660 Üsküdar/İstanbul, Türkiye","location":{"lat":40.9885,"lng":29.027},` +
+		`"building":"19C3","floor":"3","apartment":"12"}]}`
+	if string(encoded) != want {
+		t.Errorf("cevap guncel defter olmali (bos tarif yazilmaz):\n got %s\nwant %s", encoded, want)
+	}
+
+	// Ikinci adres sona eklenir; okuma ayni defteri doner.
+	if _, err := f.service.AddAddress(ctx, registered.User.ID, homeInput("Annem")); err != nil {
+		t.Fatalf("ikinci adres eklenmeli: %v", err)
+	}
+	read, err := f.service.Addresses(ctx, registered.User.ID)
+	if err != nil || len(read.Items) != 2 || read.Items[0].Title != "Ev" || read.Items[1].Title != "Annem" {
+		t.Errorf("defter kayit sirasinda iki adres tasimali: %+v %v", read, err)
+	}
+}
+
+func TestAddAddressRejectsTakenTitle(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	registered := f.register(t)
+	if _, err := f.service.AddAddress(ctx, registered.User.ID, homeInput("Ev")); err != nil {
+		t.Fatalf("ilk adres eklenmeli: %v", err)
+	}
+
+	_, err := f.service.AddAddress(ctx, registered.User.ID, homeInput("Ev"))
+
+	if codeOf(err) != apperror.CodeValidationFailed || detailOf(err, auth.FieldTitle) != "Bu adla kayıtlı bir adresin var" {
+		t.Errorf("ayni adla ikinci adres alan hatasi olmali: %v", err)
+	}
+}
+
+func TestAddAddressStopsAtTheBookLimit(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	registered := f.register(t)
+	for i := range auth.MaxSavedAddresses {
+		if _, err := f.service.AddAddress(ctx, registered.User.ID, homeInput(fmt.Sprintf("Adres %d", i))); err != nil {
+			t.Fatalf("%d. adres eklenmeli: %v", i+1, err)
+		}
+	}
+
+	_, err := f.service.AddAddress(ctx, registered.User.ID, homeInput("Fazla"))
+
+	if codeOf(err) != apperror.CodeValidationFailed || !strings.Contains(detailOf(err, auth.FieldAddresses), fmt.Sprint(auth.MaxSavedAddresses)) {
+		t.Errorf("dolu defter alan hatasi olmali: %v", err)
+	}
+}
+
+func TestAddAddressForDeletedUserIsUnauthorized(t *testing.T) {
+	f := newFixture(t)
+
+	_, err := f.service.AddAddress(context.Background(), ids.New(ids.User), homeInput("Ev"))
+
+	if codeOf(err) != apperror.CodeUnauthorized {
+		t.Errorf("olmayan kullanici UNAUTHORIZED donmeli: %v", err)
+	}
+}
+
+func TestConcurrentAddAddressWithSameTitleSucceedsOnce(t *testing.T) {
+	f := newFixture(t)
+	registered := f.register(t)
+
+	const attempts = 8
+	var wg sync.WaitGroup
+	results := make(chan error, attempts)
+	for range attempts {
+		wg.Go(func() {
+			_, err := f.service.AddAddress(context.Background(), registered.User.ID, homeInput("Ev"))
+			results <- err
+		})
+	}
+	wg.Wait()
+	close(results)
+
+	succeeded := 0
+	for err := range results {
+		if err == nil {
+			succeeded++
+		} else if codeOf(err) != apperror.CodeValidationFailed {
+			t.Errorf("kaybeden istek ad catismasi almali: %v", err)
+		}
+	}
+	if succeeded != 1 {
+		t.Errorf("ayni ad yalnizca bir kez eklenmeli, %d kez eklendi", succeeded)
+	}
+}

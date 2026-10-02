@@ -1,0 +1,8 @@
+/* Adres ekleme penceresi (T11.8): cikis basarisizsa 1. adimin ustundeki mesaj. */
+.c-address-setup__alert {
+  padding: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-danger);
+  border: var(--border-width-thin) solid var(--border-danger);
+  border-radius: var(--radius-md);
+}

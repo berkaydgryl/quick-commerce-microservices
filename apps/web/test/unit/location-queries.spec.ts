@@ -13,7 +13,11 @@ import type { QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createQueryClient } from '../../src/app/query-client';
-import { savedAddressesQuery } from '../../src/features/address/api/queries';
+import {
+  placeSearchQuery,
+  reverseGeocodeQuery,
+  savedAddressesQuery,
+} from '../../src/features/address/api/queries';
 import { addressBookState } from '../../src/features/address/services/delivery-address';
 import { nearbyMarketsQuery } from '../../src/features/markets/api/queries';
 import { marketKeys } from '../../src/features/markets/api/query-keys';
@@ -157,5 +161,48 @@ describe('adres defteri: hatadan sonraki deneme', () => {
     await retry;
     unsubscribe();
     expect(addressBookState(observer.getCurrentResult())).toBe('error');
+  });
+});
+
+describe('adres aramasi sorgusu (T11.8)', () => {
+  it('arama gonderilmeden istek gitmez; gonderilince TEK istek, liste secilir', async () => {
+    const place = { line: 'Moda Caddesi, Kadıköy', location: EV };
+    const { fetchMock, http } = clientReturning({ items: [place] });
+    const observer = new QueryObserver(queryClient(), placeSearchQuery(http, undefined));
+    const unsubscribe = observer.subscribe(() => undefined);
+
+    await settle();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    observer.setOptions(placeSearchQuery(http, 'Moda'));
+    await vi.waitFor(() => expect(observer.getCurrentResult().status).toBe('success'));
+    unsubscribe();
+
+    expect(calledUrls(fetchMock)).toEqual(['/v1/geo/search?q=Moda']);
+    expect(observer.getCurrentResult().data).toEqual([place]);
+  });
+
+  it('ters cozum hatasi TEKRAR DENENMEZ (kullanici satiri kendisi yazar)', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            success: false,
+            error: {
+              code: 'SERVICE_UNAVAILABLE',
+              message: 'x',
+              requestId: 'req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b',
+            },
+          }),
+          { status: 503 },
+        ),
+      ),
+    );
+    const http = createHttpClient({ baseUrl: '', fetch: fetchMock });
+
+    await expect(queryClient().fetchQuery(reverseGeocodeQuery(http, EV))).rejects.toMatchObject({
+      code: ERROR_CODES.SERVICE_UNAVAILABLE,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

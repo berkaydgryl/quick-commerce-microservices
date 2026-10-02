@@ -29,3 +29,20 @@ export function createIdempotencyKey(): string {
 export function isValidIdempotencyKey(key: string): boolean {
   return IDEMPOTENCY_KEY_PATTERN.test(key);
 }
+
+/**
+ * Formun niyet anahtari (T11.8): AYNI govde tekrar gonderilirse (ag koptu,
+ * "Kaydet"e yeniden basildi) ayni anahtar, govde degisince YENI anahtar.
+ * Gateway ayni anahtarla gelen farkli govdeyi 409 CONFLICT ile reddeder;
+ * kullanici formu duzeltip yeniden gonderince bu cakisma yasanmasin.
+ */
+export function createIntentKeys(create: () => string = createIdempotencyKey) {
+  let last: { readonly fingerprint: string; readonly key: string } | null = null;
+  return (body: unknown): string => {
+    const fingerprint = JSON.stringify(body);
+    if (last?.fingerprint !== fingerprint) {
+      last = { fingerprint, key: create() };
+    }
+    return last.key;
+  };
+}
