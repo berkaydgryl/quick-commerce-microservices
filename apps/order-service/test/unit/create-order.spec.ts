@@ -18,7 +18,7 @@ import { PAYMENT_METHOD } from '../../src/domain/checkout-payment.js';
 import { transitionOrder } from '../../src/domain/order.js';
 import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-order-store.js';
 import { FakePayments, TEST_CARD } from '../support/fake-payments.js';
-import { FakeStockReservations } from '../support/fake-stock-reservations.js';
+import { FakeStockReservations, TEST_LOCK_POLICY } from '../support/fake-stock-reservations.js';
 import { FakeRiskAssessment } from '../support/fake-risk-assessment.js';
 import { insertDraft, SAMPLE_PRICING } from '../support/order-builders.js';
 
@@ -48,6 +48,7 @@ beforeEach(() => {
     stock,
     outbox: repository,
     clock: fixedClock(DRAFT_AT_MS + DWELL_MS),
+    lockPolicy: TEST_LOCK_POLICY,
   });
 });
 

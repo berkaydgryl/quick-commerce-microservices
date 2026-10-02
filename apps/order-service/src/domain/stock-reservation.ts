@@ -4,11 +4,12 @@
  *
  * Yasam dongusu: taslak acilirken kilitlenir (Reserve), odeme alininca
  * kesinlesir (Commit), saga durunca birakilir (Release). Birakilamazsa kilit
- * suresi dolunca inventory'nin supurucusu stoku geri verir.
+ * suresi dolunca inventory'nin supurucusu stoku geri verir. Arada suresi
+ * ayarlanir (T11.3): orta bantta kisalir, odeme oncesi gerekirse uzar.
  */
 
-import { ERROR_CODES, ORDER_STATUS } from '@getir/core';
-import type { OrderStatus } from '@getir/core';
+import { ERROR_CODES, ORDER_STATUS, RISK_BANDS } from '@getir/core';
+import type { OrderStatus, RiskBand } from '@getir/core';
 
 import type { Order } from './order.js';
 import { TIMELINE_NOTE } from './order.js';
@@ -39,6 +40,46 @@ export type ReleaseReason = (typeof RELEASE_REASON)[keyof typeof RELEASE_REASON]
  */
 export function hasLiveReservation(order: Order, now: Date): boolean {
   return order.reservation !== undefined && order.reservation.expiresAt.getTime() > now.getTime();
+}
+
+/**
+ * Bant kilidi kisaltir mi (T11.3, roadmap "Bantlar ve aksiyonlar"): orta risk
+ * bandinda kilit 2 dk. Sure ortamdan (RESERVATION_TTL_MEDIUM_RISK_SECONDS);
+ * dusuk bant taslagin kilidiyle devam eder, yuksek ve kritik bant kilidi birakir.
+ */
+export function shortensLock(band: RiskBand): boolean {
+  return band === RISK_BANDS.MEDIUM;
+}
+
+/**
+ * Kilidin inventory'deki yeni bitisi siparise islenir (T11.3). Surum DEGISMEZ:
+ * cagiran ayni yazimda bir durum gecisi yazar (risk adimi). Kilitsiz eski
+ * siparis oldugu gibi doner.
+ */
+export function withReservationExpiry(order: Order, expiresAt: Date): Order {
+  return order.reservation === undefined
+    ? order
+    : { ...order, reservation: { ...order.reservation, expiresAt } };
+}
+
+/**
+ * Kilit uzatildi ve kaydi TEK BASINA yazilacak (odeme oncesi, T11.3): surum
+ * artar ki ayni siparisi eski haliyle yazan (supurucu) CONFLICT alsin. Durum
+ * degismez: zaman cizelgesine kayit eklenmez, olay uretilmez.
+ */
+export function rescheduleReservation(order: Order, expiresAt: Date, at: Date): Order {
+  return { ...withReservationExpiry(order, expiresAt), updatedAt: at, version: order.version + 1 };
+}
+
+/**
+ * Odeme ya da 3DS denemesinden once kilit uzatilmali mi (B21, #72): kalan sure
+ * `windowMs`'ten az. Kilitsiz eski siparis uzatilmaz.
+ */
+export function needsLockExtension(order: Order, now: Date, windowMs: number): boolean {
+  return (
+    order.reservation !== undefined &&
+    order.reservation.expiresAt.getTime() - now.getTime() < windowMs
+  );
 }
 
 /**

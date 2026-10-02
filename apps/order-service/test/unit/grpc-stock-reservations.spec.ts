@@ -1,8 +1,8 @@
 /**
- * order -> inventory gRPC istemcisi (T11.2), GERCEK tel uzerinden: sahte bir
- * inventory sunucusu ayaga kalkar. Istek cevirisi, requestId iletimi, beklenen
- * sonuclarin (stok yetmedi, kullanicinin aktif kilidi) ayrimi, sonuc sozlugu ve
- * sure siniri denenir.
+ * order -> inventory gRPC istemcisi (T11.2; uzatma ve kisaltma T11.3), GERCEK
+ * tel uzerinden: sahte bir inventory sunucusu ayaga kalkar. Istek cevirisi,
+ * requestId iletimi, beklenen sonuclarin (stok yetmedi, kullanicinin aktif
+ * kilidi, kilidin dusmesi) ayrimi, sonuc sozlugu ve sure siniri denenir.
  */
 
 import { AppError, ERROR_CODES, silentLogger } from '@getir/core';
@@ -40,8 +40,26 @@ const ORDER = {
   SLOW: 'ord_yavas',
   /** Ilk Reserve'u "ulasilamaz" doner (D17). */
   FLAKY: 'ord_kesik',
+  /** Uzatma hakki bitmis ya da kalan sure zaten kisa (T11.3). */
+  UNCHANGED: 'ord_degismedi',
+  /** Kilit dusmus: RESERVATION_EXPIRED (T11.3). */
+  LAPSED: 'ord_dustu',
 } as const;
 let flakyReserves = 0;
+let flakyExtends = 0;
+let flakyShortens = 0;
+
+/** Uzatma ve kisaltmanin ortak davranisi: siparise gore hata ya da bitisi olmayan cevap. */
+function timingFailure(orderId: string) {
+  switch (orderId) {
+    case ORDER.LAPSED:
+      return appError(ERROR_CODES.RESERVATION_EXPIRED, { orderId, reason: 'absent' });
+    case ORDER.INVALID:
+      return appError(ERROR_CODES.VALIDATION_FAILED, { additionalSeconds: 'aralik disi' });
+    default:
+      return undefined;
+  }
+}
 
 const OUTCOME_BY_ORDER: Readonly<Record<string, inventoryV1.ReservationOutcome>> = {
   ord_applied: inventoryV1.ReservationOutcome.RESERVATION_OUTCOME_APPLIED,
@@ -112,6 +130,59 @@ const implementation = {
   ): void => {
     record(call);
     callback(null, { outcome: OUTCOME_BY_ORDER[call.request.orderId] ?? 0 });
+  },
+  extendReservation: (
+    call: ServerUnaryCall<
+      inventoryV1.ExtendReservationRequest,
+      inventoryV1.ExtendReservationResponse
+    >,
+    callback: sendUnaryData<inventoryV1.ExtendReservationResponse>,
+  ): void => {
+    record(call);
+    const { orderId } = call.request;
+    if (orderId === ORDER.FLAKY) {
+      flakyExtends += 1;
+      callback(appError(ERROR_CODES.SERVICE_UNAVAILABLE, {}));
+      return;
+    }
+    const failure = timingFailure(orderId);
+    if (failure !== undefined) {
+      callback(failure);
+      return;
+    }
+    if (orderId === ORDER.NO_EXPIRY) {
+      callback(null, inventoryV1.ExtendReservationResponse.fromPartial({}));
+      return;
+    }
+    const unchanged = orderId === ORDER.UNCHANGED;
+    callback(null, {
+      expiresAt: EXPIRES_AT,
+      alreadyExtended: unchanged,
+      extensionCount: unchanged ? 3 : 1,
+    });
+  },
+  shortenReservation: (
+    call: ServerUnaryCall<
+      inventoryV1.ShortenReservationRequest,
+      inventoryV1.ShortenReservationResponse
+    >,
+    callback: sendUnaryData<inventoryV1.ShortenReservationResponse>,
+  ): void => {
+    record(call);
+    const { orderId } = call.request;
+    if (orderId === ORDER.FLAKY) {
+      flakyShortens += 1;
+      if (flakyShortens === 1) {
+        callback(appError(ERROR_CODES.SERVICE_UNAVAILABLE, {}));
+        return;
+      }
+    }
+    const failure = timingFailure(orderId);
+    if (failure !== undefined) {
+      callback(failure);
+      return;
+    }
+    callback(null, { expiresAt: EXPIRES_AT, shortened: orderId !== ORDER.UNCHANGED });
   },
 };
 
@@ -269,6 +340,94 @@ describe('GrpcStockReservations - dayaniklilik (D17)', () => {
         expiresAt: EXPIRES_AT,
       });
       expect(flakyReserves).toBe(2);
+    } finally {
+      resilient.close();
+    }
+  });
+});
+
+describe('GrpcStockReservations.extend / shorten (T11.3)', () => {
+  const MARKET = 'mkt_migros-jet-moda';
+
+  it('uzatma: siparis, market ve ek sure telde; yeni bitis ve "degisti"; requestId AYNEN iletilir', async () => {
+    seen.length = 0;
+
+    await expect(
+      stock.extend({ orderId: ORDER.LOCKED, marketId: MARKET, additionalSeconds: 60 }, scope),
+    ).resolves.toEqual({ kind: 'active', expiresAt: EXPIRES_AT, changed: true });
+    expect(seen).toEqual([
+      {
+        request: expect.objectContaining({
+          orderId: ORDER.LOCKED,
+          marketId: MARKET,
+          additionalSeconds: 60,
+        }) as unknown,
+        requestId: 'req_stok_1',
+      },
+    ]);
+  });
+
+  it('uzatma hakki bitmis: kilit duruyor ama sure degismedi (changed=false)', async () => {
+    await expect(
+      stock.extend({ orderId: ORDER.UNCHANGED, marketId: MARKET, additionalSeconds: 60 }, scope),
+    ).resolves.toEqual({ kind: 'active', expiresAt: EXPIRES_AT, changed: false });
+  });
+
+  it('kisaltma: siparis, market ve sinir telde; kalan sure zaten kisaysa changed=false', async () => {
+    seen.length = 0;
+
+    await expect(
+      stock.shorten({ orderId: ORDER.LOCKED, marketId: MARKET, maxRemainingSeconds: 120 }, scope),
+    ).resolves.toEqual({ kind: 'active', expiresAt: EXPIRES_AT, changed: true });
+    expect(seen[0]?.request).toMatchObject({ orderId: ORDER.LOCKED, maxRemainingSeconds: 120 });
+    await expect(
+      stock.shorten(
+        { orderId: ORDER.UNCHANGED, marketId: MARKET, maxRemainingSeconds: 120 },
+        scope,
+      ),
+    ).resolves.toEqual({ kind: 'active', expiresAt: EXPIRES_AT, changed: false });
+  });
+
+  it('kilit dusmus (RESERVATION_EXPIRED): hata degil SONUC, iki cagride de lapsed', async () => {
+    await expect(
+      stock.extend({ orderId: ORDER.LAPSED, marketId: MARKET, additionalSeconds: 60 }, scope),
+    ).resolves.toEqual({ kind: 'lapsed' });
+    await expect(
+      stock.shorten({ orderId: ORDER.LAPSED, marketId: MARKET, maxRemainingSeconds: 120 }, scope),
+    ).resolves.toEqual({ kind: 'lapsed' });
+  });
+
+  it('beklenmeyen hata AYNEN yukari; bitis anisiz cevapla sure varsayilmaz: INTERNAL', async () => {
+    const invalid = await rejectionOf(
+      stock.extend({ orderId: ORDER.INVALID, marketId: MARKET, additionalSeconds: 60 }, scope),
+    );
+    const noExpiry = await rejectionOf(
+      stock.extend({ orderId: ORDER.NO_EXPIRY, marketId: MARKET, additionalSeconds: 60 }, scope),
+    );
+
+    expect(invalid.code).toBe(ERROR_CODES.VALIDATION_FAILED);
+    expect(noExpiry.code).toBe(ERROR_CODES.INTERNAL);
+  });
+
+  it('D17: uzatma yeniden DENENMEZ (her cagri bir hak harcar); kisaltma denenir ve gecer', async () => {
+    const resilient = new GrpcStockReservations(`127.0.0.1:${handle.port}`, 1_000, {
+      breaker: new CircuitBreaker({ target: 'inventory', failureThreshold: 5, openMs: 60_000 }),
+      retry: { target: 'inventory', maxRetries: 2, baseDelayMs: 1 },
+    });
+    try {
+      const failure = await rejectionOf(
+        resilient.extend({ orderId: ORDER.FLAKY, marketId: MARKET, additionalSeconds: 60 }, scope),
+      );
+      expect(failure.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+      expect(flakyExtends).toBe(1);
+
+      await expect(
+        resilient.shorten(
+          { orderId: ORDER.FLAKY, marketId: MARKET, maxRemainingSeconds: 120 },
+          scope,
+        ),
+      ).resolves.toEqual({ kind: 'active', expiresAt: EXPIRES_AT, changed: true });
+      expect(flakyShortens).toBe(2);
     } finally {
       resilient.close();
     }

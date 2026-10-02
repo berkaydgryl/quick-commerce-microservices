@@ -7,10 +7,13 @@
  *
  * TEKRAR ISTEK: siparis zaten PAID ise (onay cevabi kaybolmus) ayni sonuc
  * doner, payment-svc'ye gidilmez.
+ *
+ * KILIT SURESI (T11.3): her onay denemesinden ONCE kalan sure kisaysa kilit
+ * uzatilir; kilit dusmusse kod payment-svc'ye gitmez, siparis CANCELLED + 410
+ * (lock-timing.ts; payment.cancel_requested 3DS bekleyen odemeyi kapatir).
  */
 
 import { AppError, ERROR_CODES, ORDER_STATUS } from '@getir/core';
-import type { Clock } from '@getir/core';
 import { z } from 'zod';
 
 import { PAYMENT_METHOD } from '../domain/checkout-payment.js';
@@ -19,18 +22,18 @@ import type { OrderOutbox } from '../domain/order-outbox.js';
 import type { OrderRepository } from '../domain/order-repository.js';
 import { assertTransition } from '../domain/order-state-machine.js';
 import type { Order } from '../domain/order.js';
+import { securePaymentWindow } from './lock-timing.js';
+import type { LockTimingDeps } from './lock-timing.js';
 import { findOwnOrder } from './own-order.js';
 import { failPayment, settleOrderPayment } from './payment-step.js';
-import type { StockStepDeps } from './stock-step.js';
 import type { Payments } from './payments.js';
 import type { RequestScope } from './request-scope.js';
 
-export interface ConfirmPaymentDeps extends StockStepDeps {
+export interface ConfirmPaymentDeps extends LockTimingDeps {
   readonly repository: Pick<OrderRepository, 'findById' | 'update'>;
   readonly payments: Payments;
   /** Telafi komutu icin (payment-step.ts). */
   readonly outbox: Pick<OrderOutbox, 'append'>;
-  readonly clock: Clock;
 }
 
 export interface ConfirmPaymentInput {
@@ -52,6 +55,7 @@ export function createConfirmPayment(deps: ConfirmPaymentDeps): ConfirmPayment {
       return order;
     }
     assertTransition(order.id, order.status, ORDER_STATUS.PAID);
+    const windowed = await securePaymentWindow(deps, order, scope);
 
     let result: PaymentResult;
     try {
@@ -60,13 +64,13 @@ export function createConfirmPayment(deps: ConfirmPaymentDeps): ConfirmPayment {
       if (isClosedChallenge(error)) {
         // Siparis PAYMENT_FAILED yazilir; istemci payment-svc'nin hatasini
         // (kalan hak 0, sebep: expired / attempts_exhausted) aynen gorur.
-        await failPayment(deps, order, ERROR_CODES.THREEDS_FAILED, scope);
+        await failPayment(deps, windowed, ERROR_CODES.THREEDS_FAILED, scope);
       }
       throw error;
     }
 
     // 3DS yalnizca kartli odemede vardir.
-    return (await settleOrderPayment(deps, order, PAYMENT_METHOD.CARD, result, scope)).order;
+    return (await settleOrderPayment(deps, windowed, PAYMENT_METHOD.CARD, result, scope)).order;
   };
 }
 

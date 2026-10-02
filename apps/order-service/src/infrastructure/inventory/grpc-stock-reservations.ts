@@ -1,11 +1,12 @@
 /**
- * StockReservations portunun gRPC uygulamasi: order -> inventory (T11.2).
+ * StockReservations portunun gRPC uygulamasi: order -> inventory (T11.2; uzatma
+ * ve kisaltma T11.3).
  *
  * Tasima isi service-kit callUnary'dedir (requestId, sure siniri, hata cevirisi:
  * inventory'nin x-app-error'u kodu ve ayrintisiyla AppError olur). Burasi
  * domain <-> proto cevirisini ve BEKLENEN sonuclarin ayrimini yapar: stok
- * yetmedi ve kullanicinin aktif kilidi saga'nin karar verecegi sonuclardir,
- * hata olarak yukari cikmaz.
+ * yetmedi, kullanicinin aktif kilidi ve kilidin dusmesi saga'nin karar verecegi
+ * sonuclardir, hata olarak yukari cikmaz.
  */
 
 import { AppError, ERROR_CODES, isAppError } from '@getir/core';
@@ -17,14 +18,17 @@ import { z } from 'zod';
 
 import type { RequestScope } from '../../application/request-scope.js';
 import { SETTLEMENT } from '../../application/stock-reservations.js';
-import { IDEMPOTENT, outgoingOptions } from '../grpc-resilience.js';
+import { IDEMPOTENT, NOT_IDEMPOTENT, outgoingOptions } from '../grpc-resilience.js';
 import type { ClientResilience } from '../grpc-resilience.js';
 import type {
+  ExtendLockRequest,
+  LockTiming,
   ReleaseStockRequest,
   ReserveStockOutcome,
   ReserveStockRequest,
   Settlement,
   SettleStockRequest,
+  ShortenLockRequest,
   StockReservations,
 } from '../../application/stock-reservations.js';
 
@@ -110,12 +114,61 @@ export class GrpcStockReservations implements StockReservations {
     return settlementOf(response.outcome, request.orderId);
   }
 
+  /**
+   * Uzatma (T11.3). Tekrar guvenli DEGIL: her cagri bir uzatma hakki harcar,
+   * cevabi kaybolan istegi yeniden denemek hakki bosa yakardi (D17).
+   */
+  async extend(request: ExtendLockRequest, scope: RequestScope): Promise<LockTiming> {
+    let response: inventoryV1.ExtendReservationResponse;
+    try {
+      response = await callUnary<
+        inventoryV1.ExtendReservationRequest,
+        inventoryV1.ExtendReservationResponse
+      >(
+        (message, metadata, options, callback) =>
+          this.client.extendReservation(message, metadata, options, callback),
+        inventoryV1.ExtendReservationRequest.fromPartial({
+          orderId: request.orderId,
+          marketId: request.marketId,
+          additionalSeconds: request.additionalSeconds,
+        }),
+        this.options(scope, NOT_IDEMPOTENT),
+      );
+    } catch (error: unknown) {
+      return lapsedOrThrow(error);
+    }
+    return activeTiming(response.expiresAt, !response.alreadyExtended, request.orderId);
+  }
+
+  /** Kisaltma (T11.3): ayni sinira tekrar inmek zararsiz, yeniden denenebilir. */
+  async shorten(request: ShortenLockRequest, scope: RequestScope): Promise<LockTiming> {
+    let response: inventoryV1.ShortenReservationResponse;
+    try {
+      response = await callUnary<
+        inventoryV1.ShortenReservationRequest,
+        inventoryV1.ShortenReservationResponse
+      >(
+        (message, metadata, options, callback) =>
+          this.client.shortenReservation(message, metadata, options, callback),
+        inventoryV1.ShortenReservationRequest.fromPartial({
+          orderId: request.orderId,
+          marketId: request.marketId,
+          maxRemainingSeconds: request.maxRemainingSeconds,
+        }),
+        this.options(scope, IDEMPOTENT),
+      );
+    } catch (error: unknown) {
+      return lapsedOrThrow(error);
+    }
+    return activeTiming(response.expiresAt, response.shortened, request.orderId);
+  }
+
   /** Kapanista cagrilir: acik HTTP/2 baglantisi process'i ayakta tutmasin. */
   close(): void {
     this.client.close();
   }
 
-  /** Reserve, Commit, Release siparise gore tekrar guvenli: hepsi yeniden denenebilir (D17). */
+  /** Reserve, Commit, Release ve kisaltma tekrar guvenli; uzatma degil (D17). */
   private options(scope: RequestScope, idempotent: boolean): OutgoingCallOptions {
     return outgoingOptions(scope, this.timeoutMs, this.resilience, idempotent);
   }
@@ -136,6 +189,24 @@ function expectedReserveOutcome(error: unknown): ReserveStockOutcome {
     }
   }
   throw error;
+}
+
+/** Kilidin dusmesi (RESERVATION_EXPIRED) sonuctur; gerisi hata olarak yukari gider. */
+function lapsedOrThrow(error: unknown): LockTiming {
+  if (isAppError(error) && error.code === ERROR_CODES.RESERVATION_EXPIRED) {
+    return { kind: 'lapsed' };
+  }
+  throw error;
+}
+
+/** Bitis anisiz cevapla kilit suresi varsayilmaz: INTERNAL. */
+function activeTiming(expiresAt: Date | undefined, changed: boolean, orderId: string): LockTiming {
+  if (expiresAt === undefined) {
+    throw AppError.internal('Stok servisi kilidin bitis anini dondurmedi', {
+      details: { orderId },
+    });
+  }
+  return { kind: 'active', expiresAt, changed };
 }
 
 function settlementOf(outcome: inventoryV1.ReservationOutcome, orderId: string): Settlement {

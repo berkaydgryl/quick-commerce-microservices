@@ -67,6 +67,26 @@ export const MIN_RESERVATION_TTL_SECONDS = 30;
 export const MAX_RESERVATION_TTL_SECONDS = 900;
 
 /**
+ * Banda gore kilit (T11.3, roadmap "Bantlar ve aksiyonlar"): orta risk bandinda
+ * kilidin kalan suresi risk adiminda en cok bu kadar (sn), RESERVATION_TTL_MEDIUM_RISK_SECONDS.
+ * Sinirlar kilit suresiyle ayni (30-900).
+ */
+export const DEFAULT_MEDIUM_RISK_RESERVATION_SECONDS = 120;
+
+/**
+ * Odeme oncesi uzatma (T11.3, B21, #72), RESERVATION_EXTEND_SECONDS: odeme ya
+ * da 3DS denemesinden once kalan sure bundan azsa kilit bu kadar uzatilir
+ * (inventory'de rezervasyon basina en cok 3 kez). Sinir inventory'ninkiyle
+ * ayni (1-300). Kalan sure yetiyorsa uzatma cagrisi YAPILMAZ: CreateOrder'in
+ * zaman butcesi (#69) normal yolda degismez.
+ */
+export const DEFAULT_RESERVATION_EXTEND_SECONDS = 60;
+export const MIN_RESERVATION_EXTEND_SECONDS = 1;
+export const MAX_RESERVATION_EXTEND_SECONDS = 300;
+
+export const MS_PER_SECOND = 1_000;
+
+/**
  * Gateway'in doldurdugu risk sinyali metinlerinin (IP, sehir, cihaz kimligi)
  * en uzun hali (T7.5). Deger yorumlanmaz, risk-svc'ye tasinir; sinir yalnizca
  * sinirsiz metnin kapidan gecmemesi icindir (IPv6 45 karakterdir).

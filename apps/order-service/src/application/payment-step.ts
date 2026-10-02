@@ -7,6 +7,9 @@
  * CONFLICT alir. Cakismanin sebebi ayni odemenin es zamanli ikinci istegiyse
  * (siparis zaten PAID) iade YAPILMAZ: kazanan istek siparisi odenmis yazmistir.
  *
+ * KILIT SURESI (T11.3): cekimden ONCE kalan sure kisaysa kilit uzatilir; kilit
+ * dusmusse para CEKILMEZ, siparis CANCELLED + 410 (lock-timing.ts).
+ *
  * STOK (T11.2): odeme alininca kilit PAID'den ONCE kesinlesir (Commit) - "odendi
  * ama stok kesinlesmedi" durumu olusmaz. Commit gecici hata verirse siparis odeme
  * bekler kalir; ayni istek tekrar gelince cekim idempotent ilk sonucu doner,
@@ -15,7 +18,7 @@
  */
 
 import { AppError, ERROR_CODES, ORDER_STATUS } from '@getir/core';
-import type { Clock, ErrorCode } from '@getir/core';
+import type { ErrorCode } from '@getir/core';
 
 import {
   chargeIdempotencyKey,
@@ -31,19 +34,19 @@ import type { OrderRepository } from '../domain/order-repository.js';
 import type { Order } from '../domain/order.js';
 import { transitionOrder } from '../domain/order.js';
 import { RELEASE_REASON } from '../domain/stock-reservation.js';
+import { securePaymentWindow } from './lock-timing.js';
+import type { LockTimingDeps } from './lock-timing.js';
 import type { Payments } from './payments.js';
 import { refundCharge } from './refund-step.js';
 import type { RequestScope } from './request-scope.js';
 import { SETTLEMENT } from './stock-reservations.js';
 import { commitStock, releaseStock } from './stock-step.js';
-import type { StockStepDeps } from './stock-step.js';
 
-export interface PaymentStepDeps extends StockStepDeps {
+export interface PaymentStepDeps extends LockTimingDeps {
   readonly repository: Pick<OrderRepository, 'update' | 'findById'>;
   readonly payments: Payments;
   /** Telafi komutu (T7.3): dogrudan iade basarisizsa kalici olarak yazilir. */
   readonly outbox: Pick<OrderOutbox, 'append'>;
-  readonly clock: Clock;
 }
 
 export interface CheckoutResult {
@@ -66,21 +69,22 @@ export async function chargeOrder(
 ): Promise<CheckoutResult> {
   const policy = paymentPolicyOf(order);
   assertPaymentMethodAllowed(order.id, choice.method, policy);
+  const windowed = await securePaymentWindow(deps, order, scope);
 
   const result = await deps.payments.charge(
     {
-      orderId: order.id,
-      userId: order.userId,
-      amountMinor: order.pricing.totalMinor,
-      currency: order.pricing.currency,
+      orderId: windowed.id,
+      userId: windowed.userId,
+      amountMinor: windowed.pricing.totalMinor,
+      currency: windowed.pricing.currency,
       method: choice.method,
       ...(choice.cardToken === undefined ? {} : { cardToken: choice.cardToken }),
-      idempotencyKey: chargeIdempotencyKey(order.id),
+      idempotencyKey: chargeIdempotencyKey(windowed.id),
       requireThreeDs: policy.requireThreeDs,
     },
     scope,
   );
-  return settleOrderPayment(deps, order, choice.method, result, scope);
+  return settleOrderPayment(deps, windowed, choice.method, result, scope);
 }
 
 /** Odeme sonucunu siparise isler: PAID, PAYMENT_FAILED ya da 3DS beklemesi. */
