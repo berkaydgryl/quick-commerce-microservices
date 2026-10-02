@@ -44,6 +44,8 @@ packages/service-kit/
 │   │   ├── proto.ts               # çalışma zamanında .proto yükleme
 │   │   ├── request.ts             # parseRequest: unary ve Watch aynı kapıdan (D5)
 │   │   ├── rpc-metrics.ts         # grpc_server_requests_total + süre histogramı (T10.5)
+│   │   ├── circuit-breaker.ts     # bağımlı servise devre kesici (D17)
+│   │   ├── client-metrics.ts      # devre durumu, reddedilen çağrı, yeniden deneme metrikleri (D17)
 │   │   ├── server.ts              # startGrpcServer (açılış)
 │   │   ├── tracing.ts             # sunucu/istemci span'i, traceparent (D15)
 │   │   ├── status.ts              # toServiceError / fromServiceError
@@ -207,6 +209,29 @@ curl -s localhost:51051/metrics | grep grpc_server_requests_total
 **Kimlik, kullanıcı ya da istek verisi etiket olmaz.** Ad ve etiket kuralı `@getir/observability`
 README'sinde. İşçi metrikleri (outbox, tüketici, süpürücü) aynı uçtan görünür; tanımları sahibi
 olan servistedir.
+
+## Giden çağrının dayanıklılığı (D17)
+
+`callUnary`'nin iki isteğe bağlı seçeneği var; ikisi de verilmezse yalnızca süre sınırı geçerlidir.
+
+- **`breaker` (devre kesici):** `new CircuitBreaker({ target, failureThreshold, openMs, logger })`,
+  her bağımlı servise bir tane. Üst üste `failureThreshold` "ulaşılamaz" hatada devre açılır ve
+  `openMs` boyunca çağrı ağa hiç gitmeden `SERVICE_UNAVAILABLE` alır. Süre dolunca tek bir deneme
+  çağrısına izin verilir: cevap gelirse devre kapanır, gelmezse yeniden açılır. Açılış WARN,
+  kapanış INFO satırıdır.
+- **Neyin hata sayıldığı:** yalnızca `SERVICE_UNAVAILABLE` sınıfı (bağlantı yok, süre doldu,
+  karşı taraf hizmet veremiyor). İş hataları (kart reddi, stok yetmedi, doğrulama) servisin
+  çalıştığını gösterir; devreyi açmaz, aksine sayacı sıfırlar.
+- **`retry` (yeniden deneme):** `{ target, maxRetries, baseDelayMs }`. **Yalnızca idempotent
+  çağrıda** verilir (anahtarlı ya da okuma). Yalnızca "ulaşılamaz" sınıfında denenir. Denemeler
+  çağrının **tek süre sınırını paylaşır**, yani toplam süre `timeoutMs`'i aşmaz. Bekleme üstel artar
+  ve rastgele kaydırılır; kalan süre 50 ms'nin altındaysa deneme başlatılmaz.
+- **Metrikler** (`client-metrics.ts`):
+  - `grpc_client_breaker_state{target}`: 0 kapalı, 1 yarı açık, 2 açık;
+  - `grpc_client_breaker_rejected_total{target}`;
+  - `grpc_client_retries_total{target}`.
+
+  Etiket yalnızca bağımlı servisin adıdır.
 
 ## İzler (D15, ADR-20)
 

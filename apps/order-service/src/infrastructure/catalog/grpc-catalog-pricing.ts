@@ -17,6 +17,8 @@ import type { RequestScope } from '../../application/request-scope.js';
 import { ITEM_UNIT } from '../../domain/order-item.js';
 import type { ItemUnit } from '../../domain/order-item.js';
 import type { CatalogOffer } from '../../domain/price-draft.js';
+import { IDEMPOTENT, outgoingOptions } from '../grpc-resilience.js';
+import type { ClientResilience } from '../grpc-resilience.js';
 
 const UNIT_FROM_PROTO: Readonly<Record<commonV1.Unit, ItemUnit>> = {
   [commonV1.Unit.UNIT_UNSPECIFIED]: ITEM_UNIT.UNSPECIFIED,
@@ -33,6 +35,7 @@ export class GrpcCatalogPricing implements CatalogPricing {
   constructor(
     address: string,
     private readonly timeoutMs: number,
+    private readonly resilience: ClientResilience = {},
   ) {
     // TLS YOK: servisler yalnizca ic agda konusur (gateway havuzuyla ayni karar).
     this.client = new catalogV1.CatalogServiceClient(address, credentials.createInsecure());
@@ -43,7 +46,8 @@ export class GrpcCatalogPricing implements CatalogPricing {
       (request, metadata, options, callback) =>
         this.client.getMarket(request, metadata, options, callback),
       { marketId },
-      { requestId: scope.requestId, timeoutMs: this.timeoutMs },
+      // Okuma: yeniden denenebilir (D17).
+      outgoingOptions(scope, this.timeoutMs, this.resilience, IDEMPOTENT),
     );
 
     const rules = response.market?.pricingRules;
@@ -69,7 +73,8 @@ export class GrpcCatalogPricing implements CatalogPricing {
       (request, metadata, options, callback) =>
         this.client.batchGetOffers(request, metadata, options, callback),
       { marketId, productIds: [...productIds] },
-      { requestId: scope.requestId, timeoutMs: this.timeoutMs },
+      // Okuma: yeniden denenebilir (D17).
+      outgoingOptions(scope, this.timeoutMs, this.resilience, IDEMPOTENT),
     );
 
     // catalog zaten yalnizca aktif teklifi `offers`a koyar (T9.3); filtre,

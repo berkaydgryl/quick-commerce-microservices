@@ -76,3 +76,10 @@ export const SERVING_STATUS = {
 } as const;
 
 export type ServingStatus = (typeof SERVING_STATUS)[keyof typeof SERVING_STATUS];
+
+/**
+ * Yeniden deneme (D17): bir sonraki deneme icin cagrinin ortak suresinden en az
+ * bu kadar kalmali. Daha azinda deneme baslatilmaz; anlamsiz kisa bir deneme
+ * yalnizca son hatayi gizlerdi.
+ */
+export const RETRY_MIN_REMAINING_MS = 50;

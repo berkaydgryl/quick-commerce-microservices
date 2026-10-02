@@ -6,7 +6,12 @@
 
 import { AppError, ERROR_CODES, RISK_BANDS, silentLogger } from '@getir/core';
 import { riskV1 } from '@getir/proto';
-import { REQUEST_ID_METADATA_KEY, startGrpcServer } from '@getir/service-kit';
+import {
+  CircuitBreaker,
+  REQUEST_ID_METADATA_KEY,
+  startGrpcServer,
+  toServiceError,
+} from '@getir/service-kit';
 import type { GrpcServerHandle } from '@getir/service-kit';
 import type { sendUnaryData, ServerUnaryCall } from '@grpc/grpc-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -21,6 +26,9 @@ const scope = { requestId: 'req_risk_1', logger: silentLogger };
 const seen: { context: riskV1.RiskContext | undefined; requestId: unknown }[] = [];
 
 const BANDSIZ_USER = 'usr_bantsiz';
+/** Ilk Evaluate'i "ulasilamaz" donen kullanici (D17): kac cagri gordugu sayilir. */
+const KESIK_USER = 'usr_kesik';
+let kesikCalls = 0;
 const YAVAS_USER = 'usr_yavas';
 
 const implementation = {
@@ -33,6 +41,15 @@ const implementation = {
       requestId: call.metadata.get(REQUEST_ID_METADATA_KEY)[0],
     });
     const userId = call.request.context?.userId;
+    if (userId === KESIK_USER) {
+      kesikCalls += 1;
+      if (kesikCalls === 1) {
+        callback(
+          toServiceError(new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'risk gecici kapali')),
+        );
+        return;
+      }
+    }
     const band =
       userId === BANDSIZ_USER
         ? riskV1.RiskBand.RISK_BAND_UNSPECIFIED
@@ -169,5 +186,22 @@ describe('GrpcRiskAssessment', () => {
     const error = await rejectionOf(risk.evaluate(context({ userId: YAVAS_USER }), scope));
 
     expect(error.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+  });
+});
+
+describe('GrpcRiskAssessment - dayaniklilik (D17)', () => {
+  it('Evaluate yeniden DENENMEZ: her cagri risk-svc te yeni bir degerlendirme kaydi yazar', async () => {
+    const resilient = new GrpcRiskAssessment(`127.0.0.1:${handle.port}`, TIMEOUT_MS, {
+      breaker: new CircuitBreaker({ target: 'risk', failureThreshold: 5, openMs: 60_000 }),
+      retry: { target: 'risk', maxRetries: 2, baseDelayMs: 1 },
+    });
+    try {
+      const error = await rejectionOf(resilient.evaluate(context({ userId: KESIK_USER }), scope));
+
+      expect(error.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+      expect(kesikCalls).toBe(1);
+    } finally {
+      resilient.close();
+    }
   });
 });
