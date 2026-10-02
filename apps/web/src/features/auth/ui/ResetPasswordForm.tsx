@@ -1,22 +1,21 @@
-import type { LoginCardContent, RegisterRequest } from '@getir/contracts';
+import type { LoginCardContent, ResetPasswordRequest } from '@getir/contracts';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 
 import { usePhoneRegistration } from '../hooks/usePhoneRegistration';
-import { useRegister } from '../hooks/useRegister';
+import { useResetPassword } from '../hooks/useResetPassword';
 import { countryByCode, countryByDialCode } from '../services/country';
 import {
   completePhone,
   earlyPhoneProblem,
-  REGISTER_FIELDS,
-  registerFormSchema,
+  RESET_PASSWORD_FIELDS,
+  resetPasswordFormSchema,
 } from '../services/form-schemas';
-import type { RegisterFormValues } from '../services/form-schemas';
+import type { ResetPasswordFormValues } from '../services/form-schemas';
 import type { PhoneEntry } from '../services/auth-route-state';
 import { formFeedback } from '../services/server-errors';
 
-import { AuthField } from './AuthField';
 import styles from './AuthForm.module.css';
 import { CountryCodeSelect } from './CountryCodeSelect';
 import { focusFirstInvalid, showServerErrors } from './form-errors';
@@ -26,28 +25,30 @@ import { PhoneNotice } from './PhoneNotice';
 import type { AuthSwitchTarget } from './PhoneNotice';
 import { PhoneRow } from './PhoneRow';
 
-interface RegisterFormProps {
+interface ResetPasswordFormProps {
   readonly content: LoginCardContent;
-  /** Giris penceresinden gelen numara: form dolu acilir. */
+  /** Giris penceresinden ya da karttan gelen numara: form dolu acilir. */
   readonly initialEntry: PhoneEntry | null;
   /** Yazilan numara (bossa null): pencerenin alt bandi giris penceresine tasir. */
   readonly onPhoneChange: (entry: PhoneEntry | null) => void;
-  /** Kayitli numara uyarisindaki "Giris yap" baglantisi (T11.7). */
-  readonly loginSwitch: AuthSwitchTarget;
+  /** Kayitsiz numara uyarisindaki "Kayit ol" baglantisi. */
+  readonly registerSwitch: AuthSwitchTarget;
 }
 
 /**
- * Kayit formu (T8.5; T11.6'dan beri kayit penceresinde, ulke kodu seciciyle):
- * ad soyad, telefon ve sifre; acilinca ad soyada odaklanir. Kayitli numara
- * PHONE_ALREADY_REGISTERED ile telefon alaninin altinda gorunur.
+ * Sifre yenileme formu (T11.9; demo akisi, kullanicinin karari): telefon ve
+ * yeni sifre. Kod sorulmaz; uc ve bu form yalnizca gelistirmede vardir.
+ * Basarili yenileme oturumu acar (eski oturumlar kapanir); yonlendirmeyi
+ * sayfa yapar. Numara geldiyse sifreye, gelmediyse telefona odaklanir.
+ * Kayitsiz numara yazilinca giris penceresindeki uyari cikar.
  */
-export function RegisterForm({
+export function ResetPasswordForm({
   content,
   initialEntry,
   onPhoneChange,
-  loginSwitch,
-}: RegisterFormProps) {
-  const registration = useRegister();
+  registerSwitch,
+}: ResetPasswordFormProps) {
+  const reset = useResetPassword();
   const [formMessage, setFormMessage] = useState<string | null>(null);
   const [countryCode, setCountryCode] = useState(
     () =>
@@ -58,7 +59,7 @@ export function RegisterForm({
       '',
   );
   const dialCode = countryByCode(content.countries, countryCode)?.dialCode ?? '';
-  const schema = useMemo(() => registerFormSchema(dialCode), [dialCode]);
+  const schema = useMemo(() => resetPasswordFormSchema(dialCode), [dialCode]);
   const {
     control,
     register,
@@ -66,61 +67,55 @@ export function RegisterForm({
     setError,
     setFocus,
     formState: { errors, isSubmitting },
-  } = useForm<RegisterFormValues, unknown, RegisterRequest>({
+  } = useForm<ResetPasswordFormValues, unknown, ResetPasswordRequest>({
     resolver: zodResolver(schema),
-    defaultValues: { fullName: '', phone: initialEntry?.digits ?? '', password: '' },
+    defaultValues: { phone: initialEntry?.digits ?? '', password: '' },
     // Odak sirasi form-errors.ts'te: react-hook-form kayit sirasiyla gezer.
     shouldFocusError: false,
   });
   const phoneDigits = useWatch({ control, name: 'phone' });
-  // Numara tamamlaninca sorulur (T11.7): kayitliysa ad ve sifre yazilmadan uyarilir.
   const registered = usePhoneRegistration(completePhone(phoneDigits, dialCode));
+  const startsWithPhone = initialEntry === null;
 
   useEffect(() => {
-    setFocus('fullName');
-  }, [setFocus]);
+    setFocus(startsWithPhone ? 'phone' : 'password');
+  }, [setFocus, startsWithPhone]);
 
   useEffect(() => {
     onPhoneChange(phoneDigits === '' ? null : { dialCode, digits: phoneDigits });
   }, [phoneDigits, dialCode, onPhoneChange]);
 
-  const submit = async (request: RegisterRequest): Promise<void> => {
+  const submit = async (request: ResetPasswordRequest): Promise<void> => {
     setFormMessage(null);
     try {
-      await registration.mutateAsync(request);
+      await reset.mutateAsync(request);
     } catch (error) {
-      const feedback = formFeedback(error, REGISTER_FIELDS);
-      showServerErrors(REGISTER_FIELDS, feedback.fields, setError);
+      const feedback = formFeedback(error, RESET_PASSWORD_FIELDS);
+      showServerErrors(RESET_PASSWORD_FIELDS, feedback.fields, setError);
       setFormMessage(feedback.message);
     }
   };
 
-  const { register: text } = content;
+  const { resetPassword: text } = content;
   return (
     <form
       className={styles['c-auth-form']}
       noValidate
       onSubmit={(event) =>
         void handleSubmit(submit, (invalid) =>
-          focusFirstInvalid(REGISTER_FIELDS, invalid, setFocus),
+          focusFirstInvalid(RESET_PASSWORD_FIELDS, invalid, setFocus),
         )(event)
       }
     >
+      <p className={styles['c-auth-form__description']}>{text.description}</p>
       {formMessage !== null && (
         <p className={styles['c-auth-form__alert']} role="alert">
           {formMessage}
         </p>
       )}
-      <AuthField
-        id="kayit-ad"
-        label={text.fullNameLabel}
-        autoComplete="name"
-        error={errors.fullName?.message}
-        {...register('fullName')}
-      />
       <PhoneRow>
         <CountryCodeSelect
-          id="kayit-ulke"
+          id="yenile-ulke"
           label={content.countryLabel}
           countries={content.countries}
           value={countryCode}
@@ -132,7 +127,7 @@ export function RegisterForm({
           render={({ field, fieldState }) => (
             <PhoneField
               ref={field.ref}
-              id="kayit-telefon"
+              id="yenile-telefon"
               name={field.name}
               label={content.phoneLabel}
               placeholder={content.phonePlaceholder}
@@ -145,15 +140,15 @@ export function RegisterForm({
           )}
         />
       </PhoneRow>
-      {registered === true && errors.phone === undefined && (
+      {registered === false && errors.phone === undefined && (
         <PhoneNotice
-          message={text.knownPhoneNotice}
-          linkLabel={text.loginLinkLabel}
-          target={loginSwitch}
+          message={content.login.unknownPhoneNotice}
+          linkLabel={content.login.registerLinkLabel}
+          target={registerSwitch}
         />
       )}
       <PasswordField
-        id="kayit-sifre"
+        id="yenile-sifre"
         label={text.passwordLabel}
         toggleLabel={content.showPasswordLabel}
         autoComplete="new-password"

@@ -53,6 +53,13 @@ export function LoginPage() {
     to: withNextPath(AUTH_ROUTES.register, next),
     state: { phoneEntry: entry ?? undefined, fromApp },
   };
+  // "Sifremi unuttum" (T11.9) yalnizca gelistirme paketinde; numarayla gider.
+  const forgotPassword = __DEMO_PASSWORD_RESET__
+    ? {
+        to: withNextPath(AUTH_ROUTES.forgotPassword, next),
+        state: { phoneEntry: entry ?? undefined, fromApp },
+      }
+    : undefined;
   return (
     <WelcomePage
       renderDialog={(content) => (
@@ -75,6 +82,7 @@ export function LoginPage() {
             initialPassword={demo ? DEMO_INITIAL_PASSWORD : ''}
             onPhoneChange={setEntry}
             registerSwitch={registerSwitch}
+            forgotPassword={forgotPassword}
             renderPrefill={renderDemo}
           />
         </AuthDialog>

@@ -663,3 +663,61 @@ func TestConcurrentAddAddressWithSameTitleSucceedsOnce(t *testing.T) {
 		t.Errorf("ayni ad yalnizca bir kez eklenmeli, %d kez eklendi", succeeded)
 	}
 }
+
+const newPassword = "Yeni-Parola-2026"
+
+func TestResetPasswordChangesPasswordAndSignsIn(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	registered := f.register(t)
+
+	grant, err := f.service.ResetPassword(ctx, auth.ResetPasswordInput{Phone: phone, Password: newPassword}, auth.RequestMeta{IPAddress: "203.0.113.9"})
+	if err != nil {
+		t.Fatalf("sifre yenilenmeli: %v", err)
+	}
+
+	// Dogrudan giris: yeni oturumun jetonlari calisir.
+	if grant.User != registered.User || grant.AccessToken == "" {
+		t.Errorf("yenileme oturum acmali: %+v", grant)
+	}
+	if _, err := f.service.Refresh(ctx, grant.RefreshToken); err != nil {
+		t.Errorf("yeni oturum yenilenebilmeli: %v", err)
+	}
+	// Eski sifre gecmez, yenisi gecer.
+	if _, err := f.service.Login(ctx, auth.LoginInput{Phone: phone, Password: password}, auth.RequestMeta{}); codeOf(err) != apperror.CodeInvalidCredentials {
+		t.Errorf("eski sifre INVALID_CREDENTIALS donmeli: %v", err)
+	}
+	if _, err := f.service.Login(ctx, auth.LoginInput{Phone: phone, Password: newPassword}, auth.RequestMeta{}); err != nil {
+		t.Errorf("yeni sifreyle giris yapilmali: %v", err)
+	}
+}
+
+func TestResetPasswordClosesEveryOldSession(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	registered := f.register(t)
+	other, err := f.service.Login(ctx, auth.LoginInput{Phone: phone, Password: password}, auth.RequestMeta{})
+	if err != nil {
+		t.Fatalf("ikinci cihaz girisi: %v", err)
+	}
+
+	if _, err := f.service.ResetPassword(ctx, auth.ResetPasswordInput{Phone: phone, Password: newPassword}, auth.RequestMeta{}); err != nil {
+		t.Fatalf("sifre yenilenmeli: %v", err)
+	}
+
+	for name, token := range map[string]string{"kayit": registered.RefreshToken, "baska cihaz": other.RefreshToken} {
+		if _, err := f.service.Refresh(ctx, token); codeOf(err) != apperror.CodeUnauthorized {
+			t.Errorf("%s oturumu kapanmali: %v", name, err)
+		}
+	}
+}
+
+func TestResetPasswordForUnknownPhoneIsFieldError(t *testing.T) {
+	f := newFixture(t)
+
+	_, err := f.service.ResetPassword(context.Background(), auth.ResetPasswordInput{Phone: "+905559998877", Password: newPassword}, auth.RequestMeta{})
+
+	if codeOf(err) != apperror.CodeValidationFailed || detailOf(err, auth.FieldPhone) != "Bu numarayla kayıtlı bir hesap yok" {
+		t.Errorf("kayitsiz numara telefon alaninda hata olmali: %v", err)
+	}
+}

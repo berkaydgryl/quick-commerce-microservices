@@ -34,6 +34,9 @@ type UserStore interface {
 	RecordLogin(ctx context.Context, userID string, login LoginState) (LoginState, error)
 	// CountByRegistrationDevice, cihazdan acilmis hesap sayisi.
 	CountByRegistrationDevice(ctx context.Context, deviceID string) (int, error)
+	// SetPasswordHash, kullanicinin sifre ozetini degistirir (T11.9); kullanici
+	// yoksa ErrUserNotFound.
+	SetPasswordHash(ctx context.Context, userID, passwordHash string) error
 	// AddAddress, adresi adres defterinin sonuna ATOMIK ekler ve guncel
 	// kullaniciyi doner (T11.8). Ayni adla adres varsa ErrAddressTitleTaken,
 	// defterde max adres varsa ErrAddressBookFull, kullanici yoksa
@@ -54,4 +57,7 @@ type SessionStore interface {
 	// ByID, kimlige gore oturum; yoksa ErrSessionNotFound. Suresi dolmus ama
 	// TTL'in henuz silmedigi kaydi da doner: sureyi cagiran denetler.
 	ByID(ctx context.Context, id string) (Session, error)
+	// RevokeAllForUser, kullanicinin BUTUN oturumlarini siler ve silinen sayisini
+	// doner (T11.9: sifre degisince eski cihazlar disari cikar).
+	RevokeAllForUser(ctx context.Context, userID string) (int, error)
 }

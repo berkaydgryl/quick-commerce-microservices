@@ -89,8 +89,11 @@ type LoginCard struct {
 	CloseLabel        string         `json:"closeLabel"`
 	ShowPasswordLabel string         `json:"showPasswordLabel"`
 	Countries         []PhoneCountry `json:"countries"`
-	Login             LoginStep      `json:"login"`
-	Register          RegisterStep   `json:"register"`
+	// ForgotPasswordLabel, karttaki ve giris penceresindeki "Sifremi unuttum" (T11.9).
+	ForgotPasswordLabel string            `json:"forgotPasswordLabel"`
+	Login               LoginStep         `json:"login"`
+	Register            RegisterStep      `json:"register"`
+	ResetPassword       ResetPasswordStep `json:"resetPassword"`
 }
 
 // PhoneCountry, ulke kodu secicisinin bir satiri. FlagURL dosyada goreli yol.
@@ -122,6 +125,17 @@ type RegisterStep struct {
 	LoginLinkLabel string `json:"loginLinkLabel"`
 	// KnownPhoneNotice, kayitli numara yazilinca telefonun altindaki uyari (T11.7).
 	KnownPhoneNotice string `json:"knownPhoneNotice"`
+}
+
+// ResetPasswordStep, sifre yenileme penceresi (T11.9): telefon ve yeni sifre.
+type ResetPasswordStep struct {
+	Title          string `json:"title"`
+	Description    string `json:"description"`
+	PasswordLabel  string `json:"passwordLabel"`
+	SubmitLabel    string `json:"submitLabel"`
+	PendingLabel   string `json:"pendingLabel"`
+	LoginPrompt    string `json:"loginPrompt"`
+	LoginLinkLabel string `json:"loginLinkLabel"`
 }
 
 // CategoriesHeader, kategori bolumunun basligi; liste /v1/categories'ten gelir.

@@ -24,6 +24,18 @@ type loginBody struct {
 	Password string `json:"password"`
 }
 
+// resetPasswordBody, POST /v1/auth/password-reset (resetPasswordRequestSchema; T11.9).
+type resetPasswordBody struct {
+	Phone    string `json:"phone"`
+	Password string `json:"password"`
+}
+
+func (b resetPasswordBody) toInput(errs fieldErrors) auth.ResetPasswordInput {
+	input := auth.ResetPasswordInput{Phone: b.Phone, Password: b.Password}
+	collect(errs, input.Check())
+	return input
+}
+
 // addressCreateBody, POST /v1/me/addresses (createAddressRequestSchema; T11.8).
 type addressCreateBody struct {
 	Title     string        `json:"title"`

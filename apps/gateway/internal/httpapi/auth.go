@@ -79,6 +79,34 @@ func loginHandler(authenticator UserAuthenticator, devices deviceCookies, sessio
 	}
 }
 
+// resetPasswordHandler, POST /v1/auth/password-reset (T11.9; yalnizca
+// production disinda baglanir): sifreyi degistirir, eski oturumlari kapatir ve
+// giris gibi yeni oturum acar (yenileme jetonu cerezde). Giris gibi
+// Idempotency-Key istemez: kalici kaynak yaratmaz, oturum acar; cift gonderimi
+// bekleyen dugme onler.
+func resetPasswordHandler(resetter PasswordResetter, devices deviceCookies, sessions refreshCookies) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if err := rejectUnknownQuery(c); err != nil {
+			return err
+		}
+		var body resetPasswordBody
+		if err := decodeJSONBody(c, &body); err != nil {
+			return err
+		}
+		errs := fieldErrors{}
+		input := body.toInput(errs)
+		if len(errs) > 0 {
+			return apperror.New(apperror.CodeValidationFailed, errs)
+		}
+
+		grant, err := resetter.ResetPassword(c.Context(), input, requestMeta(c, devices))
+		if err != nil {
+			return err
+		}
+		return session(c, http.StatusOK, grant, sessions)
+	}
+}
+
 // addAddressHandler, POST /v1/me/addresses (T11.8): oturumdaki kullanicinin
 // adres defterine yeni adres; cevap guncel defter (201). Kalici kayit:
 // Idempotency-Key ister (ADR-08); eksik anahtar ve govde sorunlari tek cevapta.

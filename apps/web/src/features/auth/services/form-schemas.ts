@@ -10,11 +10,17 @@
  * RegisterRequest).
  */
 
-import { fullNameSchema, passwordSchema, phoneSchema } from '@getir/contracts';
-import type { LoginRequest, RegisterRequest } from '@getir/contracts';
+import {
+  fullNameSchema,
+  PHONE_MESSAGE,
+  PHONE_MOBILE_PREFIX,
+  passwordSchema,
+  phoneSchema,
+} from '@getir/contracts';
+import type { LoginRequest, RegisterRequest, ResetPasswordRequest } from '@getir/contracts';
 import { z } from 'zod';
 
-import { toE164 } from './phone';
+import { PHONE_COUNTRY_PREFIX, toE164 } from './phone';
 
 function formPhoneSchema(dialCode: string) {
   return z
@@ -31,6 +37,24 @@ function formPhoneSchema(dialCode: string) {
 export function completePhone(digits: string, dialCode: string): string | null {
   const parsed = formPhoneSchema(dialCode).safeParse(digits);
   return parsed.success ? parsed.data : null;
+}
+
+/**
+ * Numara BITMEDEN belli olan hata (T11.9): Turkiye'de cep numarasi 5 ile
+ * baslar (PHONE_PATTERN); ilk rakam baska ise kalan rakamlar ne olursa olsun
+ * numara gecersizdir ve form gonderimi beklemeden sozlesmenin cumlesini
+ * gosterir. Bos ya da 5'le baslayan eksik numara burada hata degildir: eksiklik
+ * gonderimde soylenir (yazarken her rakamda hata gostermek rahatsiz ederdi).
+ */
+export function earlyPhoneProblem(digits: string, dialCode: string): string | undefined {
+  if (
+    dialCode !== PHONE_COUNTRY_PREFIX ||
+    digits === '' ||
+    digits.startsWith(PHONE_MOBILE_PREFIX)
+  ) {
+    return undefined;
+  }
+  return PHONE_MESSAGE;
 }
 
 /** Karsilama kartinin telefon formu: gecerli numara giris ekranina tasinir. */
@@ -53,15 +77,26 @@ export function registerFormSchema(dialCode: string) {
   }) satisfies z.ZodType<RegisterRequest, z.ZodTypeDef, unknown>;
 }
 
+/** Sifre yenileme formu (T11.9): telefon ve yeni sifre (kayittaki sifre kurali). */
+export function resetPasswordFormSchema(dialCode: string) {
+  return z.object({
+    phone: formPhoneSchema(dialCode),
+    password: passwordSchema,
+  }) satisfies z.ZodType<ResetPasswordRequest, z.ZodTypeDef, unknown>;
+}
+
 /** Formlarin tuttugu degerler: telefon 10 rakam. */
 export type PhoneEntryValues = z.input<ReturnType<typeof phoneEntrySchema>>;
 export type PhoneEntryOutput = z.output<ReturnType<typeof phoneEntrySchema>>;
 export type LoginFormValues = z.input<ReturnType<typeof loginFormSchema>>;
 export type RegisterFormValues = z.input<ReturnType<typeof registerFormSchema>>;
+export type ResetPasswordFormValues = z.input<ReturnType<typeof resetPasswordFormSchema>>;
 
 export type LoginField = keyof LoginFormValues;
 export type RegisterField = keyof RegisterFormValues;
+export type ResetPasswordField = keyof ResetPasswordFormValues;
 
 /** Sunucu hatasinin baglanabilecegi alanlar, EKRANDAKI sirayla (server-errors.ts, form-errors.ts). */
 export const LOGIN_FIELDS: readonly LoginField[] = ['phone', 'password'];
 export const REGISTER_FIELDS: readonly RegisterField[] = ['fullName', 'phone', 'password'];
+export const RESET_PASSWORD_FIELDS: readonly ResetPasswordField[] = ['phone', 'password'];

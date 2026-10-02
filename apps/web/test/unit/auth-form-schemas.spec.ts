@@ -2,6 +2,7 @@ import {
   fullNameSchema,
   loginRequestSchema,
   passwordSchema,
+  PHONE_MESSAGE,
   phoneSchema,
   registerRequestSchema,
 } from '@getir/contracts';
@@ -10,9 +11,11 @@ import type { z } from 'zod';
 
 import {
   completePhone,
+  earlyPhoneProblem,
   loginFormSchema,
   phoneEntrySchema,
   registerFormSchema,
+  resetPasswordFormSchema,
 } from '../../src/features/auth/services/form-schemas';
 
 /** Sozlesme semasinin verdigi ilk mesaj: formun gostermesi gereken cumle. */
@@ -93,5 +96,48 @@ describe('kimlik formlarinin semalari (T8.5, T11.6)', () => {
     expect(completePhone('555000000', '+90')).toBeNull();
     expect(completePhone('', '+90')).toBeNull();
     expect(completePhone('5550000001', '+49')).toBeNull();
+  });
+});
+
+describe('earlyPhoneProblem (T11.9: Turkiye cep numarasi 5 ile baslar)', () => {
+  it('ilk rakam 5 degilse numara bitmeden sozlesmenin cumlesi', () => {
+    expect(earlyPhoneProblem('1', '+90')).toBe(PHONE_MESSAGE);
+    expect(earlyPhoneProblem('12312313', '+90')).toBe(PHONE_MESSAGE);
+    expect(earlyPhoneProblem('2121234567', '+90')).toBe(PHONE_MESSAGE);
+  });
+
+  it('bos ya da 5 ile baslayan eksik numara yazarken hata degildir', () => {
+    expect(earlyPhoneProblem('', '+90')).toBeUndefined();
+    expect(earlyPhoneProblem('532', '+90')).toBeUndefined();
+  });
+
+  it('sozlesme 5 ile baslamayan 10 rakami da reddeder (gonderimde ayni cumle)', () => {
+    const result = phoneEntrySchema('+90').safeParse({ phone: '1231231312' });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toBe(PHONE_MESSAGE);
+  });
+});
+
+describe('resetPasswordFormSchema (T11.9)', () => {
+  it('telefon ve yeni sifre istek govdesine doner (E.164)', () => {
+    const result = resetPasswordFormSchema('+90').safeParse({
+      phone: '5550000001',
+      password: 'Yeni-Parola-2026',
+    });
+    expect(result.success && result.data).toEqual({
+      phone: '+905550000001',
+      password: 'Yeni-Parola-2026',
+    });
+  });
+
+  it('kayittaki kurallar: cep numarasi ve en az 8 karakter', () => {
+    const result = resetPasswordFormSchema('+90').safeParse({
+      phone: '2121234567',
+      password: 'kisa',
+    });
+    expect(fieldMessages(result)).toEqual({
+      phone: [PHONE_MESSAGE],
+      password: [contractMessage(passwordSchema, 'kisa')],
+    });
   });
 });

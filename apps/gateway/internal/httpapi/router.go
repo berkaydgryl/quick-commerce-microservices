@@ -118,6 +118,11 @@ type UserAuthenticator interface {
 	Login(ctx context.Context, input auth.LoginInput, meta auth.RequestMeta) (auth.Grant, error)
 }
 
+// PasswordResetter, POST /v1/auth/password-reset (demo sifre yenileme, T11.9).
+type PasswordResetter interface {
+	ResetPassword(ctx context.Context, input auth.ResetPasswordInput, meta auth.RequestMeta) (auth.Grant, error)
+}
+
 // PhoneChecker, POST /v1/auth/phone-check (T11.7).
 type PhoneChecker interface {
 	PhoneRegistered(ctx context.Context, input auth.PhoneCheckInput) (bool, error)
@@ -192,12 +197,15 @@ type Deps struct {
 	UserRegistrar     UserRegistrar
 	UserAuthenticator UserAuthenticator
 	PhoneChecker      PhoneChecker
-	SessionRefresher  SessionRefresher
-	SessionRevoker    SessionRevoker
-	ProfileGetter     ProfileGetter
-	AddressBook       AddressBookGetter
-	AddressAdder      AddressAdder
-	CheckoutSignals   CheckoutSignalReader
+	// PasswordResetter, demo sifre yenileme (T11.9). nil ise uc HIC baglanmaz
+	// (production: kimlik kanitlanmadan sifre degistirilemez).
+	PasswordResetter PasswordResetter
+	SessionRefresher SessionRefresher
+	SessionRevoker   SessionRevoker
+	ProfileGetter    ProfileGetter
+	AddressBook      AddressBookGetter
+	AddressAdder     AddressAdder
+	CheckoutSignals  CheckoutSignalReader
 	// Harita adres uclari (T11.8); bugun ikisini geo.Service karsilar.
 	GeoReverser GeoReverser
 	GeoSearcher GeoSearcher
@@ -289,6 +297,10 @@ func New(deps Deps) *fiber.App {
 	// Numara kontrolu (T11.7) giris gibi IP basina sinirli: kayitli numaralari
 	// toplu taramayi yavaslatir. Sayac rota basinadir, girisin hakkini yemez.
 	v1.Post("/auth/phone-check", authByIP, phoneCheckHandler(deps.PhoneChecker))
+	// Demo sifre yenileme (T11.9): yalnizca verildiyse; giris gibi IP basina sinirli.
+	if deps.PasswordResetter != nil {
+		v1.Post("/auth/password-reset", authByIP, resetPasswordHandler(deps.PasswordResetter, devices, sessions))
+	}
 	// Yenileme ve cikis GENEL sinirda (T8.5): web her acilista sessizce yeniler;
 	// jeton 256 bit rastgele oldugu icin kaba kuvvet siniri ona gerekmez.
 	v1.Post("/auth/refresh", generalByIP, refreshHandler(deps.SessionRefresher, sessions))

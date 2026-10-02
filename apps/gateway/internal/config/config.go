@@ -112,6 +112,13 @@ func (c Config) Addr() string {
 	return fmt.Sprintf(":%d", c.Port)
 }
 
+// DemoPasswordReset, kodsuz (demo) sifre yenileme ucu acik mi (T11.9):
+// yalnizca production DISINDA. Kimlik kanitlanmadan sifre degistiren uc
+// canli ortama cikmaz; gercek SMS kodlu akis gelene kadar.
+func (c Config) DemoPasswordReset() bool {
+	return c.NodeEnv != EnvProduction
+}
+
 // MetricsPort, /metrics ucunun portu: GATEWAY_PORT + 1000 (#29).
 func (c Config) MetricsPort() int {
 	return c.Port + MetricsPortOffset

@@ -98,6 +98,22 @@ export const registerStepContentSchema = z.object({
 });
 
 /**
+ * Sifre yenileme penceresi (T11.9; "Sifremi unuttum"): telefon ve yeni sifre.
+ * Kayitsiz numara uyarisi giris adimininkiyle aynidir (login.unknownPhoneNotice).
+ */
+export const resetPasswordStepContentSchema = z.object({
+  title: contentTextSchema,
+  /** Basligin altindaki kisa aciklama. */
+  description: contentTextSchema,
+  passwordLabel: contentTextSchema,
+  submitLabel: contentTextSchema,
+  pendingLabel: contentTextSchema,
+  /** "Sifreni hatirladin mi?" + giris penceresine donen baglanti. */
+  loginPrompt: contentTextSchema,
+  loginLinkLabel: contentTextSchema,
+});
+
+/**
  * Karsilama karti (telefon + "Devam Et") ile giris ve kayit penceresinin
  * metinleri. Gelistirmeye ozel demo hesap listesinin metni burada YOKTUR: o
  * arac production paketine hic girmez.
@@ -123,8 +139,11 @@ export const loginCardContentSchema = z.object({
         message: 'ayni ulke iki kez yazilamaz',
       },
     ),
+  /** Karttaki ve giris penceresindeki "Sifremi unuttum" baglantisi (T11.9). */
+  forgotPasswordLabel: contentTextSchema,
   login: loginStepContentSchema,
   register: registerStepContentSchema,
+  resetPassword: resetPasswordStepContentSchema,
 });
 
 /** Tek boy bir gorsel: adres ve dogal boyut (yer onceden ayrilir, sayfa ziplamaz). */
@@ -260,4 +279,5 @@ export type FeatureContent = z.infer<typeof featureContentSchema>;
 export type AddressKindOption = z.infer<typeof addressKindOptionSchema>;
 export type MapContent = z.infer<typeof mapContentSchema>;
 export type AddressSetupContent = z.infer<typeof addressSetupContentSchema>;
+export type ResetPasswordStepContent = z.infer<typeof resetPasswordStepContentSchema>;
 export type WelcomeContent = z.infer<typeof welcomeContentSchema>;

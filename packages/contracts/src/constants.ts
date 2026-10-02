@@ -13,8 +13,18 @@
  * TEKRAR EDILMEZ.
  */
 
-/** Telefon: E.164, yalnizca Turkiye (ADR-12). */
-export const PHONE_PATTERN = /^\+90[0-9]{10}$/;
+/**
+ * Telefon: E.164, yalnizca Turkiye ve yalnizca CEP numarasi (ADR-12; T11.9).
+ * BTK numaralandirma plani: cep numarasi "5XX" + 7 rakam, ulke kodundan sonra
+ * 10 rakam ve ilk rakam 5 (2XX-4XX sabit hat, 8XX/9XX servis numaralari;
+ * SMS ve kurye aramasi icin cep gerekir). Operator onekleri (53X, 54X, 55X...)
+ * tek tek listelenmez: BTK yeni blok actikca liste eskirdi, numara tasima
+ * oneki operatorden ayirdi.
+ */
+export const PHONE_PATTERN = /^\+905[0-9]{9}$/;
+
+/** Cep numarasinin ilk rakami (PHONE_PATTERN): form, yanlis ilk rakami yazilir yazilmaz uyarir. */
+export const PHONE_MOBILE_PREFIX = '5';
 
 /** 3DS tek kullanimlik kodu: tam 6 rakam. */
 export const OTP_PATTERN = /^[0-9]{6}$/;

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 
 import { countryByCode } from '../services/country';
-import { phoneEntrySchema } from '../services/form-schemas';
+import { earlyPhoneProblem, phoneEntrySchema } from '../services/form-schemas';
 import type { PhoneEntryOutput, PhoneEntryValues } from '../services/form-schemas';
 import type { PhoneEntry } from '../services/auth-route-state';
 
@@ -78,7 +78,7 @@ export function PhoneEntryForm({ content, onAccepted, onPhoneChange }: PhoneEntr
               value={field.value}
               onChange={field.onChange}
               onBlur={field.onBlur}
-              error={fieldState.error?.message}
+              error={fieldState.error?.message ?? earlyPhoneProblem(field.value, dialCode)}
             />
           )}
         />

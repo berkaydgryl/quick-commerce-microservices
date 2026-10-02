@@ -7,13 +7,19 @@ import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useLogin } from '../hooks/useLogin';
 import { usePhoneRegistration } from '../hooks/usePhoneRegistration';
 import { countryByCode, countryByDialCode, countryOfPhone } from '../services/country';
-import { completePhone, LOGIN_FIELDS, loginFormSchema } from '../services/form-schemas';
+import {
+  completePhone,
+  earlyPhoneProblem,
+  LOGIN_FIELDS,
+  loginFormSchema,
+} from '../services/form-schemas';
 import type { LoginField, LoginFormValues } from '../services/form-schemas';
 import type { PhoneEntry } from '../services/auth-route-state';
 import { formFeedback } from '../services/server-errors';
 
 import styles from './AuthForm.module.css';
 import { CountryCodeSelect } from './CountryCodeSelect';
+import { ForgotPasswordLink } from './ForgotPasswordLink';
 import { focusFirstInvalid, showServerErrors } from './form-errors';
 import { PasswordField } from './PasswordField';
 import { PhoneField } from './PhoneField';
@@ -38,6 +44,8 @@ interface LoginFormProps {
   readonly onPhoneChange: (entry: PhoneEntry | null) => void;
   /** Kayitsiz numara uyarisindaki "Kayit ol" baglantisi (T11.7). */
   readonly registerSwitch: AuthSwitchTarget;
+  /** "Sifremi unuttum" (T11.9): sifre alaninin altinda; verilmezse (production) yok. */
+  readonly forgotPassword?: AuthSwitchTarget | undefined;
   /** Formun altina eklenen parca; verilen fonksiyon formu doldurur, giris yapmaz. */
   readonly renderPrefill?:
     ((fill: (credentials: LoginCredentials) => void) => ReactNode) | undefined;
@@ -54,6 +62,7 @@ export function LoginForm({
   initialPassword,
   onPhoneChange,
   registerSwitch,
+  forgotPassword,
   renderPrefill,
 }: LoginFormProps) {
   const login = useLogin();
@@ -156,7 +165,7 @@ export function LoginForm({
                 value={field.value}
                 onChange={field.onChange}
                 onBlur={field.onBlur}
-                error={fieldState.error?.message}
+                error={fieldState.error?.message ?? earlyPhoneProblem(field.value, dialCode)}
               />
             )}
           />
@@ -176,6 +185,14 @@ export function LoginForm({
           error={errors.password?.message}
           {...register('password')}
         />
+        {forgotPassword !== undefined && (
+          <ForgotPasswordLink
+            label={content.forgotPasswordLabel}
+            target={forgotPassword}
+            align="end"
+            replace
+          />
+        )}
         <button type="submit" className={styles['c-auth-form__submit']} disabled={isSubmitting}>
           {isSubmitting ? text.pendingLabel : text.submitLabel}
         </button>

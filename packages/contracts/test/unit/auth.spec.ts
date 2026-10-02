@@ -14,6 +14,7 @@ import {
   passwordSchema,
   phoneSchema,
   registerRequestSchema,
+  resetPasswordRequestSchema,
 } from '../../src/index.js';
 
 /** Semanin reddettigi degerin ilk mesaji: formun alanin altinda gosterdigi cumle. */
@@ -27,7 +28,16 @@ describe('alan mesajlari kullaniciya gorunur: Turkce karakterli (T8.5 karari)', 
   // (rules_contract_test.go). Iki taraf birlikte ASCII'ye donse o test yesil
   // kalirdi; urun karari bu testte sabitlenir.
   it.each([
-    ["+90'dan sonra 10 rakam olmalı (örnek +905321234567)", phoneSchema, '+90555'],
+    [
+      'Cep telefonu numarası 5 ile başlayan 10 rakam olmalı (örnek 532 123 45 67)',
+      phoneSchema,
+      '+90555',
+    ],
+    [
+      'Cep telefonu numarası 5 ile başlayan 10 rakam olmalı (örnek 532 123 45 67)',
+      phoneSchema,
+      '+901231231312',
+    ],
     ['en az 8 karakter olmalı', passwordSchema, 'kisa'],
     ['en fazla 72 bayt olmalı (Türkçe harfler iki bayt sayılır)', passwordSchema, 'ş'.repeat(37)],
     ['en az 2 karakter olmalı', fullNameSchema, ' A '],
@@ -63,6 +73,34 @@ describe('registerRequestSchema', () => {
 
   it('yalnizca bosluktan olusan ad reddedilir', () => {
     expect(registerRequestSchema.safeParse({ ...valid, fullName: '   ' }).success).toBe(false);
+  });
+});
+
+describe('phoneSchema: yalnizca Turkiye cep numarasi (T11.9; BTK: 5XX + 7 rakam)', () => {
+  it.each(['+905321234567', '+905550000001', '+905011234567'])('%s kabul edilir', (phone) => {
+    expect(phoneSchema.safeParse(phone).success).toBe(true);
+  });
+
+  it.each([
+    ['sabit hat (Istanbul)', '+902121234567'],
+    ['servis numarasi (0850)', '+908501234567'],
+    ['1 ile baslayan', '+901231231312'],
+    ['eksik rakam', '+90532123456'],
+  ])('%s reddedilir', (_durum, phone) => {
+    expect(phoneSchema.safeParse(phone).success).toBe(false);
+  });
+});
+
+describe('resetPasswordRequestSchema (T11.9)', () => {
+  it('telefon ve yeni sifre; kayittaki kurallar', () => {
+    expect(
+      resetPasswordRequestSchema.safeParse({ phone: '+905321234567', password: 'Yeni-Parola-2026' })
+        .success,
+    ).toBe(true);
+    expect(
+      resetPasswordRequestSchema.safeParse({ phone: '+902121234567', password: 'kisa' }).error
+        ?.issues.length,
+    ).toBe(2);
   });
 });
 

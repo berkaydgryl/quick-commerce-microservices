@@ -107,6 +107,16 @@ const WELCOME: WelcomeContent = {
       loginLinkLabel: 'Giriş yap',
       knownPhoneNotice: 'Bu numarayla kayıtlı bir hesap var.',
     },
+    forgotPasswordLabel: 'Şifremi unuttum',
+    resetPassword: {
+      title: 'Şifreni yenile',
+      description: 'Hesabının telefon numarasını ve yeni şifreni yaz.',
+      passwordLabel: 'Yeni şifre',
+      submitLabel: 'Şifreyi değiştir',
+      pendingLabel: 'Şifren değiştiriliyor…',
+      loginPrompt: 'Şifreni hatırladın mı?',
+      loginLinkLabel: 'Giriş yap',
+    },
   },
   categories: { title: 'Kategoriler' },
   appDownload: {

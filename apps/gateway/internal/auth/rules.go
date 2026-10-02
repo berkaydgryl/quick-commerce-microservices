@@ -12,7 +12,7 @@ import (
 // burada yazilidir; rules_contract_test.go iki tarafi karsilastirir: biri
 // degisip digeri unutulursa test kirilir.
 const (
-	phonePattern      = `^\+90[0-9]{10}$`
+	phonePattern      = `^\+905[0-9]{9}$`
 	passwordMinLength = 8
 	// passwordMaxBytes, BAYT: bcrypt girdinin ilk 72 baytini kullanir.
 	passwordMaxBytes  = 72
@@ -26,11 +26,14 @@ var phoneRegexp = regexp.MustCompile(phonePattern)
 // KULLANICIYA gosterir; bu yuzden Turkce karakterlerle yazilir ve sozlesmedeki
 // cumlelerle birebir aynidir (rules_contract_test.go).
 const (
-	phoneReason       = "+90'dan sonra 10 rakam olmalı (örnek +905321234567)"
+	phoneReason       = "Cep telefonu numarası 5 ile başlayan 10 rakam olmalı (örnek 532 123 45 67)"
 	passwordMinReason = "en az 8 karakter olmalı"
 	passwordMaxReason = "en fazla 72 bayt olmalı (Türkçe harfler iki bayt sayılır)"
 	fullNameMinReason = "en az 2 karakter olmalı"
 	fullNameMaxReason = "en fazla 80 karakter olmalı"
+	// phoneUnknownReason, sifre yenilemede numarayla kayitli hesap yok (T11.9;
+	// yalnizca sunucunun bildigi kural, sozlesmede cumlesi yok).
+	phoneUnknownReason = "Bu numarayla kayıtlı bir hesap yok"
 )
 
 // Alan adlari: istek govdesindekiyle ayni.
@@ -49,6 +52,12 @@ type RegisterInput struct {
 
 // LoginInput, giris girdisi.
 type LoginInput struct {
+	Phone    string
+	Password string
+}
+
+// ResetPasswordInput, sifre yenileme girdisi (T11.9: POST /v1/auth/password-reset).
+type ResetPasswordInput struct {
 	Phone    string
 	Password string
 }
@@ -78,6 +87,14 @@ func (in *RegisterInput) Check() map[string]string {
 	case length > fullNameMaxLength:
 		problems[FieldFullName] = fullNameMaxReason
 	}
+	return problems
+}
+
+// Check, sifre yenileme girdisini dogrular: kayittaki telefon ve sifre kurali.
+func (in ResetPasswordInput) Check() map[string]string {
+	problems := map[string]string{}
+	checkPhone(in.Phone, problems)
+	checkPassword(in.Password, problems)
 	return problems
 }
 

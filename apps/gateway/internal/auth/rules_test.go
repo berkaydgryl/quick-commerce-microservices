@@ -19,7 +19,8 @@ func TestRegisterCheckAcceptsValidInputAndTrimsName(t *testing.T) {
 }
 
 func TestPhoneRule(t *testing.T) {
-	for _, phone := range []string{"", "05321234567", "5321234567", "+9053212345678", "+90532123456", "+905321234a67", " +905321234567", "+445321234567"} {
+	for _, phone := range []string{"", "05321234567", "5321234567", "+9053212345678", "+90532123456", "+905321234a67", " +905321234567", "+445321234567",
+		"+901231231312", "+902121234567", "+908501234567"} {
 		if problems := (LoginInput{Phone: phone, Password: "Gizli-Parola-2026"}).Check(); problems[FieldPhone] != phoneReason {
 			t.Errorf("%q reddedilmeliydi: %v", phone, problems)
 		}
