@@ -12,6 +12,9 @@
  *      olarak goc ve kaydi tek transaction'dadir. Kayit `_id`'si surum oldugu
  *      icin kilit bir sebeple asilsa bile ayni goc iki kez kaydedilemez.
  *   5. Kilit birakilir.
+ *
+ * SURESIZ (#51): calistirici baglantinin `unbounded` gorunumunu kullanir; servisin
+ * islem suresi (MONGO_OPERATION_TIMEOUT_MS) uzun bir gocu yarida kesmez.
  */
 
 import { AppError, systemClock } from '@getir/core';
@@ -45,12 +48,13 @@ export interface MigrationRunner {
 
 export function createMigrationRunner(options: MigrationRunnerOptions): MigrationRunner {
   assertMigrationList(options.migrations);
-  const { connection, migrations } = options;
+  const { migrations } = options;
+  const database = options.connection.unbounded;
   const clock = options.clock ?? systemClock;
   const logger = options.logger.child({ component: 'migrations' });
   const records: Collection<MigrationRecord> =
-    connection.db.collection<MigrationRecord>(MIGRATIONS_COLLECTION);
-  const lock = new MongoMigrationLock(connection.db, logger, { ...options.lock, clock });
+    database.db.collection<MigrationRecord>(MIGRATIONS_COLLECTION);
+  const lock = new MongoMigrationLock(database.db, logger, { ...options.lock, clock });
 
   const readStatus = async (): Promise<MigrationStatus> => {
     try {
@@ -80,13 +84,13 @@ export function createMigrationRunner(options: MigrationRunnerOptions): Migratio
         throw toMongoAppError(error, { operation: 'migration', collection: MIGRATIONS_COLLECTION });
       }
     }
-    return connection.withTransaction((session) => work(session));
+    return database.withTransaction((session) => work(session));
   };
 
   const applyUp = (migration: Migration): Promise<MigrationRecord> =>
     inTransaction(migration, async (session) => {
       const startedAt = clock.now();
-      await migration.up({ db: connection.db, session, logger });
+      await migration.up({ db: database.db, session, logger });
       const record: MigrationRecord = {
         _id: migration.version,
         name: migration.name,
@@ -99,7 +103,7 @@ export function createMigrationRunner(options: MigrationRunnerOptions): Migratio
 
   const applyDown = (migration: Migration, record: MigrationRecord): Promise<MigrationRecord> =>
     inTransaction(migration, async (session) => {
-      await migration.down({ db: connection.db, session, logger });
+      await migration.down({ db: database.db, session, logger });
       await records.deleteOne({ _id: record._id }, session === undefined ? {} : { session });
       return record;
     });

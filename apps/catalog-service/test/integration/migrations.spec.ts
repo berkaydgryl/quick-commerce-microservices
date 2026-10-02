@@ -108,7 +108,7 @@ describe('goc 0001: arama terimlerini katla (T10.4)', () => {
     expect(await finds('süt 1', 'SUT-1L')).toBe(false);
 
     const source = await openCatalogSource(
-      { uri, dbName: DB_NAME, serverSelectionTimeoutMs: 5_000 },
+      { uri, dbName: DB_NAME, serverSelectionTimeoutMs: 5_000, operationTimeoutMs: 2_000 },
       silentLogger,
     );
     await source.close();

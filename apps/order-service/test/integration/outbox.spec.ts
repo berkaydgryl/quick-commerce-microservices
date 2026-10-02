@@ -68,7 +68,7 @@ beforeAll(async () => {
   ]);
   const uri = `${mongo.getConnectionString()}?directConnection=true`;
   store = await openOrderStore(
-    { uri, dbName: DB_NAME, serverSelectionTimeoutMs: 5_000 },
+    { uri, dbName: DB_NAME, serverSelectionTimeoutMs: 5_000, operationTimeoutMs: 2_000 },
     silentLogger,
     'test',
   );
@@ -77,6 +77,7 @@ beforeAll(async () => {
     uri,
     dbName: DB_NAME,
     serverSelectionTimeoutMs: 5_000,
+    operationTimeoutMs: 2_000,
     appName: 'order-outbox-test',
     logger: silentLogger,
   });

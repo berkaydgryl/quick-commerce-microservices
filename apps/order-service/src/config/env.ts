@@ -11,7 +11,7 @@
 
 import { envString, loadEnvOrExit } from '@getir/core';
 import type { MongoEnv } from '@getir/mongo-kit';
-import { mongoEnvSchemaFor } from '@getir/mongo-kit';
+import { mongoEnvSchemaFor, withoutOperationTimeout } from '@getir/mongo-kit';
 import type { RedisEnv } from '@getir/redis-kit';
 import { redisEnvSchema } from '@getir/redis-kit';
 import { grpcPort, serviceEnvSchema } from '@getir/service-kit';
@@ -62,10 +62,14 @@ export type SeedEnv = z.infer<typeof seedSchema> & { readonly mongo: MongoEnv };
 
 /**
  * Persona seed'inin ortami (T8.1): Mongo HER ZAMAN zorunlu (seed'in isi Mongo'ya
- * yazmaktir; MOCK'ta gecmis acilista bellege yuklenir). catalog seed'iyle ayni.
+ * yazmaktir; MOCK'ta gecmis acilista bellege yuklenir). catalog seed'iyle ayni:
+ * islem suresi YOK (#51).
  */
 export function loadSeedEnv(): SeedEnv {
-  return { ...loadEnvOrExit(seedSchema), mongo: loadEnvOrExit(mongoSchema) };
+  return {
+    ...loadEnvOrExit(seedSchema),
+    mongo: withoutOperationTimeout(loadEnvOrExit(mongoSchema)),
+  };
 }
 
 /** Goc komutunun ortami (T10.4): seed'inkiyle ayni ihtiyac, MOCK ne olursa olsun Mongo. */

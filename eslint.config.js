@@ -102,6 +102,25 @@ export default tseslint.config(
   },
 
   {
+    // #51: surucu (7.6 ve 7.7) toplu yazimin seceneklerini iki kez cozer; tutamaktan
+    // miras alinan islem suresini sureli transaction'in icinde reddeder ve yazim
+    // INTERNAL duser. Repository toplu yazimi mongo-kit'in bulkCollection()'i ile yapar.
+    name: 'getir/mongo-bulk-writes',
+    files: ['apps/*/src/**/*.ts', 'packages/*/src/**/*.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression > MemberExpression[property.name=/^(insertMany|bulkWrite)$/][object.type='MemberExpression'][object.property.name='collection']",
+          message:
+            'Toplu yazim this.bulkCollection(options) ile yapilir (#51): surucu sureli transaction icinde miras alinan timeoutMS ile insertMany/bulkWrite yi reddeder.',
+        },
+      ],
+    },
+  },
+
+  {
     // Mongo imajinin ilk acilista mongosh ile calistirdigi betikler (D14):
     // kabugun kendi globalleri vardir (process Node'dan gelir).
     name: 'getir/mongosh-scripts',

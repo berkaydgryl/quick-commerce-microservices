@@ -12,6 +12,7 @@ import {
   MongoError,
   MongoErrorLabel,
   MongoNetworkError,
+  MongoOperationTimeoutError,
   MongoServerError,
   MongoServerSelectionError,
 } from 'mongodb';
@@ -35,6 +36,20 @@ const AUTHENTICATION_FAILED_CODE = 18;
  */
 const UNAUTHORIZED_CODE = 13;
 
+/**
+ * Dugum su an yazim/okuma kabul etmiyor: birincil degil (secim suruyor, yeni
+ * hacimde replica set henuz kurulmadi) ya da kapaniyor. Beklemekle duzelir;
+ * gecici hatadir (#51: yeni hacimde seed "not primary" ile INTERNAL dusmustu).
+ *
+ * 10107 NotWritablePrimary, 13435 NotPrimaryNoSecondaryOk, 13436
+ * NotPrimaryOrSecondary, 10058 LegacyNotPrimary, 189 PrimarySteppedDown,
+ * 11600 InterruptedAtShutdown, 11602 InterruptedDueToReplStateChange,
+ * 91 ShutdownInProgress.
+ */
+const NODE_UNAVAILABLE_CODES: ReadonlySet<number> = new Set([
+  10_107, 13_435, 13_436, 10_058, 189, 11_600, 11_602, 91,
+]);
+
 export interface MongoErrorContext {
   /** Hangi islem: "insertOne", "findById"... */
   readonly operation?: string;
@@ -47,6 +62,8 @@ export interface MongoErrorContext {
  * - benzersiz indeks ihlali -> CONFLICT (cagiran taraf yeniden deneyebilir)
  * - transaction yazim cakismasi (WriteConflict) -> CONFLICT
  * - ag / sunucu secimi hatasi -> SERVICE_UNAVAILABLE (gecici, yeniden denenebilir)
+ * - islem suresi doldu (#51) -> SERVICE_UNAVAILABLE: Mongo zamaninda cevap vermedi
+ * - dugum birincil degil ya da kapaniyor -> SERVICE_UNAVAILABLE
  * - yetkisiz erisim (Unauthorized) -> INTERNAL, sebebi adiyla: yeniden deneme duzeltmez
  * - digerleri -> INTERNAL (mesaji disari sizmaz)
  */
@@ -110,7 +127,28 @@ export function toMongoAppError(error: unknown, context: MongoErrorContext = {})
     });
   }
 
+  // Sure dolunca (sunucu secimi, havuz, cevap ya da transaction'in tamami)
+  // surucu bunu firlatir. Ag hatasi gibi gecicidir; "yazilmadi" demek DEGILDIR:
+  // donmus Mongo cozulunce yolda kalan tekil yazim yine uygulanabilir (#51).
+  if (error instanceof MongoOperationTimeoutError) {
+    return new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'Veritabani zamaninda cevap vermedi', {
+      details,
+      cause: error,
+    });
+  }
+
+  if (error instanceof MongoServerError && isNodeUnavailableCode(error.code)) {
+    return new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'Veritabani su an hizmet vermiyor', {
+      details,
+      cause: error,
+    });
+  }
+
   return AppError.internal('Veritabani islemi basarisiz', { details, cause: error });
+}
+
+function isNodeUnavailableCode(code: number | string | undefined): boolean {
+  return typeof code === 'number' && NODE_UNAVAILABLE_CODES.has(code);
 }
 
 /**

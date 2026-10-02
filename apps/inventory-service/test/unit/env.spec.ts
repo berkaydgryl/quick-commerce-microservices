@@ -4,9 +4,10 @@
  */
 
 import { AppError, loadEnv } from '@getir/core';
-import { describe, expect, it } from 'vitest';
+import { NO_OPERATION_TIMEOUT } from '@getir/mongo-kit';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { serviceSchema } from '../../src/config/env.js';
+import { loadCommandEnv, loadServiceEnv, serviceSchema } from '../../src/config/env.js';
 
 describe('stok servisi ortami (supurucu, T10.3)', () => {
   it('verilmezse tur 1 sn, kilit omru 3 sn (.env.example)', () => {
@@ -32,5 +33,24 @@ describe('stok servisi ortami (supurucu, T10.3)', () => {
   it('tur sinirlari: 100 ms ile 60 sn arasi', () => {
     expect(() => loadEnv(serviceSchema, { SWEEPER_INTERVAL_MS: '50' })).toThrow(AppError);
     expect(() => loadEnv(serviceSchema, { SWEEPER_INTERVAL_MS: '60001' })).toThrow(AppError);
+  });
+});
+
+describe('stok servisi ortami: Mongo islem suresi (#51)', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('servis MONGO_OPERATION_TIMEOUT_MS ile baglanir; seed ve reseed suresiz', () => {
+    vi.stubEnv('MOCK', 'false');
+    vi.stubEnv(
+      'INVENTORY_MONGO_URI',
+      'mongodb://inventory:parola@localhost:27017/?directConnection=true&authSource=admin',
+    );
+    vi.stubEnv('REDIS_URL', 'redis://localhost:6379');
+    vi.stubEnv('MONGO_OPERATION_TIMEOUT_MS', '750');
+
+    expect(loadServiceEnv().stores?.mongo.operationTimeoutMs).toBe(750);
+    expect(loadCommandEnv().mongo.operationTimeoutMs).toBe(NO_OPERATION_TIMEOUT);
   });
 });

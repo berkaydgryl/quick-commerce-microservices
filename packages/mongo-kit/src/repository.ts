@@ -25,6 +25,7 @@ import type {
   WithId,
 } from 'mongodb';
 
+import { NO_OPERATION_TIMEOUT } from './client.js';
 import { toMongoAppError } from './errors.js';
 
 /**
@@ -51,10 +52,31 @@ function sessionOf(options: SessionOption): { session?: ClientSession } {
 export abstract class MongoRepository<TDoc extends BaseDocument> {
   protected readonly collection: Collection<TDoc>;
   protected readonly collectionName: string;
+  /** Ayni koleksiyon, islem suresi tutamaktan miras ALINMADAN (#51); bkz. bulkCollection. */
+  private readonly transactionBulkCollection: Collection<TDoc>;
 
   protected constructor(db: Db, collectionName: string) {
     this.collectionName = collectionName;
     this.collection = db.collection<TDoc>(collectionName);
+    this.transactionBulkCollection =
+      db.timeoutMS === undefined
+        ? this.collection
+        : db.client.db(db.databaseName).collection<TDoc>(collectionName);
+  }
+
+  /**
+   * Toplu yazimin (insertMany, bulkWrite) koleksiyonu. Toplu yazim HER ZAMAN buradan
+   * yapilir (eslint kurali).
+   *
+   * NEDEN (#51, surucu 7.6 ve 7.7): bu iki islem seceneklerini iki kez cozer ve
+   * tutamaktan miras alinan timeoutMS'i ikinci cozumde "isleme verilmis" sayar;
+   * sureli transaction'in icinde "An operation cannot be given a timeoutMS setting"
+   * ile reddeder (siparis yazimi INTERNAL duserdi). Oturum varsa sure miras almayan
+   * tutamak kullanilir: islemi transaction'in suresi zaten sinirlar. Oturumsuz toplu
+   * yazim sureli tutamakta kalir.
+   */
+  protected bulkCollection(options: SessionOption): Collection<TDoc> {
+    return options.session === undefined ? this.collection : this.transactionBulkCollection;
   }
 
   /**
@@ -67,13 +89,18 @@ export abstract class MongoRepository<TDoc extends BaseDocument> {
   /**
    * Indeksleri olusturur (varsa dokunmaz). Servis acilisinda bir kez cagrilir.
    * createIndexes tekrar tekrar cagrilabilir: ayni tanim varsa islem yapmaz.
+   *
+   * Islem suresiyle (#51) SINIRLANMAZ: buyuk koleksiyonda indeks kurulumunun
+   * suresi belirsizdir ve acilis isidir; yarida kesilen kurulum acilisi durdururdu.
    */
   async ensureIndexes(): Promise<void> {
     const descriptions = this.indexes();
     if (descriptions.length === 0) {
       return;
     }
-    await this.run('ensureIndexes', () => this.collection.createIndexes([...descriptions]));
+    await this.run('ensureIndexes', () =>
+      this.collection.createIndexes([...descriptions], { timeoutMS: NO_OPERATION_TIMEOUT }),
+    );
   }
 
   async findById(id: string, options: SessionOption = {}): Promise<WithId<TDoc> | null> {

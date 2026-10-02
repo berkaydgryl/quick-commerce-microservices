@@ -70,6 +70,7 @@ function storesEnv(redisUrl: string): StockStoresEnv {
       uri: `${mongoContainer.getConnectionString()}?directConnection=true`,
       dbName: DB_NAME,
       serverSelectionTimeoutMs: 5_000,
+      operationTimeoutMs: 2_000,
     },
     redis: { REDIS_URL: redisUrl, REDIS_CONNECT_TIMEOUT_MS: 5_000 },
   };

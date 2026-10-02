@@ -1,5 +1,11 @@
 import { AppError, ERROR_CODES } from '@getir/core';
-import { MongoBulkWriteError, MongoErrorLabel, MongoNetworkError, MongoServerError } from 'mongodb';
+import {
+  MongoBulkWriteError,
+  MongoErrorLabel,
+  MongoNetworkError,
+  MongoOperationTimeoutError,
+  MongoServerError,
+} from 'mongodb';
 import type { BulkWriteResult } from 'mongodb';
 import { describe, expect, it } from 'vitest';
 
@@ -151,5 +157,71 @@ describe('transaction yazim cakismasi (T7.3)', () => {
     expect(retryableTransactionCause(toMongoAppError(duplicateKeyError()))).toBeUndefined();
     expect(retryableTransactionCause(AppError.internal('outbox yazilamadi'))).toBeUndefined();
     expect(retryableTransactionCause(new Error('baska'))).toBeUndefined();
+  });
+});
+
+describe('islem suresi ve erisilemeyen dugum (#51)', () => {
+  it('islem suresi doldu -> SERVICE_UNAVAILABLE; baglam korunur, surucu mesaji sizmaz', () => {
+    const error = toMongoAppError(new MongoOperationTimeoutError('Timed out at socket read'), {
+      operation: 'findById',
+      collection: 'orders',
+    });
+
+    expect(error.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+    expect(error.message).toBe('Veritabani zamaninda cevap vermedi');
+    expect(error.details).toEqual({ operation: 'findById', collection: 'orders' });
+    expect(JSON.stringify(error.toJSON())).not.toContain('socket');
+  });
+
+  it('transaction suresi es zamanli yazim yuzunden dolsa da SERVICE_UNAVAILABLE (CONFLICT degil)', () => {
+    // Surucu sure dolunca son hatayi (WriteConflict) zaman asimiyla sarar.
+    const timeout = new MongoOperationTimeoutError('Timed out during withTransaction', {
+      cause: writeConflictError(),
+    });
+
+    expect(toMongoAppError(timeout, { operation: 'withTransaction' }).code).toBe(
+      ERROR_CODES.SERVICE_UNAVAILABLE,
+    );
+  });
+
+  it('toplu yazimin sardigi zaman asimi da SERVICE_UNAVAILABLE', () => {
+    const wrapped = new MongoBulkWriteError(
+      new MongoOperationTimeoutError('Timed out at socket write'),
+      {} as unknown as BulkWriteResult,
+    );
+
+    expect(toMongoAppError(wrapped).code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+  });
+
+  it.each([
+    [10_107, 'not primary'],
+    [13_435, 'not primary and secondaryOk=false'],
+    [13_436, 'not primary or secondary; cannot currently read from this replSet member'],
+    [10_058, 'not master'],
+    [189, 'PrimarySteppedDown'],
+    [11_600, 'interrupted at shutdown'],
+    [11_602, 'InterruptedDueToReplStateChange'],
+    [91, 'The server is in quiesce mode and will shut down'],
+  ])(
+    'dugum birincil degil ya da kapaniyor (%i) -> SERVICE_UNAVAILABLE: beklemekle duzelir',
+    (code, message) => {
+      const error = toMongoAppError(new MongoServerError({ message, code }), {
+        operation: 'ensureIndexes',
+        collection: 'categories',
+      });
+
+      expect(error.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+      expect(error.message).toBe('Veritabani su an hizmet vermiyor');
+      expect(error.details).toEqual({ operation: 'ensureIndexes', collection: 'categories' });
+    },
+  );
+
+  it('baska sunucu kodlari eskisi gibi INTERNAL; kodu metin olan hata da', () => {
+    expect(toMongoAppError(new MongoServerError({ message: 'baska', code: 2 })).code).toBe(
+      ERROR_CODES.INTERNAL,
+    );
+    expect(toMongoAppError(new MongoServerError({ message: 'x', code: '10107' })).code).toBe(
+      ERROR_CODES.INTERNAL,
+    );
   });
 });

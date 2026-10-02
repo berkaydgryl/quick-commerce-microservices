@@ -32,7 +32,7 @@
     "proto:gen": "pnpm --filter @getir/proto generate",
     "proto:gen:ts": "pnpm --filter @getir/proto generate:ts",
     "proto:check": "pnpm --filter @getir/proto generate:ts && pnpm --filter @getir/proto typecheck && pnpm --filter @getir/proto check:go",
-    "infra:up": "docker compose -f infra/docker/docker-compose.dev.yml up -d",
+    "infra:up": "docker compose -f infra/docker/docker-compose.dev.yml up -d --wait",
     "infra:ps": "docker compose -f infra/docker/docker-compose.dev.yml ps",
     "infra:logs": "docker compose -f infra/docker/docker-compose.dev.yml logs -f",
     "infra:down": "docker compose -f infra/docker/docker-compose.dev.yml down",

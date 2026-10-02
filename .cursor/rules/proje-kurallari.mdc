@@ -210,6 +210,14 @@ Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicid
   ve yeniden calistirilabilir.
 - Indeksler koda BILDIRILIR (`MongoRepository.indexes()`), elle `mongosh` ile acilmaz.
   Sik sorgulanan alana indeks eklenir; gereksiz indeks yazma maliyetini artirir.
+- Her Mongo islemi ve transaction'i sureyle sinirlidir (#51, `MONGO_OPERATION_TIMEOUT_MS`,
+  varsayilan 2 sn): servis `connectMongo({ ...env.mongo })` ile baglanir ve `mongo.db`'yi kullanir;
+  islem kendi seceneginde `timeoutMS` TASIMAZ. Sure dolunca `SERVICE_UNAVAILABLE`; zaman asimi
+  "yazilmadi" demek degildir, yeniden denenen yazim tekrar guvenli olmalidir. Suresiz yalnizca
+  acilis isleri: goc calistiricisi (`mongo.unbounded`), `ensureIndexes`, seed/reseed
+  (`withoutOperationTimeout`). Repository'de toplu yazim (`insertMany`, `bulkWrite`)
+  `this.bulkCollection(options)` ile yapilir; surucu hatasi yuzunden (sureli transaction'da miras
+  alinan sure reddedilir) dogrudan `this.collection` ile yazim eslint'te yasak.
 - Is kritigi veride fiziksel silme yerine durum alani kullanilir (`products.isActive`:
   urun silinmez, gizlenir - gecmis siparisler bozulmasin).
 
@@ -335,5 +343,6 @@ sepet yalnizca tarayicida (ADR-13) · para KURUS, 100'e bolme yalnizca gosterimd
 
 - Gelistirici Windows kullanir: komutlari PowerShell uyumlu ver (`Copy-Item`, `;` ayraci). Bash'e ozgu
   sozdizimi gerekiyorsa belirt.
-- Altyapi: `pnpm infra:up` (Mongo replica set + Redis), `pnpm infra:down`, `pnpm infra:reset`.
+- Altyapi: `pnpm infra:up` (Mongo replica set + Redis + Jaeger; saglik yoklamalarini bekler, `--wait`),
+  `pnpm infra:down`, `pnpm infra:reset`.
 - Makefile yok; roadmap'te `make X` goren yer `pnpm X` karsiligini kullanir.

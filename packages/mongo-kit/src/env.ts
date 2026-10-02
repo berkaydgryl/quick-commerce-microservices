@@ -10,21 +10,35 @@
  *   CATALOG_MONGO_URI   kullanici ve parolayi tasir; varsayilani YOK
  *   CATALOG_MONGO_DB    verilmezse servisin varsayilani (getir_catalog)
  *   MONGO_SERVER_SELECTION_TIMEOUT_MS   ortak
+ *   MONGO_OPERATION_TIMEOUT_MS          ortak (#51): istek ve isci islemlerinin ust suresi
  */
 
 import { envInt, envString } from '@getir/core';
 import type { EnvSchema } from '@getir/core';
 import { z } from 'zod';
 
+import { NO_OPERATION_TIMEOUT } from './client.js';
+
 /** Sunucu secimi icin beklenecek en uzun sure (ms). */
 const DEFAULT_SERVER_SELECTION_TIMEOUT_MS = 5_000;
 const MAX_SERVER_SELECTION_TIMEOUT_MS = 60_000;
+
+/**
+ * Bir islemin (ya da transaction'in) ust suresi (ms, #51). 2 sn: tekil islem 2 sn,
+ * donmus Mongo'da transaction geri almayla en gec ~4 sn; ikisi de gateway'in 5 sn'lik
+ * istek suresinin (GATEWAY_REQUEST_TIMEOUT_MS) altinda, once servis kendi hatasini verir.
+ */
+const DEFAULT_OPERATION_TIMEOUT_MS = 2_000;
+const MIN_OPERATION_TIMEOUT_MS = 100;
+const MAX_OPERATION_TIMEOUT_MS = 60_000;
 
 /** Baglanti ayarlari; adlar connectMongo'nunkiyle ayni (`connectMongo({ ...mongo })`). */
 export interface MongoEnv {
   readonly uri: string;
   readonly dbName: string;
   readonly serverSelectionTimeoutMs: number;
+  /** Islem suresi (#51); NO_OPERATION_TIMEOUT = suresiz (yalnizca koddan: seed). */
+  readonly operationTimeoutMs: number;
 }
 
 export interface MongoEnvNames {
@@ -38,6 +52,7 @@ const mongoEnvValues = z.object({
   uri: z.string(),
   dbName: z.string(),
   serverSelectionTimeoutMs: z.number(),
+  operationTimeoutMs: z.number(),
 });
 
 /**
@@ -63,6 +78,11 @@ export function mongoEnvSchemaFor(names: MongoEnvNames): EnvSchema<MongoEnv> {
         max: MAX_SERVER_SELECTION_TIMEOUT_MS,
         defaultValue: DEFAULT_SERVER_SELECTION_TIMEOUT_MS,
       }),
+      MONGO_OPERATION_TIMEOUT_MS: envInt({
+        min: MIN_OPERATION_TIMEOUT_MS,
+        max: MAX_OPERATION_TIMEOUT_MS,
+        defaultValue: DEFAULT_OPERATION_TIMEOUT_MS,
+      }),
     })
     .transform((env) =>
       // Anahtarlar servise gore degisir; degerler yukarida dogrulandi, burada
@@ -71,6 +91,16 @@ export function mongoEnvSchemaFor(names: MongoEnvNames): EnvSchema<MongoEnv> {
         uri: env[uriKey],
         dbName: env[dbKey],
         serverSelectionTimeoutMs: env.MONGO_SERVER_SELECTION_TIMEOUT_MS,
+        operationTimeoutMs: env.MONGO_OPERATION_TIMEOUT_MS,
       }),
     );
+}
+
+/**
+ * Ayni ortam, islem suresi olmadan (#51): seed ve reseed gibi tek seferlik
+ * komutlar. Toplu yazim yavas bir makinede sureye takilip yarim kalmasin; komutu
+ * elle calistiran kisi bekledigini goruyor.
+ */
+export function withoutOperationTimeout(mongo: MongoEnv): MongoEnv {
+  return { ...mongo, operationTimeoutMs: NO_OPERATION_TIMEOUT };
 }

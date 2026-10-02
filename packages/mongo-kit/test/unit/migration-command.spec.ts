@@ -76,6 +76,7 @@ describe('migrateMain (T10.4)', () => {
         uri: 'mongodb://127.0.0.1:1/?directConnection=true',
         dbName: 'x',
         serverSelectionTimeoutMs: 60_000,
+        operationTimeoutMs: 2_000,
       },
       migrations: [],
       appName: 'test-migrate',
