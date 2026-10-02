@@ -62,7 +62,9 @@ export class StockLedgerRepository
         updateOne: { filter: { _id }, update: { $setOnInsert: fields }, upsert: true },
       };
     });
-    await this.run('record', () => this.collection.bulkWrite(operations, { ordered: false }));
+    await this.run('record', () =>
+      this.bulkCollection({}).bulkWrite(operations, { ordered: false }),
+    );
   }
 
   /**
@@ -127,7 +129,7 @@ export class StockLedgerRepository
       }),
     );
     await this.run('replaceWithOpening.insert', () =>
-      this.collection.insertMany(documents, session),
+      this.bulkCollection(options).insertMany(documents, session),
     );
   }
 }

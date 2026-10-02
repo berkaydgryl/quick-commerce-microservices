@@ -25,6 +25,8 @@ export abstract class ReplaceableRepository<
       // insertMany bos diziyle hata firlatir.
       return;
     }
-    await this.run('replaceAll.insert', () => this.collection.insertMany([...documents], session));
+    await this.run('replaceAll.insert', () =>
+      this.bulkCollection(options).insertMany([...documents], session),
+    );
   }
 }

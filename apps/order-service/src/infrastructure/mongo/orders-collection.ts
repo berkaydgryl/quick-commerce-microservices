@@ -130,7 +130,7 @@ export class OrdersCollection extends MongoRepository<OrderDocument> {
       return;
     }
     await this.run('insertMany', () =>
-      this.collection.insertMany(
+      this.bulkCollection(options).insertMany(
         [...documents],
         options.session === undefined ? {} : { session: options.session },
       ),

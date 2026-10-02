@@ -27,7 +27,12 @@ export interface OpenedStore {
 
 /** Yeni baglanti + indeks + depo. */
 export async function openPaymentStore(target: MongoTarget): Promise<OpenedStore> {
-  const connection = await connectMongo({ uri: target.uri, dbName: target.dbName });
+  // Uretimdeki gibi sureli (#51): transaction ve toplu yazim bu ayarla kosar.
+  const connection = await connectMongo({
+    uri: target.uri,
+    dbName: target.dbName,
+    operationTimeoutMs: 2_000,
+  });
   const payments = new PaymentsCollection(connection.db);
   await payments.ensureIndexes();
   return { store: new PaymentMongoStore(payments), connection };

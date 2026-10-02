@@ -15,7 +15,7 @@
 
 import { envInt, loadEnvOrExit } from '@getir/core';
 import type { MongoEnv } from '@getir/mongo-kit';
-import { mongoEnvSchemaFor } from '@getir/mongo-kit';
+import { mongoEnvSchemaFor, withoutOperationTimeout } from '@getir/mongo-kit';
 import type { RedisEnv } from '@getir/redis-kit';
 import { redisEnvSchema } from '@getir/redis-kit';
 import { grpcPort, serviceEnvSchema } from '@getir/service-kit';
@@ -94,9 +94,17 @@ const commandSchema = z.object({
 
 export type CommandEnv = z.infer<typeof commandSchema> & StockStoresEnv;
 
-/** Seed ve reseed komutlarinin ortami: Mongo ve Redis her zaman zorunlu. */
+/**
+ * Seed ve reseed komutlarinin ortami: Mongo ve Redis her zaman zorunlu; Mongo'da
+ * islem suresi YOK (#51): toplu yazim sureye takilip yarim kalmasin.
+ */
 export function loadCommandEnv(): CommandEnv {
-  return { ...loadEnvOrExit(commandSchema), ...loadStoresEnv() };
+  const stores = loadStoresEnv();
+  return {
+    ...loadEnvOrExit(commandSchema),
+    ...stores,
+    mongo: withoutOperationTimeout(stores.mongo),
+  };
 }
 
 export type MigrateEnv = z.infer<typeof commandSchema> & { readonly mongo: MongoEnv };

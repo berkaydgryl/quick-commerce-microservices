@@ -40,7 +40,7 @@ export class OutboxCollection extends MongoRepository<OutboxDocument> {
       return;
     }
     await this.run('insertMany', () =>
-      this.collection.insertMany([...documents], {
+      this.bulkCollection(options).insertMany([...documents], {
         ...(options.session === undefined ? {} : { session: options.session }),
       }),
     );

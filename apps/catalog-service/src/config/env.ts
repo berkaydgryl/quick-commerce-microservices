@@ -17,7 +17,7 @@
 
 import { loadEnvOrExit } from '@getir/core';
 import type { MongoEnv } from '@getir/mongo-kit';
-import { mongoEnvSchemaFor } from '@getir/mongo-kit';
+import { mongoEnvSchemaFor, withoutOperationTimeout } from '@getir/mongo-kit';
 import { grpcPort, serviceEnvSchema } from '@getir/service-kit';
 import { z } from 'zod';
 
@@ -48,9 +48,15 @@ const seedSchema = z.object({
 
 export type SeedEnv = z.infer<typeof seedSchema> & { readonly mongo: MongoEnv };
 
-/** Seed ortami: Mongo her zaman zorunlu. */
+/**
+ * Seed ortami: Mongo her zaman zorunlu; islem suresi YOK (#51): toplu yazim
+ * sureye takilip yarim kalmasin. Goc komutu da bunu okur (gocler zaten suresiz).
+ */
 export function loadSeedEnv(): SeedEnv {
-  return { ...loadEnvOrExit(seedSchema), mongo: loadEnvOrExit(mongoSchema) };
+  return {
+    ...loadEnvOrExit(seedSchema),
+    mongo: withoutOperationTimeout(loadEnvOrExit(mongoSchema)),
+  };
 }
 
 /** Goc komutunun ortami (T10.4): seed'inkiyle ayni ihtiyac, MOCK ne olursa olsun Mongo. */

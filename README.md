@@ -208,6 +208,7 @@ düzenleme gerekmez.
 | ------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------ |
 | `<SERVİS>_MONGO_URI`                  | `mongodb://catalog:…@localhost:27017/?…` | Servisin kendi kullanıcısıyla bağlantı (D14); `CATALOG_`, `ORDER_`, `GATEWAY_`, ...  |
 | `<SERVİS>_MONGO_DB`                   | `getir_<servis>`                         | Servisin kendi veritabanı; kullanıcı yalnızca burada yetkili                         |
+| `MONGO_OPERATION_TIMEOUT_MS`          | `2000`                                   | Bir Mongo işleminin üst süresi (#51); donmuş Mongo'da çağrı bu sürede 503 döner      |
 | `MONGO_ROOT_USERNAME` / `_PASSWORD`   | `root` / `root-dev-only`                 | Yalnızca yerel compose ve elle yönetim (`pnpm infra:mongosh`); servisler kullanmaz   |
 | `REDIS_URL`                           | `redis://localhost:6379`                 | Stok sayacı, rezervasyon indeksi, olay omurgası                                      |
 | `MOCK`                                | `true`                                   | Dış dünyaya çıkılmaz: ödeme, SMS ve harita deterministik sahte uygulamalarla değişir |
@@ -249,12 +250,16 @@ pnpm install
 **5) Altyapıyı ayağa kaldır**
 
 ```bash
-pnpm infra:up   # docker compose -f infra/docker/docker-compose.dev.yml up -d
+pnpm infra:up   # docker compose -f infra/docker/docker-compose.dev.yml up -d --wait
 ```
 
 Bu komut yalnızca durum tutan iki servisi başlatır: MongoDB ve Redis. Uygulama servisleri bilerek
 konteynerize edilmemiştir; host üzerinde `pnpm dev` ile çalışırlar (hızlı yeniden yükleme ve kolay
 hata ayıklama için).
+
+`--wait` komutu konteynerler sağlıklı olana kadar bekletir: Mongo ilk açılışta replica set'i kurup
+birincil olana kadar yazım kabul etmez. Hemen ardından çalışan seed eskiden `not primary` ile
+düşüyordu (#51).
 
 **6) Sağlığı doğrula**
 
@@ -294,35 +299,35 @@ Ayrıntı: [`infra/seed/README.md`](infra/seed/README.md).
 Hepsi depo kökünden `pnpm <komut>` ile çalışır. `make` bu projede zorunlu değildir; Windows'ta
 `make` kurulu olmadığı için Makefile hedeflerinin karşılığı pnpm script'i olarak tanımlanmıştır.
 
-| Komut           | Arkasındaki iş                                                                                        | Ne yapar                                                           | Durum                                   |
-| --------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------------- |
-| `dev`           | `turbo run dev`                                                                                       | Tüm uygulamaları izleme modunda paralel başlatır                   | Çalışıyor (T3.1: catalog; önce `build`) |
-| `build`         | `turbo run build`                                                                                     | Tüm paketleri derler                                               | Çalışıyor                               |
-| `typecheck`     | `turbo run typecheck`                                                                                 | Çıktı üretmeden tip denetimi                                       | Çalışıyor                               |
-| `lint`          | `eslint .`                                                                                            | ESLint 9 flat config ile tüm depo                                  | Çalışıyor                               |
-| `lint:fix`      | `eslint . --fix`                                                                                      | Otomatik düzeltilebilen lint hatalarını giderir                    | Çalışıyor                               |
-| `lint:style`    | `stylelint "apps/web/**/*.css"`                                                                       | CSS denetimi; `--allow-empty-input` ile dosya yokken de yeşil      | Çalışıyor                               |
-| `lint:proto`    | `buf lint` + `buf format --diff --exit-code`                                                          | gRPC sözleşmesinin kural ve biçim kapısı (`buf` kurulu olmalı)     | Çalışıyor                               |
-| `format`        | `prettier --write .`                                                                                  | Tüm depoyu biçimlendirir                                           | Çalışıyor                               |
-| `format:check`  | `prettier --check .`                                                                                  | Biçim farkı varsa hata verir                                       | Çalışıyor                               |
-| `test`          | `pnpm run test:unit`                                                                                  | Birim testleri (tek koşucu: kökteki vitest yapılandırması)         | Çalışıyor                               |
-| `test:unit`     | `vitest run`                                                                                          | Birim testleri; altyapı gerektirmez                                | Çalışıyor (`--passWithNoTests`)         |
-| `test:int`      | `vitest run --config vitest.integration.config.ts`                                                    | Testcontainers ile Mongo/Redis entegrasyon testleri                | Çalışıyor (T2.5)                        |
-| `race`          | `node -e "..."`                                                                                       | Yarış koşulu senaryosu: aynı stok için eş zamanlı rezervasyon      | **Placeholder — Gün 11 (T11.1)**        |
-| `demo`          | `node -e "..."`                                                                                       | Uçtan uca demo: sipariş → ödeme → kurye akışı                      | **Placeholder — Gün 15 (T15.1)**        |
-| `seed`          | `turbo run build` (catalog + inventory) `&& … seed` (ikisi)                                           | Katalogu ve stoğu Mongo'ya baştan yazar; stok sayaçları Redis'te   | Çalışıyor (T4.1 katalog, T9.1 stok)     |
-| `migrate`       | `node scripts/migrate.mjs up\|status`                                                                 | Servislerin bekleyen göçleri (ADR-19); `down` servis bazında       | Çalışıyor (T10.4)                       |
-| `proto:gen`     | `pnpm --filter @getir/proto generate`                                                                 | `.proto` dosyalarından **TS ve Go** kodu üretir (Go kurulu olmalı) | Çalışıyor (T2.3)                        |
-| `proto:gen:ts`  | `pnpm --filter @getir/proto generate:ts`                                                              | Yalnızca TypeScript çıktısı; Go gerektirmez                        | Çalışıyor (T2.3)                        |
-| `proto:check`   | `generate:ts && typecheck && check:go`                                                                | Üretilen kodun **iki dilde de** derlendiğini doğrular              | Çalışıyor (T2.3)                        |
-| `verify`        | `proto:gen:ts && lint && lint:style && lint:proto && format:check && typecheck && build && test:unit` | CI'daki `quality` işinin birebir aynısı                            | Çalışıyor                               |
-| `infra:up`      | `docker compose -f infra/docker/… up -d`                                                              | Mongo (replica set), Redis ve Jaeger'i başlatır                    | Çalışıyor                               |
-| `infra:ps`      | `docker compose … ps`                                                                                 | Konteyner ve sağlık durumu                                         | Çalışıyor                               |
-| `infra:logs`    | `docker compose … logs -f`                                                                            | Altyapı günlüklerini izler                                         | Çalışıyor                               |
-| `infra:down`    | `docker compose … down`                                                                               | Konteynerleri durdurur (veri kalır)                                | Çalışıyor                               |
-| `infra:reset`   | `docker compose … down -v`                                                                            | Konteyner **ve** veriyi siler, sıfırdan kurar                      | Çalışıyor                               |
-| `infra:mongosh` | `docker exec -it getir-mongo … mongosh`                                                               | Kök kullanıcıyla `mongosh` (parola konteynerin ortamından, D14)    | Çalışıyor                               |
-| `clean`         | `turbo run clean`                                                                                     | Derleme çıktılarını ve önbellekleri siler                          | Çalışıyor                               |
+| Komut           | Arkasındaki iş                                                                                        | Ne yapar                                                               | Durum                                   |
+| --------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------- |
+| `dev`           | `turbo run dev`                                                                                       | Tüm uygulamaları izleme modunda paralel başlatır                       | Çalışıyor (T3.1: catalog; önce `build`) |
+| `build`         | `turbo run build`                                                                                     | Tüm paketleri derler                                                   | Çalışıyor                               |
+| `typecheck`     | `turbo run typecheck`                                                                                 | Çıktı üretmeden tip denetimi                                           | Çalışıyor                               |
+| `lint`          | `eslint .`                                                                                            | ESLint 9 flat config ile tüm depo                                      | Çalışıyor                               |
+| `lint:fix`      | `eslint . --fix`                                                                                      | Otomatik düzeltilebilen lint hatalarını giderir                        | Çalışıyor                               |
+| `lint:style`    | `stylelint "apps/web/**/*.css"`                                                                       | CSS denetimi; `--allow-empty-input` ile dosya yokken de yeşil          | Çalışıyor                               |
+| `lint:proto`    | `buf lint` + `buf format --diff --exit-code`                                                          | gRPC sözleşmesinin kural ve biçim kapısı (`buf` kurulu olmalı)         | Çalışıyor                               |
+| `format`        | `prettier --write .`                                                                                  | Tüm depoyu biçimlendirir                                               | Çalışıyor                               |
+| `format:check`  | `prettier --check .`                                                                                  | Biçim farkı varsa hata verir                                           | Çalışıyor                               |
+| `test`          | `pnpm run test:unit`                                                                                  | Birim testleri (tek koşucu: kökteki vitest yapılandırması)             | Çalışıyor                               |
+| `test:unit`     | `vitest run`                                                                                          | Birim testleri; altyapı gerektirmez                                    | Çalışıyor (`--passWithNoTests`)         |
+| `test:int`      | `vitest run --config vitest.integration.config.ts`                                                    | Testcontainers ile Mongo/Redis entegrasyon testleri                    | Çalışıyor (T2.5)                        |
+| `race`          | `node -e "..."`                                                                                       | Yarış koşulu senaryosu: aynı stok için eş zamanlı rezervasyon          | **Placeholder — Gün 11 (T11.1)**        |
+| `demo`          | `node -e "..."`                                                                                       | Uçtan uca demo: sipariş → ödeme → kurye akışı                          | **Placeholder — Gün 15 (T15.1)**        |
+| `seed`          | `turbo run build` (catalog + inventory) `&& … seed` (ikisi)                                           | Katalogu ve stoğu Mongo'ya baştan yazar; stok sayaçları Redis'te       | Çalışıyor (T4.1 katalog, T9.1 stok)     |
+| `migrate`       | `node scripts/migrate.mjs up\|status`                                                                 | Servislerin bekleyen göçleri (ADR-19); `down` servis bazında           | Çalışıyor (T10.4)                       |
+| `proto:gen`     | `pnpm --filter @getir/proto generate`                                                                 | `.proto` dosyalarından **TS ve Go** kodu üretir (Go kurulu olmalı)     | Çalışıyor (T2.3)                        |
+| `proto:gen:ts`  | `pnpm --filter @getir/proto generate:ts`                                                              | Yalnızca TypeScript çıktısı; Go gerektirmez                            | Çalışıyor (T2.3)                        |
+| `proto:check`   | `generate:ts && typecheck && check:go`                                                                | Üretilen kodun **iki dilde de** derlendiğini doğrular                  | Çalışıyor (T2.3)                        |
+| `verify`        | `proto:gen:ts && lint && lint:style && lint:proto && format:check && typecheck && build && test:unit` | CI'daki `quality` işinin birebir aynısı                                | Çalışıyor                               |
+| `infra:up`      | `docker compose -f infra/docker/… up -d --wait`                                                       | Mongo (replica set), Redis ve Jaeger'i başlatır, sağlıklı olunca döner | Çalışıyor                               |
+| `infra:ps`      | `docker compose … ps`                                                                                 | Konteyner ve sağlık durumu                                             | Çalışıyor                               |
+| `infra:logs`    | `docker compose … logs -f`                                                                            | Altyapı günlüklerini izler                                             | Çalışıyor                               |
+| `infra:down`    | `docker compose … down`                                                                               | Konteynerleri durdurur (veri kalır)                                    | Çalışıyor                               |
+| `infra:reset`   | `docker compose … down -v`                                                                            | Konteyner **ve** veriyi siler, sıfırdan kurar                          | Çalışıyor                               |
+| `infra:mongosh` | `docker exec -it getir-mongo … mongosh`                                                               | Kök kullanıcıyla `mongosh` (parola konteynerin ortamından, D14)        | Çalışıyor                               |
+| `clean`         | `turbo run clean`                                                                                     | Derleme çıktılarını ve önbellekleri siler                              | Çalışıyor                               |
 
 ### Servisleri çalıştırma
 

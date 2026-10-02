@@ -73,6 +73,8 @@ beforeAll(async () => {
   connection = await connectMongo({
     uri: `${container.getConnectionString()}?directConnection=true`,
     dbName: DB_NAME,
+    // Uretimdeki gibi sureli (#51): toplu yazim ve transaction bu ayarla kosar.
+    operationTimeoutMs: 2_000,
   });
   repositories = createMongoCatalogRepositories(connection.db);
   seeder = new MongoCatalogSeeder(connection, repositories);

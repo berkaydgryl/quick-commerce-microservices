@@ -48,7 +48,9 @@ export class StockRepository
       version: 1,
       updatedAt: at,
     }));
-    await this.run('replaceAll.insert', () => this.collection.insertMany(documents, session));
+    await this.run('replaceAll.insert', () =>
+      this.bulkCollection(options).insertMany(documents, session),
+    );
   }
 
   /** Stogu olan marketler (supurucu, T10.3); indeks (marketId, sku) bunu karsilar. */

@@ -14,7 +14,8 @@ veritabanında yetkilidir (ADR-05). Bütün servisler aynı kök `.env`'i okudu�
 // apps/catalog-service/src/config/env.ts
 const mongoSchema = mongoEnvSchemaFor({ prefix: 'CATALOG', defaultDb: 'getir_catalog' });
 // CATALOG_MONGO_URI (zorunlu; kullanıcı ve parolayı taşır), CATALOG_MONGO_DB (varsayılanı
-// getir_catalog), MONGO_SERVER_SELECTION_TIMEOUT_MS (ortak) -> { uri, dbName, serverSelectionTimeoutMs }
+// getir_catalog), MONGO_SERVER_SELECTION_TIMEOUT_MS ve MONGO_OPERATION_TIMEOUT_MS (ortak)
+//   -> { uri, dbName, serverSelectionTimeoutMs, operationTimeoutMs }
 ```
 
 Eksik değişkenin **adı** hatada görünür (`CATALOG_MONGO_URI: ...`). D14 öncesi ortak `MONGO_URI` ve
@@ -42,11 +43,11 @@ baştan tekrar dener. `MongoRepository.run()` her sürücü hatasını `AppError
 etiket kayboluyordu: sürücü tekrar denemiyor, çağıran `INTERNAL` alıyordu. `withTransaction`
 artık etiketli asıl hatayı (`AppError.cause`) sürücüye geri verir (`retryableTransactionCause`);
 tekrar denemede geri çağrı güncel veriyi görür (örneğin sürüm koşulu tutmaz → `CONFLICT`).
-Deneme süresi dolarsa `WriteConflict` yine `CONFLICT` olarak döner. Geri çağrı bu yüzden
+Deneme süresi dolarsa (işlem süresi varsa o süre, yoksa 120 sn) `SERVICE_UNAVAILABLE` olur. Geri çağrı bu yüzden
 **tekrar çalıştırılabilir** yazılmalıdır (transaction'ın içinde yan etkisiz).
 
 **Sınırlı yeniden deneme (roadmap P3, T10.2).** Sıcak bir kayda eşzamanlı yazımda sürücünün
-kendi denemesi beklemesizdir ve süre dolana kadar (120 sn) sürer. P3'ün kuralı "en çok 3 deneme,
+kendi denemesi süre dolana kadar sürer (işlem süresi yoksa 120 sn). P3'ün kuralı "en çok 3 deneme,
 jitter'lı üstel bekleme"dir; bunu isteyen çağıran sürücünün denemesini kapatır ve yardımcıyı kullanır:
 
 ```ts
@@ -58,6 +59,58 @@ await retryOnConflict(
 Yardımcı karar vermez: yalnızca `CONFLICT`'i yeniden dener, diğer hata hemen geçer; denemeler
 bitince ne yapılacağı (telafi) çağıranın işidir. İş her denemede baştan çalışır, bu yüzden
 güncel veriyi yeniden okumalı ve yan etkisiz olmalıdır. İlk kullanan stok onayı (T10.2).
+
+## İşlem süresi (#51)
+
+Mongo cevap vermeden donarsa (`docker pause`, ağ bölünmesi, kilitlenen disk) çağrı eskiden çağıranın
+süresi dolana kadar asılı kalıyordu; çağıranı olmayan işçiler (outbox, tüketici, süpürücü) Mongo
+dönene kadar bekliyordu. Artık her işlemin bir üst süresi var:
+
+```ts
+const mongo = await connectMongo({ ...env.mongo, appName: SERVICE_NAME, logger });
+// env.mongo.operationTimeoutMs = MONGO_OPERATION_TIMEOUT_MS (varsayılan 2000, 100-60000)
+```
+
+- **Nasıl:** sürücünün kendi işlem süresi (`timeoutMS`, CSOT). Süre **veritabanı tutamağına**
+  (`mongo.db`) ve transaction'a verilir; istemcinin kendisine değil. Tutamaktan açılan her koleksiyon
+  süreyi miras alır. Süre bir işlemin tamamını kapsar: sunucu seçimi, havuzdan bağlantı, el sıkışma,
+  cevap ve sürücünün yeniden denemeleri. Süre dolunca bağlantı kapatılır, havuz tükenmez.
+- **Ne döner:** `SERVICE_UNAVAILABLE` "Veritabani zamaninda cevap vermedi" (gateway'de 503).
+- **Ne kadar sürer** (donmuş Mongo'da ölçüldü): tekil işlem **1 süre** (2 sn), transaction **2 süre**
+  (4 sn). Transaction süresi dolunca sürücü geri alma gönderir ve geri alma için süreyi baştan
+  başlatır. Sıcak kayıtta eşzamanlı yazım eskiden 120 sn deneniyordu; artık en geç 1 sürede biter.
+  Sürücü denemeler arasında 5-500 ms bekler ve bir sonraki bekleme süreyi aşacaksa erken bırakır.
+- **Sağlık:** `mongo.ping()` de süreli; donmuş Mongo'da sağlık yoklaması `false` döner, asılı kalmaz.
+- **Süresiz kalanlar:** açılıştaki ve `pnpm migrate`'teki göçler (çalıştırıcı `mongo.unbounded`'ı
+  kullanır: aynı havuzun süresiz görünümü), indeks kurulumu (`ensureIndexes`, işlem başına
+  `timeoutMS: 0`), `pnpm seed` ve inventory `reseed` (`withoutOperationTimeout(env.mongo)`). Uzun bir
+  göç ya da toplu yazım yarıda kesilmez.
+- **İşlem kendi seçeneğinde süre taşımaz:** sürücü, süreli transaction'ın içinde işleme verilen
+  `timeoutMS`'i reddeder (miras alınanı değil). Süre yalnızca bağlantı ayarından gelir.
+- **Toplu yazım `bulkCollection()` ile (sürücü hatası, 7.6 ve 7.7):** `insertMany` ve `bulkWrite`
+  seçeneklerini iki kez çözer. İkinci çözümde tutamaktan miras alınan süreyi "işleme verilmiş"
+  sayar ve süreli transaction'ın içinde reddeder ("An operation cannot be given a timeoutMS
+  setting"). Sonuç: sipariş + outbox yazımı `INTERNAL` düşerdi; `pnpm test:int` yakaladı. Repository
+  toplu yazımı `this.bulkCollection(options)` ile yapar: oturum varsa süre miras almayan tutamak
+  (işlemi transaction'ın süresi sınırlar), yoksa süreli tutamak. ESLint kuralı
+  (`getir/mongo-bulk-writes`) `this.collection.insertMany` / `bulkWrite`'ı yasaklar. Diğer işlemler
+  (insertOne, update*, replace, delete*, find*, aggregate, count, distinct, findOneAnd*) etkilenmez;
+  süreli transaction içinde tek tek denendi. Kanarya testi sürücü düzelince kırmızı olur; o zaman
+  yardımcı ve kural kaldırılır.
+
+**Zaman aşımı "yazılmadı" demek değildir.** Mongo donmuşken gönderilen tekil yazım yolda bekler;
+Mongo çözülünce uygulanabilir (`operation-timeout.spec.ts` bunu sabitler). Ağ hatasında da durum
+aynıdır. Çağıran yeniden denerken yazımın tekrar güvenli olmasına güvenir: benzersiz indeks,
+idempotency anahtarı ya da sürüm koşulu. Transaction'da commit gönderilmeden kesilen iş ise geri
+alınır, yarım kalmaz.
+
+**Tüketicide (event-bus):** işleyicinin Mongo çağrısı süre dolunca hata olur ve teslim başarısız
+sayılır: en az 30 sn arayla (`claimIdleMs`) en çok 5 teslim, sonra ölü olay (`stream:events:dead`). Eskiden işleyici
+takılıyor, grubun işi duruyordu. Mongo yaklaşık 2 dakikadan uzun donarsa olaylar ölü akıştan elle
+yeniden oynatılır (event-bus README).
+
+**Sınır:** süre isteğin gRPC'de kalan süresinden bağımsızdır (ortak sabit). order → risk (1 sn) gibi
+daha kısa çağrılarda çağıran önce vazgeçer; servisteki iş yine en geç süre sonunda biter.
 
 ## Repository tabanı
 
@@ -123,18 +176,25 @@ export const MIGRATIONS: readonly Migration[] = [foldSearchTerms];
 
 ## Hata çevirisi
 
-| Mongo durumu                    | AppError              | Sonuç                          |
-| ------------------------------- | --------------------- | ------------------------------ |
-| Benzersiz indeks ihlali (11000) | `CONFLICT`            | 409 / gRPC ABORTED             |
-| Ağ / sunucu seçimi hatası       | `SERVICE_UNAVAILABLE` | 503 / gRPC UNAVAILABLE         |
-| Yetkisiz erişim (13, D14)       | `INTERNAL`            | "Veritabani yetkisi yok"       |
-| Diğer                           | `INTERNAL`            | 500, özgün mesaj dışarı çıkmaz |
+| Mongo durumu                     | AppError              | Sonuç                                |
+| -------------------------------- | --------------------- | ------------------------------------ |
+| Benzersiz indeks ihlali (11000)  | `CONFLICT`            | 409 / gRPC ABORTED                   |
+| Ağ / sunucu seçimi hatası        | `SERVICE_UNAVAILABLE` | 503 / gRPC UNAVAILABLE               |
+| İşlem süresi doldu (#51)         | `SERVICE_UNAVAILABLE` | "Veritabani zamaninda cevap vermedi" |
+| Düğüm birincil değil / kapanıyor | `SERVICE_UNAVAILABLE` | "Veritabani su an hizmet vermiyor"   |
+| Yetkisiz erişim (13, D14)        | `INTERNAL`            | "Veritabani yetkisi yok"             |
+| Diğer                            | `INTERNAL`            | 500, özgün mesaj dışarı çıkmaz       |
 
 **Kimlik doğrulama (D14).** Yanlış kullanıcı ya da parolada (`AuthenticationFailed`, 18)
 `connectMongo` "tekrar denenebilir" `SERVICE_UNAVAILABLE` yerine `INTERNAL` ve
 "Mongo kimlik dogrulamasi reddedildi" der: beklemek düzeltmez, sebebi ağ sorunu sanılmasın.
 Mesajdaki adresin parolası maskelidir. Servis başka servisin veritabanına erişmeye kalkarsa Mongo
 reddeder (`Unauthorized`, 13); hata adıyla `INTERNAL` olur.
+
+**Birincil yok (#51).** Düğüm yazım kabul etmiyorsa (`not primary` ve ailesi: 10107, 13435, 13436,
+10058, 189; kapanış: 11600, 11602, 91) hata geçicidir, beklemekle düzelir. Eskiden `INTERNAL`
+dönüyordu: yeni hacimde replica set henüz kurulmadan çalışan seed `not primary` ile düşmüştü
+(`pnpm infra:up` artık sağlık yoklamasını bekler: `--wait`).
 
 Çakışan **değer** dışarı verilmez, yalnızca alan adı: `keyValue` müşteri verisi
 taşıyabilir (telefon, adres) ve hata zarfı istemciye gider.
@@ -151,4 +211,17 @@ benzersiz indeksin gerçekten ihlal edilmesi ve transaction'ın gerçekten geri 
 sahte istemciyle doğrulanamaz. `auth.spec.ts` kimlik doğrulamalı replica set'te (yerel compose
 ile aynı kurulum) servis kullanıcısının kendi veritabanında çalıştığını, başka veritabanında
 reddedildiğini ve yanlış parolanın mesajını sınar. `migration.spec.ts` göç çalıştırıcısını sınar:
-sıra, transaction, up → down → up, aynı anda iki çalıştırıcı, kilit devri, tutarsızlık. `pnpm test:int`.
+sıra, transaction, up → down → up, aynı anda iki çalıştırıcı, kilit devri, tutarsızlık.
+`operation-timeout.spec.ts` (#51) Mongo'nun önüne dondurulabilen bir TCP vekili koyar
+(`test/support/freezing-proxy.ts`, `docker pause` gibi: bağlantı açık, cevap yok). Sınadıkları:
+
+- süresiz bağlantı donukken cevap alamaz (kontrol deneyi), süreli olan sürede döner;
+- havuz tükenmez;
+- transaction iki sürede döner ve yarım kalmaz;
+- çözülünce bağlantı toparlanır;
+- tekil yazım çözülünce uygulanabilir;
+- ping süreli;
+- sıcak kayıt 120 sn değil, süre içinde biter;
+- indeks kurulumu ve göçler süresizdir.
+
+`pnpm test:int`.
