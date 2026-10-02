@@ -313,7 +313,7 @@ Hepsi depo kökünden `pnpm <komut>` ile çalışır. `make` bu projede zorunlu 
 | `test`          | `pnpm run test:unit`                                                                                  | Birim testleri (tek koşucu: kökteki vitest yapılandırması)             | Çalışıyor                               |
 | `test:unit`     | `vitest run`                                                                                          | Birim testleri; altyapı gerektirmez                                    | Çalışıyor (`--passWithNoTests`)         |
 | `test:int`      | `vitest run --config vitest.integration.config.ts`                                                    | Testcontainers ile Mongo/Redis entegrasyon testleri                    | Çalışıyor (T2.5)                        |
-| `race`          | `node -e "..."`                                                                                       | Yarış koşulu senaryosu: aynı stok için eş zamanlı rezervasyon          | **Placeholder — Gün 11 (T11.1)**        |
+| `race`          | `vitest run` (`apps/inventory-service/test/integration/race.spec.ts`)                                 | 100 eş zamanlı rezervasyon, stok 1: tam 1 başarı (Docker)              | Çalışıyor (T11.1)                       |
 | `demo`          | `node -e "..."`                                                                                       | Uçtan uca demo: sipariş → ödeme → kurye akışı                          | **Placeholder — Gün 15 (T15.1)**        |
 | `seed`          | `turbo run build` (catalog + inventory) `&& … seed` (ikisi)                                           | Katalogu ve stoğu Mongo'ya baştan yazar; stok sayaçları Redis'te       | Çalışıyor (T4.1 katalog, T9.1 stok)     |
 | `migrate`       | `node scripts/migrate.mjs up\|status`                                                                 | Servislerin bekleyen göçleri (ADR-19); `down` servis bazında           | Çalışıyor (T10.4)                       |
@@ -408,11 +408,11 @@ aynısı: `node scripts/git-conventions.mjs commits origin/main HEAD` ve
 `pnpm verify`, CI'daki `quality` işiyle **birebir aynı** zinciri koşar; yerelde yeşilse
 CI'da da yeşildir. Biçimlendirme için `pnpm format` yeterlidir.
 
-**Placeholder script'ler hakkında dürüst not:** `race` ve `demo` bugün
-gerçek iş yapmaz (`proto:gen` T2.3'te, `seed` T4.1'de gerçek komuta bağlandı). Her biri hangi günde ne yapacağını anlatan tek satırlık bir TODO mesajı basar ve
+**Placeholder script hakkında dürüst not:** `demo` bugün
+gerçek iş yapmaz (`proto:gen` T2.3'te, `seed` T4.1'de, `race` T11.1'de gerçek komuta bağlandı). Hangi günde ne yapacağını anlatan tek satırlık bir TODO mesajı basar ve
 **sıfır çıkış koduyla** biter; böylece `pnpm verify` var olmayan bir özellik yüzünden kırmızıya
-düşmez. Bunları boş şablon değil, tarihi belli ve sahibi belli birer TODO olarak okuyun —
-tablodaki gün numarası hangi görevde dolacaklarını söyler.
+düşmez. Bunu boş şablon değil, tarihi belli ve sahibi belli bir TODO olarak okuyun —
+tablodaki gün numarası hangi görevde dolacağını söyler.
 
 Script'ler `cmd.exe` altında da çalışacak şekilde yazılmıştır: POSIX'e özgü `rm`, `cp`, `touch`
 veya tek tırnaklı satır içi JSON kullanılmaz; gereken yerde `node -e` ile platformdan bağımsız
@@ -580,8 +580,8 @@ geçersiz kaldığında mevcut dosyanın durumu güncellenir ve yerini alan yeni
    kapanır ve süre 2 dakikaya iner.
 6. **5:00 — Ödeme.** Kart ile ödenir, 3DS kodu girilir, sipariş oluşur.
 7. **6:00 — Teslimat.** Kurye atanır, harita üzerinde pürüzsüz hareket izlenir, teslimat kapanır.
-8. **7:00 — Yarış koşulu kanıtı.** `pnpm race` koşturulur: 100 eş zamanlı istek gider, tam olarak
-   1 sipariş başarılı olur.
+8. **7:00 — Yarış koşulu kanıtı.** `pnpm race` koşturulur: aynı son kutu için 100 eş zamanlı
+   rezervasyon gider, tam olarak 1 tanesi başarılı olur (T11.1).
 
 ---
 
