@@ -23,7 +23,7 @@
     "phoneLabel": "Telefon numarası",
     "phonePlaceholder": "5XX XXX XX XX",
     "continueLabel": "Devam Et",
-    "editPhoneLabel": "Numarayı değiştir",
+    "closeLabel": "Kapat",
     "showPasswordLabel": "Şifreyi göster",
     "countries": [
       { "code": "TR", "name": "Türkiye", "dialCode": "+90", "flagUrl": "/img/flag/tr.svg" }

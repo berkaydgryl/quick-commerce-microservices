@@ -1,14 +1,38 @@
 /* Gelistirme araci: kesik cizgili cerceve, urunun parcasi olmadigi gorunsun. */
 .c-demo-personas {
-  display: grid;
-  gap: var(--space-2);
   padding: var(--space-3);
   border: var(--border-width-thin) dashed var(--border-subtle);
   border-radius: var(--radius-md);
 }
 
-.c-demo-personas__title {
+.c-demo-personas__summary {
   font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.c-demo-personas__body {
+  display: grid;
+  gap: var(--space-2);
+  padding-block-start: var(--space-2);
+}
+
+/* Acilir menu (karsilama karti): liste asagi tasar, kart uzamaz. */
+.c-demo-personas--floating {
+  position: relative;
+}
+
+.c-demo-personas--floating .c-demo-personas__body {
+  position: absolute;
+  inset-block-start: calc(100% + var(--space-2));
+  inset-inline: 0;
+  z-index: var(--z-popover);
+  padding: var(--space-3);
+  background: var(--bg-surface);
+  border: var(--border-width-thin) dashed var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-raised);
 }
 
 .c-demo-personas__note {

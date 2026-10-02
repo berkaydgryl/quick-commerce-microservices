@@ -19,8 +19,8 @@ function duplicates(values: readonly string[]): string[] {
 const CATALOG_ID = (prefix: string) => new RegExp(`^${prefix}_[a-z0-9]+(?:-[a-z0-9]+)*$`);
 
 describe('pazaryeri demo verisi', () => {
-  it('5 kategori, 15 ortak urun, 6 market (roadmap tablosu)', () => {
-    expect(categories).toHaveLength(5);
+  it('13 kategori, 15 ortak urun, 6 market (roadmap tablosu)', () => {
+    expect(categories).toHaveLength(13);
     expect(products).toHaveLength(15);
     expect(markets).toHaveLength(6);
   });

@@ -13,14 +13,22 @@ export function describeCategoryReaderContract(
   getReader: () => CategoryReader,
 ): void {
   describe(`CategoryReader sozlesmesi: ${name}`, () => {
-    it('5 kategori doner', async () => {
+    it('13 kategori doner', async () => {
       const categories = await getReader().listCategories(MAX_CATEGORY_COUNT);
 
       expect(categories.map((category) => category.slug).sort()).toEqual([
         'atistirmalik',
+        'bebek',
+        'dondurma',
+        'et-tavuk',
+        'ev-yasam',
+        'evcil-hayvan',
+        'firindan',
         'icecek',
+        'kisisel-bakim',
         'meyve-sebze',
         'sut-kahvaltilik',
+        'temel-gida',
         'temizlik',
       ]);
     });

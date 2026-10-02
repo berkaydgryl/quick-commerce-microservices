@@ -17,3 +17,9 @@
     max-width: var(--container-max-lg);
   }
 }
+
+@media (--bp-xl) {
+  .c-page-container--wide {
+    max-width: var(--container-max-xl);
+  }
+}

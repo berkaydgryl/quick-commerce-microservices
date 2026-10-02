@@ -1,0 +1,71 @@
+/* Mobil: 3 sutun. Tablet ve ustu: kutucuk genisligine gore sigdigi kadar sutun. */
+.c-category-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+}
+
+.c-category-grid__button {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: center;
+  width: 100%;
+  padding: var(--space-2);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast) var(--easing-standard);
+}
+
+.c-category-grid__button:hover {
+  background: var(--bg-page);
+}
+
+.c-category-grid__name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  text-align: center;
+}
+
+.c-category-grid__placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-2);
+}
+
+.c-category-grid__placeholder-icon {
+  width: var(--size-category-icon);
+  aspect-ratio: 1;
+  border-radius: var(--radius-lg);
+}
+
+.c-category-grid__placeholder-name {
+  width: 80%;
+  height: var(--size-skeleton-line);
+  border-radius: var(--radius-sm);
+}
+
+.is-loading {
+  background: var(--border-subtle);
+  animation: pulse 1.2s var(--easing-standard) infinite alternate;
+}
+
+@keyframes pulse {
+  to {
+    opacity: 0.5;
+  }
+}
+
+@media (--bp-md) {
+  .c-category-grid {
+    grid-template-columns: repeat(
+      auto-fill,
+      minmax(calc(var(--size-category-icon) + var(--space-5)), 1fr)
+    );
+  }
+}

@@ -1,0 +1,74 @@
+/*
+ * Mor, ince ust bar (referans: getircarsi). Mobilde ikonsuz metin: logo ve iki
+ * baglanti tek satira sigar.
+ */
+.c-welcome-header {
+  padding-block: var(--space-2);
+  color: var(--text-on-brand);
+  background: var(--color-brand-primary);
+}
+
+.c-welcome-header__bar {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.c-welcome-header__brand {
+  display: flex;
+  font-size: var(--font-size-lg);
+  text-decoration: none;
+}
+
+/* Mor zeminde mor odak halkasi gorunmezdi: halka kalir, rengi beyaz olur. */
+.c-welcome-header__brand:focus-visible {
+  outline-color: var(--text-on-brand);
+}
+
+.c-welcome-header__actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.c-welcome-header__action {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--radius-pill);
+  transition: background var(--duration-fast) var(--easing-standard);
+}
+
+.c-welcome-header__action:hover {
+  background: var(--color-brand-primary-strong);
+}
+
+/* Mor zeminde mor odak halkasi gorunmezdi: halka kalir, rengi beyaz olur. */
+.c-welcome-header__action:focus-visible {
+  outline-color: var(--text-on-brand);
+}
+
+.c-welcome-header__icon {
+  display: none;
+  width: var(--size-header-icon);
+}
+
+@media (--bp-md) {
+  .c-welcome-header__brand {
+    font-size: var(--font-size-xl);
+  }
+
+  .c-welcome-header__action {
+    padding-inline: var(--space-3);
+    font-size: var(--font-size-md);
+  }
+
+  .c-welcome-header__icon {
+    display: flex;
+  }
+}

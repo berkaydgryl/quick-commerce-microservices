@@ -7,22 +7,17 @@ import { loginPathFor } from '../services/next-path';
 import styles from './HeaderAccount.module.css';
 import { UserIcon } from './icons';
 
-/** Kimlik ekranlarinda baslikta hesap alani yoktur: kullanici zaten orada. */
-const HIDDEN_ON: ReadonlySet<string> = new Set([AUTH_ROUTES.login, AUTH_ROUTES.register]);
-
 /**
- * Basligin hesap alani (T8.5): oturumsuzken "Giris yap" (donus adresi bu
- * sayfa), oturumdayken "Hesabim". Acilistaki sessiz yenileme bitene kadar
- * ayni boyutta bos bir yer tutar: cevap gelince baslik kaymaz.
+ * Basligin hesap alani (T8.5): oturumsuzken "Giris yap" (karsilama ekrani,
+ * donus adresi bu sayfa; T11.6), oturumdayken "Hesabim". Karsilama ekraninin
+ * kendi ust bari vardir; bu alan orada cizilmez. Acilistaki sessiz yenileme
+ * bitene kadar ayni boyutta bos bir yer tutar: cevap gelince baslik kaymaz.
  * Dar ekranda yalnizca ikon gorunur; adi aria-label tasir.
  */
 export function HeaderAccount() {
   const status = useSessionStore((state) => state.status);
   const location = useLocation();
 
-  if (HIDDEN_ON.has(location.pathname)) {
-    return null;
-  }
   if (status === 'unknown') {
     return <span className={styles['c-header-account__placeholder']} aria-hidden="true" />;
   }

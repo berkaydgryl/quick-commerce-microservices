@@ -2,27 +2,78 @@
 
 Müşteri arayüzü: React 18 + Vite + TypeScript. Tarayıcı yalnızca gateway ile konuşur (`/v1/*`).
 
-## Bugünkü durum (T9.5 — teslimat adresi; T9.6 — genel arama; T8.5 — kimlik akışı; T7.6 — kalıcı sepet, stok sınırı, satışta olmayan teklif; T6.4 — sepet kabuğu)
+## Bugünkü durum (T11.6 — karşılama ve giriş ekranı; T9.5 — teslimat adresi; T9.6 — genel arama; T8.5 — kimlik akışı; T7.6 — kalıcı sepet, stok sınırı, satışta olmayan teklif; T6.4 — sepet kabuğu)
 
-| Parça                   | Durum                                                                                                                      |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Vite + React + router   | ✅ `/` ilk ekran: teslimat adresi, genel arama (`?ara=`), yakındaki marketler · `/markets` · `/markets/:id` market sayfası |
-| TanStack Query          | ✅ Yalnızca geçici hata (`SERVICE_UNAVAILABLE`) yeniden denenir; mutasyon denenmez                                         |
-| HTTP istemcisi          | ✅ Zarf açıcı → `AppError`; mutasyon `Idempotency-Key`'siz derlenmez (ADR-08)                                              |
-| Idempotency key         | ✅ `crypto.randomUUID()`, sözleşmedeki uzunluk sınırıyla                                                                   |
-| Design token'lar        | ✅ `tokens.css`: marka paleti, Nunito, `clamp()` ölçeği, kapsayıcı, bileşen ölçüleri (D11)                                 |
-| Kırılımlar              | ✅ `@custom-media` (48rem / 64rem), JS karşılığı `shared/config/breakpoints.ts`                                            |
-| Market veri hook'ları   | ✅ `useNearbyMarkets`, `useMarket`, `useMarketCategories`, `useMarketProducts` (imleçle sayfalı), `useNearbySearch` (T9.6) |
-| Ortak durumlar          | ✅ `QueryStatus`: yükleniyor / hata / boş; \"Tekrar dene\" yalnızca geçici hatada                                          |
-| Zustand (sepet, oturum) | ✅ Sepet (`useCartStore`, `getir.cart`); seçili adres (`useAddressStore`, `getir.address`); oturum (bellekte)              |
-| Kimlik (T8.5)           | ✅ `/giris`, `/kayit`, `/hesabim` (korumalı); sessiz yenileme, sekmeler arası kilit (aşağıda)                              |
-| Teslimat adresi (T9.5)  | ✅ Ana sayfada aramanın üstünde; hesabın adresleri; marketler ve arama seçili adresin konumuyla (aşağıda)                  |
+| Parça                   | Durum                                                                                                                                           |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vite + React + router   | ✅ `/` oturumsuz: karşılama ekranı (T11.6); oturumda: teslimat adresi, genel arama (`?ara=`), yakındaki marketler · `/markets` · `/markets/:id` |
+| TanStack Query          | ✅ Yalnızca geçici hata (`SERVICE_UNAVAILABLE`) yeniden denenir; mutasyon denenmez                                                              |
+| HTTP istemcisi          | ✅ Zarf açıcı → `AppError`; mutasyon `Idempotency-Key`'siz derlenmez (ADR-08)                                                                   |
+| Idempotency key         | ✅ `crypto.randomUUID()`, sözleşmedeki uzunluk sınırıyla                                                                                        |
+| Design token'lar        | ✅ `tokens.css`: marka paleti, Nunito, `clamp()` ölçeği, kapsayıcı, bileşen ölçüleri (D11)                                                      |
+| Kırılımlar              | ✅ `@custom-media` (48rem / 64rem / 90rem), JS karşılığı `shared/config/breakpoints.ts`                                                         |
+| Market veri hook'ları   | ✅ `useNearbyMarkets`, `useMarket`, `useMarketCategories`, `useMarketProducts` (imleçle sayfalı), `useNearbySearch` (T9.6)                      |
+| Ortak durumlar          | ✅ `QueryStatus`: yükleniyor / hata / boş; \"Tekrar dene\" yalnızca geçici hatada                                                               |
+| Zustand (sepet, oturum) | ✅ Sepet (`useCartStore`, `getir.cart`); seçili adres (`useAddressStore`, `getir.address`); oturum (bellekte)                                   |
+| Kimlik (T8.5, T11.6)    | ✅ Karşılama kartında telefon → şifre / kayıt; `/hesabim` (korumalı); sessiz yenileme, sekmeler arası kilit (aşağıda)                           |
+| Teslimat adresi (T9.5)  | ✅ Ana sayfada aramanın üstünde; hesabın adresleri; marketler ve arama seçili adresin konumuyla (aşağıda)                                       |
+
+## Karşılama ve giriş ekranı (T11.6)
+
+Oturumsuz ziyaretçinin `/` adresi (kullanıcının PRD'si + getirçarşı referansı, 2 Ekim kararları). Oturumdaki
+kullanıcı aynı adreste ana sayfayı görür; kapı `pages/root/RootPage.tsx` (açılıştaki sessiz yenileme bitene kadar
+hiçbir şey çizilmez, karşılama içeriği bu sürede paralel istenir). Giriş ve kayıt bu ekranın **üstünde pencere**
+olarak açılır (getir.com gibi); adres `/giris` ve `/kayit` olur.
+
+| Parça         | Dosya                                                                | İş                                                                                                |
+| ------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| İçerik        | `features/content` (`GET /v1/content/welcome`)                       | Karşılama ekranı ve pencerelerin **bütün** metin ve görselleri; kodda sabit ekran metni yok       |
+| Üst bar       | `pages/welcome/WelcomeHeader.tsx`                                    | Mor bar: logo (sarı "getir" + beyaz "market", rozetsiz), "Giriş yap" ve "Kayıt ol" pencere açar   |
+| Banner        | `pages/welcome/WelcomeHero.tsx`                                      | h1 görselin kendisi (slogan görselde, alt metin içerikten); `srcset` 960/1920/3200; karartma yok  |
+| Telefon kartı | `features/auth/ui/PhoneEntryForm.tsx`                                | "Devam Et" giriş penceresini numarayla açar; altında "Kayıt ol →" ve (geliştirmede) demo hesaplar |
+| Kategoriler   | `pages/welcome/WelcomeCategories.tsx`, `catalog/ui/CategoryGrid.tsx` | 13 kategori (CC0 görseller) ızgarada, mobil 3 sütun; tıklama giriş penceresini açar               |
+| Pencere       | `features/auth/ui/AuthDialog.tsx`                                    | `<dialog>` + `showModal`: odak pencerede, arka plan etkisiz; Esc, X ve karartmaya tıklama kapatır |
+| Giriş / kayıt | `pages/login`, `pages/register` (+ `LoginForm`, `RegisterForm`)      | Karşılama ekranının üstünde pencere; altta gri bantta "Kayıt ol →" / "Giriş yap →" (`AuthSwitch`) |
+| Geçmiş durumu | `features/auth/services/auth-route-state.ts`                         | Numara adrese yazılmaz, geçmiş kaydında taşınır; pencerenin uygulama içinden açıldığı bilgisi     |
+
+- **Kapatma:** pencere uygulama içinden açıldıysa bir geri gidilir (geri tuşuyla aynı sonuç); adres doğrudan
+  açıldıysa (yer imi, korumalı sayfanın yönlendirmesi) karşılama ekranına gidilir, korumalı sayfaya dönülmez
+  (yeniden girişe yönlendirirdi). Pencereler arası geçiş adresi değiştirir (geçmiş büyümez).
+- **Düzen:** telefonda ve 1440 px'e (`--bp-xl`, 90rem) kadar görsel kendi oranında üstte, kart altta. 1440 px ve
+  üstünde kart banner'a biner, üst barla hizalı (geniş kapsayıcı, 80rem). Daha darda (1280, 1366) uzun kart banner'ı
+  büyütür, görsel yaklaşır ve afişin yazısı kartın altında kalırdı (canlı ölçüm).
+- **Odak:** karşılama ekranı açılınca hiçbir alan odaklanmaz (telefonda klavye kendiliğinden açılmasın). Giriş
+  penceresi numara geldiyse şifreye, gelmediyse telefona; kayıt penceresi ad soyada odaklanır. `showModal`
+  `useLayoutEffect`'te çağrılır ki tarayıcının "ilk odaklanabilir öğe" seçimi (X) formun odağını ezmesin.
+
+## Görseller ve lisansları (T11.6)
+
+`public/img/` altındaki dosyalar Vite'ın kökünden yayınlanır (`/img/...`); veri göreli yolu saklar, mutlak adresi
+gateway `ASSET_BASE_URL` ile kurar. Banner (`img/banner/`, 960/1920/3200 px) ve bayrak (`img/flag/tr.svg`) bu proje
+için hazırlandı. Kategori görselleri (`img/cat/`, 320×320 px, her biri 40 KB'ın altında) **CC0 1.0** lisanslı
+fotoğraflardır (Openverse aramasıyla; atıf zorunlu değil, kaynak yine de burada).
+
+| Dosya               | Kategori          | Kaynak                                                                                            | Yazar             | Lisans  |
+| ------------------- | ----------------- | ------------------------------------------------------------------------------------------------- | ----------------- | ------- |
+| `sut.jpg`           | Süt & Kahvaltılık | [stocksnap](https://stocksnap.io/photo/milk-bottle-YFZUAHJV1M)                                    | Foodie Girl       | CC0 1.0 |
+| `manav.jpg`         | Meyve & Sebze     | [stocksnap](https://stocksnap.io/photo/fruit-vegetables-F8B73CPSBK)                               | Jamie Hamel-Smith | CC0 1.0 |
+| `icecek.jpg`        | İçecek            | [rawpixel](https://www.rawpixel.com/image/8718218/glass-orange-juice)                             | —                 | CC0 1.0 |
+| `atistirmalik.jpg`  | Atıştırmalık      | [rawpixel](https://www.rawpixel.com/image/5904291/photo-image-public-domain-food-free)            | —                 | CC0 1.0 |
+| `temizlik.jpg`      | Temizlik          | [rawpixel](https://www.rawpixel.com/image/5903626/cleaning-products-free-public-domain-cc0-photo) | —                 | CC0 1.0 |
+| `firindan.jpg`      | Fırından          | [rawpixel](https://www.rawpixel.com/image/5970492/bread-loaf)                                     | —                 | CC0 1.0 |
+| `temel-gida.jpg`    | Temel Gıda        | [rawpixel](https://www.rawpixel.com/image/5907896/image-public-domain-food-free)                  | —                 | CC0 1.0 |
+| `et-tavuk.jpg`      | Et & Tavuk        | [rawpixel](https://www.rawpixel.com/image/6034675/raw-meat-free-public-domain-cc0-photo)          | —                 | CC0 1.0 |
+| `dondurma.jpg`      | Dondurma          | [stocksnap](https://stocksnap.io/photo/icecream-gelato-E7125AED61)                                | JESHOOTS.com      | CC0 1.0 |
+| `kisisel-bakim.jpg` | Kişisel Bakım     | [rawpixel](https://www.rawpixel.com/image/5947458/free-public-domain-cc0-photo)                   | —                 | CC0 1.0 |
+| `ev-yasam.jpg`      | Ev & Yaşam        | [rawpixel](https://www.rawpixel.com/image/6020086/photo-image-public-domain-kitchen-free)         | —                 | CC0 1.0 |
+| `bebek.jpg`         | Bebek             | [rawpixel](https://www.rawpixel.com/image/5913298/image-background-public-domain-hand)            | —                 | CC0 1.0 |
+| `evcil-hayvan.jpg`  | Evcil Hayvan      | [rawpixel](https://www.rawpixel.com/image/5958959/free-public-domain-cc0-photo)                   | —                 | CC0 1.0 |
 
 ## Kimlik akışı (T8.5)
 
-Ekranlar `GetirMarket-Giriş-Ekranı` referansına göre: fotoğrafsız marka kartı, `+90` önekli telefon,
-göster/gizle düğmeli şifre; "Şifremi unuttum" ve sosyal girişler yok. Kayıt aynı düzende (ad soyad,
-telefon, şifre). Başlıkta oturumsuzken "Giriş yap", oturumdayken "Hesabım" (dar ekranda yalnızca ikon).
+Giriş (`/giris`) ve kayıt (`/kayit`) T11.6'dan beri karşılama ekranının üstünde pencere (yukarıda). Kurallar ve alan mesajları sözleşmeden; göster/gizle düğmeli şifre; "Şifremi unuttum" ve sosyal
+girişler yok. Diğer sayfaların başlığında oturumsuzken "Giriş yap" (dönüş adresiyle), oturumdayken "Hesabım"
+(dar ekranda yalnızca ikon).
 
 | Katman        | Dosya                                                    | İş                                                                                   |
 | ------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------ |
@@ -52,10 +103,11 @@ telefon, şifre). Başlıkta oturumsuzken "Giriş yap", oturumdayken "Hesabım" 
 - **Aynı kaynak:** yenileme çerezi `SameSite=Strict`, `Path=/v1/auth`; web ile gateway aynı kaynaktan
   (geliştirmede Vite vekili) konuşmalıdır. `VITE_API_BASE_URL` başka bir kaynağı gösterirse oturum kurulmaz.
 
-### Demo persona seçici (yalnızca geliştirme)
+### Demo hesaplar (yalnızca geliştirme)
 
-Giriş ekranının altında Ayşe, Zeynep, Can, Ali ve Komşu: seçilen persona telefon ve demo şifresini
-**doldurur**, girişi kullanıcı yapar. Bayrak derleme zamanıdır (`vite.config.ts` → `__DEMO_PERSONAS__`):
+Karşılama kartının ve giriş penceresinin altında katlanır "Demo hesaplar": Ayşe, Zeynep, Can, Ali ve Komşu. Kartta
+açılır menüdür (kart uzamaz) ve seçim giriş penceresini telefon ve şifre dolu açar; geçmiş durumu yalnızca "demo"
+işaretini taşır, şifreyi giriş sayfası (yalnızca geliştirme paketinde) kendisi doldurur. Seçilen hesap formu telefon ve demo şifresiyle **doldurur**, girişi kullanıcı yapar. Bayrak derleme zamanıdır (`vite.config.ts` → `__DEMO_PERSONAS__`):
 `pnpm dev`'de açık (`VITE_DEMO_PERSONAS=false` kapatır), `pnpm build`'de ortamdan bağımsız **her zaman
 kapalı**; kapalıyken seçici ve persona verisi pakete hiç girmez.
 
@@ -216,7 +268,8 @@ tarayıcı aynı kaynakla konuşur, gateway'de CORS gerekmez. Gateway başka adr
 `apps/web/.env` içine `GATEWAY_URL=...` yazılır (bkz. `.env.example`).
 
 Giriş için gateway yeterlidir: `MOCK=true` iken demo personaları açılışta belleğe yüklenir
-(`http://localhost:5173/giris`, persona seçiciden biri, "Giriş yap").
+(`http://localhost:5173/giris`, "Demo hesaplar"dan biri, "Giriş yap"). Karşılama ekranı
+`GET /v1/content/welcome` ister: gateway T11.6'dan eskiyse ekran hata gösterir, gateway yeniden başlatılır.
 
 ## Klasörler
 
@@ -224,7 +277,7 @@ Giriş için gateway yeterlidir: `MOCK=true` iken demo personaları açılışta
 src/
   app/        router, QueryClient, sağlayıcılar
   pages/      rota başına sayfa kabuğu
-  features/   özellik başına api + hook + ui (catalog, markets, cart, auth, search, address)
+  features/   özellik başına api + hook + ui (catalog, markets, cart, auth, search, address, content)
   shared/
     api/      http-client (gönder), envelope (zarf aç), idempotency-key, client (örnek)
     session/  oturum deposu, kilit, yenileyici, yetkili istemci (T8.5)

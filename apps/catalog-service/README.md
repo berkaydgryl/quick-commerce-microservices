@@ -117,7 +117,7 @@ alanıdır; iki arama aynı eşleşme kuralını kullanır (T9.4: harf ve Türk�
 | `true` | Bellek okuyucuları (`infrastructure/memory`)                          | Hayır                                                                     |
 | değil  | Mongo repository'leri (`markets`, `offers`, `products`, `categories`) | Evet, `CATALOG_MONGO_URI` zorunlu; kendi veritabanı `getir_catalog` (D14) |
 
-İki kaynak da **aynı demo verisinden** beslenir (`src/infrastructure/fixtures/`: 5 kategori,
+İki kaynak da **aynı demo verisinden** beslenir (`src/infrastructure/fixtures/`: 13 kategori,
 15 ortak ürün, 6 market, 71 teklif) ve **aynı sözleşme testlerinden** geçer
 (`test/support/{category,market,offer}-reader-contract.ts`): birim testinde bellek, entegrasyon
 testinde gerçek Mongo. Veri kaynağını seçip açan tek yer `infrastructure/catalog-source.ts`'tir.

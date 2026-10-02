@@ -4,7 +4,9 @@
  * Duzen MOBIL ONCELIKLIDIR: taban stil telefon icindir, kirilimlar yalnizca
  * min-width ile yukari dogru genisletir. Degerler rem'dir (1rem = 16px iken
  * 48rem = 768px, 64rem = 1024px); kullanici tarayicinin yazi boyutunu buyuttugunde
- * kirilim da onunla birlikte kayar.
+ * kirilim da onunla birlikte kayar. 90rem = 1440px: karsilama ekraninda kartin banner'a
+ * binmesi (T11.6). Daha darda (1280, 1366) kayit adiminin uzun karti banner'i
+ * buyutur, gorsel yaklasir ve afisin yazisi kartin altinda kalirdi (canli olcum).
  *
  * JS karsiligi: src/shared/config/breakpoints.ts. Iki dosyanin ayni degeri
  * tasidigi test/unit/breakpoints.spec.ts ile dogrulanir.
@@ -12,3 +14,4 @@
 
 @custom-media --bp-md (min-width: 48rem);
 @custom-media --bp-lg (min-width: 64rem);
+@custom-media --bp-xl (min-width: 90rem);

@@ -53,7 +53,7 @@ export const MAX_SEARCH_OFFERS_PER_MARKET = SEARCH_RESULT_PRODUCTS_MAX;
  * ListMarketCategories sayfalanmaz (proje-kurallari.mdc "Sinirli listeler"
  * istisnasi); onun yerine okuma bu sayida kesilir ve seed bu sayidan fazla
  * kategori yazmayi reddeder - kesme gercekte hic devreye girmez, yalnizca
- * yanlis veriye karsi tavandir. Bugun 5 kategori var; 100 vitrinin
+ * yanlis veriye karsi tavandir. Bugun 13 kategori var (T11.6); 100 vitrinin
  * gosterebileceginden cok fazladir.
  */
 export const MAX_CATEGORY_COUNT = 100;

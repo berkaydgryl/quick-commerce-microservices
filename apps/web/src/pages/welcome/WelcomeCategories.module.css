@@ -1,0 +1,20 @@
+/* Banner'in altinda acik zemin (referans: beyaz serit), baslik solda kucuk. */
+.c-welcome-categories {
+  padding-block: var(--space-5);
+  background: var(--bg-surface);
+}
+
+.c-welcome-categories__inner {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.c-welcome-categories__title {
+  font-size: var(--font-size-md);
+}
+
+@media (--bp-md) {
+  .c-welcome-categories {
+    padding-block: var(--space-6);
+  }
+}

@@ -32,5 +32,6 @@ describe('kirilim noktalari', () => {
   it('matchMedia sorgusu rem ile kurulur', () => {
     expect(mediaQuery('md')).toBe('(min-width: 48rem)');
     expect(mediaQuery('lg')).toBe('(min-width: 64rem)');
+    expect(mediaQuery('xl')).toBe('(min-width: 90rem)');
   });
 });

@@ -16,8 +16,10 @@ describe('ListCategories', () => {
     const { error, response } = await call(catalogV1.CatalogServiceService.listCategories, {});
 
     expect(error).toBeUndefined();
-    expect(response?.categories).toHaveLength(5);
-    expect(response?.categories.map((item) => item.sortOrder)).toEqual([1, 2, 3, 4, 5]);
+    expect(response?.categories).toHaveLength(13);
+    expect(response?.categories.map((item) => item.sortOrder)).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+    ]);
     expect(response?.categories[0]?.slug).toBe('sut-kahvaltilik');
   });
 });

@@ -11,7 +11,7 @@
  * verisidir ve ADR-05 geregi onlara yalnizca bu servis yazar; (2) .dockerignore
  * infra/'yi imaja almaz - MOCK modundaki konteyner veriyi bulamazdi.
  *
- * Icerik (docs/roadmap.md "Pazaryeri demo verisi" tablosu): 5 kategori, 15
+ * Icerik (docs/roadmap.md "Pazaryeri demo verisi" tablosu): 13 kategori, 15
  * ortak urun, iki semtte 6 market. Her market kendi fiyati, kurali ve
  * cesidiyle gelir: A101 daha ucuz, Carrefour daha pahali; manav yalnizca
  * meyve-sebze satar; A101 Abbasaga KAPALIDIR. Degerler market panelinin

@@ -1,0 +1,7 @@
+/* Ulke kodu ve numara yan yana; hata metni numaranin altinda, secici ustte hizali. */
+.c-phone-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-2);
+  align-items: start;
+}

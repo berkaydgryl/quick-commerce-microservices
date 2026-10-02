@@ -28,7 +28,7 @@ const validJSON = `{
   },
   "loginCard": {
     "title": "Giriş yap veya kayıt ol", "countryLabel": "Ülke kodu", "phoneLabel": "Telefon numarası",
-    "phonePlaceholder": "5XX XXX XX XX", "continueLabel": "Devam Et", "editPhoneLabel": "Numarayı değiştir",
+    "phonePlaceholder": "5XX XXX XX XX", "continueLabel": "Devam Et", "closeLabel": "Kapat",
     "showPasswordLabel": "Şifreyi göster",
     "countries": [{"code": "TR", "name": "Türkiye", "dialCode": "+90", "flagUrl": "/img/flag/tr.svg"}],
     "login": {"passwordLabel": "Şifren", "submitLabel": "Giriş yap", "pendingLabel": "Giriş yapılıyor…",

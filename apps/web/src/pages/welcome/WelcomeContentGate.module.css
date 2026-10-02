@@ -1,0 +1,31 @@
+.c-welcome-gate__status {
+  padding-block: var(--space-6);
+}
+
+/* Iskelet: ust barin ve banner'in yerini tutar; icerik gelince sayfa ziplamaz. */
+.c-welcome-gate__skeleton {
+  display: grid;
+}
+
+.c-welcome-gate__skeleton-bar {
+  min-height: var(--size-field-min-height);
+  background: var(--color-brand-primary);
+}
+
+/* Banner'in orani icerikle gelir; iskelet yaklasik bir banner orani tutar. */
+.c-welcome-gate__skeleton-hero {
+  width: 100%;
+  max-height: var(--size-welcome-hero-max);
+  aspect-ratio: 7 / 2;
+}
+
+.is-loading {
+  background: var(--border-subtle);
+  animation: pulse 1.2s var(--easing-standard) infinite alternate;
+}
+
+@keyframes pulse {
+  to {
+    opacity: 0.5;
+  }
+}

@@ -1,41 +1,22 @@
-/* Mobil oncelikli: kart ekrani doldurur; genis ekranda tek sutun form genisliginde ortalanir. */
+/*
+ * Kimlik karti (T11.6; referans: getircarsi): karsilama ekraninin telefon karti,
+ * giris ve kayit ekrani. Beyaz, golgeli, kavisli; mobilde ekrani doldurur, genis
+ * ekranda tek sutun form genisliginde.
+ */
 .c-auth-card {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-4);
   width: 100%;
   max-width: var(--container-max-auth);
-  padding: var(--space-4);
-  margin-inline: auto;
+  padding: var(--space-5);
   background: var(--bg-surface);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-surface);
-}
-
-.c-auth-card__hero {
-  display: grid;
-  gap: var(--space-2);
-  padding: var(--space-5);
-  color: var(--text-on-brand);
-  background: var(--color-brand-primary);
-  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-raised);
 }
 
 .c-auth-card__title {
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-extrabold);
-}
-
-.c-auth-card__highlight {
-  color: var(--color-brand-accent);
-}
-
-.c-auth-card__lead {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-}
-
-@media (--bp-md) {
-  .c-auth-card {
-    padding: var(--space-5);
-  }
+  color: var(--color-brand-primary);
+  text-align: center;
 }

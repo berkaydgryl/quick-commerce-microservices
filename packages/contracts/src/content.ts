@@ -64,31 +64,32 @@ export const phoneCountrySchema = z.object({
   flagUrl: contentImageUrlSchema,
 });
 
-/** Giris kartinin sifre adimi: numara girildikten sonra, kayitli kullanici icin. */
+/** Giris penceresi: telefon + sifre (kayitli kullanici). */
 export const loginStepContentSchema = z.object({
   passwordLabel: contentTextSchema,
   submitLabel: contentTextSchema,
   /** Istek surerken dugmede gorunen metin. */
   pendingLabel: contentTextSchema,
-  /** "Hesabin yok mu?" + kayit adimina gecen baglanti. */
+  /** "Hesabin yok mu?" + kayit penceresine gecen baglanti. */
   registerPrompt: contentTextSchema,
   registerLinkLabel: contentTextSchema,
 });
 
-/** Giris kartinin kayit adimi: ad soyad ve sifre. */
+/** Kayit penceresi: ad soyad, telefon ve sifre. */
 export const registerStepContentSchema = z.object({
   fullNameLabel: contentTextSchema,
   passwordLabel: contentTextSchema,
   submitLabel: contentTextSchema,
   pendingLabel: contentTextSchema,
-  /** "Zaten hesabin var mi?" + sifre adimina donen baglanti. */
+  /** "Zaten hesabin var mi?" + giris penceresine donen baglanti. */
   loginPrompt: contentTextSchema,
   loginLinkLabel: contentTextSchema,
 });
 
 /**
- * Giris karti: telefon adimi, sifre ve kayit adimlari. Gelistirmeye ozel demo
- * hesap listesinin metni burada YOKTUR: o arac production paketine hic girmez.
+ * Karsilama karti (telefon + "Devam Et") ile giris ve kayit penceresinin
+ * metinleri. Gelistirmeye ozel demo hesap listesinin metni burada YOKTUR: o
+ * arac production paketine hic girmez.
  */
 export const loginCardContentSchema = z.object({
   title: contentTextSchema,
@@ -97,8 +98,8 @@ export const loginCardContentSchema = z.object({
   phoneLabel: contentTextSchema,
   phonePlaceholder: contentTextSchema,
   continueLabel: contentTextSchema,
-  /** Sifre ya da kayit adimindan telefon adimina donen dugme. */
-  editPhoneLabel: contentTextSchema,
+  /** Giris ve kayit penceresinin kapat (X) dugmesinin erisilebilir adi. */
+  closeLabel: contentTextSchema,
   /** Sifre alanindaki goster/gizle dugmesinin erisilebilir adi (aria-pressed ile). */
   showPasswordLabel: contentTextSchema,
   countries: z

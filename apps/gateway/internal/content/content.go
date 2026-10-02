@@ -63,14 +63,14 @@ type BannerSource struct {
 	Width int    `json:"width"`
 }
 
-// LoginCard, giris karti: telefon adimi, sifre ve kayit adimlari.
+// LoginCard, karsilama karti ile giris ve kayit penceresinin metinleri.
 type LoginCard struct {
 	Title             string         `json:"title"`
 	CountryLabel      string         `json:"countryLabel"`
 	PhoneLabel        string         `json:"phoneLabel"`
 	PhonePlaceholder  string         `json:"phonePlaceholder"`
 	ContinueLabel     string         `json:"continueLabel"`
-	EditPhoneLabel    string         `json:"editPhoneLabel"`
+	CloseLabel        string         `json:"closeLabel"`
 	ShowPasswordLabel string         `json:"showPasswordLabel"`
 	Countries         []PhoneCountry `json:"countries"`
 	Login             LoginStep      `json:"login"`
@@ -85,7 +85,7 @@ type PhoneCountry struct {
 	FlagURL  string `json:"flagUrl"`
 }
 
-// LoginStep, sifre adimi (kayitli kullanici).
+// LoginStep, giris penceresi (kayitli kullanici).
 type LoginStep struct {
 	PasswordLabel     string `json:"passwordLabel"`
 	SubmitLabel       string `json:"submitLabel"`
@@ -94,7 +94,7 @@ type LoginStep struct {
 	RegisterLinkLabel string `json:"registerLinkLabel"`
 }
 
-// RegisterStep, kayit adimi (ad soyad ve sifre).
+// RegisterStep, kayit penceresi (ad soyad, telefon, sifre).
 type RegisterStep struct {
 	FullNameLabel  string `json:"fullNameLabel"`
 	PasswordLabel  string `json:"passwordLabel"`

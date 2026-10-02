@@ -62,7 +62,7 @@ async function countOf(name: string): Promise<number> {
 }
 
 async function expectDemoCounts(): Promise<void> {
-  expect(await countOf(COLLECTIONS.CATEGORIES)).toBe(5);
+  expect(await countOf(COLLECTIONS.CATEGORIES)).toBe(13);
   expect(await countOf(COLLECTIONS.PRODUCTS)).toBe(15);
   expect(await countOf(COLLECTIONS.MARKETS)).toBe(6);
   expect(await countOf(COLLECTIONS.OFFERS)).toBe(CATALOG_SNAPSHOT.offers.length);
@@ -92,7 +92,7 @@ describeMarketReaderContract('mongo', () => repositories.markets);
 describeOfferReaderContract('mongo', () => repositories.offers);
 
 describe('seed', () => {
-  it('5 kategori, 15 urun, 6 market ve tum teklifler yuklu', async () => {
+  it('13 kategori, 15 urun, 6 market ve tum teklifler yuklu', async () => {
     await expectDemoCounts();
   });
 
