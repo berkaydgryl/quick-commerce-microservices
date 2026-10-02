@@ -17,6 +17,8 @@ func TestLimitsMatchContractConstants(t *testing.T) {
 		"CONTENT_TEXT_MAX_LENGTH":     MaxTextLength,
 		"CONTENT_BANNER_SOURCES_MAX":  MaxBannerSources,
 		"CONTENT_PHONE_COUNTRIES_MAX": MaxPhoneCountries,
+		"CONTENT_STORE_LINKS_MAX":     MaxStoreLinks,
+		"CONTENT_FEATURES_MAX":        MaxFeatures,
 	} {
 		if contractValue := testkit.NumberConstant(t, source, name); contractValue != goValue {
 			t.Errorf("%s: sozlesme %d, gateway %d", name, contractValue, goValue)

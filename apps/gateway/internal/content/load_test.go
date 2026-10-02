@@ -32,11 +32,20 @@ const validJSON = `{
     "showPasswordLabel": "Şifreyi göster",
     "countries": [{"code": "TR", "name": "Türkiye", "dialCode": "+90", "flagUrl": "/img/flag/tr.svg"}],
     "login": {"passwordLabel": "Şifren", "submitLabel": "Giriş yap", "pendingLabel": "Giriş yapılıyor…",
-      "registerPrompt": "Hesabın yok mu?", "registerLinkLabel": "Kayıt ol"},
+      "registerPrompt": "Hesabın yok mu?", "registerLinkLabel": "Kayıt ol",
+      "unknownPhoneNotice": "Bu numarayla kayıtlı bir hesap yok."},
     "register": {"fullNameLabel": "Adın soyadın", "passwordLabel": "Şifre belirle", "submitLabel": "Kayıt ol",
-      "pendingLabel": "Kaydın yapılıyor…", "loginPrompt": "Zaten hesabın var mı?", "loginLinkLabel": "Giriş yap"}
+      "pendingLabel": "Kaydın yapılıyor…", "loginPrompt": "Zaten hesabın var mı?", "loginLinkLabel": "Giriş yap",
+      "knownPhoneNotice": "Bu numarayla kayıtlı bir hesap var."}
   },
-  "categories": {"title": "Kategoriler"}
+  "categories": {"title": "Kategoriler"},
+  "appDownload": {
+    "title": "Getir'i indir!", "subtitle": "İstediğin ürünleri dakikalar içinde kapına getirelim.",
+    "image": {"url": "/img/landing/telefonlar.png", "width": 634, "height": 298},
+    "stores": [{"label": "App Store'dan indir", "url": "https://apps.apple.com/app/id995280265",
+      "badge": {"url": "/img/store/app-store.svg", "width": 160, "height": 48}}]
+  },
+  "features": [{"image": {"url": "/img/tanitim/teslimat.png", "width": 300, "height": 300}, "text": "Dakikalar içinde kapında!"}]
 }`
 
 func TestEmbeddedWelcomeLoads(t *testing.T) {
@@ -52,6 +61,33 @@ func TestEmbeddedWelcomeLoads(t *testing.T) {
 	}
 	if got := welcome.LoginCard.Countries[0].FlagURL; got != testAssetBase+"/img/flag/tr.svg" {
 		t.Errorf("bayrak adresi: %q", got)
+	}
+	// Tanitim bolumleri (T11.7): gorseller kokun altinda, magaza baglantisi
+	// disari giden adres oldugu gibi.
+	if got := welcome.AppDownload.Image.URL; got != testAssetBase+"/img/landing/telefonlar.png" {
+		t.Errorf("telefon gorseli: %q", got)
+	}
+	for _, store := range welcome.AppDownload.Stores {
+		if !strings.HasPrefix(store.Badge.URL, testAssetBase+"/img/store/") || !strings.HasPrefix(store.URL, "https://") {
+			t.Errorf("magaza rozeti kokun altinda, baglanti https olmali: %+v", store)
+		}
+	}
+	if len(welcome.Features) != 3 {
+		t.Errorf("uc tanitim kutusu bekleniyordu: %d", len(welcome.Features))
+	}
+}
+
+func TestParseKeepsStoreLinkAsIs(t *testing.T) {
+	// Magaza baglantisi ASSET_BASE_URL ile cozulmez: disari giden adrestir.
+	welcome, err := parseWelcome([]byte(validJSON), testResolver(t))
+	if err != nil {
+		t.Fatalf("gecerli icerik reddedildi: %v", err)
+	}
+	if got := welcome.AppDownload.Stores[0].URL; got != "https://apps.apple.com/app/id995280265" {
+		t.Errorf("magaza baglantisi degismemeli: %q", got)
+	}
+	if got := welcome.Features[0].Image.URL; got != testAssetBase+"/img/tanitim/teslimat.png" {
+		t.Errorf("kutu gorseli: %q", got)
 	}
 }
 

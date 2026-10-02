@@ -79,6 +79,33 @@ func loginHandler(authenticator UserAuthenticator, devices deviceCookies, sessio
 	}
 }
 
+// phoneCheckHandler, POST /v1/auth/phone-check (T11.7): numarayla kayitli bir
+// hesap var mi. Numara govdededir, adreste degil: kisisel veri adres
+// gunluklerine ve izlere yazilmasin. Kalici bir sey degistirmez; bu yuzden
+// Idempotency-Key istemez (giris gibi). Cevap onbelleklenmez.
+func phoneCheckHandler(checker PhoneChecker) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if err := rejectUnknownQuery(c); err != nil {
+			return err
+		}
+		var body phoneCheckBody
+		if err := decodeJSONBody(c, &body); err != nil {
+			return err
+		}
+		errs := fieldErrors{}
+		input := body.toInput(errs)
+		if len(errs) > 0 {
+			return apperror.New(apperror.CodeValidationFailed, errs)
+		}
+
+		registered, err := checker.PhoneRegistered(c.Context(), input)
+		if err != nil {
+			return err
+		}
+		return private(c, http.StatusOK, phoneCheckResult{Registered: registered})
+	}
+}
+
 // refreshHandler, POST /v1/auth/refresh: cerezdeki yenileme jetonunu
 // yenisiyle degistirir (cereze yazar) ve yeni erisim jetonu verir. Erisim
 // jetonu istemez: suresi dolmus olmasi bu ucun cagrilma sebebidir. Govde

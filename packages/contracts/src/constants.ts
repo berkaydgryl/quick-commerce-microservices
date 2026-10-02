@@ -175,3 +175,11 @@ export const DIAL_CODE_PATTERN = /^\+[1-9][0-9]{0,2}$/;
 
 /** Ulke kodu: ISO 3166-1 alfa-2, buyuk harf ("TR"). */
 export const COUNTRY_CODE_PATTERN = /^[A-Z]{2}$/;
+
+/**
+ * Karsilama ekraninin tanitim bolumleri (T11.7): uygulama indirme bandindaki
+ * magaza rozetleri ve alttaki tanitim kutulari. Gateway'deki karsiliklari
+ * content.MaxStoreLinks ve content.MaxFeatures.
+ */
+export const CONTENT_STORE_LINKS_MAX = 4;
+export const CONTENT_FEATURES_MAX = 6;

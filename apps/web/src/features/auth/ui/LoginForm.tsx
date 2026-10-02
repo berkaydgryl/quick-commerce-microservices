@@ -5,8 +5,9 @@ import type { ReactNode } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 
 import { useLogin } from '../hooks/useLogin';
+import { usePhoneRegistration } from '../hooks/usePhoneRegistration';
 import { countryByCode, countryByDialCode, countryOfPhone } from '../services/country';
-import { LOGIN_FIELDS, loginFormSchema } from '../services/form-schemas';
+import { completePhone, LOGIN_FIELDS, loginFormSchema } from '../services/form-schemas';
 import type { LoginField, LoginFormValues } from '../services/form-schemas';
 import type { PhoneEntry } from '../services/auth-route-state';
 import { formFeedback } from '../services/server-errors';
@@ -16,6 +17,8 @@ import { CountryCodeSelect } from './CountryCodeSelect';
 import { focusFirstInvalid, showServerErrors } from './form-errors';
 import { PasswordField } from './PasswordField';
 import { PhoneField } from './PhoneField';
+import { PhoneNotice } from './PhoneNotice';
+import type { AuthSwitchTarget } from './PhoneNotice';
 import { PhoneRow } from './PhoneRow';
 
 /** Formu disaridan dolduran bilgiler (gelistirmede demo hesaplar). */
@@ -33,6 +36,8 @@ interface LoginFormProps {
   readonly initialPassword: string;
   /** Yazilan numara (bossa null): pencerenin alt bandi kayit penceresine tasir. */
   readonly onPhoneChange: (entry: PhoneEntry | null) => void;
+  /** Kayitsiz numara uyarisindaki "Kayit ol" baglantisi (T11.7). */
+  readonly registerSwitch: AuthSwitchTarget;
   /** Formun altina eklenen parca; verilen fonksiyon formu doldurur, giris yapmaz. */
   readonly renderPrefill?:
     ((fill: (credentials: LoginCredentials) => void) => ReactNode) | undefined;
@@ -48,6 +53,7 @@ export function LoginForm({
   initialEntry,
   initialPassword,
   onPhoneChange,
+  registerSwitch,
   renderPrefill,
 }: LoginFormProps) {
   const login = useLogin();
@@ -78,6 +84,8 @@ export function LoginForm({
     shouldFocusError: false,
   });
   const phoneDigits = useWatch({ control, name: 'phone' });
+  // Numara tamamlaninca sorulur (T11.7): kayitsizsa telefonun altinda uyari.
+  const registered = usePhoneRegistration(completePhone(phoneDigits, dialCode));
 
   useEffect(() => {
     setFocus(firstField);
@@ -153,6 +161,13 @@ export function LoginForm({
             )}
           />
         </PhoneRow>
+        {registered === false && errors.phone === undefined && (
+          <PhoneNotice
+            message={text.unknownPhoneNotice}
+            linkLabel={text.registerLinkLabel}
+            target={registerSwitch}
+          />
+        )}
         <PasswordField
           id="giris-sifre"
           label={text.passwordLabel}

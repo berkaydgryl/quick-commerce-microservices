@@ -1,0 +1,76 @@
+/*
+ * Mor kutu acik zeminin ICINDE, kapsayici genisliginde (mor tum genisligi
+ * kaplamaz; referans). Ust boslugu var, alt boslugu yok: telefon gorseli kutunun
+ * alt kenarina oturur ve sagdaki ic boslukta durur. Telefonda metin ustte,
+ * gorsel altta saga yasli; genis ekranda yan yana.
+ */
+.c-welcome-download {
+  padding-block-start: var(--space-6);
+}
+
+.c-welcome-download__box {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-5) 0;
+  overflow: hidden;
+  color: var(--text-on-brand);
+  background: var(--color-brand-primary);
+  border-radius: var(--radius-lg);
+}
+
+.c-welcome-download__text {
+  display: grid;
+  gap: var(--space-3);
+  align-content: center;
+}
+
+.c-welcome-download__title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-extrabold);
+}
+
+.c-welcome-download__subtitle {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+}
+
+.c-welcome-download__stores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-block-start: var(--space-2);
+}
+
+.c-welcome-download__store {
+  display: block;
+  border-radius: var(--radius-sm);
+}
+
+/* Mor zeminde mor odak halkasi gorunmezdi: halka kalir, rengi beyaz olur. */
+.c-welcome-download__store:focus-visible {
+  outline-color: var(--text-on-brand);
+}
+
+.c-welcome-download__badge {
+  width: auto;
+  height: var(--size-store-badge);
+}
+
+.c-welcome-download__image {
+  place-self: end;
+  width: 100%;
+  max-width: var(--size-landing-phones);
+  height: auto;
+}
+
+@media (--bp-lg) {
+  .c-welcome-download__box {
+    grid-template-columns: minmax(0, 1fr) minmax(0, var(--size-landing-phones));
+    gap: var(--space-6);
+    padding-inline: var(--space-6);
+  }
+
+  .c-welcome-download__text {
+    padding-block-end: var(--space-6);
+  }
+}

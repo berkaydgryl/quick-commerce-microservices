@@ -23,6 +23,10 @@ const (
 	MaxBannerSources = 4
 	// MaxPhoneCountries, ulke kodu secicisinin en fazla satiri.
 	MaxPhoneCountries = 10
+	// MaxStoreLinks, uygulama indirme bandindaki en fazla magaza rozeti (T11.7).
+	MaxStoreLinks = 4
+	// MaxFeatures, en fazla tanitim kutusu (T11.7).
+	MaxFeatures = 6
 )
 
 // Welcome, oturumsuz ziyaretcinin karsilama ekrani. JSON adlari sozlesmeyle
@@ -32,6 +36,9 @@ type Welcome struct {
 	Hero       Hero             `json:"hero"`
 	LoginCard  LoginCard        `json:"loginCard"`
 	Categories CategoriesHeader `json:"categories"`
+	// AppDownload ve Features, kategorilerin altindaki tanitim bolumleri (T11.7).
+	AppDownload AppDownload `json:"appDownload"`
+	Features    []Feature   `json:"features"`
 }
 
 // Header, ust bar: logonun iki parcasi ve iki dugme.
@@ -92,6 +99,8 @@ type LoginStep struct {
 	PendingLabel      string `json:"pendingLabel"`
 	RegisterPrompt    string `json:"registerPrompt"`
 	RegisterLinkLabel string `json:"registerLinkLabel"`
+	// UnknownPhoneNotice, kayitsiz numara yazilinca telefonun altindaki uyari (T11.7).
+	UnknownPhoneNotice string `json:"unknownPhoneNotice"`
 }
 
 // RegisterStep, kayit penceresi (ad soyad, telefon, sifre).
@@ -102,11 +111,43 @@ type RegisterStep struct {
 	PendingLabel   string `json:"pendingLabel"`
 	LoginPrompt    string `json:"loginPrompt"`
 	LoginLinkLabel string `json:"loginLinkLabel"`
+	// KnownPhoneNotice, kayitli numara yazilinca telefonun altindaki uyari (T11.7).
+	KnownPhoneNotice string `json:"knownPhoneNotice"`
 }
 
 // CategoriesHeader, kategori bolumunun basligi; liste /v1/categories'ten gelir.
 type CategoriesHeader struct {
 	Title string `json:"title"`
+}
+
+// Image, tek boy bir gorsel: adres ve dogal boyut. URL dosyada goreli yol,
+// cevapta mutlak adres (assets.Resolver).
+type Image struct {
+	URL    string `json:"url"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+}
+
+// StoreLink, magaza rozeti. URL disari giden https baglantisidir; gateway
+// cozmez, oldugu gibi tasir. Rozet gorseli goreli yoldur.
+type StoreLink struct {
+	Label string `json:"label"`
+	URL   string `json:"url"`
+	Badge Image  `json:"badge"`
+}
+
+// AppDownload, uygulama indirme bandi (T11.7).
+type AppDownload struct {
+	Title    string      `json:"title"`
+	Subtitle string      `json:"subtitle"`
+	Image    Image       `json:"image"`
+	Stores   []StoreLink `json:"stores"`
+}
+
+// Feature, tanitim kutusu (T11.7): gorsel + metin.
+type Feature struct {
+	Image Image  `json:"image"`
+	Text  string `json:"text"`
 }
 
 // Static, acilista yuklenmis icerigi bellekten veren kaynak.

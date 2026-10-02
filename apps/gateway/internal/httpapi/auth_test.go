@@ -57,6 +57,7 @@ func authAppWith(t *testing.T, logger *slog.Logger, secureCookies bool) *fiber.A
 		Health:            fakeReporter{report: healthyReport()},
 		UserRegistrar:     service,
 		UserAuthenticator: service,
+		PhoneChecker:      service,
 		SessionRefresher:  service,
 		SessionRevoker:    service,
 		ProfileGetter:     service,

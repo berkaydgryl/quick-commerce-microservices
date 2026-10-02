@@ -70,6 +70,20 @@ export const loginRequestSchema = z.object({
   password: passwordSchema,
 });
 
+/**
+ * POST /v1/auth/phone-check (T11.7): numarayla kayitli bir hesap var mi.
+ * Karsilama ekraninin giris ve kayit penceresi numara yazilinca erken uyarir.
+ * Bilincli odunlesim: cevap numaranin kayitli olup olmadigini soyler; uc IP
+ * basina hiz sinirlidir. Numara govdededir: adres gunluklerine yazilmasin.
+ */
+export const phoneCheckRequestSchema = z.object({
+  phone: phoneSchema,
+});
+
+export const phoneCheckResultSchema = z.object({
+  registered: z.boolean(),
+});
+
 /*
  * Yenileme jetonu GOVDEDE TASINMAZ (T8.5 hazirligi): gateway onu HttpOnly
  * cereze yazar (getir_refresh; SameSite=Strict, Path=/v1/auth). Sayfadaki betik
@@ -106,6 +120,8 @@ export const authSessionSchema = z.object({
 export type Phone = z.infer<typeof phoneSchema>;
 export type RegisterRequest = z.infer<typeof registerRequestSchema>;
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
+export type PhoneCheckRequest = z.infer<typeof phoneCheckRequestSchema>;
+export type PhoneCheckResult = z.infer<typeof phoneCheckResultSchema>;
 export type LogoutResult = z.infer<typeof logoutResultSchema>;
 export type UserProfile = z.infer<typeof userProfileSchema>;
 export type AuthSession = z.infer<typeof authSessionSchema>;

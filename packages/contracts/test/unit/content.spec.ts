@@ -6,7 +6,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CONTENT_BANNER_SOURCES_MAX,
+  CONTENT_FEATURES_MAX,
   CONTENT_PHONE_COUNTRIES_MAX,
+  CONTENT_STORE_LINKS_MAX,
   CONTENT_TEXT_MAX_LENGTH,
   welcomeContentSchema,
 } from '../../src/index.js';
@@ -19,6 +21,17 @@ const TURKIYE = {
   name: 'Türkiye',
   dialCode: '+90',
   flagUrl: `${ASSET}/img/flag/tr.svg`,
+};
+
+const STORE = {
+  label: "App Store'dan indir",
+  url: 'https://apps.apple.com/app/id995280265',
+  badge: { url: `${ASSET}/img/store/app-store.svg`, width: 160, height: 48 },
+};
+
+const FEATURE = {
+  image: { url: `${ASSET}/img/tanitim/teslimat.png`, width: 300, height: 300 },
+  text: 'Siparişin dakikalar içinde kapında!',
 };
 
 const WELCOME: WelcomeContent = {
@@ -49,6 +62,7 @@ const WELCOME: WelcomeContent = {
       pendingLabel: 'Giriş yapılıyor…',
       registerPrompt: 'Hesabın yok mu?',
       registerLinkLabel: 'Kayıt ol',
+      unknownPhoneNotice: 'Bu numarayla kayıtlı bir hesap yok.',
     },
     register: {
       fullNameLabel: 'Adın soyadın',
@@ -57,10 +71,23 @@ const WELCOME: WelcomeContent = {
       pendingLabel: 'Kaydın oluşturuluyor…',
       loginPrompt: 'Zaten hesabın var mı?',
       loginLinkLabel: 'Giriş yap',
+      knownPhoneNotice: 'Bu numarayla kayıtlı bir hesap var.',
     },
   },
   categories: { title: 'Kategoriler' },
+  appDownload: {
+    title: "Getir'i indir!",
+    subtitle: 'İstediğin ürünleri dakikalar içinde kapına getirelim.',
+    image: { url: `${ASSET}/img/landing/telefonlar.png`, width: 634, height: 298 },
+    stores: [STORE],
+  },
+  features: [FEATURE],
 };
+
+const withAppDownload = (appDownload: Partial<WelcomeContent['appDownload']>) => ({
+  ...WELCOME,
+  appDownload: { ...WELCOME.appDownload, ...appDownload },
+});
 
 const withCard = (card: Partial<WelcomeContent['loginCard']>) => ({
   ...WELCOME,
@@ -129,5 +156,33 @@ describe('welcomeContentSchema', () => {
   it.each(['tr', 'TUR', 'T'])('ISO alfa-2 disindaki ulke kodunu reddeder: %s', (code) => {
     const countries = [{ ...TURKIYE, code }];
     expect(welcomeContentSchema.safeParse(withCard({ countries })).success).toBe(false);
+  });
+
+  it('magaza baglantisi yalnizca https olabilir (disari giden baglanti)', () => {
+    const stores = [{ ...STORE, url: 'http://apps.apple.com/app/id995280265' }];
+    expect(welcomeContentSchema.safeParse(withAppDownload({ stores })).success).toBe(false);
+    const relative = [{ ...STORE, url: '/magaza' }];
+    expect(welcomeContentSchema.safeParse(withAppDownload({ stores: relative })).success).toBe(
+      false,
+    );
+  });
+
+  it('rozetsiz ya da sinirdan kalabalik magaza listesini reddeder', () => {
+    expect(welcomeContentSchema.safeParse(withAppDownload({ stores: [] })).success).toBe(false);
+    const crowded = Array.from({ length: CONTENT_STORE_LINKS_MAX + 1 }, () => STORE);
+    expect(welcomeContentSchema.safeParse(withAppDownload({ stores: crowded })).success).toBe(
+      false,
+    );
+  });
+
+  it('tanitim kutusu olmadan ya da sinirdan fazlasiyla reddeder', () => {
+    expect(welcomeContentSchema.safeParse({ ...WELCOME, features: [] }).success).toBe(false);
+    const crowded = Array.from({ length: CONTENT_FEATURES_MAX + 1 }, () => FEATURE);
+    expect(welcomeContentSchema.safeParse({ ...WELCOME, features: crowded }).success).toBe(false);
+  });
+
+  it('gorselin dogal boyutu pozitif olmali (yer onceden ayrilir)', () => {
+    const image = { ...WELCOME.appDownload.image, height: 0 };
+    expect(welcomeContentSchema.safeParse(withAppDownload({ image })).success).toBe(false);
   });
 });

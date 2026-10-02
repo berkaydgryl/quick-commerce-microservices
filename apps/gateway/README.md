@@ -19,7 +19,7 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | Korelasyon kimliği   | ✅ `req_` + 32 hex; gelen kimlik yalnızca bu biçimdeyse korunur (D8) |
 | Zarif kapanış        | ✅ SIGINT/SIGTERM → devam eden istekler beklenir                |
 | `GET /v1/categories` | ✅ catalog `ListCategories`; bilinmeyen sorgu parametresi 400   |
-| `GET /v1/content/welcome` | ✅ Karşılama ekranının metin ve görselleri (T11.6): gömülü `internal/content/welcome.json`; açılışta doğrulanır, bozuksa gateway açılmaz; görseller `ASSET_BASE_URL` ile |
+| `GET /v1/content/welcome` | ✅ Karşılama ekranının metin ve görselleri (T11.6; T11.7'de indirme bandı ve tanıtım kutuları): gömülü `internal/content/welcome.json`; açılışta doğrulanır, bozuksa gateway açılmaz; görseller `ASSET_BASE_URL` ile, mağaza bağlantıları yalnızca `https` ve olduğu gibi |
 | `GET /v1/markets?lat&lng` | ✅ Yakındaki marketler; boş bölge = boş liste, hata değil |
 | `GET /v1/markets/{id}` | ✅ Market sayfası başlığı; puan onda birden ondalığa (`47` → `4.7`) |
 | `GET /v1/markets/{id}/categories` | ✅ Marketin teklifi olan kategoriler |
@@ -31,6 +31,7 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `GET /v1/orders/{id}` | ✅ order `GetOrder`; başkasının siparişi 404 |
 | `POST /v1/auth/register` | ✅ Kayıt + oturum (201); telefon benzersiz, şifre bcrypt (T8.1) |
 | `POST /v1/auth/login` | ✅ Giriş (200); yanlış şifre ile kayıtsız numara aynı cevabı alır |
+| `POST /v1/auth/phone-check` | ✅ Numarayla kayıtlı hesap var mı (T11.7): karşılama pencereleri erken uyarır. Bilinçli ödünleşim: numaranın kayıtlı olduğu öğrenilebilir; IP başına kimlik sınırı (ayrı sayaç), numara günlüğe yazılmaz, anahtar istemez |
 | `POST /v1/auth/refresh` | ✅ Yenileme jetonu her kullanımda değişir; eskisi bir daha geçmez |
 | `POST /v1/auth/logout` | ✅ Yenileme jetonunu iptal eder; tekrarı zararsız (`revoked:false`) |
 | `GET /v1/me`         | ✅ Jetondaki kullanıcının profili |

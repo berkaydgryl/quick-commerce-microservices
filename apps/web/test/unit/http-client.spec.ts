@@ -124,6 +124,26 @@ describe('http-client', () => {
     expect(init?.body).toBe('{"phone":"+905550000001"}');
   });
 
+  it('govdeli okuma (T11.7) anahtarsiz POST; numara govdede, adreste degil', async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({ success: true, data: { ok: true } }));
+
+    await clientWith(fetchMock).request('/v1/auth/phone-check', {
+      schema,
+      method: 'POST',
+      readOnly: true,
+      body: { phone: '+905550000001' },
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    const headers = new Headers(init?.headers);
+    expect(url).toBe('http://gw.test/v1/auth/phone-check');
+    expect(init?.method).toBe('POST');
+    expect(headers.has('Idempotency-Key')).toBe(false);
+    expect(init?.body).toBe('{"phone":"+905550000001"}');
+  });
+
   it('erisim jetonu Bearer basligiyla gider; jetonsuz istekte baslik yok', async () => {
     const fetchMock = vi
       .fn<typeof fetch>()

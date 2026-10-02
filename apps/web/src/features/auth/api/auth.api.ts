@@ -3,11 +3,18 @@
  * cekirdegindedir (shared/session/session-api.ts): yetkili istemci de kullanir.
  */
 
-import { authSessionSchema, logoutResultSchema, userProfileSchema } from '@getir/contracts';
+import {
+  authSessionSchema,
+  logoutResultSchema,
+  phoneCheckResultSchema,
+  userProfileSchema,
+} from '@getir/contracts';
 import type {
   AuthSession,
   LoginRequest,
   LogoutResult,
+  PhoneCheckRequest,
+  PhoneCheckResult,
   RegisterRequest,
   UserProfile,
 } from '@getir/contracts';
@@ -35,6 +42,24 @@ export function loginUser(client: HttpClient, request: LoginRequest): Promise<Au
     session: true,
     body: request,
     schema: authSessionSchema,
+  });
+}
+
+/**
+ * POST /v1/auth/phone-check (T11.7): numarayla kayitli hesap var mi. Govdeli
+ * okuma: numara adrese yazilmaz, anahtar istemez.
+ */
+export function checkPhone(
+  client: HttpClient,
+  request: PhoneCheckRequest,
+  signal?: AbortSignal,
+): Promise<PhoneCheckResult> {
+  return client.request('/v1/auth/phone-check', {
+    method: 'POST',
+    readOnly: true,
+    body: request,
+    schema: phoneCheckResultSchema,
+    signal,
   });
 }
 

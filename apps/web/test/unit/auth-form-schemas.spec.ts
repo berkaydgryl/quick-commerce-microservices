@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 
 import {
+  completePhone,
   loginFormSchema,
   phoneEntrySchema,
   registerFormSchema,
@@ -85,5 +86,12 @@ describe('kimlik formlarinin semalari (T8.5, T11.6)', () => {
     });
 
     expect(fieldMessages(result)).toEqual({ fullName: [contractMessage(fullNameSchema, 'A')] });
+  });
+
+  it('tamamlanmis numara (T11.7): yalnizca sozlesmeye uyan numara E.164 olur, eksigi null', () => {
+    expect(completePhone('5550000001', '+90')).toBe('+905550000001');
+    expect(completePhone('555000000', '+90')).toBeNull();
+    expect(completePhone('', '+90')).toBeNull();
+    expect(completePhone('5550000001', '+49')).toBeNull();
   });
 });

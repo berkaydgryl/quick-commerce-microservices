@@ -52,7 +52,19 @@ interface SessionRequest<T> extends BaseRequest<T> {
   readonly body?: unknown;
 }
 
-export type ApiRequest<T> = ReadRequest<T> | MutationRequest<T> | SessionRequest<T>;
+/**
+ * Govdeli okuma (T11.7): kalici bir sey degistirmeyen ama kisisel veriyi
+ * adreste tasimamak icin POST kullanan uc (numara kontrolu, /v1/auth/phone-check).
+ * Anahtar istemez: tekrari zararsizdir, kayit yaratmaz.
+ */
+interface BodyReadRequest<T> extends BaseRequest<T> {
+  readonly method: 'POST';
+  readonly readOnly: true;
+  readonly body: unknown;
+}
+
+export type ApiRequest<T> =
+  ReadRequest<T> | MutationRequest<T> | SessionRequest<T> | BodyReadRequest<T>;
 
 export interface HttpClient {
   request<T>(path: string, request: ApiRequest<T>): Promise<T>;

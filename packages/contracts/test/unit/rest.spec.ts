@@ -7,6 +7,8 @@ import {
   createOrderRequestSchema,
   marketProductsQuerySchema,
   loginRequestSchema,
+  phoneCheckRequestSchema,
+  phoneCheckResultSchema,
   orderPlacementSchema,
   orderStatusSchema,
   productSchema,
@@ -27,6 +29,15 @@ const VALID_ADDRESS = {
   line: 'Bagdat Caddesi 12',
   location: { lat: 41.0082, lng: 28.9784 },
 };
+
+describe('numara kontrolu (T11.7)', () => {
+  it('istek yalnizca E.164 telefon tasir; cevap registered', () => {
+    expect(phoneCheckRequestSchema.safeParse({ phone: '+905551112233' }).success).toBe(true);
+    expect(phoneCheckRequestSchema.safeParse({ phone: '05551112233' }).success).toBe(false);
+    expect(phoneCheckResultSchema.safeParse({ registered: false }).success).toBe(true);
+    expect(phoneCheckResultSchema.safeParse({}).success).toBe(false);
+  });
+});
 
 describe('loginRequestSchema', () => {
   it('E.164 telefonu kabul eder', () => {

@@ -24,6 +24,23 @@ type loginBody struct {
 	Password string `json:"password"`
 }
 
+// phoneCheckBody, POST /v1/auth/phone-check (phoneCheckRequestSchema).
+type phoneCheckBody struct {
+	Phone string `json:"phone"`
+}
+
+// phoneCheckResult, numara kontrolunun cevabi (phoneCheckResultSchema).
+type phoneCheckResult struct {
+	Registered bool `json:"registered"`
+}
+
+// toInput, numara kontrolu govdesini girdiye cevirir; bicim sorununu errs'e yazar.
+func (b phoneCheckBody) toInput(errs fieldErrors) auth.PhoneCheckInput {
+	input := auth.PhoneCheckInput{Phone: b.Phone}
+	collect(errs, input.Check())
+	return input
+}
+
 // logoutResult, cikis cevabi (logoutResultSchema). revoked false hata degildir:
 // jeton zaten iptal edilmis ya da suresi dolmus olabilir.
 type logoutResult struct {
