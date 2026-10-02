@@ -48,6 +48,11 @@ export function LoginPage() {
   if (status === 'authenticated') {
     return <Navigate to={next} replace />;
   }
+  // Alt bant ve kayitsiz numara uyarisi ayni yere, numarayla gider.
+  const registerSwitch = {
+    to: withNextPath(AUTH_ROUTES.register, next),
+    state: { phoneEntry: entry ?? undefined, fromApp },
+  };
   return (
     <WelcomePage
       renderDialog={(content) => (
@@ -59,8 +64,8 @@ export function LoginPage() {
             <AuthSwitch
               prompt={content.loginCard.login.registerPrompt}
               label={content.loginCard.login.registerLinkLabel}
-              to={withNextPath(AUTH_ROUTES.register, next)}
-              state={{ phoneEntry: entry ?? undefined, fromApp }}
+              to={registerSwitch.to}
+              state={registerSwitch.state}
             />
           }
         >
@@ -69,6 +74,7 @@ export function LoginPage() {
             initialEntry={phoneEntry}
             initialPassword={demo ? DEMO_INITIAL_PASSWORD : ''}
             onPhoneChange={setEntry}
+            registerSwitch={registerSwitch}
             renderPrefill={renderDemo}
           />
         </AuthDialog>

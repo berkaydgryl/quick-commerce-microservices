@@ -53,6 +53,18 @@ type LoginInput struct {
 	Password string
 }
 
+// PhoneCheckInput, numara kontrolu girdisi (T11.7: POST /v1/auth/phone-check).
+type PhoneCheckInput struct {
+	Phone string
+}
+
+// Check, numaranin bicimini dogrular (sozlesmenin E.164 kurali).
+func (in PhoneCheckInput) Check() map[string]string {
+	problems := map[string]string{}
+	checkPhone(in.Phone, problems)
+	return problems
+}
+
 // Check, kayit girdisini dogrular ve adi kirpar. Hatalar alan -> sebep
 // haritasidir; bossa girdi gecerlidir.
 func (in *RegisterInput) Check() map[string]string {

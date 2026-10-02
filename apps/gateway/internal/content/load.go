@@ -56,7 +56,9 @@ func decodeStrict(raw []byte) (Welcome, error) {
 	return welcome, nil
 }
 
-// resolveImages, banner boylarini ve bayraklari mutlak adrese cevirir.
+// resolveImages, banner boylarini, bayraklari ve tanitim gorsellerini (telefon
+// gorseli, magaza rozetleri, kutu gorselleri; T11.7) mutlak adrese cevirir.
+// Magaza baglantisi cevrilmez: disari giden adrestir (validate.go).
 // Cozulemeyen yol (http(s) disi sema) hatadir: istemcide bos gorsel olurdu.
 // Girdinin dilimleri degistirilmez, cevap yeni dilimlerle kurulur.
 func resolveImages(welcome Welcome, images ImageResolver) (Welcome, error) {
@@ -77,9 +79,51 @@ func resolveImages(welcome Welcome, images ImageResolver) (Welcome, error) {
 		country.FlagURL = url
 		countries = append(countries, country)
 	}
+	download, err := resolveAppDownload(welcome.AppDownload, images)
+	if err != nil {
+		return Welcome{}, err
+	}
+	features := make([]Feature, 0, len(welcome.Features))
+	for index, feature := range welcome.Features {
+		image, err := resolveImage(images, feature.Image, fmt.Sprintf("features[%d].image", index))
+		if err != nil {
+			return Welcome{}, err
+		}
+		features = append(features, Feature{Image: image, Text: feature.Text})
+	}
 	welcome.Hero.Banner.Sources = sources
 	welcome.LoginCard.Countries = countries
+	welcome.AppDownload = download
+	welcome.Features = features
 	return welcome, nil
+}
+
+func resolveAppDownload(download AppDownload, images ImageResolver) (AppDownload, error) {
+	image, err := resolveImage(images, download.Image, "appDownload.image")
+	if err != nil {
+		return AppDownload{}, err
+	}
+	stores := make([]StoreLink, 0, len(download.Stores))
+	for index, store := range download.Stores {
+		badge, err := resolveImage(images, store.Badge, fmt.Sprintf("appDownload.stores[%d].badge", index))
+		if err != nil {
+			return AppDownload{}, err
+		}
+		store.Badge = badge
+		stores = append(stores, store)
+	}
+	download.Image = image
+	download.Stores = stores
+	return download, nil
+}
+
+func resolveImage(images ImageResolver, image Image, field string) (Image, error) {
+	url, err := resolve(images, image.URL, field+".url")
+	if err != nil {
+		return Image{}, err
+	}
+	image.URL = url
+	return image, nil
 }
 
 func resolve(images ImageResolver, path, field string) (string, error) {

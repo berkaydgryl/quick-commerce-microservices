@@ -103,6 +103,22 @@ func (s *Service) Register(ctx context.Context, input RegisterInput, meta Reques
 //
 // Hangi alanin hatali oldugu SOYLENMEZ ve olmayan kullanicida da ayni surede
 // cevap verilir (Burn): kayitli numaralar ne mesajdan ne sureden taranabilir.
+// PhoneRegistered, numarayla kayitli bir hesap olup olmadigini soyler (T11.7):
+// karsilama ekraninin giris ve kayit penceresi numara yazilinca kullaniciyi
+// erken uyarir. BILINCLI ODUNLESIM (2 Ekim karari): bu cevap bir numaranin
+// kayitli olup olmadigini disari soyler; uc giris gibi IP basina hiz sinirina
+// tabidir (router.go) ve numara gunluge yazilmaz.
+func (s *Service) PhoneRegistered(ctx context.Context, input PhoneCheckInput) (bool, error) {
+	_, err := s.deps.Users.ByPhone(ctx, input.Phone)
+	if errors.Is(err, ErrUserNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("kullanici okunamadi: %w", err)
+	}
+	return true, nil
+}
+
 func (s *Service) Login(ctx context.Context, input LoginInput, meta RequestMeta) (Grant, error) {
 	user, err := s.deps.Users.ByPhone(ctx, input.Phone)
 	if errors.Is(err, ErrUserNotFound) {

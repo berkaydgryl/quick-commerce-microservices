@@ -153,6 +153,7 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 		// Tek kimlik servisi bes kimlik ucunu karsilar (T8.1).
 		UserRegistrar:     identity.service,
 		UserAuthenticator: identity.service,
+		PhoneChecker:      identity.service,
 		SessionRefresher:  identity.service,
 		SessionRevoker:    identity.service,
 		ProfileGetter:     identity.service,

@@ -12,8 +12,10 @@ import { AuthSwitch } from '../../features/auth/ui/AuthSwitch';
 import type { LoginCredentials } from '../../features/auth/ui/LoginForm';
 import { PhoneEntryForm } from '../../features/auth/ui/PhoneEntryForm';
 
+import { WelcomeAppDownload } from './WelcomeAppDownload';
 import { WelcomeCategories } from './WelcomeCategories';
 import { WelcomeContentGate } from './WelcomeContentGate';
+import { WelcomeFeatures } from './WelcomeFeatures';
 import { WelcomeHeader } from './WelcomeHeader';
 import { WelcomeHero } from './WelcomeHero';
 
@@ -35,7 +37,8 @@ interface WelcomePageProps {
 
 /**
  * Karsilama ekrani (T11.6; kullanicinin PRD'si): oturumsuz ziyaretcinin ana
- * sayfasi. Ust bar, banner + telefon karti, kategoriler. Butun metin ve
+ * sayfasi. Ust bar, banner + telefon karti, kategoriler, uygulama indirme
+ * bandi ve tanitim kutulari (T11.7). Butun metin ve
  * gorseller icerik ucundan gelir (GET /v1/content/welcome).
  *
  * Giris ve kayit bu ekranin USTUNDE pencere olarak acilir (/giris, /kayit):
@@ -88,6 +91,8 @@ export function WelcomePage({ renderDialog }: WelcomePageProps) {
                 </AuthCard>
               </WelcomeHero>
               <WelcomeCategories title={content.categories.title} onSelect={openLogin} />
+              <WelcomeAppDownload content={content.appDownload} />
+              <WelcomeFeatures features={content.features} />
             </main>
             {renderDialog?.(content)}
           </>

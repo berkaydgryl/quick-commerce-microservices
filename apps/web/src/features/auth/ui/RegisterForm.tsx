@@ -3,9 +3,10 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 
+import { usePhoneRegistration } from '../hooks/usePhoneRegistration';
 import { useRegister } from '../hooks/useRegister';
 import { countryByCode, countryByDialCode } from '../services/country';
-import { REGISTER_FIELDS, registerFormSchema } from '../services/form-schemas';
+import { completePhone, REGISTER_FIELDS, registerFormSchema } from '../services/form-schemas';
 import type { RegisterFormValues } from '../services/form-schemas';
 import type { PhoneEntry } from '../services/auth-route-state';
 import { formFeedback } from '../services/server-errors';
@@ -16,6 +17,8 @@ import { CountryCodeSelect } from './CountryCodeSelect';
 import { focusFirstInvalid, showServerErrors } from './form-errors';
 import { PasswordField } from './PasswordField';
 import { PhoneField } from './PhoneField';
+import { PhoneNotice } from './PhoneNotice';
+import type { AuthSwitchTarget } from './PhoneNotice';
 import { PhoneRow } from './PhoneRow';
 
 interface RegisterFormProps {
@@ -24,6 +27,8 @@ interface RegisterFormProps {
   readonly initialEntry: PhoneEntry | null;
   /** Yazilan numara (bossa null): pencerenin alt bandi giris penceresine tasir. */
   readonly onPhoneChange: (entry: PhoneEntry | null) => void;
+  /** Kayitli numara uyarisindaki "Giris yap" baglantisi (T11.7). */
+  readonly loginSwitch: AuthSwitchTarget;
 }
 
 /**
@@ -31,7 +36,12 @@ interface RegisterFormProps {
  * ad soyad, telefon ve sifre; acilinca ad soyada odaklanir. Kayitli numara
  * PHONE_ALREADY_REGISTERED ile telefon alaninin altinda gorunur.
  */
-export function RegisterForm({ content, initialEntry, onPhoneChange }: RegisterFormProps) {
+export function RegisterForm({
+  content,
+  initialEntry,
+  onPhoneChange,
+  loginSwitch,
+}: RegisterFormProps) {
   const registration = useRegister();
   const [formMessage, setFormMessage] = useState<string | null>(null);
   const [countryCode, setCountryCode] = useState(
@@ -58,6 +68,8 @@ export function RegisterForm({ content, initialEntry, onPhoneChange }: RegisterF
     shouldFocusError: false,
   });
   const phoneDigits = useWatch({ control, name: 'phone' });
+  // Numara tamamlaninca sorulur (T11.7): kayitliysa ad ve sifre yazilmadan uyarilir.
+  const registered = usePhoneRegistration(completePhone(phoneDigits, dialCode));
 
   useEffect(() => {
     setFocus('fullName');
@@ -128,6 +140,13 @@ export function RegisterForm({ content, initialEntry, onPhoneChange }: RegisterF
           )}
         />
       </PhoneRow>
+      {registered === true && errors.phone === undefined && (
+        <PhoneNotice
+          message={text.knownPhoneNotice}
+          linkLabel={text.loginLinkLabel}
+          target={loginSwitch}
+        />
+      )}
       <PasswordField
         id="kayit-sifre"
         label={text.passwordLabel}

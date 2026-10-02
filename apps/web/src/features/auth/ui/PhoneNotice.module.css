@@ -1,0 +1,23 @@
+/* Telefonun altindaki erken uyari: alan hatasiyla ayni yer ve renk, yaninda gecis. */
+.c-phone-notice {
+  font-size: var(--font-size-xs);
+  color: var(--text-danger);
+}
+
+.c-phone-notice__link {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+  text-decoration: none;
+}
+
+.c-phone-notice__link:hover {
+  text-decoration: underline;
+}
+
+.c-phone-notice__icon {
+  display: inline-flex;
+  width: var(--size-link-icon);
+}

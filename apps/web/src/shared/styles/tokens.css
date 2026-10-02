@@ -113,6 +113,13 @@
   --size-country-flag: 1.5rem;
   --size-welcome-hero-max: 36rem;
 
+  /* Tanitim bolumleri (T11.7): magaza rozetinin yuksekligi (rozet 160x48),
+     telefon gorselinin en fazla genisligi (dogal boyutu 634 px; buyutulse
+     bulaniklasirdi) ve tanitim kutusu gorseli. */
+  --size-store-badge: 3rem;
+  --size-landing-phones: 39.625rem;
+  --size-feature-image: clamp(7.5rem, 6rem + 4vw, 9.5rem);
+
   /* --- Kenar, yaricap, golge --- */
   --border-width-thin: 0.0625rem;
   --focus-ring-width: 0.1875rem;
@@ -136,6 +143,8 @@
   /* --- Katman sirasi --- */
   --z-header: 10;
 
-  /* Sayfanin ustune acilan liste (karsilama kartinin demo hesaplari, T11.6). */
-  --z-popover: 20;
+  /* Sayfanin ustune acilan liste (karsilama kartinin demo hesaplari, T11.6):
+     alttaki icerigin ustunde, sabit ust barin (--z-header) ALTINDA kalir;
+     sayfa kaydirilirken bara binmez. */
+  --z-popover: 5;
 }

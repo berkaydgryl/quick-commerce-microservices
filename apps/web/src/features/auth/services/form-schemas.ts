@@ -23,6 +23,16 @@ function formPhoneSchema(dialCode: string) {
     .pipe(phoneSchema);
 }
 
+/**
+ * Tamamlanmis numara (T11.7: numara kontrolu): formdaki rakamlar ve ulke kodu
+ * sozlesmenin E.164 kuralina uyuyorsa E.164, uymuyorsa null. Eksik numara
+ * sunucuya sorulmaz.
+ */
+export function completePhone(digits: string, dialCode: string): string | null {
+  const parsed = formPhoneSchema(dialCode).safeParse(digits);
+  return parsed.success ? parsed.data : null;
+}
+
 /** Karsilama kartinin telefon formu: gecerli numara giris ekranina tasinir. */
 export function phoneEntrySchema(dialCode: string) {
   return z.object({ phone: formPhoneSchema(dialCode) });

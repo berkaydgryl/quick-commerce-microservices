@@ -109,3 +109,43 @@ func TestValidateReportsEveryProblem(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateStoreLinks(t *testing.T) {
+	for _, link := range []string{"http://apps.apple.com/app/1", "javascript:alert(1)", "/magaza", "https://"} {
+		welcome := validWelcome(t)
+		welcome.AppDownload.Stores[0].URL = link
+		expectProblem(t, welcome, "appDownload.stores[0].url")
+	}
+
+	welcome := validWelcome(t)
+	welcome.AppDownload.Stores = nil
+	expectProblem(t, welcome, "appDownload.stores 0 rozet")
+
+	welcome = validWelcome(t)
+	store := welcome.AppDownload.Stores[0]
+	welcome.AppDownload.Stores = []StoreLink{store, store, store, store, store}
+	expectProblem(t, welcome, "appDownload.stores 5 rozet")
+
+	welcome = validWelcome(t)
+	welcome.AppDownload.Stores[0].Badge.Width = 0
+	expectProblem(t, welcome, "appDownload.stores[0].badge dogal boyutu")
+}
+
+func TestValidateFeatures(t *testing.T) {
+	welcome := validWelcome(t)
+	welcome.Features = nil
+	expectProblem(t, welcome, "features 0 kutu")
+
+	welcome = validWelcome(t)
+	feature := welcome.Features[0]
+	welcome.Features = []Feature{feature, feature, feature, feature, feature, feature, feature}
+	expectProblem(t, welcome, "features 7 kutu")
+
+	welcome = validWelcome(t)
+	welcome.Features[0].Text = " "
+	expectProblem(t, welcome, "features[0].text bos")
+
+	welcome = validWelcome(t)
+	welcome.AppDownload.Image.Height = 0
+	expectProblem(t, welcome, "appDownload.image dogal boyutu")
+}

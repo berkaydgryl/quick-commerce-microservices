@@ -1,8 +1,13 @@
 /*
  * Mor, ince ust bar (referans: getircarsi). Mobilde ikonsuz metin: logo ve iki
- * baglanti tek satira sigar.
+ * baglanti tek satira sigar. Sayfa kaydirilinca ustte sabit kalir (referans;
+ * diger sayfalarin basligi gibi): en alttayken de "Giris yap" ve "Kayit ol"
+ * gorunur.
  */
 .c-welcome-header {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-header);
   padding-block: var(--space-2);
   color: var(--text-on-brand);
   background: var(--color-brand-primary);

@@ -1,0 +1,38 @@
+/* Acik zeminde beyaz kutular; telefonda alt alta, tablet ve ustunde uc sutun. */
+.c-welcome-features {
+  padding-block: var(--space-5) var(--space-6);
+}
+
+.c-welcome-features__list {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.c-welcome-features__card {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  justify-items: center;
+  padding: var(--space-6) var(--space-5);
+  text-align: center;
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+}
+
+.c-welcome-features__image {
+  width: var(--size-feature-image);
+  height: auto;
+}
+
+.c-welcome-features__text {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  color: var(--color-brand-primary);
+}
+
+@media (--bp-md) {
+  .c-welcome-features__list {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

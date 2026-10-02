@@ -2,7 +2,7 @@
 
 Müşteri arayüzü: React 18 + Vite + TypeScript. Tarayıcı yalnızca gateway ile konuşur (`/v1/*`).
 
-## Bugünkü durum (T11.6 — karşılama ve giriş ekranı; T9.5 — teslimat adresi; T9.6 — genel arama; T8.5 — kimlik akışı; T7.6 — kalıcı sepet, stok sınırı, satışta olmayan teklif; T6.4 — sepet kabuğu)
+## Bugünkü durum (T11.7 — karşılama tanıtım bölümleri; T11.6 — karşılama ve giriş ekranı; T9.5 — teslimat adresi; T9.6 — genel arama; T8.5 — kimlik akışı; T7.6 — kalıcı sepet, stok sınırı, satışta olmayan teklif; T6.4 — sepet kabuğu)
 
 | Parça                   | Durum                                                                                                                                           |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -25,16 +25,18 @@ kullanıcı aynı adreste ana sayfayı görür; kapı `pages/root/RootPage.tsx` 
 hiçbir şey çizilmez, karşılama içeriği bu sürede paralel istenir). Giriş ve kayıt bu ekranın **üstünde pencere**
 olarak açılır (getir.com gibi); adres `/giris` ve `/kayit` olur.
 
-| Parça         | Dosya                                                                | İş                                                                                                |
-| ------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| İçerik        | `features/content` (`GET /v1/content/welcome`)                       | Karşılama ekranı ve pencerelerin **bütün** metin ve görselleri; kodda sabit ekran metni yok       |
-| Üst bar       | `pages/welcome/WelcomeHeader.tsx`                                    | Mor bar: logo (sarı "getir" + beyaz "market", rozetsiz), "Giriş yap" ve "Kayıt ol" pencere açar   |
-| Banner        | `pages/welcome/WelcomeHero.tsx`                                      | h1 görselin kendisi (slogan görselde, alt metin içerikten); `srcset` 960/1920/3200; karartma yok  |
-| Telefon kartı | `features/auth/ui/PhoneEntryForm.tsx`                                | "Devam Et" giriş penceresini numarayla açar; altında "Kayıt ol →" ve (geliştirmede) demo hesaplar |
-| Kategoriler   | `pages/welcome/WelcomeCategories.tsx`, `catalog/ui/CategoryGrid.tsx` | 13 kategori (CC0 görseller) ızgarada, mobil 3 sütun; tıklama giriş penceresini açar               |
-| Pencere       | `features/auth/ui/AuthDialog.tsx`                                    | `<dialog>` + `showModal`: odak pencerede, arka plan etkisiz; Esc, X ve karartmaya tıklama kapatır |
-| Giriş / kayıt | `pages/login`, `pages/register` (+ `LoginForm`, `RegisterForm`)      | Karşılama ekranının üstünde pencere; altta gri bantta "Kayıt ol →" / "Giriş yap →" (`AuthSwitch`) |
-| Geçmiş durumu | `features/auth/services/auth-route-state.ts`                         | Numara adrese yazılmaz, geçmiş kaydında taşınır; pencerenin uygulama içinden açıldığı bilgisi     |
+| Parça            | Dosya                                                                | İş                                                                                                                                          |
+| ---------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| İçerik           | `features/content` (`GET /v1/content/welcome`)                       | Karşılama ekranı ve pencerelerin **bütün** metin ve görselleri; kodda sabit ekran metni yok                                                 |
+| Üst bar          | `pages/welcome/WelcomeHeader.tsx`                                    | Mor bar: logo (sarı "getir" + beyaz "market", rozetsiz), "Giriş yap" ve "Kayıt ol" pencere açar                                             |
+| Banner           | `pages/welcome/WelcomeHero.tsx`                                      | h1 görselin kendisi (slogan görselde, alt metin içerikten); `srcset` 960/1920/3200; karartma yok                                            |
+| Telefon kartı    | `features/auth/ui/PhoneEntryForm.tsx`                                | "Devam Et" giriş penceresini numarayla açar; altında "Kayıt ol →" ve (geliştirmede) demo hesaplar                                           |
+| Kategoriler      | `pages/welcome/WelcomeCategories.tsx`, `catalog/ui/CategoryGrid.tsx` | 13 kategori (CC0 görseller) ızgarada, mobil 3 sütun; tıklama giriş penceresini açar                                                         |
+| İndirme bandı    | `pages/welcome/WelcomeAppDownload.tsx`                               | Açık zeminde mor kutu: başlık, alt metin, App Store / Google Play rozetleri (yeni sekme, `noopener`); telefonlar sağa ve alta yaslı (T11.7) |
+| Tanıtım kutuları | `pages/welcome/WelcomeFeatures.tsx`                                  | Üç beyaz kutu: görsel (süs) + mor metin; telefonda alt alta, tablet ve üstünde yan yana (T11.7)                                             |
+| Pencere          | `features/auth/ui/AuthDialog.tsx`                                    | `<dialog>` + `showModal`: odak pencerede, arka plan etkisiz; Esc, X ve karartmaya tıklama kapatır                                           |
+| Giriş / kayıt    | `pages/login`, `pages/register` (+ `LoginForm`, `RegisterForm`)      | Karşılama ekranının üstünde pencere; altta gri bantta "Kayıt ol →" / "Giriş yap →" (`AuthSwitch`)                                           |
+| Geçmiş durumu    | `features/auth/services/auth-route-state.ts`                         | Numara adrese yazılmaz, geçmiş kaydında taşınır; pencerenin uygulama içinden açıldığı bilgisi                                               |
 
 - **Kapatma:** pencere uygulama içinden açıldıysa bir geri gidilir (geri tuşuyla aynı sonuç); adres doğrudan
   açıldıysa (yer imi, korumalı sayfanın yönlendirmesi) karşılama ekranına gidilir, korumalı sayfaya dönülmez
@@ -52,6 +54,11 @@ olarak açılır (getir.com gibi); adres `/giris` ve `/kayit` olur.
 gateway `ASSET_BASE_URL` ile kurar. Banner (`img/banner/`, 960/1920/3200 px) ve bayrak (`img/flag/tr.svg`) bu proje
 için hazırlandı. Kategori görselleri (`img/cat/`, 320×320 px, her biri 40 KB'ın altında) **CC0 1.0** lisanslı
 fotoğraflardır (Openverse aramasıyla; atıf zorunlu değil, kaynak yine de burada).
+
+Tanıtım bölümlerinin görselleri (T11.7) kullanıcının getir.com'dan sağladığı dosyalardır: telefonlar
+(`img/landing/telefonlar.png`, 634×298; büyütülmez), tanıtım kutuları (`img/tanitim/teslimat.png`, `cesit.png`,
+`dakikalar.png`, 300×300; getirçarşı markalı) ve mağaza rozetleri (`img/store/app-store.svg`, `google-play.svg`,
+160×48). Rozet bağlantıları Getir'in App Store ve Google Play sayfasına gider (getir.com'daki rozetlerle aynı adres).
 
 | Dosya               | Kategori          | Kaynak                                                                                            | Yazar             | Lisans  |
 | ------------------- | ----------------- | ------------------------------------------------------------------------------------------------- | ----------------- | ------- |
@@ -75,17 +82,18 @@ Giriş (`/giris`) ve kayıt (`/kayit`) T11.6'dan beri karşılama ekranının ü
 girişler yok. Diğer sayfaların başlığında oturumsuzken "Giriş yap" (dönüş adresiyle), oturumdayken "Hesabım"
 (dar ekranda yalnızca ikon).
 
-| Katman        | Dosya                                                    | İş                                                                                   |
-| ------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Oturum deposu | `shared/session/session-store.ts`                        | `unknown` / `anonymous` / `authenticated`; erişim jetonu **yalnızca bellekte**       |
-| Kilit         | `shared/session/session-lock.ts`                         | Yenileme, giriş, kayıt, çıkış bütün sekmelerde sırayla (Web Locks, `getir-oturum`)   |
-| Yenileyici    | `shared/session/session-refresher.ts`                    | Sekme içinde tek uçuş; 401 → oturumsuz; geçici hata fırlatılır, oturum yerinde kalır |
-| Yetkili istek | `shared/session/authorized-client.ts`                    | `Bearer` ekler; 401'de **bir kez** yeniler ve **bir kez** tekrarlar (döngü yok)      |
-| Açılış        | `shared/session/restore-session.ts` (`main.tsx`)         | Sayfa yenilenince bir kez sessiz yenileme; herkese açık sayfa beklemez               |
-| Formlar       | `features/auth/services/form-schemas.ts`, `ui/*Form.tsx` | react-hook-form + zodResolver; kurallar ve alan mesajları `@getir/contracts`'tan     |
-| Sunucu hatası | `features/auth/services/server-errors.ts`                | Alan altına / form üstüne; metin sözlükten; 429'da kalan saniye                      |
-| Dönüş adresi  | `features/auth/services/next-path.ts`                    | `?next=` yalnızca uygulama içi yol (`//site`, `/\site`, mutlak adres → ana sayfa)    |
-| Koruma        | `features/auth/ui/RequireAuth.tsx`                       | Oturum yoksa `/giris?next=...`; girişle geri döner                                   |
+| Katman          | Dosya                                                               | İş                                                                                                                                                        |
+| --------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Oturum deposu   | `shared/session/session-store.ts`                                   | `unknown` / `anonymous` / `authenticated`; erişim jetonu **yalnızca bellekte**                                                                            |
+| Kilit           | `shared/session/session-lock.ts`                                    | Yenileme, giriş, kayıt, çıkış bütün sekmelerde sırayla (Web Locks, `getir-oturum`)                                                                        |
+| Yenileyici      | `shared/session/session-refresher.ts`                               | Sekme içinde tek uçuş; 401 → oturumsuz; geçici hata fırlatılır, oturum yerinde kalır                                                                      |
+| Yetkili istek   | `shared/session/authorized-client.ts`                               | `Bearer` ekler; 401'de **bir kez** yeniler ve **bir kez** tekrarlar (döngü yok)                                                                           |
+| Açılış          | `shared/session/restore-session.ts` (`main.tsx`)                    | Sayfa yenilenince bir kez sessiz yenileme; herkese açık sayfa beklemez                                                                                    |
+| Formlar         | `features/auth/services/form-schemas.ts`, `ui/*Form.tsx`            | react-hook-form + zodResolver; kurallar ve alan mesajları `@getir/contracts`'tan                                                                          |
+| Sunucu hatası   | `features/auth/services/server-errors.ts`                           | Alan altına / form üstüne; metin sözlükten; 429'da kalan saniye                                                                                           |
+| Numara kontrolü | `features/auth/hooks/usePhoneRegistration.ts`, `ui/PhoneNotice.tsx` | Numara tamamlanınca (300 ms sonra, iptal edilebilir) `POST /v1/auth/phone-check`; kayıtta "hesap var → Giriş yap", girişte "hesap yok → Kayıt ol" (T11.7) |
+| Dönüş adresi    | `features/auth/services/next-path.ts`                               | `?next=` yalnızca uygulama içi yol (`//site`, `/\site`, mutlak adres → ana sayfa)                                                                         |
+| Koruma          | `features/auth/ui/RequireAuth.tsx`                                  | Oturum yoksa `/giris?next=...`; girişle geri döner                                                                                                        |
 
 - **Neden kilit:** yenileme jetonu her kullanımda değişir; kullanılmış jetonu gönderen istek 401 alır
   ve gateway çerezi siler. İki sekme aynı anda yenilese ikisi birden oturumu kaybederdi. Kilitle ikinci

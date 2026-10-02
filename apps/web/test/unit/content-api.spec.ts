@@ -33,6 +33,7 @@ const welcome = {
       pendingLabel: 'Giriş yapılıyor…',
       registerPrompt: 'Hesabın yok mu?',
       registerLinkLabel: 'Kayıt ol',
+      unknownPhoneNotice: 'Bu numarayla kayıtlı bir hesap yok.',
     },
     register: {
       fullNameLabel: 'Adın soyadın',
@@ -41,9 +42,28 @@ const welcome = {
       pendingLabel: 'Kaydın yapılıyor…',
       loginPrompt: 'Zaten hesabın var mı?',
       loginLinkLabel: 'Giriş yap',
+      knownPhoneNotice: 'Bu numarayla kayıtlı bir hesap var.',
     },
   },
   categories: { title: 'Kategoriler' },
+  appDownload: {
+    title: "Getir'i indir!",
+    subtitle: 'İstediğin ürünleri dakikalar içinde kapına getirelim.',
+    image: { url: `${ASSET}/img/landing/telefonlar.png`, width: 634, height: 298 },
+    stores: [
+      {
+        label: "App Store'dan indir",
+        url: 'https://apps.apple.com/app/id995280265',
+        badge: { url: `${ASSET}/img/store/app-store.svg`, width: 160, height: 48 },
+      },
+    ],
+  },
+  features: [
+    {
+      image: { url: `${ASSET}/img/tanitim/teslimat.png`, width: 300, height: 300 },
+      text: 'Siparişin dakikalar içinde kapında!',
+    },
+  ],
 };
 
 function clientReturning(body: unknown) {

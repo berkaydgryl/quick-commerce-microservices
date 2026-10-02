@@ -3,6 +3,7 @@ package content
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"reflect"
 	"regexp"
 	"strings"
@@ -29,6 +30,8 @@ func validateWelcome(welcome Welcome) error {
 		checkTexts(reflect.ValueOf(welcome), ""),
 		checkBanner(welcome.Hero.Banner),
 		checkCountries(welcome.LoginCard.Countries),
+		checkAppDownload(welcome.AppDownload),
+		checkFeatures(welcome.Features),
 	)
 }
 
@@ -113,6 +116,45 @@ func checkCountries(countries []PhoneCountry) error {
 		seen[country.Code] = struct{}{}
 	}
 	return errors.Join(problems...)
+}
+
+// checkAppDownload: gorsel boyutlari pozitif; en az bir, en fazla
+// MaxStoreLinks rozet; magaza baglantisi mutlak https adresi (disari gider,
+// gateway cozmez: "javascript:" ya da goreli yol istemciye gitmesin).
+func checkAppDownload(download AppDownload) error {
+	const path = "appDownload"
+	problems := []error{checkImage(path+".image", download.Image)}
+	if count := len(download.Stores); count == 0 || count > MaxStoreLinks {
+		problems = append(problems, fmt.Errorf("%s.stores %d rozet, 1-%d olmali", path, count, MaxStoreLinks))
+	}
+	for index, store := range download.Stores {
+		field := fmt.Sprintf("%s.stores[%d]", path, index)
+		problems = append(problems, checkImage(field+".badge", store.Badge))
+		if parsed, err := url.Parse(store.URL); err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+			problems = append(problems, fmt.Errorf("%s.url %q: mutlak https adresi olmali", field, store.URL))
+		}
+	}
+	return errors.Join(problems...)
+}
+
+// checkFeatures: en az bir, en fazla MaxFeatures kutu; gorsel boyutlari pozitif.
+func checkFeatures(features []Feature) error {
+	if count := len(features); count == 0 || count > MaxFeatures {
+		return fmt.Errorf("features %d kutu, 1-%d olmali", count, MaxFeatures)
+	}
+	problems := make([]error, 0, len(features))
+	for index, feature := range features {
+		problems = append(problems, checkImage(fmt.Sprintf("features[%d].image", index), feature.Image))
+	}
+	return errors.Join(problems...)
+}
+
+// checkImage: dogal boyut pozitif (istemci yeri onceden ayirir).
+func checkImage(path string, image Image) error {
+	if image.Width <= 0 || image.Height <= 0 {
+		return fmt.Errorf("%s dogal boyutu %dx%d: ikisi de pozitif olmali", path, image.Width, image.Height)
+	}
+	return nil
 }
 
 func joinPath(path, name string) string {

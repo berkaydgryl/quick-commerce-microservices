@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  checkPhone,
   fetchProfile,
   loginUser,
   logoutSession,
@@ -46,6 +47,20 @@ describe('kimlik uclari (T8.5)', () => {
       body: JSON.stringify({ ...CREDENTIALS, fullName: 'Ayşe Yılmaz' }),
       idempotencyKey: 'kayit-anahtari-1',
       authorization: null,
+    });
+  });
+
+  it('numara kontrolu (T11.7): anahtarsiz POST, numara govdede; cevap registered', async () => {
+    const { client, fetchMock } = clientReturning(success({ registered: true }));
+
+    await expect(checkPhone(client, { phone: '+905550000001' })).resolves.toEqual({
+      registered: true,
+    });
+    expect(sentRequest(fetchMock)).toMatchObject({
+      url: '/v1/auth/phone-check',
+      method: 'POST',
+      body: JSON.stringify({ phone: '+905550000001' }),
+      idempotencyKey: null,
     });
   });
 

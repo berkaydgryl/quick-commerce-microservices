@@ -5,4 +5,6 @@
 export const authKeys = {
   all: ['auth'] as const,
   profile: (userId: string) => [...authKeys.all, 'profile', userId] as const,
+  /** Numara kontrolu (T11.7): numara basina; ayni numara tekrar sorulmaz. */
+  phoneCheck: (phone: string) => [...authKeys.all, 'phone-check', phone] as const,
 };
