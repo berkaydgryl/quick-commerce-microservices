@@ -6,14 +6,14 @@ idempotency ve durum makinesi baştan yerinde.
 
 ## Bugünkü durum (T7.4 — iade komutu tüketicisi)
 
-| Uç                         | Durum                                                                                      |
-| -------------------------- | ------------------------------------------------------------------------------------------ |
-| `Charge`                   | ✅ Test kartına göre onay / ret / 3DS; kapıda ödeme `PENDING`; risk 3DS isteyebilir (T7.1) |
-| `Confirm3Ds`               | ✅ Sabit kod, 60 sn ömür, 3 yanlışta kilit, tekrar istek güvenli (T5.2)                    |
-| `payments`                 | ✅ Mongo (`MOCK=false`) ya da bellek (`MOCK=true`); `attempts[]` geçmişi (T5.3)            |
-| `Refund`                   | ✅ Saga'nın telafisi (T7.1): yalnızca tamamlanmış çekim; tekrar istek `already_refunded`   |
-| `payment.refund_requested` | ✅ Olay tüketicisi (T7.4): saga'nın kalıcı iade komutu `stream:events`'ten, grup `payment` |
-| `GetPayment`               | ⏳ Henüz çağıran yok: `NOT_IMPLEMENTED` (gRPC `UNIMPLEMENTED`, HTTP 501; D5)               |
+| Uç                         | Durum                                                                                                            |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `Charge`                   | ✅ Test kartına göre onay / ret / 3DS; kapıda ödeme `PENDING`; risk 3DS isteyebilir (T7.1)                       |
+| `Confirm3Ds`               | ✅ Sabit kod, 60 sn ömür, 3 yanlışta kilit, tekrar istek güvenli (T5.2)                                          |
+| `payments`                 | ✅ Mongo (`MOCK=false`) ya da bellek (`MOCK=true`); `attempts[]` geçmişi (T5.3)                                  |
+| `Refund`                   | ✅ Saga'nın telafisi (T7.1): yalnızca tamamlanmış çekim; tekrar istek `already_refunded`                         |
+| `payment.refund_requested` | ✅ Olay tüketicisi (T7.4): saga'nın kalıcı iade komutu `stream:events`'ten, grup `payment`                       |
+| `GetPayment`               | ✅ Siparişin ödeme kaydı (yöntem, durum); kayıt yoksa `NOT_FOUND`. Çağıran order: iptal ve süpürücü (T11.2 PR 2) |
 
 ## Test kartları
 

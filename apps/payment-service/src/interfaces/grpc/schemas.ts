@@ -120,3 +120,8 @@ export const refundRequestSchema = z.object({
 });
 
 export type RefundRequestInput = z.infer<typeof refundRequestSchema>;
+
+/** GetPayment (T11.2 PR 2): okuma, anahtar yok. */
+export const getPaymentRequestSchema = z.object({
+  orderId: requiredText('orderId'),
+});

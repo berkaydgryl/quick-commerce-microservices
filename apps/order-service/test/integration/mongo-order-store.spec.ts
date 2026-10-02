@@ -82,6 +82,25 @@ describe('indeks', () => {
     expect(winning).toContain('userId_createdAt_id');
     expect(winning).not.toContain('"stage":"SORT"');
   });
+
+  it('supurucu sorgusu (T11.2 PR 2) durum + kilit bitisi indeksinden, bellekte SORT yok', async () => {
+    // orders-collection.ts findExpiredReservations ile ayni sorgu ve sira.
+    const plan: Document = await connection.db
+      .collection(COLLECTIONS.ORDERS)
+      .find({
+        status: { $in: ['DRAFT', 'AWAITING_PAYMENT'] },
+        'reservation.expiresAt': { $lte: new Date() },
+      })
+      .sort({ 'reservation.expiresAt': 1, _id: 1 })
+      .limit(100)
+      .explain('queryPlanner');
+
+    const { queryPlanner } = explainSchema.parse(plan);
+    const winning = JSON.stringify(queryPlanner.winningPlan);
+    expect(winning).toContain('status_reservationExpiresAt_id');
+    expect(winning).not.toContain('"stage":"SORT"');
+    expect(winning).not.toContain('COLLSCAN');
+  });
 });
 
 describe('gRPC -> Mongo (T4.5 bitti sayilir: siparis Mongo da gorulur)', () => {

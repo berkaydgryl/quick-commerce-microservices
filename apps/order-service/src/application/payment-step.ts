@@ -22,17 +22,17 @@ import {
   decidePayment,
   PAYMENT_STATUS,
   REFUND_REASON,
-  refundIdempotencyKey,
 } from '../domain/checkout-payment.js';
-import type { PaymentMethod, PaymentResult, RefundReason } from '../domain/checkout-payment.js';
+import type { PaymentMethod, PaymentResult } from '../domain/checkout-payment.js';
 import { assertPaymentMethodAllowed, paymentPolicyOf } from '../domain/checkout-risk.js';
-import { refundRequestedEvent, statusChangedEvents } from '../domain/order-events.js';
+import { statusChangedEvents } from '../domain/order-events.js';
 import type { OrderOutbox } from '../domain/order-outbox.js';
 import type { OrderRepository } from '../domain/order-repository.js';
 import type { Order } from '../domain/order.js';
 import { transitionOrder } from '../domain/order.js';
 import { RELEASE_REASON } from '../domain/stock-reservation.js';
 import type { Payments } from './payments.js';
+import { refundCharge } from './refund-step.js';
 import type { RequestScope } from './request-scope.js';
 import { SETTLEMENT } from './stock-reservations.js';
 import { commitStock, releaseStock } from './stock-step.js';
@@ -205,53 +205,6 @@ async function writeTransition(
       return latest;
     }
     throw error;
-  }
-}
-
-/**
- * Telafi: alinan tutari geri verir. Once dogrudan iade denenir (hizli yol).
- * O da basarisiz olursa iade KOMUTU outbox'a yazilir (T7.3):
- * payment.refund_requested, payment-svc dinler ve ayni anahtarla iade eder
- * (T7.4) - komut kalicidir, servis yeniden baslasa da kaybolmaz. Istemciye her
- * durumda siparisin kendi hatasi doner (CONFLICT ya da RESERVATION_EXPIRED).
- */
-async function refundCharge(
-  deps: PaymentStepDeps,
-  order: Order,
-  reason: RefundReason,
-  scope: RequestScope,
-): Promise<void> {
-  const request = { reason, idempotencyKey: refundIdempotencyKey(order.id) };
-  try {
-    await deps.payments.refund({ orderId: order.id, ...request }, scope);
-    scope.logger.warn(
-      { orderId: order.id, reason },
-      'odeme alindi ama siparis tamamlanamadi; tutar iade edildi',
-    );
-  } catch (refundError: unknown) {
-    await requestRefundLater(deps, order, request, refundError, scope);
-  }
-}
-
-/** Dogrudan iade olmadi: komut outbox'a. O da yazilamazsa son care ERROR gunlugu. */
-async function requestRefundLater(
-  deps: PaymentStepDeps,
-  order: Order,
-  request: { readonly reason: string; readonly idempotencyKey: string },
-  refundError: unknown,
-  scope: RequestScope,
-): Promise<void> {
-  try {
-    await deps.outbox.append([refundRequestedEvent(order, request, deps.clock.date())]);
-    scope.logger.warn(
-      { err: refundError, orderId: order.id },
-      'dogrudan iade basarisiz; iade komutu outbox a yazildi (payment.refund_requested)',
-    );
-  } catch (outboxError: unknown) {
-    scope.logger.error(
-      { err: outboxError, refundError, orderId: order.id },
-      'TELAFI BASARISIZ: odeme alindi, siparis yazilamadi, iade ve iade komutu yazilamadi',
-    );
   }
 }
 

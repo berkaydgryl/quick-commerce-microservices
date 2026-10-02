@@ -4,26 +4,32 @@
  * Handler dogrular, use-case'i cagirir, cevabi sozlesme bicimine cevirir. Is
  * kurali yok; hata cevirisi ve gunlukleme service-kit'in ara katmanindadir.
  *
- * Charge (T5.1), Confirm3Ds (T5.2) ve Refund (T7.1, siparis saga'sinin
- * telafisi). GetPayment'i henuz cagiran yok: unimplemented() standart hata
- * yolundan NOT_IMPLEMENTED (501) doner (D5).
+ * Charge (T5.1), Confirm3Ds (T5.2), Refund (T7.1, siparis saga'sinin
+ * telafisi) ve GetPayment (T11.2 PR 2: order'in iptal ve supurucu kontrolu).
  */
 
 import type { Logger } from '@getir/core';
 import type { paymentV1 } from '@getir/proto';
-import { unaryHandler, unimplemented } from '@getir/service-kit';
+import { unaryHandler } from '@getir/service-kit';
 import type { UntypedServiceImplementation } from '@grpc/grpc-js';
 
 import type { Charge } from '../../application/charge.js';
 import type { Confirm3Ds } from '../../application/confirm-3ds.js';
+import type { GetPayment } from '../../application/get-payment.js';
 import type { Refund } from '../../application/refund.js';
 import { toProtoChargeResponse, toProtoPayment } from './mappers.js';
-import { chargeRequestSchema, confirm3DsRequestSchema, refundRequestSchema } from './schemas.js';
+import {
+  chargeRequestSchema,
+  confirm3DsRequestSchema,
+  getPaymentRequestSchema,
+  refundRequestSchema,
+} from './schemas.js';
 
 export interface PaymentHandlerDeps {
   readonly charge: Charge;
   readonly confirm3Ds: Confirm3Ds;
   readonly refund: Refund;
+  readonly getPayment: GetPayment;
   readonly logger?: Logger;
 }
 
@@ -63,6 +69,13 @@ export function createPaymentImplementation(
       },
     }),
 
-    getPayment: unimplemented('GetPayment', 'cagiran yok', logger),
+    getPayment: unaryHandler({
+      name: 'GetPayment',
+      schema: getPaymentRequestSchema,
+      ...(logger === undefined ? {} : { logger }),
+      handle: async (input): Promise<paymentV1.GetPaymentResponse> => ({
+        payment: toProtoPayment(await deps.getPayment(input.orderId)),
+      }),
+    }),
   };
 }

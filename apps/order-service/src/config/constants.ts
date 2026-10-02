@@ -84,3 +84,14 @@ export const MAX_CANCEL_REASON_LENGTH = 64;
  */
 export const OUTBOX_POLL_INTERVAL_MS = 500;
 export const OUTBOX_BATCH_SIZE = 100;
+
+/**
+ * Kilidi dolan siparisleri kapatan supurucu (T11.2 PR 2), ORDER_SWEEPER_INTERVAL_MS.
+ * Kullaniciya gorunen davranis supurucuye bagli degil (kilidi dusmus taslak
+ * CreateOrder'da 410 alir); tur kayitlari ve parayi toparlar, 10 sn yeter.
+ * Turda en fazla 100 siparis: birikmis kuyruk dakikada 600 siparis erir.
+ */
+export const DEFAULT_ORDER_SWEEPER_INTERVAL_MS = 10_000;
+export const MIN_ORDER_SWEEPER_INTERVAL_MS = 1_000;
+export const MAX_ORDER_SWEEPER_INTERVAL_MS = 600_000;
+export const ORDER_SWEEPER_BATCH_SIZE = 100;

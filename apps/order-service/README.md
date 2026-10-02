@@ -9,16 +9,16 @@ Bu serviste **olmayanlar**, bilinçli: stok sayacı `inventory-service`'in, kart
 (kapıda ödeme kapalı, rezervasyon süresi, reddet) burada verilir — risk servisi yalnızca
 skor önerir.
 
-## Bugünkü durum (T11.2 PR 1 — saga'da stok kilidi)
+## Bugünkü durum (T11.2 PR 2 — kilidi dolan siparişlerin süpürücüsü)
 
-| RPC                | Durum                                                                                                                                          |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CreateDraftOrder` | ✅ Fiyatı catalog'dan okur, sunucuda hesaplar, `expected_total` ile karşılaştırır; tutarı taslakta dondurur (T7.2); stoku kilitler (T11.2)     |
-| `CreateOrder`      | ✅ Saga (T7.1): risk-svc → bant kararı → payment-svc çekimi → stok kesinleşir (T11.2); `PAID`, `PAYMENT_FAILED`, 3DS ya da `REVIEW`/`REJECTED` |
-| `ConfirmPayment`   | ✅ 3DS kodu (T7.1): doğruysa stok kesinleşir ve `PAID`; hak biter / süre dolarsa `PAYMENT_FAILED`, kilit bırakılır                             |
-| `GetOrder`         | ✅ Tek sipariş, zaman çizelgesi dahil; başkasının siparişi `NOT_FOUND`                                                                         |
-| `ListMyOrders`     | ✅ Yeniden eskiye, imleçle sayfalı; sipariş yoksa boş liste                                                                                    |
-| `CancelOrder`      | ✅ Kullanıcı iptali: yalnızca `DRAFT`, `RESERVED`, `AWAITING_PAYMENT` (B29); Idempotency-Key zorunlu (D4); kilit bırakılır (T11.2)             |
+| RPC                | Durum                                                                                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `CreateDraftOrder` | ✅ Fiyatı catalog'dan okur, sunucuda hesaplar, `expected_total` ile karşılaştırır; tutarı taslakta dondurur (T7.2); stoku kilitler (T11.2)             |
+| `CreateOrder`      | ✅ Saga (T7.1): risk-svc → bant kararı → payment-svc çekimi → stok kesinleşir (T11.2); `PAID`, `PAYMENT_FAILED`, 3DS ya da `REVIEW`/`REJECTED`         |
+| `ConfirmPayment`   | ✅ 3DS kodu (T7.1): doğruysa stok kesinleşir ve `PAID`; hak biter / süre dolarsa `PAYMENT_FAILED`, kilit bırakılır                                     |
+| `GetOrder`         | ✅ Tek sipariş, zaman çizelgesi dahil; başkasının siparişi `NOT_FOUND`                                                                                 |
+| `ListMyOrders`     | ✅ Yeniden eskiye, imleçle sayfalı; sipariş yoksa boş liste                                                                                            |
+| `CancelOrder`      | ✅ Kullanıcı iptali: yalnızca `DRAFT`, `RESERVED`, `AWAITING_PAYMENT` (B29); Idempotency-Key zorunlu (D4); kilit bırakılır; parası alınmışsa iptal yok |
 
 ## Veri kaynağı: Mongo ya da MOCK
 
@@ -48,13 +48,14 @@ listeyi gezerken yeni sipariş verirse offset kayar. Sayfa boyutu sözleşme sı
 oturtulur (0 → 20, 100 üstü → 100); bu sınırlar REST ile aynı yerden, `@getir/contracts`'tan
 gelir.
 
-| Koleksiyon | İndeks                                                          | Sorgu          |
-| ---------- | --------------------------------------------------------------- | -------------- |
-| `orders`   | `{ userId: 1, createdAt: -1, _id: -1 }` (`userId_createdAt_id`) | `ListMyOrders` |
+| Koleksiyon | İndeks                                                                                 | Sorgu                 |
+| ---------- | -------------------------------------------------------------------------------------- | --------------------- |
+| `orders`   | `{ userId: 1, createdAt: -1, _id: -1 }` (`userId_createdAt_id`)                        | `ListMyOrders`        |
+| `orders`   | `{ status: 1, 'reservation.expiresAt': 1, _id: 1 }` (`status_reservationExpiresAt_id`) | süpürücü (T11.2 PR 2) |
 
-Roadmap veri modelindeki `status` indeksi, durumu sorgulayan ilk iş (rezervasyon süpürücüsü,
-T11.x) geldiğinde eklenir: bugün onu kullanan sorgu yok, gereksiz indeks her yazımı
-pahalılaştırır.
+Roadmap veri modelindeki `status` indeksi süpürücüyle (T11.2 PR 2) geldi: durum (`$in`, iki
+değer) + kilidin bitişi aralığı ve aynı sıraya göre okuma tek indeksten, bellekte sıralama yok
+(explain testli).
 
 **Kalemler ve tutarlar:** proto `Order`'daki fiyatlı kalemler (`items`) ve tutarlar (`subtotal`,
 `delivery_fee`, `discount`, `total`) taslakta dondurulan değerlerdir (T7.2); `GetOrder` onları
@@ -79,7 +80,9 @@ notsuz yazılır. Eski kayıtlarda not durur, okuyan bir şey yok.
 **Kullanıcı iptali (B29):** kullanıcı yalnızca `DRAFT`, `RESERVED` ve `AWAITING_PAYMENT`
 durumundaki **kendi** siparişini iptal edebilir (`USER_CANCELLABLE`). `PAID → CANCELLED` tabloda
 var ama sistemin telafi adımıdır (iade, B20c). Gerekçe bir anahtardır (`CHANGED_MIND`); yoksa
-`USER_CANCELLED` yazılır. İptalden sonra stok kilidi bırakılır (T11.2). Sistemin iptal notları
+`USER_CANCELLED` yazılır. İptalden sonra stok kilidi bırakılır (T11.2). Ödeme bekleyen siparişte
+önce payment-svc'deki kayda bakılır: para alınmışsa ya da kart çekimi sürüyorsa iptal edilmez
+(`REQUEST_IN_PROGRESS`; T11.2 PR 2, aşağıda). Sistemin iptal notları
 (`STOCK_INSUFFICIENT`, `RESERVATION_EXPIRED`, `CART_REPLACED`) gerekçe olarak kabul edilmez
 (`INVALID_ARGUMENT`): risk geçmişi o notlu iptalleri saymaz, kullanıcı kendi iptalini böyle
 gizleyemez.
@@ -206,20 +209,23 @@ inventory'nin sınırlarıyla 30–900); banda göre kısaltma T11.3'te. Kilit s
 (`reservedAt`, `expiresAt`) olarak yazılır; adres `INVENTORY_GRPC_ADDR` (gateway'le aynı
 değişken), süre sınırı 1 sn.
 
-| An                                           | Ne olur                                                                                | Cevap                                      |
-| -------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------ |
-| Taslak, stok yeterli                         | kilitlenir; taslak kilidiyle tek yazımda kaydedilir                                    | `reservation_expires_at` dolu              |
-| Taslak, stok yetmedi                         | taslak iz olarak `CANCELLED` (not `STOCK_INSUFFICIENT`) yazılır                        | `STOCK_INSUFFICIENT` (sku, istenen, kalan) |
-| Taslak, kullanıcının eski taslağı kilitli    | eski taslak `CANCELLED` (`CART_REPLACED`), kilidi bırakılır, yeni sepet kilitlenir     | yeni taslak                                |
-| Taslak, kullanıcının ödeme bekleyen siparişi | dokunulmaz (B22: kullanıcı başına tek aktif kilit)                                     | `RESERVATION_ACTIVE` (`activeOrderId`)     |
-| Taslak, saga'nın bırakamadığı eski kilit     | durmuş siparişin (iptal, ret, inceleme, ödeme hatası) kilidi şimdi bırakılır           | yeni taslak                                |
-| Taslak yazılamadı                            | kilit hemen bırakılır (`draft_not_saved`)                                              | depo hatası                                |
-| `CreateOrder`, kilit süresi dolmuş taslak    | `CANCELLED` (`RESERVATION_EXPIRED`), kilit bırakılır; risk sorulmaz, ödeme alınmaz     | `RESERVATION_EXPIRED` (REST 410)           |
-| Risk `REVIEW` / `REJECTED`, kart reddi       | kilit bırakılır (`risk_review`, `risk_rejected`, `payment_failed`)                     | adımın kendi hatası                        |
-| Ödeme alındı                                 | `Commit`, sonra `PAID`                                                                 | —                                          |
-| Ödeme alındı ama kilit düşmüş (`NOT_FOUND`)  | tutar iade (`reservation_expired`), sipariş `CANCELLED` (`RESERVATION_EXPIRED`)        | `RESERVATION_EXPIRED`                      |
-| `Commit`'e ulaşılamadı                       | sipariş `AWAITING_PAYMENT` kalır; tekrar isteği aynı çekimi alıp yeniden kesinleştirir | `SERVICE_UNAVAILABLE`                      |
-| Kullanıcı iptali                             | kilit bırakılır (`user_cancelled`)                                                     | `CANCELLED`                                |
+| An                                           | Ne olur                                                                                    | Cevap                                      |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------ |
+| Taslak, stok yeterli                         | kilitlenir; taslak kilidiyle tek yazımda kaydedilir                                        | `reservation_expires_at` dolu              |
+| Taslak, stok yetmedi                         | taslak iz olarak `CANCELLED` (not `STOCK_INSUFFICIENT`) yazılır                            | `STOCK_INSUFFICIENT` (sku, istenen, kalan) |
+| Taslak, kullanıcının eski taslağı kilitli    | eski taslak `CANCELLED` (`CART_REPLACED`), kilidi bırakılır, yeni sepet kilitlenir         | yeni taslak                                |
+| Taslak, kullanıcının ödeme bekleyen siparişi | dokunulmaz (B22: kullanıcı başına tek aktif kilit)                                         | `RESERVATION_ACTIVE` (`activeOrderId`)     |
+| Taslak, saga'nın bırakamadığı eski kilit     | durmuş siparişin (iptal, ret, inceleme, ödeme hatası) kilidi şimdi bırakılır               | yeni taslak                                |
+| Taslak yazılamadı                            | kilit hemen bırakılır (`draft_not_saved`)                                                  | depo hatası                                |
+| `CreateOrder`, kilit süresi dolmuş taslak    | `CANCELLED` (`RESERVATION_EXPIRED`), kilit bırakılır; risk sorulmaz, ödeme alınmaz         | `RESERVATION_EXPIRED` (REST 410)           |
+| Risk `REVIEW` / `REJECTED`, kart reddi       | kilit bırakılır (`risk_review`, `risk_rejected`, `payment_failed`)                         | adımın kendi hatası                        |
+| Ödeme alındı                                 | `Commit`, sonra `PAID`                                                                     | —                                          |
+| Ödeme alındı ama kilit düşmüş (`NOT_FOUND`)  | tutar iade (`reservation_expired`), sipariş `CANCELLED` (`RESERVATION_EXPIRED`)            | `RESERVATION_EXPIRED`                      |
+| `Commit`'e ulaşılamadı                       | sipariş `AWAITING_PAYMENT` kalır; tekrar isteği aynı çekimi alıp yeniden kesinleştirir     | `SERVICE_UNAVAILABLE`                      |
+| Kullanıcı iptali                             | kilit bırakılır (`user_cancelled`)                                                         | `CANCELLED`                                |
+| İptal, ödeme bekleyen ve parası alınmış      | iptal edilmez; saga tamamlar ya da kilit dolunca süpürücü iade eder                        | `REQUEST_IN_PROGRESS` (`paymentStatus`)    |
+| Süpürücü, kilidi dolmuş taslak               | `CANCELLED` (`RESERVATION_EXPIRED`), kilit bırakılır                                       | —                                          |
+| Süpürücü, kilidi dolmuş ödeme bekleyen       | önce ödeme: alınmışsa `CANCELLED` + iade, çekim sürüyorsa sonraki tur, değilse `CANCELLED` | —                                          |
 
 - **Bırakma en iyi gayretle:** başarısızsa WARN yazılır, saga sonucunu yine döner; kilit süresi
   dolunca inventory'nin süpürücüsü stoku geri verir. Bu arada kullanıcı yeni sepet açarsa eski
@@ -228,9 +234,36 @@ değişken), süre sınırı 1 sn.
   ödeme her zaman alınmıştır ya da iade yolundadır.
 - **T11.2 öncesi kayıtlar:** kilidi olmayan taslak `CreateOrder`'da süresi dolmuş sayılır (kilitsiz
   stokla ödeme alınmaz); kilidi olmayan, ödeme bekleyen eski sipariş kesinleştirilmeden `PAID` olur.
-- **PR 2'ye kalanlar:** süresi dolan siparişleri order tarafında kapatan süpürücü; ödeme bekleyen
-  siparişin iptalinde ödemenin kontrolü ve iadesi; iptal edilen kapıda ödemenin `PENDING` kaydı.
-  PR 3: inventory istemcisine devre kesici (D17).
+- **Kalanlar:** iptal edilen kapıda ödemenin `PENDING` kaydının kapatılması payment'ta yeni bir
+  durum ister (PR 3); inventory istemcisine devre kesici D17 (PR 4).
+
+### Süpürücü (T11.2 PR 2)
+
+Kullanıcıya görünen davranış süpürücüye bağlı değil: kilidi düşmüş taslak `CreateOrder`'da 410
+alır, stoku inventory'nin kendi süpürücüsü geri verir. Bu süpürücü **kayıtları ve parayı**
+toparlar: kilidi dolmuş `DRAFT` ve `AWAITING_PAYMENT` siparişleri kapatır
+(`application/sweep-expired-reservations.ts`, işçi `interfaces/workers/reservation-sweeper.ts`).
+
+- **Sıklık:** `ORDER_SWEEPER_INTERVAL_MS` (varsayılan 10 sn, 1 sn–10 dk), turda en fazla 100
+  sipariş, kilidi önce dolan önce. Kilidi olmayan eski (T11.2 öncesi) siparişe dokunmaz.
+- **Ödeme bekleyen sipariş:** önce payment-svc'ye sorulur (`GetPayment`,
+  `domain/payment-standing.ts`). Para alınmışsa sipariş `CANCELLED` olur ve tutar iade edilir
+  (önce doğrudan, olmazsa `payment.refund_requested` komutu; saga'yla aynı yol,
+  `application/refund-step.ts`). Kart çekimi sürüyorsa (`PENDING`) o tur atlanır. Kapıda ödemenin
+  `PENDING`'i "para alındı" sayılmaz: tutar teslimatta alınır.
+- **Sıra:** önce sipariş yazılır (sürüm kontrollü), sonra kilit ve iade. Sipariş o arada başka bir
+  yazımla değiştiyse dokunulmaz.
+- **Birden fazla örnek:** lider kilidi yok. Sürüm kontrolü ve iadenin sabit anahtarı
+  (`refund-<orderId>`) aynı siparişin iki kez kapanmasını ya da iki kez iade edilmesini önler. Redis
+  gerekmez; MOCK modunda da çalışır.
+- **Hata:** bir siparişin hatası (payment kapalı) turu durdurmaz; sayılır, sonraki turda tekrar
+  denenir. Her sipariş kendi istek kimliğiyle kapanır (payment ve inventory günlüğünde tek iz).
+- **Metrikler:** `order_sweeper_closed_total{status}` (kapanmadan önceki durum: `DRAFT`,
+  `AWAITING_PAYMENT`) ve `order_sweeper_errors_total` (kapanamayan sipariş, düşen tur); uç
+  `localhost:51053/metrics`. Bir şey kapandıysa turda tek özet satırı.
+- **Bilinen sınır:** `Commit` uygulandıktan sonra sipariş `PAID` yazılamadan süreç çökerse (ya da
+  kullanıcı tam o anda 3DS'i onaylarken iptal ederse) sipariş kapanır ve para iade edilir ama
+  kesinleşmiş stok geri dönmez: eksik satış yönü, fazla satış yok (bekleyen işler #70).
 
 ## Outbox ile olay yayını (T7.3, ADR-04)
 
@@ -302,6 +335,8 @@ src/
 │   ├── checkout-risk.ts         # saga risk adımı: bant → karar/politika, risk bağlamı (T7.1)
 │   ├── checkout-payment.ts      # saga ödeme adımı: ödeme sonucu → sipariş, anahtarlar (T7.1)
 │   ├── stock-reservation.ts     # stok kilidi kuralları: bırakma gerekçeleri, sistem iptalleri (T11.2)
+│   ├── payment-standing.ts      # para alındı mı, çekim sürüyor mu (T11.2 PR 2)
+│   ├── expired-order-finder.ts  # port: kilidi dolmuş siparişler, süpürücünün kuyruğu (T11.2 PR 2)
 │   └── order-history-cursor.ts  # geçmiş sırası ve imleç
 ├── application/       # bir dosya = bir use-case
 │   ├── create-draft-order.ts, create-order.ts, confirm-payment.ts, cancel-order.ts
@@ -309,11 +344,13 @@ src/
 │   ├── risk-step.ts, payment-step.ts  # saga adımları (T7.1), use-case'ler paylaşır
 │   ├── draft-reservation.ts     # taslağın stok kilidi: kilitle / yetmedi / sepeti yenile (T11.2)
 │   ├── stock-step.ts            # saga'nın kesinleştirme ve en iyi gayretle bırakma adımı (T11.2)
+│   ├── refund-step.ts           # telafi iadesi: doğrudan, olmazsa outbox komutu (T7.1, T7.3)
+│   ├── sweep-expired-reservations.ts  # süpürücünün tek turu (T11.2 PR 2)
 │   ├── relay-outbox.ts          # tek yayın turu: bekleyenler → hat → işaret (T7.3)
 │   ├── own-order.ts             # "kendi siparişi değilse NOT_FOUND" tek yerde
 │   ├── catalog-pricing.ts       # port: marketRules, activeOffers (T7.2)
 │   ├── risk-assessment.ts       # port: evaluate (T7.1)
-│   ├── payments.ts              # port: charge, confirmThreeDs, refund (T7.1)
+│   ├── payments.ts              # port: charge, confirmThreeDs, refund (T7.1), getPayment (T11.2 PR 2)
 │   ├── stock-reservations.ts    # port: reserve, commit, release (T11.2)
 │   └── request-scope.ts         # use-case'e taşınan requestId + çağrının logger'ı
 ├── infrastructure/
@@ -331,6 +368,8 @@ src/
 │   └── order-handlers.ts
 ├── interfaces/workers/outbox-publisher.ts  # zamanlayıcı: turu aralıkla çalıştırır, kapanışta bekler
 ├── interfaces/workers/outbox-metrics.ts    # yayın, hata ve gecikme metrikleri (T10.5)
+├── interfaces/workers/reservation-sweeper.ts  # süpürücü zamanlayıcısı (T11.2 PR 2)
+├── interfaces/workers/sweeper-metrics.ts   # kapanan ve kapanamayan sipariş metrikleri
 ├── config/            # env.ts (process.env yalnızca burada) + constants.ts
 ├── bootstrap.ts
 ├── main.ts
