@@ -36,7 +36,8 @@ export function stockDocumentId(marketId: string, sku: string): string {
  * domain/stock-ledger.ts LedgerEntry).
  *
  * `_id` DOGAL ANAHTARDIR (domain/stock-ledger.ts ledgerEntryId): siparis
- * hareketinde "siparis/sku/tur", acilista "opening/market/sku". Ayni hareket
+ * hareketinde "siparis/sku/tur" (uzatmada "siparis/sku/extend-sira"), acilista
+ * "opening/market/sku". Ayni hareket
  * ikinci kez yazilirsa ayni `_id`'ye duser ve yazilmaz (B14: cift kayit
  * olusmaz); ayri bir benzersiz indeks gerekmez.
  */
@@ -49,5 +50,7 @@ export interface StockLedgerDocument extends BaseDocument {
   reason: string;
   /** Siparis hareketlerinde; acilis kaydinda yok. */
   orderId?: string;
+  /** Ayni turden birden fazla kaydi olan harekette sira (uzatma, T11.3). */
+  sequence?: number;
   createdAt: Date;
 }

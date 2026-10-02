@@ -22,6 +22,7 @@ import { z } from 'zod';
 
 import {
   MAX_AVAILABILITY_SKUS,
+  RESERVATION_EXTEND_MAX_SECONDS,
   RESERVATION_TTL_MAX_SECONDS,
   RESERVATION_TTL_MIN_SECONDS,
 } from '../../config/constants.js';
@@ -104,4 +105,32 @@ export const releaseRequestSchema = z.object({
 export const commitRequestSchema = z.object({
   orderId: requiredText.pipe(orderIdSchema),
   marketId: requiredText.pipe(marketIdSchema),
+});
+
+/**
+ * ExtendReservation (T11.3, B21). Eklenecek sure 1-300 sn: sinir KORUMADIR
+ * (sureyi order verir, 60); 0 ya da negatif sure uzatma hakkini bosa yakardi.
+ */
+export const extendRequestSchema = z.object({
+  orderId: requiredText.pipe(orderIdSchema),
+  marketId: requiredText.pipe(marketIdSchema),
+  additionalSeconds: z
+    .number()
+    .int('tam sayi olmali')
+    .min(1, 'en az 1 saniye')
+    .max(RESERVATION_EXTEND_MAX_SECONDS, `en fazla ${RESERVATION_EXTEND_MAX_SECONDS} saniye`),
+});
+
+/**
+ * ShortenReservation (T11.3). Kalan sure siniri rezervasyon suresiyle ayni
+ * aralikta (30-900): kilidi aninda dusurmek kisaltma degil birakmadir (Release).
+ */
+export const shortenRequestSchema = z.object({
+  orderId: requiredText.pipe(orderIdSchema),
+  marketId: requiredText.pipe(marketIdSchema),
+  maxRemainingSeconds: z
+    .number()
+    .int('tam sayi olmali')
+    .min(RESERVATION_TTL_MIN_SECONDS, `en az ${RESERVATION_TTL_MIN_SECONDS} saniye`)
+    .max(RESERVATION_TTL_MAX_SECONDS, `en fazla ${RESERVATION_TTL_MAX_SECONDS} saniye`),
 });

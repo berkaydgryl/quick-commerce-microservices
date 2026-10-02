@@ -24,9 +24,11 @@ import { z } from 'zod';
 import {
   DEFAULT_INVENTORY_GRPC_PORT,
   DEFAULT_MONGO_DB,
+  DEFAULT_RESERVATION_MAX_EXTENSIONS,
   DEFAULT_SWEEPER_INTERVAL_MS,
   DEFAULT_SWEEPER_LOCK_TTL_SECONDS,
   MS_PER_SECOND,
+  RESERVATION_MAX_EXTENSIONS_LIMIT,
   SWEEPER_INTERVAL_MAX_MS,
   SWEEPER_INTERVAL_MIN_MS,
   SWEEPER_LOCK_MIN_TURNS,
@@ -48,6 +50,12 @@ export const serviceSchema = serviceEnvSchema
       min: 1,
       max: SWEEPER_LOCK_TTL_MAX_SECONDS,
       defaultValue: DEFAULT_SWEEPER_LOCK_TTL_SECONDS,
+    }),
+    /** Rezervasyon basina en cok uzatma (T11.3, B21); 0 = uzatma kapali. */
+    RESERVATION_MAX_EXTENSIONS: envInt({
+      min: 0,
+      max: RESERVATION_MAX_EXTENSIONS_LIMIT,
+      defaultValue: DEFAULT_RESERVATION_MAX_EXTENSIONS,
     }),
   })
   .superRefine((env, context) => {

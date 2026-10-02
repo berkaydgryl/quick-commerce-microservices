@@ -14,7 +14,7 @@ syntax = "proto3";
 //   - rezervasyon suresinin NE KADAR olacagina karar vermek -> order-svc
 //     (risk bandindan turer ve ttl_seconds olarak buraya PARAMETRE gelir)
 //
-// ATOMIKLIK: Reserve/Commit/Release/ExtendReservation islemlerinin tamami tek
+// ATOMIKLIK: Reserve/Commit/Release/Extend/ShortenReservation islemlerinin tamami tek
 // bir Redis Lua script'i icinde kosar (ADR-01). Redlock veya cok adimli
 // istemci tarafi kilit YOKTUR. Bu yuzden kismi rezervasyon imkansizdir:
 // ya sepetin tamami rezerve edilir ya hicbiri. Commit ve Release'in stok
@@ -72,8 +72,26 @@ service InventoryService {
   // defteri tamamlar ve ALREADY_APPLIED alir.
   rpc Release(ReleaseRequest) returns (ReleaseResponse);
 
-  // Rezervasyon suresini bir kez uzatir (odeme adimina girerken).
+  // Rezervasyonun bitis anini `additional_seconds` ileri alir (T11.3, B21):
+  // odeme ya da 3DS denemesi kilit dusmeden bitsin. Uzatma rezervasyon basina
+  // en cok RESERVATION_MAX_EXTENSIONS kez (varsayilan 3) yapilir; hak bitince
+  // sure DEGISMEZ ve already_extended = true doner (hata degil). Her uzatma
+  // stok defterine yazilir (eldeki adet degismez).
+  //
+  // Aktif rezervasyon yoksa (birakilmis, onaylanmis, bitis ani gecmis ya da
+  // hic olmamis) FAILED_PRECONDITION + ErrorDetail.code = "RESERVATION_EXPIRED":
+  // kilit dusmustur, cagiran odeme ALMAMALIDIR. Bitis ani gecmis rezervasyon
+  // supurucu henuz birakmamis olsa da uzatilmaz (dusmus kilit diriltilmez).
   rpc ExtendReservation(ExtendReservationRequest) returns (ExtendReservationResponse);
+
+  // Rezervasyonun kalan suresini en cok `max_remaining_seconds`'e indirir
+  // (T11.3: orta risk bandinda kilit 2 dk). Kalan sure zaten kisaysa
+  // dokunmaz (shortened = false); asla uzatmaz. Kaydin, indeksin ve kullanici
+  // kilidinin omru birlikte kisalir: supurucu kilidi yeni bitiste birakir.
+  //
+  // Aktif rezervasyon yoksa ExtendReservation ile ayni hata
+  // (FAILED_PRECONDITION + "RESERVATION_EXPIRED").
+  rpc ShortenReservation(ShortenReservationRequest) returns (ShortenReservationResponse);
 
   // Rezervasyonun o anki halini okur.
   rpc GetReservation(GetReservationRequest) returns (GetReservationResponse);
@@ -169,8 +187,9 @@ message Reservation {
 
   ReservationStatus status = 6;
 
-  // Sure bir kez uzatildi mi. Uzatma yalnizca BIR KEZ yapilabilir; aksi halde
-  // odeme ekraninda bekleyen bir kullanici stogu sinirsiz sure tutabilirdi.
+  // Sure en az bir kez uzatildi mi. Uzatma sinirlidir (ExtendReservation:
+  // en cok RESERVATION_MAX_EXTENSIONS kez); aksi halde odeme ekraninda bekleyen
+  // bir kullanici stogu sinirsiz sure tutabilirdi.
   bool extended = 7;
 }
 
@@ -288,9 +307,9 @@ message ExtendReservationRequest {
   // Pazaryerinde siparisin/stogun ait oldugu market (ADR-15): mkt_ onekli kimlik.
   string market_id = 4;
 
-  // Mevcut bitis anina EKLENECEK saniye. Mutlak bir zaman alinmaz; istemci
-  // saatine guvenmek, saat kaymasi olan bir cihazin sureyi istedigi kadar
-  // uzatmasina izin verirdi.
+  // Mevcut bitis anina EKLENECEK saniye (1-300; disi VALIDATION_FAILED).
+  // Mutlak bir zaman alinmaz; istemci saatine guvenmek, saat kaymasi olan bir
+  // cihazin sureyi istedigi kadar uzatmasina izin verirdi.
   int32 additional_seconds = 3;
 }
 
@@ -298,9 +317,32 @@ message ExtendReservationResponse {
   // Uzatma sonrasi yeni bitis ani. Uzatma yapilmadiysa MEVCUT bitis ani doner.
   google.protobuf.Timestamp expires_at = 1;
 
-  // true ise sure daha once zaten bir kez uzatilmisti ve bu cagri sureye
-  // dokunmadi. Hata degildir; odeme adimi tekrar denenmis olabilir.
+  // true ise uzatma hakki bitmisti ve bu cagri sureye dokunmadi. Hata
+  // degildir: cagiran kalan sureyle devam eder (alan adi T11.3 oncesinden;
+  // o zaman tek uzatma vardi).
   bool already_extended = 2;
+
+  // Bu cagridan sonra rezervasyonun toplam uzatma sayisi (0 = hic uzatilmadi).
+  int32 extension_count = 3;
+}
+
+message ShortenReservationRequest {
+  string order_id = 1;
+
+  // Pazaryerinde siparisin/stogun ait oldugu market (ADR-15): mkt_ onekli kimlik.
+  string market_id = 2;
+
+  // Simdiden itibaren en cok bu kadar saniye kalsin (30-900; disi
+  // VALIDATION_FAILED). "Simdi" servisin saatidir; mutlak zaman alinmaz.
+  int32 max_remaining_seconds = 3;
+}
+
+message ShortenReservationResponse {
+  // Islemden sonraki bitis ani (kisalmadiysa MEVCUT bitis ani).
+  google.protobuf.Timestamp expires_at = 1;
+
+  // true: bu cagri sureyi kisaltti; false: kalan sure zaten sinirin altindaydi.
+  bool shortened = 2;
 }
 
 message GetReservationRequest {

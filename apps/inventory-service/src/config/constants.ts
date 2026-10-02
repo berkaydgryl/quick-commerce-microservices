@@ -51,6 +51,21 @@ export const RESERVATION_TTL_MIN_SECONDS = 30;
 export const RESERVATION_TTL_MAX_SECONDS = 900;
 
 /**
+ * Uzatma (T11.3, roadmap B21): rezervasyon basina en cok kac kez
+ * (RESERVATION_MAX_EXTENSIONS; .env.example ile ayni varsayilan). 3 x 60 sn,
+ * ucuncu 3DS denemesini de kapsar. Ust sinir korumadir: sinirsiz uzatma stogu
+ * sinirsiz kilitlerdi.
+ */
+export const DEFAULT_RESERVATION_MAX_EXTENSIONS = 3;
+export const RESERVATION_MAX_EXTENSIONS_LIMIT = 10;
+
+/**
+ * Tek uzatmanin en uzun hali (sn, ExtendReservationRequest.additional_seconds).
+ * Sureyi order verir (RESERVATION_EXTEND_SECONDS, 60); bu sinir KORUMADIR.
+ */
+export const RESERVATION_EXTEND_MAX_SECONDS = 300;
+
+/**
  * Rezervasyon hash'inin sure dolduktan SONRA Redis'te kalma payi (inventory.proto
  * Reservation.expires_at: "Redis hash'i bundan 60 saniye SONRA silinir"):
  * supurucu gecikmeli tick'inde kaydi (adetleri) hala okuyabilsin (T10.3).
@@ -76,6 +91,8 @@ export const LUA_SCRIPTS = {
   RESERVE: 'reserve',
   RELEASE: 'release',
   COMMIT: 'commit',
+  EXTEND: 'extend',
+  SHORTEN: 'shorten',
   LEADER: 'leader',
 } as const;
 

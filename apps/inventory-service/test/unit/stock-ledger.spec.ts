@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   commitEntries,
   expireEntries,
+  extendEntries,
   LEDGER_KINDS,
   ledgerEntryId,
   releaseEntries,
@@ -63,6 +64,55 @@ describe('birakma kaydi', () => {
     expect(settlementOfKind(LEDGER_KINDS.COMMIT)).toBe('committed');
     expect(settlementOfKind(LEDGER_KINDS.EXPIRE)).toBe('expired');
     expect(settlementOfKind(LEDGER_KINDS.OPENING)).toBeUndefined();
+    expect(settlementOfKind(LEDGER_KINDS.EXTEND)).toBeUndefined();
+  });
+});
+
+describe('uzatma kaydi (T11.3, B21)', () => {
+  it('kalem basina bir kayit: eldeki adet degismez (delta 0), gerekce payment_attempt, sira numarasiyla', () => {
+    expect(
+      extendEntries({
+        marketId: MARKET,
+        orderId: ORDER,
+        lines: [{ sku: 'SUT-1L', quantity: 2 }],
+        sequence: 2,
+        at: AT,
+      }),
+    ).toEqual([
+      {
+        marketId: MARKET,
+        sku: 'SUT-1L',
+        kind: 'extend',
+        delta: 0,
+        quantity: 2,
+        reason: 'payment_attempt',
+        orderId: ORDER,
+        sequence: 2,
+        at: AT,
+      },
+    ]);
+  });
+
+  it('sira kimlikte: ikinci uzatma birincinin uzerine dusmez; ayni uzatmanin tekrari duser (B14)', async () => {
+    const ledger = new InMemoryStockLedger();
+    const nth = (sequence: number) =>
+      extendEntries({
+        marketId: MARKET,
+        orderId: ORDER,
+        lines: [{ sku: 'SUT-1L', quantity: 2 }],
+        sequence,
+        at: AT,
+      });
+
+    await ledger.record(nth(1));
+    await ledger.record(nth(2));
+    await ledger.record(nth(2));
+
+    expect(ledger.all().map((entry) => ledgerEntryId(entry))).toEqual([
+      `${ORDER}/SUT-1L/extend-1`,
+      `${ORDER}/SUT-1L/extend-2`,
+    ]);
+    expect(await ledger.settlementOf(MARKET, ORDER)).toBeUndefined();
   });
 });
 

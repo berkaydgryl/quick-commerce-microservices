@@ -12,11 +12,14 @@ import type { GrpcServiceRegistration } from '@getir/service-kit';
 
 import { createCheckAvailability } from './application/check-availability.js';
 import { createCommitReservation } from './application/commit-reservation.js';
+import { createExtendReservation } from './application/extend-reservation.js';
 import { createReleaseReservation } from './application/release-reservation.js';
 import { createReserveStock } from './application/reserve-stock.js';
+import { createShortenReservation } from './application/shorten-reservation.js';
 import { createSweepExpired } from './application/sweep-expired.js';
 import type { SweepExpired } from './application/sweep-expired.js';
 import {
+  DEFAULT_RESERVATION_MAX_EXTENSIONS,
   INVENTORY_SERVICE_FULL_NAME,
   SWEEP_BATCH_SIZE,
   SWEEPER_MARKET_REFRESH_MS,
@@ -33,6 +36,8 @@ export interface BootstrapOptions {
   readonly stock?: StockPorts;
   /** Rezervasyonun "simdi"si; verilmezse sistem saati (testler sabit saat verir). */
   readonly clock?: Clock;
+  /** Rezervasyon basina en cok uzatma (RESERVATION_MAX_EXTENSIONS, T11.3). */
+  readonly maxExtensions?: number;
 }
 
 /** Servisin gRPC'ye kayitli hali; startGrpcServer bunu oldugu gibi alir. */
@@ -62,6 +67,18 @@ export function buildInventoryService(options: BootstrapOptions = {}): GrpcServi
       reservations: stock.reservations,
       committer: stock.committer,
       ledger: stock.ledger,
+      clock,
+      logger,
+    }),
+    extendReservation: createExtendReservation({
+      reservations: stock.reservations,
+      ledger: stock.ledger,
+      clock,
+      logger,
+      maxExtensions: options.maxExtensions ?? DEFAULT_RESERVATION_MAX_EXTENSIONS,
+    }),
+    shortenReservation: createShortenReservation({
+      reservations: stock.reservations,
       clock,
       logger,
     }),

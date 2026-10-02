@@ -38,7 +38,11 @@ function storeWith(hash: Record<string, string>, ...replies: unknown[]) {
   };
   const redis = { hgetall: () => Promise.resolve(hash) } as unknown as RedisClient;
   return {
-    store: new RedisReservationStore(redis, { reserve: unused, release: unused, commit }, OPTIONS),
+    store: new RedisReservationStore(
+      redis,
+      { reserve: unused, release: unused, commit, extend: unused, shorten: unused },
+      OPTIONS,
+    ),
     calls,
   };
 }

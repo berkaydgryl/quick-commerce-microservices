@@ -1,6 +1,7 @@
 /**
  * Bellekteki rezervasyon (MOCK=true, B16): reserve.lua, release.lua (birakma ve
- * sure dolumu kipleri) ve commit.lua'nin AYNI kurallari, Redis olmadan. Butun adimlar tek senkron blokta kosar: arada
+ * sure dolumu kipleri), commit.lua, extend.lua ve shorten.lua'nin AYNI
+ * kurallari, Redis olmadan. Butun adimlar tek senkron blokta kosar: arada
  * baska cagri calisamaz, bu yuzden bellekte de kismi rezervasyon ya da cift
  * birakma olmaz. Redis uygulamasi ayni senaryolardan gecer
  * (test/support/reservation-store-contract.ts).
@@ -19,6 +20,9 @@ import type {
   CommitOutcome,
   ExpireCommand,
   ExpireOutcome,
+  ExtendCommand,
+  ExtendOutcome,
+  InactiveReservation,
   ReleaseCommand,
   ReleaseOutcome,
   ReservationLine,
@@ -27,6 +31,8 @@ import type {
   ReserveCommand,
   ReserveOutcome,
   SettledReservation,
+  ShortenCommand,
+  ShortenOutcome,
 } from '../../domain/reservation.js';
 import { COMMIT_REASON, EXPIRE_REASON } from '../../domain/stock-ledger.js';
 
@@ -42,6 +48,8 @@ interface StoredReservation {
   readonly userId: string;
   readonly lines: readonly ReservationLine[];
   readonly expiresAt: number;
+  /** Kac kez uzatildi (Redis'te hash'in `extended` alani, T11.3). */
+  readonly extensionCount: number;
   /** Sonuclandiysa iz (Redis'te hash'in `state` alani). */
   readonly settled?: Settled;
 }
@@ -118,6 +126,14 @@ export class InMemoryReservationStore implements ReservationStore {
     return Promise.resolve(this.commitNow(command));
   }
 
+  extend(command: ExtendCommand): Promise<ExtendOutcome> {
+    return Promise.resolve(this.extendNow(command));
+  }
+
+  shorten(command: ShortenCommand): Promise<ShortenOutcome> {
+    return Promise.resolve(this.shortenNow(command));
+  }
+
   forgetSettled(marketId: string, orderId: string): Promise<void> {
     const key = reservationKey(marketId, orderId);
     if (this.reservations.get(key)?.settled !== undefined) {
@@ -165,7 +181,7 @@ export class InMemoryReservationStore implements ReservationStore {
       this.counters.set(counter, (this.counters.get(counter) ?? 0) - quantity);
     }
     const expiresAt = nowMs + ttlMs;
-    this.reservations.set(key, { userId, lines: [...lines], expiresAt });
+    this.reservations.set(key, { userId, lines: [...lines], expiresAt, extensionCount: 0 });
     this.userLocks.set(userId, { orderId, expiresAt });
     return { status: 'reserved', expiresAt };
   }
@@ -229,6 +245,75 @@ export class InMemoryReservationStore implements ReservationStore {
       settled: { settlement: 'committed', reason: COMMIT_REASON, at: nowMs },
     });
     return { status: 'committed', lines: sortedLines(existing.lines) };
+  }
+
+  /** Uzatma (extend.lua): kayit ve kullanici kilidi birlikte ileri; hak sinirli. */
+  private extendNow(command: ExtendCommand): ExtendOutcome {
+    const { orderId, marketId, nowMs, additionalMs, maxExtensions } = command;
+    const key = reservationKey(marketId, orderId);
+    const existing = this.reservations.get(key);
+    const inactive = this.inactiveOf(existing, nowMs);
+    if (inactive !== undefined || existing === undefined) {
+      return inactive ?? { status: 'inactive', reason: 'absent' };
+    }
+    if (existing.extensionCount >= maxExtensions) {
+      return {
+        status: 'limit-reached',
+        expiresAt: existing.expiresAt,
+        extensionCount: existing.extensionCount,
+      };
+    }
+    const expiresAt = existing.expiresAt + additionalMs;
+    const extensionCount = existing.extensionCount + 1;
+    this.moveTiming(key, existing, orderId, { ...existing, expiresAt, extensionCount });
+    return { status: 'extended', expiresAt, extensionCount, lines: sortedLines(existing.lines) };
+  }
+
+  /** Kisaltma (shorten.lua): kalan sure en cok sinir kadar; asla uzatmaz. */
+  private shortenNow(command: ShortenCommand): ShortenOutcome {
+    const { orderId, marketId, nowMs, maxRemainingMs } = command;
+    const key = reservationKey(marketId, orderId);
+    const existing = this.reservations.get(key);
+    const inactive = this.inactiveOf(existing, nowMs);
+    if (inactive !== undefined || existing === undefined) {
+      return inactive ?? { status: 'inactive', reason: 'absent' };
+    }
+    const cap = nowMs + maxRemainingMs;
+    if (existing.expiresAt <= cap) {
+      return { status: 'unchanged', expiresAt: existing.expiresAt };
+    }
+    this.moveTiming(key, existing, orderId, { ...existing, expiresAt: cap });
+    return { status: 'shortened', expiresAt: cap };
+  }
+
+  /** Kaydin yeni bitisi; kullanici kilidi yalnizca BU siparisinse onunla birlikte. */
+  private moveTiming(
+    key: string,
+    existing: StoredReservation,
+    orderId: string,
+    next: StoredReservation,
+  ): void {
+    this.reservations.set(key, next);
+    if (this.userLocks.get(existing.userId)?.orderId === orderId) {
+      this.userLocks.set(existing.userId, { orderId, expiresAt: next.expiresAt });
+    }
+  }
+
+  /** Uzatma ve kisaltma icin: aktif degilse sebebi, aktifse undefined (extend.lua sirasi). */
+  private inactiveOf(
+    existing: StoredReservation | undefined,
+    nowMs: number,
+  ): InactiveReservation | undefined {
+    if (existing?.settled !== undefined && this.isStored(existing, nowMs)) {
+      return { status: 'inactive', reason: 'settled' };
+    }
+    if (existing === undefined || !this.isStored(existing, nowMs)) {
+      return { status: 'inactive', reason: 'absent' };
+    }
+    if (existing.expiresAt <= nowMs) {
+      return { status: 'inactive', reason: 'due' };
+    }
+    return undefined;
   }
 
   /** Iz varsa iz, kayit hic yoksa ya da dusmusse absent; aktif kayitta undefined. */

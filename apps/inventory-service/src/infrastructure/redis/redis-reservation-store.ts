@@ -1,7 +1,7 @@
 /**
  * Rezervasyonun Redis uygulamasi: lua/reserve.lua (T10.1), lua/release.lua ve
- * lua/commit.lua (T10.2; ADR-01, ADR-18). Sure dolumu release.lua'nin "expire"
- * kipidir (T10.3, ADR-02).
+ * lua/commit.lua (T10.2; ADR-01, ADR-18), lua/extend.lua ve lua/shorten.lua
+ * (T11.3, B21). Sure dolumu release.lua'nin "expire" kipidir (T10.3, ADR-02).
  *
  * Anahtarlar redis-kit'in ureticilerinden gelir (bicim tek kaynakta); script'in
  * bekledigi sira B15'tedir: once stok sayaclari, sonra rezervasyon hash'i,
@@ -28,6 +28,9 @@ import type {
   CommitOutcome,
   ExpireCommand,
   ExpireOutcome,
+  ExtendCommand,
+  ExtendOutcome,
+  InactiveReservation,
   ReleaseCommand,
   ReleaseOutcome,
   ReservationLine,
@@ -35,6 +38,8 @@ import type {
   ReserveCommand,
   ReserveOutcome,
   SettledReservation,
+  ShortenCommand,
+  ShortenOutcome,
 } from '../../domain/reservation.js';
 import { COMMIT_REASON, EXPIRE_REASON } from '../../domain/stock-ledger.js';
 import { readReservationHash } from './reservation-hash.js';
@@ -100,6 +105,27 @@ const commitReplySchema = z.union([
   z.tuple([z.literal('stale')]),
 ]);
 
+/** extend.lua ve shorten.lua'nin ortak "aktif degil" cevaplari ve eskimis on okuma. */
+const inactiveReplies = [
+  z.tuple([z.literal('settled')]),
+  z.tuple([z.literal('absent')]),
+  z.tuple([z.literal('orphaned')]),
+  z.tuple([z.literal('due')]),
+  z.tuple([z.literal('stale')]),
+] as const;
+
+const extendReplySchema = z.union([
+  z.tuple([z.literal('extended'), integerReply, integerReply]).rest(pairsReply),
+  z.tuple([z.literal('limit'), integerReply, integerReply]),
+  ...inactiveReplies,
+]);
+
+const shortenReplySchema = z.union([
+  z.tuple([z.literal('shortened'), integerReply]),
+  z.tuple([z.literal('unchanged'), integerReply]),
+  ...inactiveReplies,
+]);
+
 /** On okuma ile script arasinda kayit degisirse (on okuma eskidiyse) kac kez denenir. */
 const SETTLE_ATTEMPTS = 2;
 
@@ -107,6 +133,8 @@ export interface RedisReservationScripts {
   readonly reserve: LuaScript;
   readonly release: LuaScript;
   readonly commit: LuaScript;
+  readonly extend: LuaScript;
+  readonly shorten: LuaScript;
 }
 
 export interface RedisReservationStoreOptions {
@@ -231,6 +259,14 @@ export class RedisReservationStore implements ReservationStore {
     return this.withPreRead(command, (hash) => this.commitOnce(command, hash));
   }
 
+  extend(command: ExtendCommand): Promise<ExtendOutcome> {
+    return this.withPreRead(command, (hash) => this.extendOnce(command, hash));
+  }
+
+  shorten(command: ShortenCommand): Promise<ShortenOutcome> {
+    return this.withPreRead(command, (hash) => this.shortenOnce(command, hash));
+  }
+
   /**
    * Izi siler. Guvenli: iz dururken reserve.lua ayni siparisi yeniden acmaz
    * (EXISTS), dolayisiyla bu anahtar ancak sonuclanmis kaydi tasiyabilir.
@@ -298,6 +334,90 @@ export class RedisReservationStore implements ReservationStore {
       case 'stale':
         return 'stale';
     }
+  }
+
+  private async extendOnce(
+    command: ExtendCommand,
+    hash: ReservationHash | undefined,
+  ): Promise<ExtendOutcome | 'stale'> {
+    const { orderId, marketId, nowMs, additionalMs, maxExtensions } = command;
+    const args = [
+      orderId,
+      hash?.userId ?? '',
+      nowMs,
+      additionalMs,
+      this.options.holdAfterExpiryMs,
+      maxExtensions,
+    ];
+
+    const parsed = extendReplySchema.safeParse(
+      await this.scripts.extend.run(this.timingKeys(command, hash), args),
+    );
+    if (!parsed.success) {
+      throw AppError.internal('extend script beklenmeyen cevap verdi', {
+        cause: parsed.error,
+        details: { orderId, marketId },
+      });
+    }
+
+    const reply = parsed.data;
+    switch (reply[0]) {
+      case 'extended': {
+        const [, expiresAt, extensionCount, ...pairs] = reply;
+        return { status: 'extended', expiresAt, extensionCount, lines: linesOf(pairs, command) };
+      }
+      case 'limit':
+        return { status: 'limit-reached', expiresAt: reply[1], extensionCount: reply[2] };
+      case 'stale':
+        return 'stale';
+      default:
+        return inactiveOf(reply[0]);
+    }
+  }
+
+  private async shortenOnce(
+    command: ShortenCommand,
+    hash: ReservationHash | undefined,
+  ): Promise<ShortenOutcome | 'stale'> {
+    const { orderId, marketId, nowMs, maxRemainingMs } = command;
+    const args = [
+      orderId,
+      hash?.userId ?? '',
+      nowMs,
+      maxRemainingMs,
+      this.options.holdAfterExpiryMs,
+    ];
+
+    const parsed = shortenReplySchema.safeParse(
+      await this.scripts.shorten.run(this.timingKeys(command, hash), args),
+    );
+    if (!parsed.success) {
+      throw AppError.internal('shorten script beklenmeyen cevap verdi', {
+        cause: parsed.error,
+        details: { orderId, marketId },
+      });
+    }
+
+    const reply = parsed.data;
+    switch (reply[0]) {
+      case 'shortened':
+        return { status: 'shortened', expiresAt: reply[1] };
+      case 'unchanged':
+        return { status: 'unchanged', expiresAt: reply[1] };
+      case 'stale':
+        return 'stale';
+      default:
+        return inactiveOf(reply[0]);
+    }
+  }
+
+  /** extend.lua ve shorten.lua'nin anahtarlari: kayit, indeks, (varsa) kullanici kilidi. */
+  private timingKeys(command: CommitCommand, hash: ReservationHash | undefined): string[] {
+    return [
+      reservationKey(command.marketId, command.orderId),
+      reservationIndexKey(command.marketId),
+      ...(hash === undefined ? [] : [userReservationKey(hash.userId)]),
+    ];
   }
 
   private async releaseOnce(
@@ -373,6 +493,11 @@ export class RedisReservationStore implements ReservationStore {
     }
     return line;
   }
+}
+
+/** Script'in "aktif degil" cevabi -> sonuc (yazilan bir sey yok). */
+function inactiveOf(reason: InactiveReservation['reason']): InactiveReservation {
+  return { status: 'inactive', reason };
 }
 
 /** 'settled' cevabi -> iz. */
