@@ -18,6 +18,7 @@ import { createConfirmPayment } from '../../src/application/confirm-payment.js';
 import { transitionOrder } from '../../src/domain/order.js';
 import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-order-store.js';
 import { FAKE_CHALLENGE_ID, FakePayments } from '../support/fake-payments.js';
+import { FakeStockReservations } from '../support/fake-stock-reservations.js';
 import { insertAwaitingPayment, insertDraft } from '../support/order-builders.js';
 
 const clock = fixedClock(1_760_000_000_000);
@@ -25,12 +26,14 @@ const scope = { requestId: 'req_3ds_1', logger: silentLogger };
 
 let repository: InMemoryOrderStore;
 let payments: FakePayments;
+let stock: FakeStockReservations;
 let confirm: ReturnType<typeof createConfirmPayment>;
 
 beforeEach(() => {
   repository = new InMemoryOrderStore();
   payments = new FakePayments();
-  confirm = createConfirmPayment({ repository, payments, outbox: repository, clock });
+  stock = new FakeStockReservations();
+  confirm = createConfirmPayment({ repository, payments, stock, outbox: repository, clock });
 });
 
 /** 3DS bekleyen (MEDIUM bant) siparis. */
@@ -90,6 +93,50 @@ describe('ConfirmPayment', () => {
       expect(order?.timeline.at(-1)?.note).toBe('THREEDS_FAILED');
     },
   );
+
+  it('dogru kod: stok kilidi PAID yazilmadan once kesinlesir (T11.2)', async () => {
+    const { id, marketId } = await awaiting3Ds();
+
+    await confirm(input(id), scope);
+
+    expect(stock.commits).toEqual([{ orderId: id, marketId }]);
+    expect(stock.releases).toEqual([]);
+  });
+
+  it('dogrulama kapandi: siparis PAYMENT_FAILED, kilit birakilir (payment_failed)', async () => {
+    const { id, marketId } = await awaiting3Ds();
+    payments.confirmOutcome = threeDsFailed(0, 'attempts_exhausted');
+
+    await expect(confirm(input(id, '000000'), scope)).rejects.toBeInstanceOf(AppError);
+
+    expect(stock.releases).toEqual([{ orderId: id, marketId, reason: 'payment_failed' }]);
+    expect(stock.commits).toEqual([]);
+  });
+
+  it('yanlis kod, hak var: kilit KORUNUR (kullanici yeniden dener)', async () => {
+    const { id } = await awaiting3Ds();
+    payments.confirmOutcome = threeDsFailed(2, 'wrong_code');
+
+    await expect(confirm(input(id, '000000'), scope)).rejects.toBeInstanceOf(AppError);
+
+    expect(stock.releases).toEqual([]);
+  });
+
+  it('3DS beklerken kilit dustu: tutar iade edilir, siparis CANCELLED, RESERVATION_EXPIRED', async () => {
+    const { id } = await awaiting3Ds();
+    stock.expire(id);
+
+    await expect(confirm(input(id), scope)).rejects.toMatchObject({
+      code: ERROR_CODES.RESERVATION_EXPIRED,
+      details: { orderId: id, status: ORDER_STATUS.CANCELLED },
+    });
+    expect(payments.refunds.map((refund) => [refund.orderId, refund.reason])).toEqual([
+      [id, 'reservation_expired'],
+    ]);
+    await expect(repository.findById(id)).resolves.toMatchObject({
+      status: ORDER_STATUS.CANCELLED,
+    });
+  });
 
   it('tekrar istek (onay cevabi kayboldu): siparis zaten PAID, payment-svc ye gidilmez', async () => {
     const { id } = await awaiting3Ds();

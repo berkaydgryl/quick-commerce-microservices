@@ -38,13 +38,29 @@ export interface TimelineEntry {
  * Istemci ayni anahtari hata mesajina zaten ceviriyor; ikinci sozluk olmaz.
  */
 export const TIMELINE_NOTE = {
-  /** Stok rezervasyonu henuz yok (T11.2): adim kilitsiz gecti. */
+  /**
+   * T11.2 ONCESI kayitlar: RESERVED adimi stok kilitlenmeden gecti. Artik
+   * yazilmaz; eski siparislerin zaman cizelgesinde durur.
+   */
   PENDING_RESERVATION: 'PENDING_RESERVATION',
+  /** Kullanici yeni sepetle rezervasyon istedi; eski taslak iptal edildi (T11.2). */
+  CART_REPLACED: 'CART_REPLACED',
   /** Kullanici gerekce vermeden iptal etti. */
   USER_CANCELLED: 'USER_CANCELLED',
   /** Kapida odeme (T7.1): cekim yok, tutar teslimatta alinacak; siparis yine PAID'e gecer. */
   CASH_ON_DELIVERY: 'CASH_ON_DELIVERY',
 } as const;
+
+/**
+ * Siparisin stok rezervasyonu (T11.2, ADR-01): taslak acilirken inventory'de
+ * kilitlenir. Kimligi siparisin kimligidir; burada yalnizca anlari tutulur.
+ */
+export interface OrderReservation {
+  /** Kilidin alindigi an: risk adimi "odeme ekraninda gecen sure"yi buradan olcer. */
+  readonly reservedAt: Date;
+  /** Kilidin dusecegi an; istemcinin geri sayimi buna gore (reservation_expires_at). */
+  readonly expiresAt: Date;
+}
 
 export interface DeliveryLocation {
   readonly lat: number;
@@ -76,6 +92,11 @@ export interface Order {
    * yeniden sorulmaz. Istemciye gosterilmez (proto Order'da alani yok).
    */
   readonly riskBand?: RiskBand;
+  /**
+   * Stok rezervasyonu (T11.2). Taslak acilirken yazilir; kilitlenemeyen ya da
+   * T11.2 oncesi taslakta YOK. Siparis iptal edilse de silinmez (iz).
+   */
+  readonly reservation?: OrderReservation;
   readonly createdAt: Date;
   readonly updatedAt: Date;
   /**

@@ -16,7 +16,7 @@ import { PAYMENT_METHOD } from './checkout-payment.js';
 import type { PaymentMethod } from './checkout-payment.js';
 import type { RiskHistory } from './order-history-reader.js';
 import type { DeliveryLocation, Order } from './order.js';
-import { TIMELINE_NOTE, transitionOrder } from './order.js';
+import { transitionOrder } from './order.js';
 
 /** proto int32 ust siniri: bekleme suresi bu alana sigmali (~24,8 gun). */
 const INT32_MAX = 2_147_483_647;
@@ -83,7 +83,7 @@ export function assertPaymentMethodAllowed(
 /**
  * Risk kararini siparise isler: DRAFT -> RISK_CHECK (bant kaydedilir), sonra
  * durdurulduysa REVIEW / REJECTED (not: hata anahtari), gecerse
- * RESERVED (stok T11.2'de: not PENDING_RESERVATION) -> AWAITING_PAYMENT.
+ * RESERVED (stok taslakta kilitlendi, T11.2) -> AWAITING_PAYMENT.
  */
 export function applyRiskDecision(
   order: Order,
@@ -98,12 +98,8 @@ export function applyRiskDecision(
   if (decision.kind === 'stop') {
     return transitionOrder(checked, decision.status, clock, decision.code);
   }
-  const reserved = transitionOrder(
-    checked,
-    ORDER_STATUS.RESERVED,
-    clock,
-    TIMELINE_NOTE.PENDING_RESERVATION,
-  );
+  // Stok taslak acilirken kilitlendi (T11.2): RESERVED artik gercek bir kilit.
+  const reserved = transitionOrder(checked, ORDER_STATUS.RESERVED, clock);
   return transitionOrder(reserved, ORDER_STATUS.AWAITING_PAYMENT, clock);
 }
 
@@ -141,8 +137,8 @@ export interface OrderRiskContext {
   readonly currency: string;
   readonly userAverageBasketMinor?: number;
   /**
-   * checkout-dwell: SUNUCUDA olculur (B9). Rezervasyon (T11.2) gelene kadar
-   * baslangic taslagin acildigi an; T11.2'de reservedAt olur.
+   * checkout-dwell: SUNUCUDA olculur (B9). Baslangic stok kilidinin alindigi
+   * an (T11.2, reservedAt); kilidi olmayan eski taslakta taslagin acildigi an.
    */
   readonly checkoutDwellMs: number;
   readonly deliveryLocation: DeliveryLocation;
@@ -156,7 +152,8 @@ export function riskContextOf(
   now: Date,
   signals: CheckoutSignals,
 ): OrderRiskContext {
-  const dwellMs = Math.max(0, now.getTime() - order.createdAt.getTime());
+  const dwellStart = order.reservation?.reservedAt ?? order.createdAt;
+  const dwellMs = Math.max(0, now.getTime() - dwellStart.getTime());
   return {
     userId: order.userId,
     orderId: order.id,

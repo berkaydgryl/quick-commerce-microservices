@@ -9,7 +9,7 @@
  * yapilandirmayla ayaga kalkip ilk siparisde patlamaktan iyidir.
  */
 
-import { envString, loadEnvOrExit } from '@getir/core';
+import { envInt, envString, loadEnvOrExit } from '@getir/core';
 import type { MongoEnv } from '@getir/mongo-kit';
 import { mongoEnvSchemaFor, withoutOperationTimeout } from '@getir/mongo-kit';
 import type { RedisEnv } from '@getir/redis-kit';
@@ -19,10 +19,14 @@ import { z } from 'zod';
 
 import {
   DEFAULT_CATALOG_GRPC_ADDR,
+  DEFAULT_INVENTORY_GRPC_ADDR,
   DEFAULT_MONGO_DB,
   DEFAULT_ORDER_GRPC_PORT,
   DEFAULT_PAYMENT_GRPC_ADDR,
+  DEFAULT_RESERVATION_TTL_SECONDS,
   DEFAULT_RISK_GRPC_ADDR,
+  MAX_RESERVATION_TTL_SECONDS,
+  MIN_RESERVATION_TTL_SECONDS,
 } from './constants.js';
 
 const serviceSchema = serviceEnvSchema.extend({
@@ -33,6 +37,13 @@ const serviceSchema = serviceEnvSchema.extend({
   // Siparis saga'si (T7.1): risk degerlendirmesi ve odeme.
   RISK_GRPC_ADDR: envString(DEFAULT_RISK_GRPC_ADDR),
   PAYMENT_GRPC_ADDR: envString(DEFAULT_PAYMENT_GRPC_ADDR),
+  // Stok kilidi (T11.2). Ad gateway'le ayni: iki servis ayni inventory'ye baglanir.
+  INVENTORY_GRPC_ADDR: envString(DEFAULT_INVENTORY_GRPC_ADDR),
+  RESERVATION_TTL_SECONDS: envInt({
+    min: MIN_RESERVATION_TTL_SECONDS,
+    max: MAX_RESERVATION_TTL_SECONDS,
+    defaultValue: DEFAULT_RESERVATION_TTL_SECONDS,
+  }),
 });
 
 /** Servisin kendi veritabani ve kullanicisi (D14): ORDER_MONGO_URI, ORDER_MONGO_DB. */

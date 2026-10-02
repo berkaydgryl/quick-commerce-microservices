@@ -28,10 +28,13 @@ import type { OrderHistoryReader } from '../domain/order-history-reader.js';
 import type { OrderRepository } from '../domain/order-repository.js';
 import { assertTransition } from '../domain/order-state-machine.js';
 import type { Order } from '../domain/order.js';
+import { RELEASE_REASON } from '../domain/stock-reservation.js';
 import type { RequestScope } from './request-scope.js';
 import type { RiskAssessment } from './risk-assessment.js';
+import { releaseStock } from './stock-step.js';
+import type { StockStepDeps } from './stock-step.js';
 
-export interface RiskStepDeps {
+export interface RiskStepDeps extends StockStepDeps {
   readonly repository: Pick<OrderRepository, 'update'>;
   readonly history: Pick<OrderHistoryReader, 'riskHistory'>;
   readonly risk: RiskAssessment;
@@ -66,6 +69,16 @@ export async function passRiskStep(
   );
 
   if (decision.kind === 'stop') {
+    // Durdurulan siparisin stoku baskasina acilir (T7.1 notu, T11.2). Inceleme
+    // onaylarsa stok yeniden kilitlenir (REVIEW -> RESERVED, inceleme akisi).
+    await releaseStock(
+      deps,
+      next,
+      next.status === ORDER_STATUS.REJECTED
+        ? RELEASE_REASON.RISK_REJECTED
+        : RELEASE_REASON.RISK_REVIEW,
+      scope,
+    );
     throw new AppError(decision.code, 'Siparis risk adiminda durduruldu', {
       details: { orderId: order.id, status: next.status },
     });

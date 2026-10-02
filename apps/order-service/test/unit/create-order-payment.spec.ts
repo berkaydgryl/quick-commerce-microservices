@@ -21,6 +21,7 @@ import type { Order } from '../../src/domain/order.js';
 import { transitionOrder } from '../../src/domain/order.js';
 import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-order-store.js';
 import { FakePayments, TEST_CARD } from '../support/fake-payments.js';
+import { FakeStockReservations } from '../support/fake-stock-reservations.js';
 import { FakeRiskAssessment } from '../support/fake-risk-assessment.js';
 import { insertDraft } from '../support/order-builders.js';
 
@@ -30,17 +31,20 @@ const byCard = (cardToken: string) => ({ method: PAYMENT_METHOD.CARD, cardToken 
 let repository: InMemoryOrderStore;
 let risk: FakeRiskAssessment;
 let payments: FakePayments;
+let stock: FakeStockReservations;
 let create: ReturnType<typeof createCreateOrder>;
 
 beforeEach(() => {
   repository = new InMemoryOrderStore();
   risk = new FakeRiskAssessment();
   payments = new FakePayments();
+  stock = new FakeStockReservations();
   create = createCreateOrder({
     repository,
     history: repository,
     risk,
     payments,
+    stock,
     outbox: repository,
     clock,
   });
@@ -253,6 +257,7 @@ describe('CreateOrder - telafi (P3: PAID yazilamazsa iade)', () => {
       history: repository,
       risk,
       payments,
+      stock,
       outbox: brokenOutbox,
       clock,
     });

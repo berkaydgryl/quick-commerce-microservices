@@ -61,6 +61,8 @@ export interface OrderDocument extends BaseDocument {
   timeline: TimelineEntryDocument[];
   /** Risk adimindan once HIC yazilmaz (T7.1). */
   riskBand?: RiskBand;
+  /** Stok kilidi (T11.2); kilitlenemeyen ve T11.2 oncesi taslakta HIC yok. */
+  reservation?: { reservedAt: Date; expiresAt: Date };
   createdAt: Date;
   updatedAt: Date;
   /** Iyimser kilit surumu; guncelleme filtresi bunu kosul olarak kullanir. */

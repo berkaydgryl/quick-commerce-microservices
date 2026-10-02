@@ -5,8 +5,10 @@
  * siparisini iptal edebilir (USER_CANCELLABLE, B29). Odenmis siparisin iptali
  * sistemin telafi adimidir (iade, B20c); kullanici tetikleyemez.
  *
- * Rezervasyonun serbest birakilmasi (inventory Release) T11.2'de saga'ya
- * eklenecek; bugun siparis durumu ve zaman cizelgesi yazilir.
+ * Iptalden sonra stok kilidi birakilir (T11.2, inventory Release): stok
+ * baskasina acilir. Birakilamazsa kilit suresi dolunca inventory geri verir.
+ * Odeme bekleyen siparisin odeme durumunu kontrol edip gerekirse iade etmek
+ * T11.2 PR 2'de.
  */
 
 import { AppError, ERROR_CODES, ORDER_STATUS } from '@getir/core';
@@ -17,9 +19,13 @@ import type { OrderRepository } from '../domain/order-repository.js';
 import type { Order } from '../domain/order.js';
 import { TIMELINE_NOTE, transitionOrder } from '../domain/order.js';
 import { USER_CANCELLABLE } from '../domain/order-state-machine.js';
+import { RELEASE_REASON } from '../domain/stock-reservation.js';
 import { findOwnOrder } from './own-order.js';
+import type { RequestScope } from './request-scope.js';
+import { releaseStock } from './stock-step.js';
+import type { StockStepDeps } from './stock-step.js';
 
-export interface CancelOrderDeps {
+export interface CancelOrderDeps extends StockStepDeps {
   readonly repository: OrderRepository;
   readonly clock: Clock;
 }
@@ -31,10 +37,10 @@ export interface CancelOrderInput {
   readonly reason?: string | undefined;
 }
 
-export type CancelOrder = (input: CancelOrderInput) => Promise<Order>;
+export type CancelOrder = (input: CancelOrderInput, scope: RequestScope) => Promise<Order>;
 
 export function createCancelOrder(deps: CancelOrderDeps): CancelOrder {
-  return async ({ orderId, userId, reason }) => {
+  return async ({ orderId, userId, reason }, scope) => {
     const order = await findOwnOrder(deps.repository, orderId, userId);
 
     // Tabloda CANCELLED'a kenar olsa bile (PAID -> CANCELLED) kullanici
@@ -56,6 +62,7 @@ export function createCancelOrder(deps: CancelOrderDeps): CancelOrder {
       reason ?? TIMELINE_NOTE.USER_CANCELLED,
     );
     await deps.repository.update(cancelled, order.version, statusChangedEvents(order, cancelled));
+    await releaseStock(deps, order, RELEASE_REASON.USER_CANCELLED, scope);
     return cancelled;
   };
 }

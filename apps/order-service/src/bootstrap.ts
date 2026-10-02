@@ -18,7 +18,9 @@ import { createListMyOrders } from './application/list-my-orders.js';
 import { createRelayOutbox } from './application/relay-outbox.js';
 import type { Payments } from './application/payments.js';
 import type { RiskAssessment } from './application/risk-assessment.js';
+import type { StockReservations } from './application/stock-reservations.js';
 import {
+  DEFAULT_RESERVATION_TTL_SECONDS,
   ORDER_SERVICE_FULL_NAME,
   OUTBOX_BATCH_SIZE,
   OUTBOX_POLL_INTERVAL_MS,
@@ -46,6 +48,10 @@ export interface BootstrapOptions {
   readonly risk: RiskAssessment;
   /** Saga'nin odeme adimi (T7.1): uretimde payment gRPC istemcisi, testte sahtesi. ZORUNLU. */
   readonly payments: Payments;
+  /** Stok kilidi (T11.2): uretimde inventory gRPC istemcisi, testte sahtesi. ZORUNLU. */
+  readonly stock: StockReservations;
+  /** Kilidin omru (sn); verilmezse 600 (RESERVATION_TTL_SECONDS'un varsayilani). */
+  readonly reservationTtlSeconds?: number;
   readonly logger?: Logger;
   /** Siparis portlari. Verilmezse bellek kullanilir (testler). */
   readonly store?: OrderPorts;
@@ -61,12 +67,15 @@ function inMemoryPorts(): OrderPorts {
 export function buildOrderService(options: BootstrapOptions): GrpcServiceRegistration {
   const { repository, history, outbox } = options.store ?? inMemoryPorts();
   const clock = options.clock ?? systemClock;
+  const { stock } = options;
 
   const implementation = createOrderImplementation({
     createDraftOrder: createCreateDraftOrder({
       repository,
       history,
       catalog: options.catalog,
+      stock,
+      reservationTtlSeconds: options.reservationTtlSeconds ?? DEFAULT_RESERVATION_TTL_SECONDS,
       clock,
     }),
     createOrder: createCreateOrder({
@@ -74,18 +83,20 @@ export function buildOrderService(options: BootstrapOptions): GrpcServiceRegistr
       history,
       risk: options.risk,
       payments: options.payments,
+      stock,
       outbox,
       clock,
     }),
     confirmPayment: createConfirmPayment({
       repository,
       payments: options.payments,
+      stock,
       outbox,
       clock,
     }),
     getOrder: createGetOrder({ repository }),
     listMyOrders: createListMyOrders({ history }),
-    cancelOrder: createCancelOrder({ repository, clock }),
+    cancelOrder: createCancelOrder({ repository, stock, clock }),
     ...(options.logger === undefined ? {} : { logger: options.logger }),
   });
 

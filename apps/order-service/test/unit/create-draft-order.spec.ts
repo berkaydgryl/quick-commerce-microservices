@@ -11,6 +11,7 @@ import { createCreateDraftOrder } from '../../src/application/create-draft-order
 import { createDraftOrder, transitionOrder } from '../../src/domain/order.js';
 import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-order-store.js';
 import { FAKE_MARKET_ID, FakeCatalogPricing } from '../support/fake-catalog-pricing.js';
+import { FAKE_TTL_SECONDS, FakeStockReservations } from '../support/fake-stock-reservations.js';
 import { sampleDraftInput } from '../support/order-builders.js';
 import { DRAFT_TOTAL_MINOR } from '../support/order-fixtures.js';
 
@@ -28,9 +29,17 @@ const input: CreateDraftOrderInput = {
 
 let repository: InMemoryOrderStore;
 let catalog: FakeCatalogPricing;
+let stock: FakeStockReservations;
 
 function useCase(history = repository) {
-  return createCreateDraftOrder({ repository, history, catalog, clock });
+  return createCreateDraftOrder({
+    repository,
+    history,
+    catalog,
+    stock,
+    reservationTtlSeconds: FAKE_TTL_SECONDS,
+    clock,
+  });
 }
 
 async function rejectionOf(promise: Promise<unknown>): Promise<AppError> {
@@ -59,6 +68,7 @@ async function givenPaidOrder(userId: string): Promise<void> {
 
 beforeEach(() => {
   repository = new InMemoryOrderStore();
+  stock = new FakeStockReservations(() => clock.now());
   catalog = new FakeCatalogPricing();
 });
 

@@ -141,6 +141,40 @@ export function describeOrderHistoryReaderContract(
       });
     });
 
+    it('riskHistory (T11.2): sistemin iptalleri (stok yetmedi, sure doldu, sepet yenilendi) SAYILMAZ', async () => {
+      const store = getStore();
+      const userId = newUserId();
+      const cancelledWith = (
+        at: number,
+        note: string | undefined,
+        steps: readonly OrderStatus[] = [],
+      ) =>
+        transitionOrder(
+          walk(draftAt(userId, at), steps),
+          ORDER_STATUS.CANCELLED,
+          fixedClock(at),
+          note,
+        );
+
+      await store.insert(cancelledWith(START_MS, 'STOCK_INSUFFICIENT'), []);
+      await store.insert(cancelledWith(START_MS + 1, 'RESERVATION_EXPIRED'), []);
+      await store.insert(cancelledWith(START_MS + 2, 'CART_REPLACED'), []);
+      // Odeme sirasinda kilit dustu: odeme bekleyen siparis sistemce iptal.
+      await store.insert(
+        cancelledWith(START_MS + 3, 'RESERVATION_EXPIRED', TO_PAID.slice(0, 3)),
+        [],
+      );
+      // Kullanicinin iptalleri sayilir: notsuz, USER_CANCELLED ve kendi gerekcesi.
+      await store.insert(cancelledWith(START_MS + 4, undefined), []);
+      await store.insert(cancelledWith(START_MS + 5, 'USER_CANCELLED'), []);
+      await store.insert(cancelledWith(START_MS + 6, 'CHANGED_MIND', TO_PAID.slice(0, 3)), []);
+
+      await expect(store.riskHistory(userId)).resolves.toEqual({
+        deliveredCount: 0,
+        cancelledCount: 3,
+      });
+    });
+
     it('riskHistory: teslimati olmayan kullanicida ortalama YOK (0 degil)', async () => {
       await expect(getStore().riskHistory(newUserId())).resolves.toEqual({
         deliveredCount: 0,

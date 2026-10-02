@@ -9,6 +9,7 @@ import { MongoRepository } from '@getir/mongo-kit';
 import type { SessionOption } from '@getir/mongo-kit';
 import type { Db, Filter, IndexDescription } from 'mongodb';
 
+import { ORDER_STATUS } from '@getir/core';
 import type { OrderStatus } from '@getir/core';
 
 import type { OrderHistoryCursor } from '../../domain/order-history-cursor.js';
@@ -73,11 +74,14 @@ export class OrdersCollection extends MongoRepository<OrderDocument> {
   async countAndSumByStatus(
     userId: string,
     statuses: readonly OrderStatus[],
+    options: CountByStatusOptions = {},
   ): Promise<ReadonlyMap<OrderStatus, { readonly count: number; readonly totalMinor: number }>> {
+    const excluded = options.excludeCancellationNotes ?? [];
     const rows = await this.run('countAndSumByStatus', () =>
       this.collection
         .aggregate<{ _id: OrderStatus; count: number; totalMinor: number }>([
           { $match: { userId, status: { $in: [...statuses] } } },
+          ...(excluded.length === 0 ? [] : [{ $match: notCancelledWith(excluded) }]),
           {
             $group: {
               _id: '$status',
@@ -148,5 +152,39 @@ function afterFilter(after: OrderHistoryCursor | undefined): Filter<OrderDocumen
       { createdAt: { $lt: after.createdAt } },
       { createdAt: after.createdAt, _id: { $lt: after.orderId } },
     ],
+  };
+}
+
+export interface CountByStatusOptions {
+  /**
+   * Son kaydinin notu bunlardan biri olan CANCELLED siparisler sayilmaz
+   * (sistem iptalleri, T11.2; SYSTEM_CANCELLATION_NOTES).
+   */
+  readonly excludeCancellationNotes?: readonly string[];
+}
+
+/** "CANCELLED ve son notu listede" OLMAYAN belgeler; not yoksa bos metin sayilir. */
+function notCancelledWith(notes: readonly string[]): Filter<OrderDocument> {
+  return {
+    $expr: {
+      $not: [
+        {
+          $and: [
+            { $eq: ['$status', ORDER_STATUS.CANCELLED] },
+            {
+              $in: [
+                {
+                  $ifNull: [
+                    { $getField: { field: 'note', input: { $arrayElemAt: ['$timeline', -1] } } },
+                    '',
+                  ],
+                },
+                [...notes],
+              ],
+            },
+          ],
+        },
+      ],
+    },
   };
 }
