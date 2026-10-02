@@ -43,6 +43,7 @@ func limitedApp(t *testing.T, limits RateLimit, orders *fakeOrders, logger *slog
 	deps := Deps{
 		Health:            fakeReporter{report: healthyReport()},
 		Categories:        &fakeLister{list: catalog.CategoryList{Items: []catalog.Category{}}},
+		WelcomeContent:    &fakeWelcome{welcome: sampleWelcome()},
 		NearbyMarkets:     markets,
 		Market:            markets,
 		MarketCategories:  markets,
