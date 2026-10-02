@@ -142,6 +142,34 @@ adres yoksa span'ler yine oluşur ve taşınır, yalnızca dışarı gönderilme
   `spanId`'sini taşır (`telemetry.NewLogHandler`).
 - **Kapanış:** sunucu ve bağlantılar kapandıktan sonra bekleyen span'ler en çok 2 sn'de gönderilir.
 
+## Metrikler (#29)
+
+Gateway `GATEWAY_PORT + 1000`'de (yerelde 9080) **yalnızca `GET /metrics`** sunar; `/metrics`'e başka
+fiil 405 (`Allow: GET`), başka yol 404. Ayrı porttadır: istemcilere açık API portu metrik göstermez.
+Kurallar Node servisleriyle aynıdır (T10.5): ad öneki yok, her metrikte `service="gateway"`, birim
+adın sonunda, etiket değeri **kapalı kümeden**. Kimlik, IP, sorgu ve ham yol etiket olmaz.
+
+| Metrik                                                  | Ne                                                                                   |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `http_server_requests_total{route,method,code}`         | Tamamlanan istek; `code` `OK` ya da hata sözlüğü kodu (`RATE_LIMITED`, `NOT_FOUND`…) |
+| `http_server_request_duration_seconds{route,method,code}` | İsteğin gateway'deki süresi (servis çağrıları dahil); kovalar 5 ms - 10 sn (Node'la aynı) |
+| `idempotency_replays_total{route}`                      | Kayıttan aynen tekrar edilen cevap (`Idempotent-Replayed: true`)                      |
+| `idempotency_key_rejections_total{route,reason}`        | Anahtar yüzünden 409: `key_reused` (farklı gövde), `in_progress`, `replay_unavailable` |
+| `rate_limit_rejections_total{route}`                    | Hız sınırına takılan istek (429); rota hangi sınır olduğunu da söyler                 |
+| `go_*`, `process_*`                                     | Go çalışma zamanı ve süreç (bellek, CPU, goroutine)                                   |
+
+- `route` rota kalıbıdır (`/v1/orders/:id`); eşleşmeyen yol `unmatched`, kullanılmayan yöntem
+  (`TRACE`, `CONNECT`) `OTHER`. `/healthz` de sayılır (yoklama sıklığı görünür). Fiber'in yönlendirme
+  öncesi hata geçişindeki istek (gövde sınırı) son durumla bir kez sayılır.
+- Kayıt `internal/httpapi/metrics.go` (ara katman, `RequestMetrics` arayüzü), defter ve uç
+  `internal/metrics` (`prometheus/client_golang`; defter örneğe ait, küresel değil).
+- Kapanış Node'la aynı sıradadır: HTTP drenajından sonra metrik ucu kapanır (süren kazıma en çok 1 sn
+  beklenir), sonra bağlantılar, en son izler.
+
+```bash
+curl -s localhost:9080/metrics | grep -E '^(http_server|idempotency|rate_limit)'
+```
+
 ## Go kuralları ve lint (D8)
 
 Kuralların kendisi `.cursor/rules/proje-kurallari.mdc` "Go" bölümündedir; CI onları
@@ -453,7 +481,7 @@ curl -s "localhost:8080/v1/search?lat=40.9885&lng=29.0262&q=s%C3%BCt" \
 | Değişken                     | Varsayılan        | Anlamı                                          |
 | ---------------------------- | ----------------- | ----------------------------------------------- |
 | `ASSET_BASE_URL`             | **yok — zorunlu** | Görsel adreslerinin kökü (aşağıda)              |
-| `GATEWAY_PORT`               | `8080`            | Dinlenen HTTP portu                             |
+| `GATEWAY_PORT`               | `8080`            | Dinlenen HTTP portu; en çok 64535 (metrik ucu +1000, #29) |
 | `CATALOG_GRPC_ADDR`          | `localhost:50051` | catalog-service adresi (`host:port`)            |
 | `INVENTORY_GRPC_ADDR`        | `localhost:50052` | inventory-service adresi (ürün listesi ve genel aramadaki stok, T8.4, T9.6) |
 | `ORDER_GRPC_ADDR`            | `localhost:50053` | order-service adresi                            |

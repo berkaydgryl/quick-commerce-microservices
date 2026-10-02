@@ -4,20 +4,46 @@ Servisler arası olay hattı (ADR-04, ADR-07). Servis kodu Redis'i doğrudan ça
 `EventPublisher` ve `EventSubscriber` arayüzlerini görür. Taşıma bugün Redis Streams, ileride
 Kafka olabilir — değişen tek şey fabrikada seçilen uygulama olur.
 
-| Parça                                                  | Ne                                                                                                |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| `eventEnvelopeSchema`                                  | Sabit zarf: `eventId` (`evt_…`), `topic` (core `EVENTS`), `partitionKey`, `occurredAt`, `payload` |
-| `EventPublisher` · `RedisStreamsPublisher`             | `publish(envelope)`: `XADD stream:events MAXLEN ~ 10000 * …`; bozuk zarf hatta girmez (T7.3)      |
-| `EventSubscriber` · `EventConsumer`                    | `subscribe(topic, group, handler)`; `start()` / `stop()` (T7.4)                                   |
-| `RedisStreamsConsumer`                                 | Tüketici grubu, onay, yeniden teslim, çöken tüketicinin devri, ölü olaylar (T7.4)                 |
-| `EVENT_HANDLED` · `rejectEvent`                        | İşleyicinin cevabı: işlendi / kalıcı ret                                                          |
-| `DEFAULT_DELIVERY_SETTINGS` · `GROUP_START`            | Taşımaya özgü ince ayarlar (ADR-07: arayüzün dışında, yapılandırmayla)                            |
-| `DEAD_LETTER_FIELD` · `DEAD_LETTER_REASON`             | Ölü olay kaydının alan düzeni (`stream:events:dead`, ADR-16)                                      |
-| `toStreamFields` · `fromStreamFields` · `peekEnvelope` | Zarf ↔ stream alanları; okuma Zod'dan geçer, `peekEnvelope` yalnızca kimlik ve konuya bakar       |
-| `InMemoryEventPublisher`                               | Testler için bellek içi yayıncı (MOCK modunda yayıncı ve tüketici hiç kurulmaz)                   |
+| Parça                                                  | Ne                                                                                           |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `eventEnvelopeSchema` · `validCorrelation`             | Zarf: beş sabit alan + isteğe bağlı `requestId`, `traceparent` (D16)                         |
+| `EventPublisher` · `RedisStreamsPublisher`             | `publish(envelope)`: `XADD stream:events MAXLEN ~ 10000 * …`; bozuk zarf hatta girmez (T7.3) |
+| `EventSubscriber` · `EventConsumer`                    | `subscribe(topic, group, handler)`; `start()` / `stop()` (T7.4)                              |
+| `RedisStreamsConsumer`                                 | Tüketici grubu, onay, yeniden teslim, çöken tüketicinin devri, ölü olaylar (T7.4)            |
+| `EVENT_HANDLED` · `rejectEvent`                        | İşleyicinin cevabı: işlendi / kalıcı ret                                                     |
+| `DEFAULT_DELIVERY_SETTINGS` · `GROUP_START`            | Taşımaya özgü ince ayarlar (ADR-07: arayüzün dışında, yapılandırmayla)                       |
+| `DEAD_LETTER_FIELD` · `DEAD_LETTER_REASON`             | Ölü olay kaydının alan düzeni (`stream:events:dead`, ADR-16)                                 |
+| `toStreamFields` · `fromStreamFields` · `peekEnvelope` | Zarf ↔ stream alanları; okuma Zod'dan geçer, `peekEnvelope` yalnızca kimlik ve konuya bakar  |
+| `InMemoryEventPublisher`                               | Testler için bellek içi yayıncı (MOCK modunda yayıncı ve tüketici hiç kurulmaz)              |
 
 Olayların **gövde şemaları** burada değil, `@getir/contracts` `events.ts`'tedir: üreten servis
 gövdeyi o tipten kurar, tüketen aynı şemadan geçirir (bugün `payment.refund_requested`).
+
+## Korelasyon ve iz (D16, ADR-07 eki, ADR-20)
+
+Zarfın beş alanı (`eventId` `evt_…`, `topic` core `EVENTS`, `partitionKey`, `occurredAt`, `payload`)
+sabittir; zarf yalnızca **isteğe bağlı** iki alanla genişler:
+
+| Alan          | Ne                                                                        |
+| ------------- | ------------------------------------------------------------------------- |
+| `requestId`   | Olayı doğuran isteğin kimliği (`req_` + 32 hex)                           |
+| `traceparent` | Olayı yayınlayan span'in W3C bağlamı: tüketicinin span'i onun çocuğu olur |
+
+- **Yayın:** her `publish` bir PRODUCER span'idir (`publish <konu>`). Üst span zarftaki
+  `traceparent`'tır (order'da outbox satırına saklanan istek bağlamı), yoksa aktif bağlam; akışa
+  yazılan `traceparent` yayın span'inindir.
+- **İşleme:** işleyiciye verilen her teslim bir CONSUMER span'idir (`process <konu>`), üstü zarftaki
+  `traceparent`. İşleyici span'in ve `requestId`'nin bağlamında koşar: günlük satırı `requestId`,
+  `traceId` ve `spanId` taşır, giden çağrısı (`callUnary`) bu span'in çocuğu olur. Zarfta
+  `requestId` yoksa (eski kayıt) tüketici yenisini üretir. Ret ve geçici hata span'i `ERROR`
+  işaretler; her yeniden deneme ayrı span'dir. Grubun dinlemediği konu span açmaz.
+- **Nitelikler** izin listelidir: `messaging.system`, `messaging.operation.type`,
+  `messaging.destination.name` (konu), `messaging.message.id` (`eventId`),
+  `messaging.consumer.group.name`, `app.delivery_attempt`, `app.request_id`, hatada
+  `app.error_code` (`MESSAGING_ATTRIBUTES`). Gövde ize yazılmaz.
+- **Korelasyon olayı takmaz:** biçimsiz alan yayında atılır (`validCorrelation`; outbox durmaz),
+  okumada atılır (olay ölü olaylara gitmez). Yeniden deneme ve ölü olay satırları da `requestId`
+  taşır; ölü olay kopyası iki alanı korur (yeniden oynatılan olay aynı izde).
 
 ## Dinleme (T7.4)
 

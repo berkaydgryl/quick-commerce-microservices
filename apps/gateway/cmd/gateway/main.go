@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/config"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/metrics"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/redisdb"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/telemetry"
 )
@@ -83,18 +84,34 @@ func run(cfg config.Config, logger *slog.Logger) error {
 	// bekleyen span'ler gonderilir; sure sinirli, kapanisi uzatmaz.
 	defer flushTraces(tracing, logger)
 
-	app, cleanup, err := bootstrap(ctx, cfg, logger, tracing)
+	// Metrikler (#29): istek, tekrar korumasi, hiz siniri, Go ve surec.
+	recorder := metrics.New()
+	app, cleanup, err := bootstrap(ctx, cfg, logger, tracing, recorder)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
 
+	// Ayri port (GATEWAY_PORT + 1000): istemcilere acik API metrik gostermez.
+	// Port doluysa acilis durur; baglantilar (cleanup) birakilir.
+	metricsServer, err := metrics.Listen(ctx, cfg.MetricsAddr(), recorder.Handler(), logger)
+	if err != nil {
+		return err
+	}
+
 	logger.Info("gateway dinlemede",
 		slog.Int("port", cfg.Port),
+		slog.Int("metricsPort", cfg.MetricsPort()),
 		slog.Bool("mock", cfg.Mock),
 		slog.Int("services", len(cfg.Services)),
 	)
-	return serve(ctx, app, cfg.Addr(), cfg.ShutdownTimeout, logger)
+	serveErr := serve(ctx, app, cfg.Addr(), cfg.ShutdownTimeout, logger)
+	// Drenajdan SONRA, baglantilardan ONCE (Node ile ayni sira, T10.5): son
+	// kazima kapanisi da gorur; kapanmazsa en cok CloseGrace beklenir.
+	if closeErr := metricsServer.Close(context.WithoutCancel(ctx)); closeErr != nil {
+		logger.Warn("metrik ucu kapanirken hata", slog.Any("err", closeErr))
+	}
+	return serveErr
 }
 
 // traceFlushTimeout, kapanista bekleyen span'leri gondermek icin taninan en

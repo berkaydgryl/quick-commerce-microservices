@@ -17,6 +17,7 @@
 
 import { ERROR_SEVERITY, errorSeverityFor } from '@getir/core';
 import type { ErrorCode, ErrorSeverity } from '@getir/core';
+import { withRequestId } from '@getir/observability';
 import { InterceptingCall, ListenerBuilder, status as GrpcStatus } from '@grpc/grpc-js';
 import type { Interceptor, Metadata } from '@grpc/grpc-js';
 import {
@@ -89,19 +90,17 @@ export interface ServerSpan {
   readonly context: Context;
 }
 
-/** Izlenmeyen cagri: kayit tutmayan span (nitelik ve kapanis bir sey yapmaz), bos baglam. */
-const UNTRACED: ServerSpan = {
-  span: trace.wrapSpanContext(INVALID_SPAN_CONTEXT),
-  context: ROOT_CONTEXT,
-};
+/** Izlenmeyen cagrinin span'i: kayit tutmaz (nitelik ve kapanis bir sey yapmaz). */
+const UNTRACED_SPAN = trace.wrapSpanContext(INVALID_SPAN_CONTEXT);
 
 /**
  * Gelen cagrinin sunucu span'ini acar; ust span metadata'daki traceparent'tan.
- * Saglik yoklamasinda span acilmaz.
+ * Saglik yoklamasinda span acilmaz. Iki durumda da baglam requestId'yi tasir
+ * (D16): outbox yazicisi olayi doguran istegi baglamdan okur.
  */
 export function startServerSpan(path: string, metadata: Metadata, requestId: string): ServerSpan {
   if (path.startsWith(HEALTH_PATH_PREFIX)) {
-    return UNTRACED;
+    return { span: UNTRACED_SPAN, context: withRequestId(ROOT_CONTEXT, requestId) };
   }
   const parent = propagation.extract(ROOT_CONTEXT, metadata, metadataGetter);
   const { name, service, method } = rpcNameOf(path);
@@ -118,7 +117,7 @@ export function startServerSpan(path: string, metadata: Metadata, requestId: str
     },
     parent,
   );
-  return { span, context: trace.setSpan(parent, span) };
+  return { span, context: withRequestId(trace.setSpan(parent, span), requestId) };
 }
 
 /**

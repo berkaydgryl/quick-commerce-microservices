@@ -11,6 +11,8 @@
 
 import { ERROR_CODES, fixedClock, ORDER_STATUS, RISK_BANDS, silentLogger } from '@getir/core';
 import { fromStreamFields, RedisStreamsPublisher } from '@getir/event-bus';
+import { connectMongo } from '@getir/mongo-kit';
+import type { MongoConnection } from '@getir/mongo-kit';
 import type { EventEnvelope } from '@getir/event-bus';
 import { connectRedis, EVENTS_STREAM_KEY } from '@getir/redis-kit';
 import type { RedisConnection } from '@getir/redis-kit';
@@ -29,6 +31,10 @@ import { orderCreatedEvents, statusChangedEvents } from '../../src/domain/order-
 import { createDraftOrder, transitionOrder } from '../../src/domain/order.js';
 import type { Order } from '../../src/domain/order.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
+import { MongoOrderOutbox } from '../../src/infrastructure/mongo/mongo-order-outbox.js';
+import { OrderMongoStore } from '../../src/infrastructure/mongo/order-mongo-store.js';
+import { OrdersCollection } from '../../src/infrastructure/mongo/orders-collection.js';
+import { OutboxCollection } from '../../src/infrastructure/mongo/outbox-collection.js';
 import { openOrderStore } from '../../src/infrastructure/order-store.js';
 import type { OrderStore } from '../../src/infrastructure/order-store.js';
 import { sampleDraftInput } from '../support/order-builders.js';
@@ -47,6 +53,8 @@ const clock = fixedClock(1_760_000_000_000);
 let mongo: StartedMongoDBContainer;
 let redisContainer: StartedRedisContainer;
 let store: OrderStore;
+/** Ayni veritabanina ikinci baglanti: iz kaynagi verilen depo icin (D16). */
+let correlatedConnection: MongoConnection;
 let redis: RedisConnection;
 /** Ham istemci: servisin disinda baska bir transaction ve explain icin. */
 let raw: MongoClient;
@@ -65,10 +73,18 @@ beforeAll(async () => {
     'test',
   );
   raw = await MongoClient.connect(uri);
+  correlatedConnection = await connectMongo({
+    uri,
+    dbName: DB_NAME,
+    serverSelectionTimeoutMs: 5_000,
+    appName: 'order-outbox-test',
+    logger: silentLogger,
+  });
   redis = await connectRedis({ url: redisContainer.getConnectionUrl(), name: 'order-outbox-test' });
 });
 
 afterAll(async () => {
+  await correlatedConnection?.close();
   await raw?.close();
   await redis?.close();
   await store?.close();
@@ -109,10 +125,22 @@ async function awaitingPaymentOrder(): Promise<Order> {
   return awaiting;
 }
 
-describeOrderOutboxContract('mongo', () => ({
-  repository: store.repository,
-  outbox: store.outbox,
-}));
+describeOrderOutboxContract(
+  'mongo',
+  () => ({ repository: store.repository, outbox: store.outbox }),
+  (source) => {
+    const outbox = new OutboxCollection(correlatedConnection.db);
+    return {
+      repository: new OrderMongoStore(
+        new OrdersCollection(correlatedConnection.db),
+        outbox,
+        correlatedConnection,
+        source,
+      ),
+      outbox: new MongoOrderOutbox(outbox, source),
+    };
+  },
+);
 
 describe('es zamanli yazim ve indeks (gercek Mongo)', () => {
   it('baska transaction siparisi tutarken yazan kaybeden CONFLICT alir, olayi yazilmaz', async () => {

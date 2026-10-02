@@ -81,4 +81,8 @@ export interface OutboxDocument extends BaseDocument {
   occurredAt: Date;
   payload: Record<string, unknown>;
   publishedAt: Date | null;
+  /** Olayi yazan istegin kimligi (D16); istek disi yazimda ve eski satirlarda yok. */
+  requestId?: string;
+  /** Olayi yazan istegin W3C iz baglami (D16); yayinci zarfa kopyalar. */
+  traceparent?: string;
 }

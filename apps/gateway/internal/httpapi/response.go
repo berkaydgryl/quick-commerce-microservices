@@ -41,6 +41,8 @@ func ok(c fiber.Ctx, status int, data any) error {
 // ayni kod her uctan ayni durum ve ayni metinle doner. requestId gunlukteki
 // kayitla ayni degerdir.
 func fail(c fiber.Ctx, code apperror.Code, details any) error {
+	// Metrik (#29) cevabin kodunu buradan okur: butun hata zarflari buradan gecer.
+	c.Locals(responseCodeKey{}, code)
 	return c.Status(apperror.HTTPStatus(code)).JSON(Envelope{
 		Success: false,
 		Error: &APIError{

@@ -5,6 +5,8 @@
  */
 
 import { AppError, ERROR_CODES } from '@getir/core';
+import { activeRequestId, currentCorrelation } from '@getir/observability';
+import type { Correlation } from '@getir/observability';
 import { recordSpans } from '@getir/observability/testing';
 import type { ReadableSpan } from '@getir/observability/testing';
 import { Metadata } from '@grpc/grpc-js';
@@ -134,6 +136,35 @@ describe("unaryHandler: sunucu span'i (D15)", () => {
     });
 
     expect(active).toBe(only(SpanKind.SERVER).spanContext().spanId);
+  });
+
+  it("handler baglaminda requestId ve sunucu span'inin traceparent'i (D16: outbox yazicisi okur)", async () => {
+    const requestId = `req_${'4'.repeat(32)}`;
+    const metadata = withTraceparent();
+    metadata.set('x-request-id', requestId);
+    let seen: Correlation | undefined;
+
+    await invoke(() => {
+      seen = currentCorrelation();
+      return { ok: true };
+    }, metadata);
+
+    const { traceId, spanId } = only(SpanKind.SERVER).spanContext();
+    expect(seen).toEqual({ requestId, traceparent: `00-${traceId}-${spanId}-01` });
+  });
+
+  it('bicimsiz istek kimligi baglamda durur ama olaya tasinmaz (zarf semasi)', async () => {
+    let active: string | undefined;
+    let seen: Correlation | undefined;
+
+    await invoke(() => {
+      active = activeRequestId();
+      seen = currentCorrelation();
+      return { ok: true };
+    }, withTraceparent());
+
+    expect(active).toBe('req_izli');
+    expect(seen).not.toHaveProperty('requestId');
   });
 });
 

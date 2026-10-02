@@ -1,6 +1,6 @@
 /**
- * @getir/observability - gozlemlenebilirlik (T10.5, D15): gunluk, korelasyon
- * kimligi, iz ve metrik.
+ * @getir/observability - gozlemlenebilirlik (T10.5, D15, D16): gunluk, korelasyon
+ * kimligi, iz (olay hattindaki korelasyon dahil) ve metrik.
  *
  * Kapsam: pino gunlukcusu (stdout, esli; satirda traceId), request-id kurali,
  * iz saglayicisi (OpenTelemetry, D15), surecin metrik defteri ve metrik
@@ -20,3 +20,4 @@ export {
   TRACE_FLUSH_TIMEOUT_MS,
 } from './tracing/provider.js';
 export type { Tracing, TracingOptions } from './tracing/provider.js';
+export * from './tracing/correlation.js';

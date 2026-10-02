@@ -8,6 +8,7 @@
 
 import { ERROR_CODES, isAppError, ORDER_STATUS } from '@getir/core';
 import type { MongoConnection } from '@getir/mongo-kit';
+import { currentCorrelation } from '@getir/observability';
 import type { ClientSession } from 'mongodb';
 
 import type { OrderEvent } from '../../domain/order-events.js';
@@ -19,9 +20,11 @@ import type {
   RiskHistory,
 } from '../../domain/order-history-reader.js';
 import { PAID_ORDER_STATUSES, toRiskHistory } from '../../domain/order-history-reader.js';
+import type { CorrelationSource } from '../../domain/order-outbox.js';
 import type { OrderRepository } from '../../domain/order-repository.js';
 import { orderAlreadyExists, orderVersionConflict } from '../../domain/order-repository.js';
 import type { Order } from '../../domain/order.js';
+import type { OutboxDocument } from './documents.js';
 import { fromOrderDocument, toOrderDocument } from './mappers.js';
 import type { OrdersCollection } from './orders-collection.js';
 import type { OutboxCollection } from './outbox-collection.js';
@@ -31,20 +34,30 @@ import { toOutboxDocument } from './outbox-mappers.js';
  * YAZIM = TEK TRANSACTION (T7.3, ADR-04): siparis belgesi ve outbox satirlari
  * ayni oturumda yazilir. Surum cakismasi transaction icinde firlatilir;
  * transaction geri alinir ve olay da yazilmaz. (Mongo tek dugumlu replica set
- * olarak calisir - transaction'in on kosulu.)
+ * olarak calisir - transaction'in on kosulu.) Outbox satiri yazan istegin izini
+ * (requestId, traceparent; D16) tasir.
  */
 export class OrderMongoStore implements OrderRepository, OrderHistoryReader {
   constructor(
     private readonly orders: OrdersCollection,
     private readonly outbox: OutboxCollection,
     private readonly transactions: Pick<MongoConnection, 'withTransaction'>,
+    private readonly correlation: CorrelationSource = currentCorrelation,
   ) {}
 
   async insert(order: Order, events: readonly OrderEvent[]): Promise<void> {
+    // Istegin izi transaction'a girmeden alinir (D16): yeniden denenen
+    // transaction da ayni izi yazar.
+    const documents = this.outboxDocuments(events);
     await this.transactions.withTransaction(async (session) => {
       await this.insertOrder(order, session);
-      await this.outbox.insertMany(events.map(toOutboxDocument), { session });
+      await this.outbox.insertMany(documents, { session });
     });
+  }
+
+  private outboxDocuments(events: readonly OrderEvent[]): OutboxDocument[] {
+    const correlation = this.correlation();
+    return events.map((event) => toOutboxDocument(event, correlation));
   }
 
   /**
@@ -68,6 +81,7 @@ export class OrderMongoStore implements OrderRepository, OrderHistoryReader {
     expectedVersion: number,
     events: readonly OrderEvent[],
   ): Promise<void> {
+    const documents = this.outboxDocuments(events);
     await this.transactions.withTransaction(async (session) => {
       const replaced = await this.orders.replaceIfVersion(toOrderDocument(order), expectedVersion, {
         session,
@@ -76,7 +90,7 @@ export class OrderMongoStore implements OrderRepository, OrderHistoryReader {
         // Transaction icinde firlatilir: geri alinir, outbox'a da yazilmaz.
         throw orderVersionConflict(order.id, expectedVersion);
       }
-      await this.outbox.insertMany(events.map(toOutboxDocument), { session });
+      await this.outbox.insertMany(documents, { session });
     });
   }
 

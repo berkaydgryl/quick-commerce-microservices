@@ -60,7 +60,8 @@ COPY --from=builder /out/gateway /gateway
 # degisirse kural gozden kacmasin.
 USER nonroot:nonroot
 
-EXPOSE 8080
+# 8080 API, 9080 /metrics (GATEWAY_PORT + 1000, #29; Node imajlariyla ayni kural).
+EXPOSE 8080 9080
 
 # Kabuk olmadigi icin HEALTHCHECK exec biciminde ve ikilinin kendi alt
 # komutuyla calisir (bkz. cmd/gateway/healthcheck.go).

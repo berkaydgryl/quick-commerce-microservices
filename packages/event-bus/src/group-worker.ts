@@ -117,6 +117,7 @@ async function settle(
     attempt,
     maxDeliveries: settings.maxDeliveries,
     handlerFor: (topic) => options.handlers.get(topic),
+    group: options.group,
     logger,
   });
   if (settlement.kind !== 'skipped') {
@@ -219,14 +220,16 @@ async function pause(ms: number, signal: AbortSignal): Promise<void> {
   }
 }
 
-function peekOf(entry: StreamEntry): { eventId?: string; topic?: string } {
+function peekOf(entry: StreamEntry): { eventId?: string; topic?: string; requestId?: string } {
   if (entry.fields === null) {
     return {};
   }
-  const { eventId, topic } = peekEnvelope(entry.fields);
+  // requestId (D16): yeniden deneme ve olu olay satiri olayi doguran istege baglanir.
+  const { eventId, topic, requestId } = peekEnvelope(entry.fields);
   return {
     ...(eventId === undefined ? {} : { eventId }),
     ...(topic === undefined ? {} : { topic }),
+    ...(requestId === undefined ? {} : { requestId }),
   };
 }
 

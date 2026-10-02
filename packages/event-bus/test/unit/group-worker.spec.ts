@@ -167,6 +167,22 @@ describe('runGroupWorker: yeni okunan parti', () => {
   });
 });
 
+describe('runGroupWorker: olayi doguran istek (D16)', () => {
+  it("yeniden deneme satiri olayi doguran istegin requestId'sini tasir", async () => {
+    const requestId = `req_${'9'.repeat(32)}` as const;
+    stream.batches.push([
+      entryOf('1-0', {
+        ...envelopeOf(EVENTS.PAYMENT_REFUND_REQUESTED, { orderId: 'ord_hata' }),
+        requestId,
+      }),
+    ]);
+
+    await run();
+
+    expect(lines.find((line) => line.level === 'warn')?.fields['requestId']).toBe(requestId);
+  });
+});
+
 describe('runGroupWorker: takilan kayitlar', () => {
   it('tek tek devralinir; deneme = onceki teslim + 1', async () => {
     const attempts: number[] = [];

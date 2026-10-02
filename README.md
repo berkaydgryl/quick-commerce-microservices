@@ -337,6 +337,7 @@ pnpm proto:gen && (cd apps/gateway && ASSET_BASE_URL=http://localhost:5173 go ru
 curl -s localhost:8080/healthz          # iki servisin durumu; biri dusukse 503
 curl -s localhost:8080/v1/categories    # catalog uzerinden kategori listesi
 curl -s localhost:51051/metrics | grep grpc_server   # T10.5: RPC sayaclari (her servis gRPC portu + 1000)
+curl -s localhost:9080/metrics | grep http_server    # #29: gateway istek, tekrar ve 429 sayaclari (8080 + 1000)
 open http://localhost:16686                           # D15: izler (Jaeger; pnpm infra:up kaldirir)
 
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/catalog.proto \

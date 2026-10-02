@@ -16,6 +16,7 @@ import type { CatalogPricing } from '../../src/application/catalog-pricing.js';
 import type { Payments } from '../../src/application/payments.js';
 import type { RiskAssessment } from '../../src/application/risk-assessment.js';
 import { buildOrderService } from '../../src/bootstrap.js';
+import type { OrderPorts } from '../../src/bootstrap.js';
 import { FakeCatalogPricing } from './fake-catalog-pricing.js';
 import { FakePayments } from './fake-payments.js';
 import { FakeRiskAssessment } from './fake-risk-assessment.js';
@@ -26,6 +27,8 @@ export interface OrderServerDeps {
   readonly catalog?: CatalogPricing;
   readonly risk?: RiskAssessment;
   readonly payments?: Payments;
+  /** Siparis portlari; verilmezse sunucunun kendi bellek deposu (D16 testi depoyu okur). */
+  readonly store?: OrderPorts;
 }
 
 /**
@@ -42,7 +45,14 @@ export function useOrderGrpcServer(deps: OrderServerDeps = {}): UnaryCall {
   beforeAll(async () => {
     server = await startTestGrpcServer({
       serviceName: 'order-test',
-      services: [buildOrderService({ catalog, risk, payments })],
+      services: [
+        buildOrderService({
+          catalog,
+          risk,
+          payments,
+          ...(deps.store === undefined ? {} : { store: deps.store }),
+        }),
+      ],
     });
   });
 

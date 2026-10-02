@@ -14,6 +14,8 @@ import { installProvider } from '../tracing/provider.js';
 import { registeredProvider } from '../tracing/state.js';
 
 export type { ReadableSpan } from '@opentelemetry/sdk-trace-node';
+/** Span turu ve durumu: servis testleri API paketine dogrudan baglanmadan sinar. */
+export { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 
 export interface RecordedSpans {
   /** Bitmis span'ler, bitis sirasiyla. */

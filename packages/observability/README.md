@@ -56,14 +56,22 @@ bir `write` çağrısı; servisler `info` seviyesinde başarılı istek başına
 - **Hata satırı seyrek:** OpenTelemetry'nin hataları (örn. Jaeger kapalı: her parti düşer) JSON
   günlüğe WARN olarak, dakikada en çok bir kez yazılır; aradakiler `suppressed` alanında.
 
+- **Olay hattı (D16):** `withRequestId(ctx, id)` / `activeRequestId()` bağlamdaki istek kimliği
+  (service-kit handler'ı ve event-bus tüketicisi koyar); `currentCorrelation()` aktif bağlamın
+  `requestId`'si (yalnızca `req_` + 32 hex) ve span'inin `traceparent`'ı (outbox satırına bunlar
+  yazılır); `contextFromTraceparent(değer)` zarftaki bağlamdan üst span. Kullanımı event-bus README'de.
+
 Testte: `recordSpans()` (`@getir/observability/testing`) sağlayıcıyı bellek içi göndericiyle kurar.
-Sunucudan **önce** çağrılmalıdır.
+Sunucudan **önce** çağrılmalıdır. Aynı yerde `startOtlpCollector()` (Jaeger yerine yerel OTLP/HTTP
+toplayıcı) ve span türü/durumu (`SpanKind`, `SpanStatusCode`: servis testleri API paketine bağlanmadan
+sınar).
 
 ## Korelasyon kimliği
 
 `REQUEST_ID_METADATA_KEY` (`x-request-id`) gateway'in de okuduğu anahtardır. `resolveRequestId(gelen)`
 gelen değeri (baş/son boşluksuz) kullanır, yoksa `req_` + 32 onaltılık yenisini üretir. Taşıma burada
-değildir: gRPC metadata'sından okumak service-kit'in `requestIdFrom`'udur. Olay zarfında taşınması D16.
+değildir: gRPC metadata'sından okumak service-kit'in `requestIdFrom`'udur. Olay zarfında taşınması
+D16'dır (yukarıda "Olay hattı").
 
 ## Metrik
 

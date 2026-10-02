@@ -8,6 +8,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { EVENTS, ID_PREFIX, newId } from '@getir/core';
+import type { Logger } from '@getir/core';
 import { connectRedis } from '@getir/redis-kit';
 import type { RedisConnection } from '@getir/redis-kit';
 import { RedisContainer } from '@testcontainers/redis';
@@ -47,6 +48,7 @@ export interface RedisHarness {
     streams: Streams,
     name?: string,
     delivery?: Partial<DeliverySettings>,
+    logger?: Logger,
   ): RedisStreamsConsumer;
   /** Baslatir; dosyanin afterEach'i durdurur. */
   startAll(...consumers: RedisStreamsConsumer[]): Promise<void>;
@@ -98,13 +100,14 @@ export function useRedisHarness(): RedisHarness {
         deadLetterKey: `stream:test-${streamCounter}:dead`,
       };
     },
-    consumerOn: (streams, name = 'tuketici-1', delivery = FAST_DELIVERY) =>
+    consumerOn: (streams, name = 'tuketici-1', delivery = FAST_DELIVERY, logger = undefined) =>
       new RedisStreamsConsumer({
         connect: () => connectRedis({ url: url(), name }),
         consumerName: name,
         streamKey: streams.streamKey,
         deadLetterKey: streams.deadLetterKey,
         delivery,
+        ...(logger === undefined ? {} : { logger }),
       }),
     startAll: async (...consumers) => {
       for (const consumer of consumers) {

@@ -102,6 +102,16 @@ func (c Config) Addr() string {
 	return fmt.Sprintf(":%d", c.Port)
 }
 
+// MetricsPort, /metrics ucunun portu: GATEWAY_PORT + 1000 (#29).
+func (c Config) MetricsPort() int {
+	return c.Port + MetricsPortOffset
+}
+
+// MetricsAddr, /metrics ucunun dinledigi adres.
+func (c Config) MetricsAddr() string {
+	return fmt.Sprintf(":%d", c.MetricsPort())
+}
+
 // Getenv, ortam okuyucusudur. Testte sahte bir fonksiyon verilir; boylece
 // testler gercek ortami kirletmez ve paralel kosabilir.
 type Getenv func(string) string
@@ -110,7 +120,7 @@ type Getenv func(string) string
 func Load(getenv Getenv) (Config, error) {
 	var problems []error
 
-	port, err := readInt(getenv, "GATEWAY_PORT", defaultPort, minPort, maxPort)
+	port, err := readInt(getenv, "GATEWAY_PORT", defaultPort, minPort, maxGatewayPort)
 	if err != nil {
 		problems = append(problems, err)
 	}

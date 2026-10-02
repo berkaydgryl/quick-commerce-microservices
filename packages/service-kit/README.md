@@ -223,6 +223,9 @@ Adres yoksa span'ler yine oluşur ve taşınır, yalnızca dışarı gönderilme
   sıradışı ve beklenmeyen `ERROR`, beklenmeyenin istisnası da kaydedilir. İstemci tarafında karşı
   tarafın `x-app-error` kodu okunur.
 - Yalnızca `@opentelemetry/api` kullanılır; SDK `@getir/observability`'dedir. Health RPC'leri izlenmez.
+- **Bağlamda `requestId` (D16):** handler'ın bağlamı istek kimliğini de taşır
+  (`activeRequestId()`); outbox yazıcısı gibi altyapı kodu olayı doğuran isteği oradan okur
+  (`currentCorrelation()`, `@getir/observability`). Use-case'e parametre eklenmez.
 
 ## Zarif kapanış sırası
 

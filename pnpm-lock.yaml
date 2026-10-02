@@ -320,6 +320,9 @@ importers:
       '@getir/redis-kit':
         specifier: workspace:*
         version: link:../redis-kit
+      '@opentelemetry/api':
+        specifier: ^1.9.1
+        version: 1.9.1
       zod:
         specifier: ^3.23.8
         version: 3.25.76

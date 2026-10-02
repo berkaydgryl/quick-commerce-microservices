@@ -242,7 +242,8 @@ Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicid
   disaridan gelen kimligi YALNIZCA bu bicimdeyse kabul eder, degilse yenisini uretir (D8):
   kabul edilen deger her servisin gunlugune yazilir.
 - Metrik ucu servis portu + 1000'dedir (roadmap port haritasi): service-kit acar (`GET /metrics`),
-  zarif kapanista kapatir; servis kodu bir sey yapmaz (T10.5).
+  zarif kapanista kapatir; servis kodu bir sey yapmaz (T10.5). Gateway'de ayni kural
+  (`GATEWAY_PORT` + 1000, `internal/metrics`; #29); `client_golang` yalnizca orada import edilir.
 - Metrik adi onek tasimaz (`getir_` yok); servis her metrikteki `service` etiketiyle ayrilir.
   Birim adin sonundadir (`_seconds`, `_total`). Etiket degeri KAPALI bir kumeden gelir (RPC adi,
   hata kodu, olay konusu, grup); kimlik (siparis, kullanici, istek), telefon, adres etiket olmaz.
@@ -261,6 +262,10 @@ Bu kurallar `apps/gateway` (T3.3) ve `packages/proto` Go ciktisi icin baglayicid
   `startTracing` (service-kit cagirir) ve gateway `internal/telemetry` (yalnizca `main`; testler
   kuresel duruma dokunmaz). Span icinde yazilan gunluk satiri `traceId` ve `spanId` tasir;
   `requestId` ayri kalir ve span'e `app.request_id` olarak yazilir.
+- Olay hattinda korelasyon (D16, ADR-07 eki): zarf istege bagli `requestId` ve `traceparent`
+  tasir. Olayi yazan altyapi kodu istegin baglamini (`currentCorrelation()`) outbox satirina
+  saklar; yayin ve isleme span'i event-bus'tadir, tuketici gunlugu ayni `requestId`'yi yazar.
+  Korelasyon olayi takmaz: bicimsiz deger atilir, olay yine yayinlanir ve islenir.
 
 ## Test
 
