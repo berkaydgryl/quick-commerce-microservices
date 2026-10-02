@@ -95,3 +95,15 @@ export const DEFAULT_ORDER_SWEEPER_INTERVAL_MS = 10_000;
 export const MIN_ORDER_SWEEPER_INTERVAL_MS = 1_000;
 export const MAX_ORDER_SWEEPER_INTERVAL_MS = 600_000;
 export const ORDER_SWEEPER_BATCH_SIZE = 100;
+
+/**
+ * Giden cagrilarin dayanikliligi (D17; infrastructure/grpc-resilience.ts).
+ * Devre: bagimli servise ust uste 5 "ulasilamaz" hatada 10 sn cagri yapilmaz,
+ * sonra tek deneme cagrisi. Yeniden deneme: yalnizca idempotent cagrida, en
+ * fazla 2 kez, ~100 ve ~200 ms arayla; denemeler cagrinin sure sinirini paylasir
+ * (CreateOrder'in zaman butcesi degismez).
+ */
+export const DEPENDENCY_BREAKER_FAILURE_THRESHOLD = 5;
+export const DEPENDENCY_BREAKER_OPEN_MS = 10_000;
+export const IDEMPOTENT_RETRY_MAX = 2;
+export const IDEMPOTENT_RETRY_BASE_DELAY_MS = 100;

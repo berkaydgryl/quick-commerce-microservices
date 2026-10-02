@@ -38,6 +38,7 @@ import {
 } from './config/constants.js';
 import { loadServiceEnv } from './config/env.js';
 import { GrpcCatalogPricing } from './infrastructure/catalog/grpc-catalog-pricing.js';
+import { DEPENDENCY, dependencyResilience } from './infrastructure/grpc-resilience.js';
 import { GrpcStockReservations } from './infrastructure/inventory/grpc-stock-reservations.js';
 import { openOrderStore } from './infrastructure/order-store.js';
 import { GrpcPayments } from './infrastructure/payment/grpc-payments.js';
@@ -99,14 +100,31 @@ const { handle, store, events } = await startOrExit(
     );
     // Fiyatlar catalog'dan (T7.2). Istemci tembel baglanir: catalog henuz
     // ayakta degilse acilis durmaz, ilk taslak istegi SERVICE_UNAVAILABLE alir.
-    const catalog = new GrpcCatalogPricing(env.CATALOG_GRPC_ADDR, CATALOG_CALL_TIMEOUT_MS);
+    // Her bagimli servise devre kesici, idempotent cagrilara yeniden deneme (D17).
+    const catalog = new GrpcCatalogPricing(
+      env.CATALOG_GRPC_ADDR,
+      CATALOG_CALL_TIMEOUT_MS,
+      dependencyResilience(DEPENDENCY.CATALOG, logger),
+    );
     // Saga (T7.1): istemciler catalog'unki gibi tembel baglanir; risk ya da
     // payment kapaliysa CreateOrder SERVICE_UNAVAILABLE alir, acilis durmaz.
-    const risk = new GrpcRiskAssessment(env.RISK_GRPC_ADDR, RISK_CALL_TIMEOUT_MS);
-    const payments = new GrpcPayments(env.PAYMENT_GRPC_ADDR, PAYMENT_CALL_TIMEOUT_MS);
+    const risk = new GrpcRiskAssessment(
+      env.RISK_GRPC_ADDR,
+      RISK_CALL_TIMEOUT_MS,
+      dependencyResilience(DEPENDENCY.RISK, logger),
+    );
+    const payments = new GrpcPayments(
+      env.PAYMENT_GRPC_ADDR,
+      PAYMENT_CALL_TIMEOUT_MS,
+      dependencyResilience(DEPENDENCY.PAYMENT, logger),
+    );
     // Stok kilidi (T11.2): tembel baglanir; inventory kapaliysa taslak ve siparis
     // SERVICE_UNAVAILABLE alir, acilis durmaz.
-    const stock = new GrpcStockReservations(env.INVENTORY_GRPC_ADDR, INVENTORY_CALL_TIMEOUT_MS);
+    const stock = new GrpcStockReservations(
+      env.INVENTORY_GRPC_ADDR,
+      INVENTORY_CALL_TIMEOUT_MS,
+      dependencyResilience(DEPENDENCY.INVENTORY, logger),
+    );
     // Kilidi dolan siparisleri kapatan supurucu (T11.2 PR 2): her depoda calisir.
     const sweeper = startReservationSweeping({
       expired: opened.expired,

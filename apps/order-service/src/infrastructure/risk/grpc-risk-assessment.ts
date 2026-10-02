@@ -14,6 +14,8 @@ import { credentials } from '@grpc/grpc-js';
 import type { RequestScope } from '../../application/request-scope.js';
 import type { RiskAssessment, RiskAssessmentResult } from '../../application/risk-assessment.js';
 import type { CheckoutSignals, OrderRiskContext } from '../../domain/checkout-risk.js';
+import { NOT_IDEMPOTENT, outgoingOptions } from '../grpc-resilience.js';
+import type { ClientResilience } from '../grpc-resilience.js';
 
 /**
  * Proto bandi -> core sozlugu. Record TUM enum degerlerini ister: proto'ya
@@ -35,6 +37,7 @@ export class GrpcRiskAssessment implements RiskAssessment {
   constructor(
     address: string,
     private readonly timeoutMs: number,
+    private readonly resilience: ClientResilience = {},
   ) {
     // TLS YOK: servisler yalnizca ic agda konusur (catalog istemcisiyle ayni karar).
     this.client = new riskV1.RiskServiceClient(address, credentials.createInsecure());
@@ -45,7 +48,8 @@ export class GrpcRiskAssessment implements RiskAssessment {
       (request, metadata, options, callback) =>
         this.client.evaluate(request, metadata, options, callback),
       { context: toProtoContext(context) },
-      { requestId: scope.requestId, timeoutMs: this.timeoutMs },
+      // Yeniden DENENMEZ: her Evaluate risk-svc'de yeni bir degerlendirme kaydi yazar (D17).
+      outgoingOptions(scope, this.timeoutMs, this.resilience, NOT_IDEMPOTENT),
     );
 
     const evaluation = response.evaluation;

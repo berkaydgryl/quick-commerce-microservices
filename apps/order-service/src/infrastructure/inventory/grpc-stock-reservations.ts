@@ -11,11 +11,14 @@
 import { AppError, ERROR_CODES, isAppError } from '@getir/core';
 import { inventoryV1 } from '@getir/proto';
 import { callUnary } from '@getir/service-kit';
+import type { OutgoingCallOptions } from '@getir/service-kit';
 import { credentials } from '@grpc/grpc-js';
 import { z } from 'zod';
 
 import type { RequestScope } from '../../application/request-scope.js';
 import { SETTLEMENT } from '../../application/stock-reservations.js';
+import { IDEMPOTENT, outgoingOptions } from '../grpc-resilience.js';
+import type { ClientResilience } from '../grpc-resilience.js';
 import type {
   ReleaseStockRequest,
   ReserveStockOutcome,
@@ -48,6 +51,7 @@ export class GrpcStockReservations implements StockReservations {
   constructor(
     address: string,
     private readonly timeoutMs: number,
+    private readonly resilience: ClientResilience = {},
   ) {
     // TLS YOK: servisler yalnizca ic agda konusur (diger istemcilerle ayni karar).
     this.client = new inventoryV1.InventoryServiceClient(address, credentials.createInsecure());
@@ -66,7 +70,7 @@ export class GrpcStockReservations implements StockReservations {
           items: request.lines.map((line) => ({ sku: line.sku, quantity: line.quantity })),
           ttlSeconds: request.ttlSeconds,
         }),
-        this.options(scope),
+        this.options(scope, IDEMPOTENT),
       );
     } catch (error: unknown) {
       return expectedReserveOutcome(error);
@@ -87,7 +91,7 @@ export class GrpcStockReservations implements StockReservations {
         orderId: request.orderId,
         marketId: request.marketId,
       }),
-      this.options(scope),
+      this.options(scope, IDEMPOTENT),
     );
     return settlementOf(response.outcome, request.orderId);
   }
@@ -101,7 +105,7 @@ export class GrpcStockReservations implements StockReservations {
         marketId: request.marketId,
         reason: request.reason,
       }),
-      this.options(scope),
+      this.options(scope, IDEMPOTENT),
     );
     return settlementOf(response.outcome, request.orderId);
   }
@@ -111,8 +115,9 @@ export class GrpcStockReservations implements StockReservations {
     this.client.close();
   }
 
-  private options(scope: RequestScope) {
-    return { requestId: scope.requestId, timeoutMs: this.timeoutMs };
+  /** Reserve, Commit, Release siparise gore tekrar guvenli: hepsi yeniden denenebilir (D17). */
+  private options(scope: RequestScope, idempotent: boolean): OutgoingCallOptions {
+    return outgoingOptions(scope, this.timeoutMs, this.resilience, idempotent);
   }
 }
 

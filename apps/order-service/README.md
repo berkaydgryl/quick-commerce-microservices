@@ -200,6 +200,25 @@ sınırların toplamı gateway'in 5 sn'sine eşittir; üç çağrı da sınırı
 önce keser, sipariş `AWAITING_PAYMENT` kalır ve tekrar isteği işi zararsızca tamamlar
 (`config/constants.ts`).
 
+**Dayanıklılık (D17, `infrastructure/grpc-resilience.ts`):** dört bağımlı servisin (catalog, risk,
+payment, inventory) her birine bir devre kesici var. Üst üste 5 "ulaşılamaz" hatada devre açılır;
+10 sn boyunca o servise çağrı yapılmaz, istek beklemeden `SERVICE_UNAVAILABLE` alır. Sonra tek bir
+deneme çağrısı devreyi kapatır ya da yeniden açar.
+
+Yalnızca idempotent çağrılar yeniden denenir (en fazla 2 kez, ~100/200 ms arayla, çağrının süre
+sınırı içinde):
+
+- catalog `GetMarket` ve `BatchGetOffers`;
+- payment `Charge` (anahtarlı), `Refund` ve `GetPayment`;
+- inventory `Reserve`, `Commit` ve `Release`.
+
+Denenmeyenler:
+
+- risk `Evaluate`: her çağrı yeni bir değerlendirme kaydı yazar;
+- payment `Confirm3Ds`: tekrar, 3DS hakkını boşa yakabilir.
+
+Süre bütçesi değişmedi: denemeler çağrının kendi sınırını paylaşır.
+
 ## Stok kilidi (T11.2)
 
 Stok **taslak açılırken** inventory'de kilitlenir (`Reserve`, `application/draft-reservation.ts`),
@@ -360,6 +379,7 @@ src/
 │   └── request-scope.ts         # use-case'e taşınan requestId + çağrının logger'ı
 ├── infrastructure/
 │   ├── order-store.ts           # MOCK ya da Mongo: depoyu açar, kapanışı verir
+│   ├── grpc-resilience.ts       # istemcilerin devre kesicisi ve yeniden deneme politikası (D17)
 │   ├── catalog/                 # order -> catalog gRPC istemcisi (service-kit callUnary)
 │   ├── risk/, payment/          # order -> risk / payment gRPC istemcileri (T7.1)
 │   ├── inventory/               # order -> inventory gRPC istemcisi (T11.2)

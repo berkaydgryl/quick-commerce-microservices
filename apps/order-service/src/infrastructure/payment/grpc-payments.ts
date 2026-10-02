@@ -10,6 +10,7 @@ import { AppError, ERROR_CODES, isAppError, isErrorCode } from '@getir/core';
 import type { ErrorCode } from '@getir/core';
 import { paymentV1 } from '@getir/proto';
 import { callUnary } from '@getir/service-kit';
+import type { OutgoingCallOptions } from '@getir/service-kit';
 import { credentials } from '@grpc/grpc-js';
 
 import type {
@@ -22,6 +23,8 @@ import type { RequestScope } from '../../application/request-scope.js';
 import { PAYMENT_METHOD, PAYMENT_STATUS } from '../../domain/checkout-payment.js';
 import type { PaymentMethod, PaymentResult, PaymentStatus } from '../../domain/checkout-payment.js';
 import type { PaymentSnapshot } from '../../domain/payment-standing.js';
+import { IDEMPOTENT, NOT_IDEMPOTENT, outgoingOptions } from '../grpc-resilience.js';
+import type { ClientResilience } from '../grpc-resilience.js';
 
 const METHOD_TO_PROTO: Readonly<Record<PaymentMethod, paymentV1.PaymentMethod>> = {
   [PAYMENT_METHOD.CARD]: paymentV1.PaymentMethod.PAYMENT_METHOD_CARD,
@@ -54,6 +57,7 @@ export class GrpcPayments implements Payments {
   constructor(
     address: string,
     private readonly timeoutMs: number,
+    private readonly resilience: ClientResilience = {},
   ) {
     this.client = new paymentV1.PaymentServiceClient(address, credentials.createInsecure());
   }
@@ -71,7 +75,7 @@ export class GrpcPayments implements Payments {
         idempotencyKey: request.idempotencyKey,
         requireThreeDs: request.requireThreeDs,
       },
-      this.options(scope),
+      this.options(scope, IDEMPOTENT),
     );
     return toPaymentResult(request.orderId, response.payment, response.challengeId);
   }
@@ -84,7 +88,7 @@ export class GrpcPayments implements Payments {
       (message, metadata, options, callback) =>
         this.client.confirm3Ds(message, metadata, options, callback),
       { orderId: request.orderId, challengeId: request.challengeId, code: request.code },
-      this.options(scope),
+      this.options(scope, NOT_IDEMPOTENT),
     );
     return toPaymentResult(request.orderId, response.payment, '');
   }
@@ -98,7 +102,7 @@ export class GrpcPayments implements Payments {
         reason: request.reason,
         idempotencyKey: request.idempotencyKey,
       },
-      this.options(scope),
+      this.options(scope, IDEMPOTENT),
     );
   }
 
@@ -113,7 +117,7 @@ export class GrpcPayments implements Payments {
         (message, metadata, options, callback) =>
           this.client.getPayment(message, metadata, options, callback),
         { orderId },
-        this.options(scope),
+        this.options(scope, IDEMPOTENT),
       );
     } catch (error: unknown) {
       if (isAppError(error) && error.code === ERROR_CODES.NOT_FOUND) {
@@ -129,8 +133,9 @@ export class GrpcPayments implements Payments {
     this.client.close();
   }
 
-  private options(scope: RequestScope): { requestId: string; timeoutMs: number } {
-    return { requestId: scope.requestId, timeoutMs: this.timeoutMs };
+  /** Devre her cagrida; yeniden deneme yalnizca idempotent cagrida (D17, grpc-resilience.ts). */
+  private options(scope: RequestScope, idempotent: boolean): OutgoingCallOptions {
+    return outgoingOptions(scope, this.timeoutMs, this.resilience, idempotent);
   }
 }
 

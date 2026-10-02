@@ -26,3 +26,5 @@ export * from './grpc/types.js';
 export * from './grpc/status.js';
 export * from './grpc/unimplemented.js';
 export * from './grpc/unary-call.js';
+export * from './grpc/circuit-breaker.js';
+export { CLIENT_METRICS } from './grpc/client-metrics.js';

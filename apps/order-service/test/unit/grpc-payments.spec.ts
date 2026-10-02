@@ -7,7 +7,13 @@
 
 import { AppError, ERROR_CODES, silentLogger } from '@getir/core';
 import { paymentV1 } from '@getir/proto';
-import { REQUEST_ID_METADATA_KEY, startGrpcServer, toServiceError } from '@getir/service-kit';
+import {
+  BREAKER_STATE,
+  CircuitBreaker,
+  REQUEST_ID_METADATA_KEY,
+  startGrpcServer,
+  toServiceError,
+} from '@getir/service-kit';
 import type { GrpcServerHandle } from '@getir/service-kit';
 import type { sendUnaryData, ServerUnaryCall } from '@grpc/grpc-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -23,6 +29,20 @@ const seenCharges: paymentV1.ChargeRequest[] = [];
 const seenRefunds: paymentV1.RefundRequest[] = [];
 const seenRequestIds: unknown[] = [];
 const seenLookups: { orderId: string; requestId: unknown }[] = [];
+/** Ilk cagrisi "ulasilamaz" donen siparisler (D17): siparis -> gorulen cagri sayisi. */
+const flakyCalls = new Map<string, number>();
+const FLAKY_PREFIX = 'ord_kesik';
+
+/** Siparis "ord_kesik..." ise ilk cagri SERVICE_UNAVAILABLE ile duser. */
+function failsFirst(orderId: string): boolean {
+  if (!orderId.startsWith(FLAKY_PREFIX)) return false;
+  const seen = (flakyCalls.get(orderId) ?? 0) + 1;
+  flakyCalls.set(orderId, seen);
+  return seen === 1;
+}
+
+const unavailableError = () =>
+  toServiceError(new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'payment gecici olarak kapali'));
 
 function payment(status: paymentV1.PaymentStatus, failureCode = ''): paymentV1.Payment {
   return paymentV1.Payment.fromPartial({ id: 'pay_1', orderId: 'ord_1', status, failureCode });
@@ -76,6 +96,10 @@ const implementation = {
     call: ServerUnaryCall<paymentV1.Confirm3DsRequest, paymentV1.Confirm3DsResponse>,
     callback: sendUnaryData<paymentV1.Confirm3DsResponse>,
   ): void => {
+    if (failsFirst(call.request.orderId)) {
+      callback(unavailableError());
+      return;
+    }
     if (call.request.code !== '123456') {
       callback(
         toServiceError(
@@ -96,6 +120,10 @@ const implementation = {
       orderId: call.request.orderId,
       requestId: call.metadata.get(REQUEST_ID_METADATA_KEY)[0],
     });
+    if (failsFirst(call.request.orderId)) {
+      callback(unavailableError());
+      return;
+    }
     const recorded = RECORDS[call.request.orderId];
     if (recorded === undefined) {
       callback(toServiceError(new AppError(ERROR_CODES.NOT_FOUND, 'odeme yok')));
@@ -276,5 +304,79 @@ describe('GrpcPayments.getPayment (T11.2 PR 2)', () => {
     const error = await rejectionOf(payments.getPayment('ord_kapali', scope));
 
     expect(error.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+  });
+});
+
+describe('GrpcPayments - dayaniklilik (D17)', () => {
+  const resilience = () => ({
+    breaker: new CircuitBreaker({ target: 'payment', failureThreshold: 2, openMs: 60_000 }),
+    retry: { target: 'payment', maxRetries: 2, baseDelayMs: 1 },
+  });
+  let resilient: GrpcPayments;
+
+  beforeAll(() => {
+    resilient = new GrpcPayments(`127.0.0.1:${handle.port}`, 500, resilience());
+  });
+
+  afterAll(() => {
+    resilient.close();
+  });
+
+  it('idempotent okuma (GetPayment) ilk deneme duserse yeniden denenir ve sonuc doner', async () => {
+    await expect(resilient.getPayment('ord_kesik_okuma', scope)).resolves.toBeNull();
+    expect(flakyCalls.get('ord_kesik_okuma')).toBe(2);
+  });
+
+  it('3DS onayi yeniden DENENMEZ (tekrar, kullanicinin hakkini bosa yakabilir)', async () => {
+    const error = await rejectionOf(
+      resilient.confirmThreeDs(
+        { orderId: 'ord_kesik_3ds', challengeId: 'tds_1', code: '123456' },
+        scope,
+      ),
+    );
+
+    expect(error.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+    expect(flakyCalls.get('ord_kesik_3ds')).toBe(1);
+  });
+
+  it('ulasilamayan servise ust uste hatadan sonra devre acilir; cagri ag a gitmeden hemen reddedilir', async () => {
+    // Dinlemeyen bir port: baglanti hemen reddedilir (UNAVAILABLE).
+    const unreachable = new GrpcPayments('127.0.0.1:1', 500, resilience());
+    try {
+      await rejectionOf(
+        unreachable.confirmThreeDs(
+          { orderId: 'ord_1', challengeId: 'tds_1', code: '123456' },
+          scope,
+        ),
+      );
+      await rejectionOf(
+        unreachable.confirmThreeDs(
+          { orderId: 'ord_1', challengeId: 'tds_1', code: '123456' },
+          scope,
+        ),
+      );
+      const started = Date.now();
+      const rejected = await rejectionOf(unreachable.getPayment('ord_1', scope));
+
+      expect(rejected.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+      expect(Date.now() - started).toBeLessThan(50);
+    } finally {
+      unreachable.close();
+    }
+  });
+
+  it('is hatasi (yanlis 3DS kodu) devreyi ACMAZ', async () => {
+    const options = resilience();
+    const client = new GrpcPayments(`127.0.0.1:${handle.port}`, 500, options);
+    try {
+      for (let i = 0; i < 4; i += 1) {
+        await rejectionOf(
+          client.confirmThreeDs({ orderId: 'ord_1', challengeId: 'tds_1', code: '000000' }, scope),
+        );
+      }
+      expect(options.breaker.currentState).toBe(BREAKER_STATE.CLOSED);
+    } finally {
+      client.close();
+    }
   });
 });

@@ -8,7 +8,12 @@
 import { AppError, ERROR_CODES, silentLogger } from '@getir/core';
 import type { ErrorCode } from '@getir/core';
 import { inventoryV1 } from '@getir/proto';
-import { REQUEST_ID_METADATA_KEY, startGrpcServer, toServiceError } from '@getir/service-kit';
+import {
+  CircuitBreaker,
+  REQUEST_ID_METADATA_KEY,
+  startGrpcServer,
+  toServiceError,
+} from '@getir/service-kit';
 import type { GrpcServerHandle } from '@getir/service-kit';
 import type { sendUnaryData, ServerUnaryCall } from '@grpc/grpc-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -33,7 +38,10 @@ const ORDER = {
   NO_EXPIRY: 'ord_bitissiz',
   INVALID: 'ord_gecersiz',
   SLOW: 'ord_yavas',
+  /** Ilk Reserve'u "ulasilamaz" doner (D17). */
+  FLAKY: 'ord_kesik',
 } as const;
+let flakyReserves = 0;
 
 const OUTCOME_BY_ORDER: Readonly<Record<string, inventoryV1.ReservationOutcome>> = {
   ord_applied: inventoryV1.ReservationOutcome.RESERVATION_OUTCOME_APPLIED,
@@ -56,6 +64,13 @@ const implementation = {
     callback: sendUnaryData<inventoryV1.ReserveResponse>,
   ): void => {
     record(call);
+    if (call.request.orderId === ORDER.FLAKY) {
+      flakyReserves += 1;
+      if (flakyReserves === 1) {
+        callback(appError(ERROR_CODES.SERVICE_UNAVAILABLE, {}));
+        return;
+      }
+    }
     switch (call.request.orderId) {
       case ORDER.INSUFFICIENT:
         callback(
@@ -239,5 +254,23 @@ describe('GrpcStockReservations.commit / release', () => {
     );
 
     expect(error.code).toBe(ERROR_CODES.INTERNAL);
+  });
+});
+
+describe('GrpcStockReservations - dayaniklilik (D17)', () => {
+  it('Reserve siparise gore tekrar guvenli: ilk deneme duserse yeniden denenir, kilit alinir', async () => {
+    const resilient = new GrpcStockReservations(`127.0.0.1:${handle.port}`, 1_000, {
+      breaker: new CircuitBreaker({ target: 'inventory', failureThreshold: 5, openMs: 60_000 }),
+      retry: { target: 'inventory', maxRetries: 2, baseDelayMs: 1 },
+    });
+    try {
+      await expect(resilient.reserve(reserveRequest(ORDER.FLAKY), scope)).resolves.toEqual({
+        kind: 'reserved',
+        expiresAt: EXPIRES_AT,
+      });
+      expect(flakyReserves).toBe(2);
+    } finally {
+      resilient.close();
+    }
   });
 });
