@@ -1,7 +1,7 @@
 /**
  * Odeme alaninin SOZLUGU ve VARLIKLARI: durumlar, yontemler, deneme gecmisi,
  * Payment kaydi. Adimlarin kurallari kendi dosyalarindadir (D9): cekim
- * charge.ts, 3DS three-ds.ts, iade refund.ts. Uc adimin ortak yardimcisi
+ * charge.ts, 3DS three-ds.ts, iade refund.ts, iptal cancel.ts (T11.2 PR 3). Uc adimin ortak yardimcisi
  * (withAttempt) burada durur.
  *
  * KURAL: bu dosya DISARI BAKMAZ - grpc, uretilen proto tipi ya da veritabani
@@ -19,6 +19,8 @@ export const PAYMENT_STATUS = {
   SUCCEEDED: 'SUCCEEDED',
   FAILED: 'FAILED',
   REFUNDED: 'REFUNDED',
+  /** Tahsil edilmeden kapatildi: siparis iptal edildi (T11.2 PR 3). Para hic alinmadi. */
+  CANCELLED: 'CANCELLED',
 } as const;
 
 export type PaymentStatus = (typeof PAYMENT_STATUS)[keyof typeof PAYMENT_STATUS];
@@ -36,11 +38,13 @@ export const ATTEMPT_KIND = {
   THREEDS: 'THREEDS',
   /** Siparis saga'sinin telafi adimi (T7.1): cekilen tutar geri verildi. */
   REFUND: 'REFUND',
+  /** Siparis iptal edildi, tahsil edilmemis odeme kapatildi (T11.2 PR 3). */
+  CANCEL: 'CANCEL',
 } as const;
 
 export type AttemptKind = (typeof ATTEMPT_KIND)[keyof typeof ATTEMPT_KIND];
 
-/** Denemenin sonucu. CHARGE icin ilk dordu, THREEDS icin sonraki ucu, REFUND icin sonuncusu. */
+/** Denemenin sonucu. CHARGE icin ilk dordu, THREEDS icin sonraki ucu, REFUND ve CANCEL icin son ikisi. */
 export const ATTEMPT_OUTCOME = {
   APPROVED: 'APPROVED',
   DECLINED: 'DECLINED',
@@ -50,6 +54,7 @@ export const ATTEMPT_OUTCOME = {
   CODE_REJECTED: 'CODE_REJECTED',
   EXPIRED: 'EXPIRED',
   REFUNDED: 'REFUNDED',
+  CANCELLED: 'CANCELLED',
 } as const;
 
 export type AttemptOutcome = (typeof ATTEMPT_OUTCOME)[keyof typeof ATTEMPT_OUTCOME];
@@ -104,6 +109,8 @@ export interface Payment {
   readonly challenge?: ThreeDsChallenge;
   /** Yalnizca REFUNDED durumunda dolu: iadeyi isteyen tarafin gerekce anahtari. */
   readonly refundReason?: string;
+  /** Yalnizca CANCELLED durumunda dolu: iptali isteyen tarafin gerekce anahtari. */
+  readonly cancelReason?: string;
   /**
    * Denetim gecmisi (T5.3): odemede olan her karar, eskiden yeniye. Durumu
    * degistirmeyen istekler (tekrar istek, bicimi bozuk kod, ulasilamayan

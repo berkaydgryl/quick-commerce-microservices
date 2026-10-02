@@ -251,6 +251,11 @@ describe('CreateOrder - kilit odeme sirasinda dustu (Commit NOT_FOUND)', () => {
 
     expect(payments.refunds).toEqual([]);
     expect((await stored(id)).status).toBe(ORDER_STATUS.CANCELLED);
+    // Kapida odemenin PENDING kaydi payment'ta kapatilsin (T11.2 PR 3): komut ayni yazimda.
+    expect(repository.recordedEvents.at(-1)).toMatchObject({
+      topic: 'payment.cancel_requested',
+      payload: { orderId: id, reason: 'order_cancelled' },
+    });
   });
 });
 

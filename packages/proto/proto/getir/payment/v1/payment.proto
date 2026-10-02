@@ -68,6 +68,10 @@ enum PaymentStatus {
   // Commit sirasinda rezervasyon dusmusse (ZREM 0) odeme geri verilir ve
   // siparis CANCELLED olur (B3, B20).
   PAYMENT_STATUS_REFUNDED = 5;
+
+  // Tahsil edilmeden kapatildi (T11.2 PR 3): siparis iptal edildi; kapida
+  // odeme PENDING'di ya da 3DS bekleniyordu. Para hic alinmadi, iade yok.
+  PAYMENT_STATUS_CANCELLED = 6;
 }
 
 // Odeme kaydi.

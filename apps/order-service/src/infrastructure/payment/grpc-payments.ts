@@ -44,6 +44,7 @@ const STATUS_FROM_PROTO: Readonly<Record<paymentV1.PaymentStatus, PaymentStatus 
   [paymentV1.PaymentStatus.PAYMENT_STATUS_SUCCEEDED]: PAYMENT_STATUS.SUCCEEDED,
   [paymentV1.PaymentStatus.PAYMENT_STATUS_FAILED]: PAYMENT_STATUS.FAILED,
   [paymentV1.PaymentStatus.PAYMENT_STATUS_REFUNDED]: PAYMENT_STATUS.REFUNDED,
+  [paymentV1.PaymentStatus.PAYMENT_STATUS_CANCELLED]: PAYMENT_STATUS.CANCELLED,
   [paymentV1.PaymentStatus.UNRECOGNIZED]: undefined,
 };
 

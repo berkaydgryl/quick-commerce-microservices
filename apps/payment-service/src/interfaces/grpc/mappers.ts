@@ -13,6 +13,7 @@ const STATUS_TO_PROTO: Readonly<Record<PaymentStatus, paymentV1.PaymentStatus>> 
   SUCCEEDED: paymentV1.PaymentStatus.PAYMENT_STATUS_SUCCEEDED,
   FAILED: paymentV1.PaymentStatus.PAYMENT_STATUS_FAILED,
   REFUNDED: paymentV1.PaymentStatus.PAYMENT_STATUS_REFUNDED,
+  CANCELLED: paymentV1.PaymentStatus.PAYMENT_STATUS_CANCELLED,
 };
 
 const METHOD_TO_PROTO: Readonly<Record<PaymentMethod, paymentV1.PaymentMethod>> = {

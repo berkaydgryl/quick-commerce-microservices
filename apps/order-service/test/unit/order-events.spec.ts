@@ -2,8 +2,12 @@
  * Siparis olaylarinin turetilmesi (T7.3): saf, I/O yok.
  */
 
-import { refundRequestedPayloadSchema } from '@getir/contracts';
+import {
+  paymentCancelRequestedPayloadSchema,
+  refundRequestedPayloadSchema,
+} from '@getir/contracts';
 import { EVENTS, fixedClock, ID_PREFIX, isId, ORDER_STATUS } from '@getir/core';
+import type { OrderStatus } from '@getir/core';
 import { describe, expect, it } from 'vitest';
 
 import { REFUND_REASON, refundIdempotencyKey } from '../../src/domain/checkout-payment.js';
@@ -88,6 +92,59 @@ describe('statusChangedEvents', () => {
     const order = draft();
 
     expect(statusChangedEvents(order, order)).toEqual([]);
+  });
+});
+
+describe('statusChangedEvents - payment.cancel_requested (T11.2 PR 3)', () => {
+  const clock = fixedClock(T0);
+  const walk = (steps: readonly OrderStatus[]) =>
+    steps.reduce((order, status) => transitionOrder(order, status, clock), draft());
+  const TO_AWAITING: readonly OrderStatus[] = [
+    ORDER_STATUS.RISK_CHECK,
+    ORDER_STATUS.RESERVED,
+    ORDER_STATUS.AWAITING_PAYMENT,
+  ];
+
+  it.each<[string, readonly OrderStatus[]]>([
+    ['odeme bekleyen', TO_AWAITING],
+    ['odenmis (sistemin telafisi)', [...TO_AWAITING, ORDER_STATUS.PAID]],
+  ])(
+    '%s siparis iptal edilince: status_changed ve ardindan iptal komutu, ayni surum ve an',
+    (_name, steps) => {
+      const before = walk(steps);
+      const after = transitionOrder(before, ORDER_STATUS.CANCELLED, clock, 'USER_CANCELLED');
+
+      const events = statusChangedEvents(before, after);
+
+      expect(events.map((event) => event.topic)).toEqual([
+        EVENTS.ORDER_STATUS_CHANGED,
+        EVENTS.PAYMENT_CANCEL_REQUESTED,
+      ]);
+      const [changed, command] = events;
+      expect(command).toMatchObject({
+        orderId: after.id,
+        version: changed?.version,
+        occurredAt: changed?.occurredAt,
+        payload: { orderId: after.id, reason: 'order_cancelled' },
+      });
+      expect(isId(ID_PREFIX.EVENT, command?.eventId)).toBe(true);
+      // payment ayni semayla dogrular: govde sozlesmeden gecer.
+      expect(paymentCancelRequestedPayloadSchema.safeParse(command?.payload).success).toBe(true);
+    },
+  );
+
+  it.each<[string, readonly OrderStatus[], OrderStatus]>([
+    ['taslak iptali (odeme olamaz)', [], ORDER_STATUS.CANCELLED],
+    ['risk incelemesi', [ORDER_STATUS.RISK_CHECK], ORDER_STATUS.REVIEW],
+    ['odeme', TO_AWAITING, ORDER_STATUS.PAID],
+    ['odeme hatasi', TO_AWAITING, ORDER_STATUS.PAYMENT_FAILED],
+  ])('%s: iptal komutu YOK', (_name, steps, to) => {
+    const before = walk(steps);
+    const after = transitionOrder(before, to, clock);
+
+    expect(statusChangedEvents(before, after).map((event) => event.topic)).toEqual([
+      EVENTS.ORDER_STATUS_CHANGED,
+    ]);
   });
 });
 

@@ -41,3 +41,16 @@ export const refundRequestedPayloadSchema = z.object({
 });
 
 export type RefundRequestedPayload = z.infer<typeof refundRequestedPayloadSchema>;
+
+/**
+ * payment.cancel_requested (T11.2 PR 3; order uretir, payment dinler): siparis
+ * odeme asamasindan CANCELLED'a gecti. Odeme siparis kimligiyle bulunur.
+ * Gerekce anahtari iadeyle ayni kurala uyar (kayda oldugu gibi yazilir).
+ * Anahtar yok: islem durumdan tekrar-guvenlidir (zaten CANCELLED ise yazilmaz).
+ */
+export const paymentCancelRequestedPayloadSchema = z.object({
+  orderId: idSchema,
+  reason: refundReasonSchema,
+});
+
+export type PaymentCancelRequestedPayload = z.infer<typeof paymentCancelRequestedPayloadSchema>;

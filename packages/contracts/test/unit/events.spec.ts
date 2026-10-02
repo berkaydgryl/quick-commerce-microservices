@@ -1,6 +1,6 @@
 /**
- * Servisler arasi olay govdeleri (T7.4) ve paylasilan kural parcalari:
- * iade gerekcesi anahtari ve idempotency anahtari.
+ * Servisler arasi olay govdeleri (T7.4; iptal komutu T11.2 PR 3) ve paylasilan
+ * kural parcalari: iade gerekcesi anahtari ve idempotency anahtari.
  */
 
 import { ID_PREFIX, newId } from '@getir/core';
@@ -11,6 +11,7 @@ import {
   IDEMPOTENCY_KEY_MIN_LENGTH,
   REFUND_REASON_MAX_LENGTH,
   idempotencyKeySchema,
+  paymentCancelRequestedPayloadSchema,
   refundReasonSchema,
   refundRequestedPayloadSchema,
 } from '../../src/index.js';
@@ -42,6 +43,27 @@ describe('refundRequestedPayloadSchema', () => {
     // Uretici yeni alan eklerse eski tuketici olayi reddetmemeli.
     expect(refundRequestedPayloadSchema.safeParse({ ...payload, amountMinor: 100 }).success).toBe(
       true,
+    );
+  });
+});
+
+describe('paymentCancelRequestedPayloadSchema (T11.2 PR 3)', () => {
+  const cancel = { orderId, reason: 'order_cancelled' };
+
+  it('order un urettigi govdeyi kabul eder; bilinmeyen alan bozmaz (ADR-07)', () => {
+    expect(paymentCancelRequestedPayloadSchema.parse(cancel)).toEqual(cancel);
+    expect(paymentCancelRequestedPayloadSchema.safeParse({ ...cancel, note: 'x' }).success).toBe(
+      true,
+    );
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ['siparis kimligi bicimsiz', { orderId: 'ord_1' }],
+    ['gerekce eksik', { reason: undefined }],
+    ['gerekce metin (anahtar degil)', { reason: 'Siparis iptal edildi' }],
+  ])('reddeder: %s', (_name, overrides) => {
+    expect(paymentCancelRequestedPayloadSchema.safeParse({ ...cancel, ...overrides }).success).toBe(
+      false,
     );
   });
 });

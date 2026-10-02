@@ -9,7 +9,8 @@
  * baslayinca unutur, olay dinleme kapali), aksi halde PAYMENT_MONGO_URI ve
  * REDIS_URL zorunlu: odemeler kendi veritabaninin (D14) `payments`
  * koleksiyonuna yazilir, siparis saga'sinin iade komutlari
- * (payment.refund_requested) stream:events'ten dinlenir (T7.4).
+ * (payment.refund_requested, T7.4) ve iptal komutu (payment.cancel_requested, T11.2 PR 3)
+ * stream:events'ten dinlenir.
  * Saglayici her iki modda mock'tur: test kartlari README'de.
  *
  * Dogrulama (grpcurl):

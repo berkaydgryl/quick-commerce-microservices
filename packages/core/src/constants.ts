@@ -69,6 +69,13 @@ export const EVENTS = {
    * ikinci kez iade yapmaz.
    */
   PAYMENT_REFUND_REQUESTED: 'payment.refund_requested',
+  /**
+   * Iptal komutu (T11.2 PR 3): siparis odeme asamasindan (AWAITING_PAYMENT ya
+   * da PAID) CANCELLED'a gecti. payment-svc dinler; tahsil edilmemis odemeyi
+   * (kapida odeme PENDING, 3DS bekleyen) CANCELLED yapar, digerlerine dokunmaz.
+   * Order odeme yontemini bilmez; karar payment'tadir.
+   */
+  PAYMENT_CANCEL_REQUESTED: 'payment.cancel_requested',
   COURIER_ASSIGNED: 'courier.assigned',
   COURIER_LOCATION: 'courier.location',
   ORDER_DELIVERED: 'order.delivered',

@@ -234,8 +234,12 @@ değişken), süre sınırı 1 sn.
   ödeme her zaman alınmıştır ya da iade yolundadır.
 - **T11.2 öncesi kayıtlar:** kilidi olmayan taslak `CreateOrder`'da süresi dolmuş sayılır (kilitsiz
   stokla ödeme alınmaz); kilidi olmayan, ödeme bekleyen eski sipariş kesinleştirilmeden `PAID` olur.
-- **Kalanlar:** iptal edilen kapıda ödemenin `PENDING` kaydının kapatılması payment'ta yeni bir
-  durum ister (PR 3); inventory istemcisine devre kesici D17 (PR 4).
+- **Tahsil edilmemiş ödeme kapanır (PR 3):** sipariş `AWAITING_PAYMENT` ya da `PAID`'den
+  `CANCELLED`'a geçince `statusChangedEvents` `order.status_changed`'in ardından
+  `payment.cancel_requested` üretir; iptal eden her yazım (kullanıcı, süpürücü, kilidi düşmüş ödeme)
+  aynı fonksiyonu kullandığı için komut unutulamaz ve siparişle aynı transaction'dadır. Kapıda
+  ödemenin `PENDING`'ini ve 3DS bekleyen kartı payment `CANCELLED` yapar (payment README).
+- **Kalan:** inventory istemcisine devre kesici D17 (PR 4).
 
 ### Süpürücü (T11.2 PR 2)
 
@@ -271,11 +275,12 @@ toparlar: kilidi dolmuş `DRAFT` ve `AWAITING_PAYMENT` siparişleri kapatır
 Bu yüzden sipariş ve olayları **tek Mongo transaction'ında** yazılır; ayrı bir işçi
 yayınlanmamış olayları sonra `stream:events`'e basar.
 
-| Olay                       | Ne zaman                                     | Payload                                                            |
-| -------------------------- | -------------------------------------------- | ------------------------------------------------------------------ |
-| `order.created`            | Taslak açılınca (B8: kimlik burada doğar)    | `orderId, userId, marketId, status, totalMinor, currency, version` |
-| `order.status_changed`     | Her geçişte, **geçiş başına bir olay**       | `orderId, userId, marketId, from, to, note?, version`              |
-| `payment.refund_requested` | Telafi: doğrudan iade başarısız (T7.1 borcu) | `orderId, reason, idempotencyKey`                                  |
+| Olay                       | Ne zaman                                           | Payload                                                            |
+| -------------------------- | -------------------------------------------------- | ------------------------------------------------------------------ |
+| `order.created`            | Taslak açılınca (B8: kimlik burada doğar)          | `orderId, userId, marketId, status, totalMinor, currency, version` |
+| `order.status_changed`     | Her geçişte, **geçiş başına bir olay**             | `orderId, userId, marketId, from, to, note?, version`              |
+| `payment.refund_requested` | Telafi: doğrudan iade başarısız (T7.1 borcu)       | `orderId, reason, idempotencyKey`                                  |
+| `payment.cancel_requested` | Ödeme aşamasından `CANCELLED`'a geçiş (T11.2 PR 3) | `orderId, reason` (`order_cancelled`)                              |
 
 - **Olay unutulamaz:** `OrderRepository.insert/update` olayları **zorunlu** parametre olarak
   alır (`domain/order-events.ts` türetir). Sipariş yazıldıktan sonra olay yazımı patlarsa

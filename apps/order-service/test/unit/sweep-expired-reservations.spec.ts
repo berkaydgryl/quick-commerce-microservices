@@ -162,6 +162,20 @@ describe('SweepExpiredReservations - odeme bekleyen', () => {
     expect((await stored(awaiting.id))?.status).toBe(ORDER_STATUS.CANCELLED);
   });
 
+  it('odeme bekleyen siparis kapaninca payment a iptal komutu ayni yazimda gider (T11.2 PR 3)', async () => {
+    const awaiting = await expiredAwaiting();
+    paidBy(awaiting, PAYMENT_STATUS.PENDING, PAYMENT_METHOD.CASH_ON_DELIVERY);
+
+    await sweep();
+
+    expect(
+      repository.recordedEvents
+        .filter((event) => event.orderId === awaiting.id)
+        .slice(-2)
+        .map((event) => event.topic),
+    ).toEqual([EVENTS.ORDER_STATUS_CHANGED, EVENTS.PAYMENT_CANCEL_REQUESTED]);
+  });
+
   it('dogrudan iade basarisiz: iade KOMUTU outbox a yazilir, siparis yine kapanir', async () => {
     const awaiting = await expiredAwaiting();
     paidBy(awaiting, PAYMENT_STATUS.SUCCEEDED);

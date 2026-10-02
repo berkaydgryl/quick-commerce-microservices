@@ -53,11 +53,14 @@ describe('decidePayment', () => {
     });
   });
 
-  it('iade edilmis odeme odeme adiminda olamaz: INTERNAL', () => {
-    expect(() => decidePayment('ord_1', CARD, { status: PAYMENT_STATUS.REFUNDED })).toThrow(
-      expect.objectContaining({ code: ERROR_CODES.INTERNAL }) as Error,
-    );
-  });
+  it.each([PAYMENT_STATUS.REFUNDED, PAYMENT_STATUS.CANCELLED])(
+    'sonuclanmis odeme (%s) odeme adiminda olamaz: INTERNAL',
+    (status) => {
+      expect(() => decidePayment('ord_1', CARD, { status })).toThrow(
+        expect.objectContaining({ code: ERROR_CODES.INTERNAL }) as Error,
+      );
+    },
+  );
 });
 
 describe('idempotency anahtarlari siparisten turetilir', () => {

@@ -25,6 +25,7 @@ describe('paymentStandingOf', () => {
     [PAYMENT_STATUS.REQUIRES_3DS, PAYMENT_STANDING.NONE],
     [PAYMENT_STATUS.FAILED, PAYMENT_STANDING.NONE],
     [PAYMENT_STATUS.REFUNDED, PAYMENT_STANDING.NONE],
+    [PAYMENT_STATUS.CANCELLED, PAYMENT_STANDING.NONE],
   ])('kartla %s -> %s', (status, standing) => {
     expect(paymentStandingOf({ status, method: PAYMENT_METHOD.CARD })).toBe(standing);
   });
