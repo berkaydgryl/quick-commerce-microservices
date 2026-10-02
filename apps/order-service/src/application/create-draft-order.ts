@@ -6,8 +6,11 @@
  * (@getir/pricing). Istemcinin gordugu toplam tutmazsa PRICE_CHANGED doner ve
  * taslak ACILMAZ. Fiyat taslakta DONDURULUR; CreateOrder yeniden hesaplamaz.
  *
- * KAPSAM DISI: risk degerlendirmesi ve odeme (T7.1 saga), stok rezervasyonu
- * (Gun 9-11), kapali market kontrolu (T11.4).
+ * Stok taslak acilirken KILITLENIR (T11.2, draft-reservation.ts): kilitli taslak
+ * tek yazimda kaydedilir; yazim basarisiz olursa kilit hemen geri verilir.
+ *
+ * KAPSAM DISI: risk degerlendirmesi ve odeme (T7.1 saga), banda gore kilit
+ * suresi (T11.3), kapali market kontrolu (T11.4).
  */
 
 import type { Clock } from '@getir/core';
@@ -17,10 +20,14 @@ import type { OrderHistoryReader } from '../domain/order-history-reader.js';
 import type { OrderRepository } from '../domain/order-repository.js';
 import type { DeliveryLocation, Order } from '../domain/order.js';
 import { createDraftOrder as buildDraftOrder } from '../domain/order.js';
+import { RELEASE_REASON } from '../domain/stock-reservation.js';
 import type { CartLine } from '../domain/price-draft.js';
 import { assertExpectedTotal, priceDraft } from '../domain/price-draft.js';
 import type { CatalogPricing } from './catalog-pricing.js';
+import { reserveDraftStock } from './draft-reservation.js';
+import type { DraftReservationDeps } from './draft-reservation.js';
 import type { RequestScope } from './request-scope.js';
+import { releaseStock } from './stock-step.js';
 
 export interface CreateDraftOrderInput {
   readonly userId: string;
@@ -33,7 +40,7 @@ export interface CreateDraftOrderInput {
   readonly couponCode?: string | undefined;
 }
 
-export interface CreateDraftOrderDeps {
+export interface CreateDraftOrderDeps extends DraftReservationDeps {
   readonly repository: OrderRepository;
   readonly history: Pick<OrderHistoryReader, 'hasPaidOrder'>;
   readonly catalog: CatalogPricing;
@@ -68,7 +75,7 @@ export function createCreateDraftOrder(deps: CreateDraftOrderDeps): CreateDraftO
     });
     assertExpectedTotal(pricing, input.expectedTotalMinor);
 
-    const order = buildDraftOrder(
+    const draft = buildDraftOrder(
       {
         userId: input.userId,
         marketId: input.marketId,
@@ -79,8 +86,14 @@ export function createCreateDraftOrder(deps: CreateDraftOrderDeps): CreateDraftO
       },
       deps.clock,
     );
-    // Taslak ve order.created ayni atomik yazimda (ADR-04).
-    await deps.repository.insert(order, orderCreatedEvents(order));
+    const order = await reserveDraftStock(deps, draft, scope);
+    try {
+      // Taslak, kilidi ve order.created ayni atomik yazimda (ADR-04).
+      await deps.repository.insert(order, orderCreatedEvents(order));
+    } catch (error: unknown) {
+      await releaseStock(deps, order, RELEASE_REASON.DRAFT_NOT_SAVED, scope);
+      throw error;
+    }
     return order;
   };
 }

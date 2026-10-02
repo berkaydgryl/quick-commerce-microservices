@@ -48,27 +48,49 @@ export function sampleDraftInput(overrides: Partial<DraftOrderInput> = {}): Draf
   };
 }
 
+/** Taslagin kilit omru (ms): RESERVATION_TTL_SECONDS varsayilani, 10 dk. */
+export const SAMPLE_RESERVATION_TTL_MS = 600_000;
+
+export interface DraftOptions {
+  /**
+   * Stok kilidi (T11.2). Verilmezse taslak acildigi an 10 dk'lik kilitle
+   * yazilir (gercek taslak gibi); `null` kilitsiz taslak (T11.2 oncesi).
+   */
+  readonly reservation?: Order['reservation'] | null;
+}
+
 /** Taslagi domain'den kurup depoya yazar: taslagin kendisini test ETMEYEN senaryolarin on kosulu. */
 export async function insertDraft(
   repository: Pick<OrderRepository, 'insert'>,
   clock: Clock,
   overrides: Partial<DraftOrderInput> = {},
+  options: DraftOptions = {},
 ): Promise<Order> {
-  const order = createDraftOrder(sampleDraftInput(overrides), clock);
+  const draft = createDraftOrder(sampleDraftInput(overrides), clock);
+  const reservation =
+    options.reservation === undefined
+      ? {
+          reservedAt: clock.date(),
+          expiresAt: new Date(clock.now() + SAMPLE_RESERVATION_TTL_MS),
+        }
+      : options.reservation;
+  const order = reservation === null ? draft : { ...draft, reservation };
   await repository.insert(order, orderCreatedEvents(order));
   return order;
 }
 
 /**
  * Risk adimindan gecmis, ODEME BEKLEYEN siparis yazar (T7.1): odeme adimini
- * ya da iptali test eden senaryolarin on kosulu. Bant verilmezse LOW.
+ * ya da iptali test eden senaryolarin on kosulu. Bant verilmezse LOW; kilit
+ * insertDraft'taki gibi.
  */
 export async function insertAwaitingPayment(
   repository: Pick<OrderRepository, 'insert' | 'update'>,
   clock: Clock,
   band: RiskBand = RISK_BANDS.LOW,
+  options: DraftOptions = {},
 ): Promise<Order> {
-  const draft = await insertDraft(repository, clock);
+  const draft = await insertDraft(repository, clock, {}, options);
   const awaiting = applyRiskDecision(draft, band, decideRisk(band), clock);
   await repository.update(awaiting, draft.version, statusChangedEvents(draft, awaiting));
   return awaiting;

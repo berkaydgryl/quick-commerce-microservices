@@ -18,6 +18,7 @@ import { PAYMENT_METHOD } from '../../src/domain/checkout-payment.js';
 import { transitionOrder } from '../../src/domain/order.js';
 import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-order-store.js';
 import { FakePayments, TEST_CARD } from '../support/fake-payments.js';
+import { FakeStockReservations } from '../support/fake-stock-reservations.js';
 import { FakeRiskAssessment } from '../support/fake-risk-assessment.js';
 import { insertDraft, SAMPLE_PRICING } from '../support/order-builders.js';
 
@@ -31,17 +32,20 @@ const cashOnDelivery = { method: PAYMENT_METHOD.CASH_ON_DELIVERY } as const;
 let repository: InMemoryOrderStore;
 let risk: FakeRiskAssessment;
 let payments: FakePayments;
+let stock: FakeStockReservations;
 let create: ReturnType<typeof createCreateOrder>;
 
 beforeEach(() => {
   repository = new InMemoryOrderStore();
   risk = new FakeRiskAssessment();
   payments = new FakePayments();
+  stock = new FakeStockReservations();
   create = createCreateOrder({
     repository,
     history: repository,
     risk,
     payments,
+    stock,
     outbox: repository,
     clock: fixedClock(DRAFT_AT_MS + DWELL_MS),
   });
@@ -60,8 +64,8 @@ describe('CreateOrder - mutlu yol (LOW, kart)', () => {
     expect(order.timeline.map((entry) => [entry.status, entry.note])).toEqual([
       [ORDER_STATUS.DRAFT, undefined],
       [ORDER_STATUS.RISK_CHECK, undefined],
-      // Stok rezervasyonu T11.2'de: adim sessizce atlanmaz, notuyla gorunur.
-      [ORDER_STATUS.RESERVED, 'PENDING_RESERVATION'],
+      // Stok taslakta kilitlendi (T11.2): RESERVED gercek kilit, not yok.
+      [ORDER_STATUS.RESERVED, undefined],
       [ORDER_STATUS.AWAITING_PAYMENT, undefined],
       [ORDER_STATUS.PAID, undefined],
     ]);

@@ -96,4 +96,8 @@ export function refundIdempotencyKey(orderId: string): string {
 export const REFUND_REASON = {
   /** Cekim basarili oldu ama siparis PAID yazilamadi (ornegin ayni anda iptal edildi). */
   ORDER_CHANGED_DURING_PAYMENT: 'order_changed_during_payment',
+  /** Cekim basarili oldu ama stok kilidi o arada dustu (T11.2): siparis iptal. */
+  RESERVATION_EXPIRED: 'reservation_expired',
 } as const;
+
+export type RefundReason = (typeof REFUND_REASON)[keyof typeof REFUND_REASON];

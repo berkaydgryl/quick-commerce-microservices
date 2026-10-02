@@ -47,7 +47,11 @@ export interface OrderHistoryPage {
 export interface RiskHistory {
   /** DELIVERED siparis sayisi. */
   readonly deliveredCount: number;
-  /** CANCELLED siparis sayisi (kullanici ya da sistem iptali). */
+  /**
+   * CANCELLED siparis sayisi. Sistemin taslak iptalleri (stok yetmedi, rezervasyon
+   * suresi doldu, sepet yenilendi; SYSTEM_CANCELLATION_NOTES) SAYILMAZ: kullanici
+   * davranisi degil (T11.2). Kullanici iptali ve odeme sonrasi iptal sayilir.
+   */
   readonly cancelledCount: number;
   /**
    * Teslim edilmis siparislerin ortalama tutari (kurus, tam sayiya yuvarlanmis).

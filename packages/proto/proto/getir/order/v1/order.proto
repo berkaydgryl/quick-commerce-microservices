@@ -29,12 +29,14 @@ option go_package = "github.com/berkaydgryl/quick-commerce-microservices/package
 
 // Siparis servisi.
 service OrderService {
-  // Sepeti taslak siparise cevirir, riski degerlendirir ve stogu kilitler.
-  // Gateway karsiligi: POST /v1/cart/reserve
+  // Sepeti fiyatlayip taslak siparise cevirir ve stogu kilitler (T11.2).
+  // Risk CreateOrder'da sorulur. Gateway karsiligi: POST /v1/cart/reserve
   rpc CreateDraftOrder(CreateDraftOrderRequest) returns (CreateDraftOrderResponse);
 
   // Taslak siparisi gercek siparise cevirir: risk gecisi, odeme ve stok
-  // dusumu (saga, T7.1). Gateway karsiligi: POST /v1/orders
+  // dusumu (saga, T7.1). Kilidi dusmus taslak ilerlemez: siparis CANCELLED,
+  // FAILED_PRECONDITION + "RESERVATION_EXPIRED"; sepet yeniden onaylanir
+  // (T11.2). Gateway karsiligi: POST /v1/orders
   rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
 
   // 3DS kodunu dogrular ve siparisi odeme sonucuna gore ilerletir (T7.1):
@@ -68,7 +70,7 @@ service OrderService {
 enum OrderStatus {
   ORDER_STATUS_UNSPECIFIED = 0;
 
-  // Sepet rezerve edilmek uzere acildi; henuz stok kilitlenmedi.
+  // Sepet fiyatlandi ve stok kilitlendi (T11.2); siparis onayi bekleniyor.
   ORDER_STATUS_DRAFT = 1;
 
   // Risk degerlendirmesi suruyor.
@@ -80,7 +82,7 @@ enum OrderStatus {
   // CRITICAL bant ya da inceleme reddi.
   ORDER_STATUS_REJECTED = 4;
 
-  // Stok kilitlendi, geri sayim basladi.
+  // Risk gecti; taslakta alinan stok kilidi suruyor.
   ORDER_STATUS_RESERVED = 5;
 
   // Rezervasyon suresi doldu.
@@ -179,8 +181,8 @@ message Order {
   google.protobuf.Timestamp created_at = 12;
   google.protobuf.Timestamp updated_at = 13;
 
-  // Rezervasyon bitis ani. Yalnizca RESERVED ve AWAITING_PAYMENT
-  // durumlarinda doludur; diger durumlarda bos birakilir.
+  // Stok kilidinin bitis ani (T11.2). Yalnizca kilit canliyken doludur:
+  // DRAFT, RESERVED ve AWAITING_PAYMENT; diger durumlarda bos birakilir.
   google.protobuf.Timestamp reservation_expires_at = 14;
 
   repeated OrderTimelineEntry timeline = 15;
@@ -216,19 +218,20 @@ message CreateDraftOrderRequest {
 
 // Taslak siparis cevabi.
 //
-// Risk bandi CRITICAL ise bu RPC hicbir sey yaratmadan PERMISSION_DENIED +
-// ErrorDetail.code = "RISK_BLOCKED" doner; rezervasyon hic acilmaz ve stok
-// dokunulmamis kalir. Stok yetmezse siparis CANCELLED'a cekilir ve
-// FAILED_PRECONDITION + "STOCK_INSUFFICIENT" doner. (Taslak anindaki risk
-// degerlendirmesi ve stok kilidi T11.2 ile gelir; bugun taslak yalnizca
-// fiyatlanir, risk CreateOrder'da sorulur.)
+// Stok taslak acilirken kilitlenir (T11.2):
+//   - stok yetmezse taslak CANCELLED yazilir ve FAILED_PRECONDITION +
+//     "STOCK_INSUFFICIENT" doner (ayrinti: sku, requested, available);
+//   - kullanicinin odeme asamasinda baska siparisi varsa ALREADY_EXISTS +
+//     "RESERVATION_ACTIVE" doner (ayrinti: activeOrderId);
+//   - kullanicinin eski taslagi kilit tutuyorsa o taslak iptal edilir
+//     (CART_REPLACED), kilidi yeni sepete gecer.
+// Risk taslakta sorulmaz; CreateOrder'da sorulur (T7.1).
 message CreateDraftOrderResponse {
   string order_id = 1;
   OrderStatus status = 2;
 
-  // Geri sayimin bitecegi an (UTC). Sure risk bandindan turer. Stok
-  // rezervasyonu (T11.2) gelene kadar BOS doner: kilitlenmemis stok icin
-  // geri sayim yoktur.
+  // Geri sayimin bitecegi an (UTC). Sure bugun sabittir (order-svc
+  // RESERVATION_TTL_SECONDS, varsayilan 10 dk); banda gore kisaltma T11.3.
   google.protobuf.Timestamp reservation_expires_at = 3;
 }
 
@@ -356,6 +359,8 @@ message CancelOrderRequest {
   string user_id = 2;
 
   // Iptal gerekcesi anahtari; zaman cizelgesine ve outbox olayina yazilir.
+  // Sistemin iptal notlari (STOCK_INSUFFICIENT, RESERVATION_EXPIRED,
+  // CART_REPLACED) kullaniciya kapalidir: INVALID_ARGUMENT (T11.2).
   string reason = 3;
 
   // ADR-08 geregi tum mutasyon uclari idempotency anahtari ister (REST'te

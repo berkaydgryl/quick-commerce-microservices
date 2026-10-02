@@ -28,6 +28,7 @@ import type {
 import type { OrderRepository } from '../../domain/order-repository.js';
 import { orderAlreadyExists, orderVersionConflict } from '../../domain/order-repository.js';
 import type { Order } from '../../domain/order.js';
+import { isSystemCancellation } from '../../domain/stock-reservation.js';
 
 interface StoredEvent {
   readonly event: OrderEvent;
@@ -150,7 +151,11 @@ export class InMemoryOrderStore implements OrderRepository, OrderHistoryReader, 
   riskHistory(userId: string): Promise<RiskHistory> {
     const own = [...this.orders.values()].filter((order) => order.userId === userId);
     const delivered = own.filter((order) => order.status === ORDER_STATUS.DELIVERED);
-    const cancelled = own.filter((order) => order.status === ORDER_STATUS.CANCELLED);
+    // Sistemin taslak iptalleri (stok yetmedi, sure doldu, sepet yenilendi)
+    // kullanici davranisi degil: sayilmaz (T11.2, Mongo ile ayni kural).
+    const cancelled = own.filter(
+      (order) => order.status === ORDER_STATUS.CANCELLED && !isSystemCancellation(order),
+    );
     const deliveredTotal = delivered.reduce((sum, order) => sum + order.pricing.totalMinor, 0);
     return Promise.resolve(toRiskHistory(delivered.length, cancelled.length, deliveredTotal));
   }

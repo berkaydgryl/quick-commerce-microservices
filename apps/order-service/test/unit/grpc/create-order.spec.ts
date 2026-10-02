@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { FakeRiskAssessment } from '../../support/fake-risk-assessment.js';
 import { TEST_CARD } from '../../support/fake-payments.js';
 import { appErrorOf } from '@getir/service-kit/testing';
-import { createOrderRequest } from '../../support/order-fixtures.js';
+import { createOrderRequest, draftRequest } from '../../support/order-fixtures.js';
 import { newDraftId, useOrderGrpcServer } from '../../support/order-grpc-harness.js';
 
 const risk = new FakeRiskAssessment();
@@ -19,11 +19,19 @@ beforeEach(() => {
   risk.band = RISK_BANDS.LOW;
 });
 
-async function createOrder(overrides: Partial<orderV1.CreateOrderRequest> = {}) {
-  const orderId = await newDraftId(call);
+/**
+ * Taslak + CreateOrder. Siparisi odeme bekler birakan test KENDI kullanicisini
+ * verir: kilit kullanicida kalir (B22, tek aktif kilit) ve ayni kullanicinin
+ * sonraki taslagi RESERVATION_ACTIVE alir.
+ */
+async function createOrder(
+  overrides: Partial<orderV1.CreateOrderRequest> = {},
+  userId = draftRequest.userId,
+) {
+  const orderId = await newDraftId(call, { ...draftRequest, userId });
   const result = await call(
     orderV1.OrderServiceService.createOrder,
-    createOrderRequest(orderId, overrides),
+    createOrderRequest(orderId, { userId, ...overrides }),
   );
   return { orderId, ...result };
 }
@@ -67,10 +75,26 @@ describe('CreateOrder', () => {
   it('MEDIUM bant: 3DS bekler, challengeId doner', async () => {
     risk.band = RISK_BANDS.MEDIUM;
 
-    const { response } = await createOrder();
+    const { response } = await createOrder({}, 'usr_3ds');
 
     expect(response?.status).toBe(orderV1.OrderStatus.ORDER_STATUS_AWAITING_PAYMENT);
     expect(response?.challengeId).toBe('tds_sahte_dogrulama');
+  });
+
+  it('odeme bekleyen siparisi olan kullanici yeni sepet kilitleyemez: ALREADY_EXISTS + RESERVATION_ACTIVE (B22)', async () => {
+    risk.band = RISK_BANDS.MEDIUM;
+    const { orderId } = await createOrder({}, 'usr_bekleyen');
+
+    const { error } = await call(orderV1.OrderServiceService.createDraftOrder, {
+      ...draftRequest,
+      userId: 'usr_bekleyen',
+    });
+
+    expect(error?.code).toBe(GRPC_STATUS.ALREADY_EXISTS);
+    expect(appErrorOf(error)).toEqual({
+      code: ERROR_CODES.RESERVATION_ACTIVE,
+      details: { activeOrderId: orderId },
+    });
   });
 
   it('MEDIUM + kapida odeme: FAILED_PRECONDITION + PAYMENT_METHOD_NOT_ALLOWED', async () => {

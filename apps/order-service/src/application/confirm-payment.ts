@@ -20,11 +20,12 @@ import type { OrderRepository } from '../domain/order-repository.js';
 import { assertTransition } from '../domain/order-state-machine.js';
 import type { Order } from '../domain/order.js';
 import { findOwnOrder } from './own-order.js';
-import { markPaymentFailed, settleOrderPayment } from './payment-step.js';
+import { failPayment, settleOrderPayment } from './payment-step.js';
+import type { StockStepDeps } from './stock-step.js';
 import type { Payments } from './payments.js';
 import type { RequestScope } from './request-scope.js';
 
-export interface ConfirmPaymentDeps {
+export interface ConfirmPaymentDeps extends StockStepDeps {
   readonly repository: Pick<OrderRepository, 'findById' | 'update'>;
   readonly payments: Payments;
   /** Telafi komutu icin (payment-step.ts). */
@@ -59,7 +60,7 @@ export function createConfirmPayment(deps: ConfirmPaymentDeps): ConfirmPayment {
       if (isClosedChallenge(error)) {
         // Siparis PAYMENT_FAILED yazilir; istemci payment-svc'nin hatasini
         // (kalan hak 0, sebep: expired / attempts_exhausted) aynen gorur.
-        await markPaymentFailed(deps, order, ERROR_CODES.THREEDS_FAILED);
+        await failPayment(deps, order, ERROR_CODES.THREEDS_FAILED, scope);
       }
       throw error;
     }

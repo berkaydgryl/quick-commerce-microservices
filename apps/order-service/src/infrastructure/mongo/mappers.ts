@@ -81,6 +81,14 @@ export function toOrderDocument(order: Order): OrderDocument {
     status: order.status,
     timeline: order.timeline.map(toTimelineEntryDocument),
     ...(order.riskBand === undefined ? {} : { riskBand: order.riskBand }),
+    ...(order.reservation === undefined
+      ? {}
+      : {
+          reservation: {
+            reservedAt: order.reservation.reservedAt,
+            expiresAt: order.reservation.expiresAt,
+          },
+        }),
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
     version: order.version,
@@ -99,6 +107,14 @@ export function fromOrderDocument(document: OrderDocument): Order {
     status: document.status,
     timeline: document.timeline.map(fromTimelineEntryDocument),
     ...(document.riskBand === undefined ? {} : { riskBand: document.riskBand }),
+    ...(document.reservation === undefined
+      ? {}
+      : {
+          reservation: {
+            reservedAt: document.reservation.reservedAt,
+            expiresAt: document.reservation.expiresAt,
+          },
+        }),
     createdAt: document.createdAt,
     updatedAt: document.updatedAt,
     version: document.version,

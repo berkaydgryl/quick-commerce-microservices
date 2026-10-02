@@ -31,12 +31,14 @@ import { buildOrderService, startEventPublishing } from './bootstrap.js';
 import type { OrderOutbox } from './domain/order-outbox.js';
 import {
   CATALOG_CALL_TIMEOUT_MS,
+  INVENTORY_CALL_TIMEOUT_MS,
   PAYMENT_CALL_TIMEOUT_MS,
   RISK_CALL_TIMEOUT_MS,
   SERVICE_NAME,
 } from './config/constants.js';
 import { loadServiceEnv } from './config/env.js';
 import { GrpcCatalogPricing } from './infrastructure/catalog/grpc-catalog-pricing.js';
+import { GrpcStockReservations } from './infrastructure/inventory/grpc-stock-reservations.js';
 import { openOrderStore } from './infrastructure/order-store.js';
 import { GrpcPayments } from './infrastructure/payment/grpc-payments.js';
 import { GrpcRiskAssessment } from './infrastructure/risk/grpc-risk-assessment.js';
@@ -102,6 +104,9 @@ const { handle, store, events } = await startOrExit(
     // payment kapaliysa CreateOrder SERVICE_UNAVAILABLE alir, acilis durmaz.
     const risk = new GrpcRiskAssessment(env.RISK_GRPC_ADDR, RISK_CALL_TIMEOUT_MS);
     const payments = new GrpcPayments(env.PAYMENT_GRPC_ADDR, PAYMENT_CALL_TIMEOUT_MS);
+    // Stok kilidi (T11.2): tembel baglanir; inventory kapaliysa taslak ve siparis
+    // SERVICE_UNAVAILABLE alir, acilis durmaz.
+    const stock = new GrpcStockReservations(env.INVENTORY_GRPC_ADDR, INVENTORY_CALL_TIMEOUT_MS);
     const server = await startGrpcServer({
       serviceName: SERVICE_NAME,
       host: env.GRPC_HOST,
@@ -110,7 +115,17 @@ const { handle, store, events } = await startOrExit(
       // Izler (D15): adres yoksa olusur ve tasinir, disari gonderilmez.
       otlpEndpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
       logger,
-      services: [buildOrderService({ logger, store: opened, catalog, risk, payments })],
+      services: [
+        buildOrderService({
+          logger,
+          store: opened,
+          catalog,
+          risk,
+          payments,
+          stock,
+          reservationTtlSeconds: env.RESERVATION_TTL_SECONDS,
+        }),
+      ],
       // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti
       // kesilmesin. Once giden istemci, veritabani EN SON (proje kurali).
       onShutdown: async () => {
@@ -120,6 +135,7 @@ const { handle, store, events } = await startOrExit(
         catalog.close();
         risk.close();
         payments.close();
+        stock.close();
         await opened.close();
       },
     });

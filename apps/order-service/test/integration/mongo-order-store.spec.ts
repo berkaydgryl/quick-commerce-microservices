@@ -20,8 +20,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { buildOrderService } from '../../src/bootstrap.js';
+import { DEFAULT_RESERVATION_TTL_SECONDS } from '../../src/config/constants.js';
 import { FakeCatalogPricing } from '../support/fake-catalog-pricing.js';
 import { FakePayments, TEST_CARD } from '../support/fake-payments.js';
+import { FakeStockReservations } from '../support/fake-stock-reservations.js';
 import { FakeRiskAssessment } from '../support/fake-risk-assessment.js';
 import { DRAFT_TOTAL_MINOR, draftRequest } from '../support/order-fixtures.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
@@ -99,6 +101,7 @@ describe('gRPC -> Mongo (T4.5 bitti sayilir: siparis Mongo da gorulur)', () => {
           catalog: new FakeCatalogPricing(),
           risk: new FakeRiskAssessment(),
           payments: new FakePayments(),
+          stock: new FakeStockReservations(),
         }),
       ],
     });
@@ -153,13 +156,26 @@ describe('gRPC -> Mongo (T4.5 bitti sayilir: siparis Mongo da gorulur)', () => {
       },
     });
     expect(document?.['pricing']).not.toHaveProperty('couponCode');
-    expect(document?.['timeline']).toMatchObject([
-      { status: 'DRAFT' },
-      { status: 'RISK_CHECK' },
-      { status: 'RESERVED', note: 'PENDING_RESERVATION' },
-      { status: 'AWAITING_PAYMENT' },
-      { status: 'PAID' },
+    // Hicbir adimda not yok (strict): RESERVED artik PENDING_RESERVATION yazmaz (T11.2).
+    const timeline = z
+      .array(z.object({ status: z.string(), at: z.date() }).strict())
+      .parse(document?.['timeline']);
+    expect(timeline.map((entry) => entry.status)).toEqual([
+      'DRAFT',
+      'RISK_CHECK',
+      'RESERVED',
+      'AWAITING_PAYMENT',
+      'PAID',
     ]);
+    // Stok kilidi taslakla ayni belgede (T11.2); PAID'de de iz olarak durur.
+    // Omur: bitis ani inventory'nin (kilit aninda), baslangic order'in saati.
+    const reservation = z
+      .object({ reservedAt: z.date(), expiresAt: z.date() })
+      .strict()
+      .parse(document?.['reservation']);
+    const lifetimeMs = reservation.expiresAt.getTime() - reservation.reservedAt.getTime();
+    expect(lifetimeMs).toBeLessThanOrEqual(DEFAULT_RESERVATION_TTL_SECONDS * 1000);
+    expect(lifetimeMs).toBeGreaterThan(DEFAULT_RESERVATION_TTL_SECONDS * 1000 - 5_000);
 
     // Ayni kayit GetOrder ve ListMyOrders ile de okunur (servis yeniden baslasa da).
     const got = await call(orderV1.OrderServiceService.getOrder, { orderId, userId: 'usr_grpc' });

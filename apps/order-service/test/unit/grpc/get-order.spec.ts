@@ -6,7 +6,11 @@ import { GRPC_STATUS } from '@getir/core';
 import { commonV1, orderV1 } from '@getir/proto';
 import { describe, expect, it } from 'vitest';
 
-import { DRAFT_TOTAL_MINOR } from '../../support/order-fixtures.js';
+import {
+  cancelOrderRequest,
+  DRAFT_TOTAL_MINOR,
+  draftRequest,
+} from '../../support/order-fixtures.js';
 import { newDraftId, useOrderGrpcServer } from '../../support/order-grpc-harness.js';
 
 const call = useOrderGrpcServer();
@@ -49,6 +53,23 @@ describe('GetOrder', () => {
       discount: { amountMinor: 0, currency: 'TRY' },
       total: { amountMinor: DRAFT_TOTAL_MINOR, currency: 'TRY' },
     });
+  });
+
+  it('stok kilidinin bitis ani yalnizca kilit canliyken doner; iptalden sonra BOS (T11.2)', async () => {
+    const draft = { ...draftRequest, userId: 'usr_kilit' };
+    const orderId = await newDraftId(call, draft);
+    const read = async () =>
+      (await call(orderV1.OrderServiceService.getOrder, { orderId, userId: 'usr_kilit' })).response
+        ?.order;
+
+    expect((await read())?.reservationExpiresAt).toBeInstanceOf(Date);
+
+    await call(
+      orderV1.OrderServiceService.cancelOrder,
+      cancelOrderRequest(orderId, { userId: 'usr_kilit' }),
+    );
+
+    expect((await read())?.reservationExpiresAt).toBeUndefined();
   });
 
   it('baskasinin siparisi NOT_FOUND (PERMISSION_DENIED degil)', async () => {

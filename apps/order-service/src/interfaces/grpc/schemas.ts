@@ -27,6 +27,7 @@ import { PAYMENT_METHOD } from '../../domain/checkout-payment.js';
 import type { PaymentMethod } from '../../domain/checkout-payment.js';
 import type { CheckoutSignals } from '../../domain/checkout-risk.js';
 import type { OrderHistoryCursor } from '../../domain/order-history-cursor.js';
+import { SYSTEM_CANCELLATION_NOTES } from '../../domain/stock-reservation.js';
 
 import { MAX_CANCEL_REASON_LENGTH, MAX_SIGNAL_TEXT_LENGTH } from '../../config/constants.js';
 import { decodePageToken } from './page-token.js';
@@ -230,12 +231,17 @@ export const confirmPaymentRequestSchema = z.object({
 /**
  * Iptal gerekcesi ANAHTARI (metin degil): zaman cizelgesine ve outbox
  * olayina yazilir, istemci kullanici diline cevirir. Bos = gerekce yok.
+ *
+ * Sistemin iptal notlari (stok yetmedi, sure doldu, sepet yenilendi) kullaniciya
+ * KAPALI: risk gecmisi o notla iptali saymaz (T11.2); kullanici kendi iptalini
+ * boyle gizleyemez.
  */
 const cancelReason = z
   .string()
   .trim()
   .max(MAX_CANCEL_REASON_LENGTH)
   .regex(/^[A-Z0-9_]*$/, 'gerekce buyuk harf, rakam ve alt cizgiden olusan bir anahtar olmali')
+  .refine((value) => !SYSTEM_CANCELLATION_NOTES.includes(value), 'bu gerekce sisteme ayrilmis')
   .transform((value) => (value === '' ? undefined : value));
 
 export const cancelOrderRequestSchema = z.object({

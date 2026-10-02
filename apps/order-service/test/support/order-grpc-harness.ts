@@ -15,11 +15,13 @@ import { afterAll, beforeAll } from 'vitest';
 import type { CatalogPricing } from '../../src/application/catalog-pricing.js';
 import type { Payments } from '../../src/application/payments.js';
 import type { RiskAssessment } from '../../src/application/risk-assessment.js';
+import type { StockReservations } from '../../src/application/stock-reservations.js';
 import { buildOrderService } from '../../src/bootstrap.js';
 import type { OrderPorts } from '../../src/bootstrap.js';
 import { FakeCatalogPricing } from './fake-catalog-pricing.js';
 import { FakePayments } from './fake-payments.js';
 import { FakeRiskAssessment } from './fake-risk-assessment.js';
+import { FakeStockReservations } from './fake-stock-reservations.js';
 import { draftRequest } from './order-fixtures.js';
 
 /** Sunucunun dis bagimliliklari; verilmeyen sahtesiyle kurulur. */
@@ -27,6 +29,7 @@ export interface OrderServerDeps {
   readonly catalog?: CatalogPricing;
   readonly risk?: RiskAssessment;
   readonly payments?: Payments;
+  readonly stock?: StockReservations;
   /** Siparis portlari; verilmezse sunucunun kendi bellek deposu (D16 testi depoyu okur). */
   readonly store?: OrderPorts;
 }
@@ -40,6 +43,7 @@ export function useOrderGrpcServer(deps: OrderServerDeps = {}): UnaryCall {
   const catalog = deps.catalog ?? new FakeCatalogPricing();
   const risk = deps.risk ?? new FakeRiskAssessment();
   const payments = deps.payments ?? new FakePayments();
+  const stock = deps.stock ?? new FakeStockReservations();
   let server: TestGrpcServer | undefined;
 
   beforeAll(async () => {
@@ -50,6 +54,7 @@ export function useOrderGrpcServer(deps: OrderServerDeps = {}): UnaryCall {
           catalog,
           risk,
           payments,
+          stock,
           ...(deps.store === undefined ? {} : { store: deps.store }),
         }),
       ],

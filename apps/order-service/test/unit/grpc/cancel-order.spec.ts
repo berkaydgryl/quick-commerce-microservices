@@ -49,6 +49,21 @@ describe('CancelOrder', () => {
     expect(error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
   });
 
+  it.each(['STOCK_INSUFFICIENT', 'RESERVATION_EXPIRED', 'CART_REPLACED'])(
+    'sistemin iptal notu (%s) kullanici gerekcesi olamaz: risk gecmisinden iptal gizlenmesin',
+    async (reason) => {
+      const orderId = await newDraftId(call);
+
+      const { error } = await call(
+        orderV1.OrderServiceService.cancelOrder,
+        cancelOrderRequest(orderId, { reason }),
+      );
+
+      expect(error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
+      expect(Object.keys(appErrorOf(error)?.details as object)).toEqual(['reason']);
+    },
+  );
+
   it('baskasinin siparisi NOT_FOUND', async () => {
     const orderId = await newDraftId(call);
 

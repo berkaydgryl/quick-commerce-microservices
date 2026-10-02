@@ -29,8 +29,8 @@ describe('CreateDraftOrder', () => {
     expect(error).toBeUndefined();
     expect(response?.orderId).toMatch(/^ord_[0-9a-f]{32}$/);
     expect(response?.status).toBe(orderV1.OrderStatus.ORDER_STATUS_DRAFT);
-    // Stok henuz kilitlenmiyor: rezervasyon bitis ani BOS olmali.
-    expect(response?.reservationExpiresAt).toBeUndefined();
+    // Stok taslakta kilitlenir (T11.2): bitis ani istemcinin geri sayimidir.
+    expect(response?.reservationExpiresAt).toBeInstanceOf(Date);
   });
 
   it('bos sepeti INVALID_ARGUMENT ile reddeder', async () => {

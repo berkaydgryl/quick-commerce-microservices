@@ -24,6 +24,7 @@ import type { CorrelationSource } from '../../domain/order-outbox.js';
 import type { OrderRepository } from '../../domain/order-repository.js';
 import { orderAlreadyExists, orderVersionConflict } from '../../domain/order-repository.js';
 import type { Order } from '../../domain/order.js';
+import { SYSTEM_CANCELLATION_NOTES } from '../../domain/stock-reservation.js';
 import type { OutboxDocument } from './documents.js';
 import { fromOrderDocument, toOrderDocument } from './mappers.js';
 import type { OrdersCollection } from './orders-collection.js';
@@ -114,10 +115,12 @@ export class OrderMongoStore implements OrderRepository, OrderHistoryReader {
   }
 
   async riskHistory(userId: string): Promise<RiskHistory> {
-    const byStatus = await this.orders.countAndSumByStatus(userId, [
-      ORDER_STATUS.DELIVERED,
-      ORDER_STATUS.CANCELLED,
-    ]);
+    const byStatus = await this.orders.countAndSumByStatus(
+      userId,
+      [ORDER_STATUS.DELIVERED, ORDER_STATUS.CANCELLED],
+      // Sistemin taslak iptalleri kullanici davranisi degil (T11.2).
+      { excludeCancellationNotes: SYSTEM_CANCELLATION_NOTES },
+    );
     const delivered = byStatus.get(ORDER_STATUS.DELIVERED);
     return toRiskHistory(
       delivered?.count ?? 0,

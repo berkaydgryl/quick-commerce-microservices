@@ -44,6 +44,28 @@ export const DEFAULT_PAYMENT_GRPC_ADDR = 'localhost:50054';
 export const RISK_CALL_TIMEOUT_MS = 1_000;
 export const PAYMENT_CALL_TIMEOUT_MS = 3_000;
 
+/** Stok servisinin varsayilan adresi (roadmap port haritasi: inventory 50052). */
+export const DEFAULT_INVENTORY_GRPC_ADDR = 'localhost:50052';
+
+/**
+ * order -> inventory cagrisinin sure siniri (ms), T11.2. Reserve/Commit/Release
+ * tek Lua script'i (milisaniyeler); 1 sn risk cagrisiyla ayni. CreateOrder'in
+ * basarili yolunda risk + odeme + kesinlestirme ardisik calisir ve sinirlarin
+ * toplami (1 + 3 + 1 sn) gateway'in 5 sn'sine ESITTIR: uc cagri da sinirina yakin
+ * surerse gateway once keser. Zarar yok: siparis AWAITING_PAYMENT kalir, ayni
+ * istegin tekrari cekimin ilk sonucunu alir (idempotent) ve kesinlestirmeyi yeniden
+ * dener; para iki kez cekilmez, stok iki kez dusmez.
+ */
+export const INVENTORY_CALL_TIMEOUT_MS = 1_000;
+
+/**
+ * Stok kilidinin omru (sn), RESERVATION_TTL_SECONDS. Sinirlar inventory'nin
+ * kabul ettigiyle ayni (30-900); banda gore kisaltma (orta risk 120 sn) T11.3.
+ */
+export const DEFAULT_RESERVATION_TTL_SECONDS = 600;
+export const MIN_RESERVATION_TTL_SECONDS = 30;
+export const MAX_RESERVATION_TTL_SECONDS = 900;
+
 /**
  * Gateway'in doldurdugu risk sinyali metinlerinin (IP, sehir, cihaz kimligi)
  * en uzun hali (T7.5). Deger yorumlanmaz, risk-svc'ye tasinir; sinir yalnizca

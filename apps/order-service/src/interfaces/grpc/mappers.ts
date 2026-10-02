@@ -30,6 +30,13 @@ const STATUS_TO_PROTO: Readonly<Record<OrderStatus, orderV1.OrderStatus>> = {
   [ORDER_STATUS.DELIVERED]: orderV1.OrderStatus.ORDER_STATUS_DELIVERED,
 };
 
+/** Stok kilidinin canli oldugu durumlar (geri sayim yalnizca bunlarda). */
+const RESERVATION_HOLDING_STATUSES: ReadonlySet<OrderStatus> = new Set([
+  ORDER_STATUS.DRAFT,
+  ORDER_STATUS.RESERVED,
+  ORDER_STATUS.AWAITING_PAYMENT,
+]);
+
 const UNIT_TO_PROTO: Readonly<Record<ItemUnit, commonV1.Unit>> = {
   [ITEM_UNIT.UNSPECIFIED]: commonV1.Unit.UNIT_UNSPECIFIED,
   [ITEM_UNIT.PIECE]: commonV1.Unit.UNIT_PIECE,
@@ -64,9 +71,11 @@ function toProtoTimelineEntry(entry: TimelineEntry): orderV1.OrderTimelineEntry 
 /**
  * Siparis -> proto Order. Kalemler ve tutar taslakta dondurulmus degerlerdir (T7.2).
  *
- * BILEREK BOS BIRAKILANLAR (sozlesme bunlara izin verir, uydurma deger yazilmaz):
- *   - reservation_expires_at: stok rezervasyonu T11.2'de.
- *   - dark_store_id: kullanimdan kalkti (ADR-15); yerini market_id aldi.
+ * reservation_expires_at yalnizca stok KILITLIYKEN dolu (T11.2): DRAFT, RESERVED,
+ * AWAITING_PAYMENT. Odenen, iptal edilen ya da reddedilen sipariste kilit yok;
+ * eski an istemciye geri sayim gibi gorunmesin diye yazilmaz.
+ *
+ * BILEREK BOS: dark_store_id kullanimdan kalkti (ADR-15); yerini market_id aldi.
  */
 export function toProtoOrder(order: Order): orderV1.Order {
   return {
@@ -85,5 +94,8 @@ export function toProtoOrder(order: Order): orderV1.Order {
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
     timeline: order.timeline.map(toProtoTimelineEntry),
+    ...(order.reservation !== undefined && RESERVATION_HOLDING_STATUSES.has(order.status)
+      ? { reservationExpiresAt: order.reservation.expiresAt }
+      : {}),
   };
 }

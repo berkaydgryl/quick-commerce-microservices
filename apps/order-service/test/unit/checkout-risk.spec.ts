@@ -58,7 +58,7 @@ describe('assertPaymentMethodAllowed', () => {
 });
 
 describe('applyRiskDecision', () => {
-  it('gecen karar: RISK_CHECK (bant yazilir) -> RESERVED (PENDING_RESERVATION) -> AWAITING_PAYMENT', () => {
+  it('gecen karar: RISK_CHECK (bant yazilir) -> RESERVED -> AWAITING_PAYMENT; stok taslakta kilitli, not yok (T11.2)', () => {
     const order = applyRiskDecision(draft(), RISK_BANDS.LOW, decideRisk(RISK_BANDS.LOW), clock);
 
     expect(order.status).toBe(ORDER_STATUS.AWAITING_PAYMENT);
@@ -67,7 +67,7 @@ describe('applyRiskDecision', () => {
     expect(order.timeline.map((entry) => entry.note)).toEqual([
       undefined,
       undefined,
-      'PENDING_RESERVATION',
+      undefined,
       undefined,
     ]);
   });

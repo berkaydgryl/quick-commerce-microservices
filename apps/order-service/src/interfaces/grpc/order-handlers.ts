@@ -63,10 +63,14 @@ export function createOrderImplementation(deps: OrderHandlerDeps): UntypedServic
           { requestId: ctx.requestId, logger: ctx.logger },
         );
 
-        // reservationExpiresAt BOS: stok henuz kilitlenmiyor (T11.2). Sozlesme
-        // "yalnizca RESERVED/AWAITING_PAYMENT durumlarinda doludur" diyor;
-        // DRAFT icin bos birakmak dogru davranis.
-        return { orderId: order.id, status: toProtoOrderStatus(order.status) };
+        // Geri sayimin bitecegi an (T11.2): stok taslak acilirken kilitlendi.
+        return {
+          orderId: order.id,
+          status: toProtoOrderStatus(order.status),
+          ...(order.reservation === undefined
+            ? {}
+            : { reservationExpiresAt: order.reservation.expiresAt }),
+        };
       },
     }),
 
@@ -145,8 +149,11 @@ export function createOrderImplementation(deps: OrderHandlerDeps): UntypedServic
       name: 'CancelOrder',
       schema: cancelOrderRequestSchema,
       ...(logger === undefined ? {} : { logger }),
-      handle: async (input): Promise<orderV1.CancelOrderResponse> => {
-        const order = await deps.cancelOrder(input);
+      handle: async (input, ctx): Promise<orderV1.CancelOrderResponse> => {
+        const order = await deps.cancelOrder(input, {
+          requestId: ctx.requestId,
+          logger: ctx.logger,
+        });
         return { status: toProtoOrderStatus(order.status) };
       },
     }),
