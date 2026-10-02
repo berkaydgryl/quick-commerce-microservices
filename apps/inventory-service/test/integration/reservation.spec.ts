@@ -16,6 +16,8 @@
  *      birakmanin yarisi (tam biri kazanir, B3/B4).
  *  10. Supurucu (T10.3): liderlik kilidi (leader.lua), sure dolumu izi,
  *      supurucu ile onayin yarisi, lider coktugunde devralma (B25).
+ *  11. Uzatma ve kisaltma (T11.3): kayit, indeks ve kullanici kilidi birlikte
+ *      hareket eder; hak siniri es zamanli uzatmada da tutar; eskimis on okuma.
  */
 
 import { ERROR_CODES, GRPC_STATUS, silentLogger, systemClock } from '@getir/core';
@@ -71,6 +73,8 @@ let reservations: RedisReservationStore;
 let releaseScript: LuaScript;
 let commitScript: LuaScript;
 let leaderScript: LuaScript;
+let extendScript: LuaScript;
+let shortenScript: LuaScript;
 const loadLines: LogLine[] = [];
 
 beforeAll(async () => {
@@ -84,12 +88,16 @@ beforeAll(async () => {
   releaseScript = scripts.get(LUA_SCRIPTS.RELEASE);
   commitScript = scripts.get(LUA_SCRIPTS.COMMIT);
   leaderScript = scripts.get(LUA_SCRIPTS.LEADER);
+  extendScript = scripts.get(LUA_SCRIPTS.EXTEND);
+  shortenScript = scripts.get(LUA_SCRIPTS.SHORTEN);
   reservations = new RedisReservationStore(
     connection.redis,
     {
       reserve: scripts.get(LUA_SCRIPTS.RESERVE),
       release: scripts.get(LUA_SCRIPTS.RELEASE),
       commit: scripts.get(LUA_SCRIPTS.COMMIT),
+      extend: scripts.get(LUA_SCRIPTS.EXTEND),
+      shorten: scripts.get(LUA_SCRIPTS.SHORTEN),
     },
     {
       holdAfterExpiryMs: RESERVATION_HOLD_AFTER_EXPIRY_MS,
@@ -645,6 +653,143 @@ describe('supurucu (T10.3)', () => {
     }
     // Kapanista lider kilidi birakti: bir sonraki ornek beklemeden alir.
     expect(await connection.redis.exists(RECONCILE_LOCK_KEY)).toBe(0);
+  });
+});
+
+describe('uzatma ve kisaltma (extend.lua, shorten.lua, T11.3)', () => {
+  beforeEach(() => seed({ 'SUT-1L': 5, 'KOLA-1L': 3 }));
+
+  const ADD_MS = 60_000;
+  const extend = (order: number, nowMs = systemClock.now(), maxExtensions = 3) =>
+    reservations.extend({
+      orderId: orderId(order),
+      marketId: MARKET,
+      nowMs,
+      additionalMs: ADD_MS,
+      maxExtensions,
+    });
+  const shorten = (order: number, maxRemainingMs: number, nowMs = systemClock.now()) =>
+    reservations.shorten({ orderId: orderId(order), marketId: MARKET, nowMs, maxRemainingMs });
+  const timing = async (order: number, user: number) => ({
+    expiresAt: await connection.redis.hget(reservationKey(MARKET, orderId(order)), 'expiresAt'),
+    extended: await connection.redis.hget(reservationKey(MARKET, orderId(order)), 'extended'),
+    score: await connection.redis.zscore(reservationIndexKey(MARKET), orderId(order)),
+    hashTtl: await connection.redis.pttl(reservationKey(MARKET, orderId(order))),
+    userTtl: await connection.redis.pttl(userReservationKey(userId(user))),
+  });
+
+  it('uzatma uc yeri BIRLIKTE ileri alir: hash alani ve omru, indeks skoru, kullanici kilidinin omru', async () => {
+    const nowMs = systemClock.now();
+    await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 1 }], nowMs);
+
+    await extend(1, nowMs);
+
+    const after = await timing(1, 1);
+    const expiresAt = nowMs + TTL_MS + ADD_MS;
+    expect(after).toMatchObject({
+      expiresAt: String(expiresAt),
+      extended: '1',
+      score: String(expiresAt),
+    });
+    expect(after.hashTtl).toBeGreaterThan(
+      TTL_MS + ADD_MS + RESERVATION_HOLD_AFTER_EXPIRY_MS - TTL_TOLERANCE_MS,
+    );
+    expect(after.hashTtl).toBeLessThanOrEqual(TTL_MS + ADD_MS + RESERVATION_HOLD_AFTER_EXPIRY_MS);
+    expect(after.userTtl).toBeGreaterThan(TTL_MS + ADD_MS - TTL_TOLERANCE_MS);
+    expect(after.userTtl).toBeLessThanOrEqual(TTL_MS + ADD_MS);
+  });
+
+  it('hak bitince (limit) ve bitis gecmisken (due) HICBIR sey yazilmaz', async () => {
+    const nowMs = systemClock.now();
+    await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 1 }], nowMs);
+    await extend(1, nowMs, 1);
+    const before = await timing(1, 1);
+
+    expect((await extend(1, nowMs, 1)).status).toBe('limit-reached');
+    const afterLimit = await timing(1, 1);
+    expect(afterLimit).toMatchObject({
+      expiresAt: before.expiresAt,
+      extended: '1',
+      score: before.score,
+    });
+
+    expect(await extend(1, nowMs + TTL_MS + 2 * ADD_MS)).toEqual({
+      status: 'inactive',
+      reason: 'due',
+    });
+    expect(await timing(1, 1)).toMatchObject({ extended: '1', score: before.score });
+  });
+
+  it('ayni rezervasyona 10 es zamanli uzatma: tam 3 tanesi uzatir (hak 3), bitis tam 3 x sure ileri', async () => {
+    const nowMs = systemClock.now();
+    await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 1 }], nowMs);
+
+    const outcomes = await Promise.all(Array.from({ length: 10 }, () => extend(1, nowMs)));
+
+    expect(outcomes.filter((outcome) => outcome.status === 'extended')).toHaveLength(3);
+    expect(outcomes.filter((outcome) => outcome.status === 'limit-reached')).toHaveLength(7);
+    expect(await timing(1, 1)).toMatchObject({
+      expiresAt: String(nowMs + TTL_MS + 3 * ADD_MS),
+      extended: '3',
+    });
+  });
+
+  it('kisaltma uc yeri BIRLIKTE geri alir; zaten kisaysa (unchanged) hicbir sey yazilmaz', async () => {
+    const nowMs = systemClock.now();
+    await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 1 }], nowMs);
+    const capMs = 120_000;
+
+    await shorten(1, capMs, nowMs);
+    const after = await timing(1, 1);
+    expect(after).toMatchObject({
+      expiresAt: String(nowMs + capMs),
+      extended: '0',
+      score: String(nowMs + capMs),
+    });
+    expect(after.hashTtl).toBeGreaterThan(
+      capMs + RESERVATION_HOLD_AFTER_EXPIRY_MS - TTL_TOLERANCE_MS,
+    );
+    expect(after.hashTtl).toBeLessThanOrEqual(capMs + RESERVATION_HOLD_AFTER_EXPIRY_MS);
+    expect(after.userTtl).toBeGreaterThan(capMs - TTL_TOLERANCE_MS);
+    expect(after.userTtl).toBeLessThanOrEqual(capMs);
+
+    expect((await shorten(1, TTL_MS, nowMs)).status).toBe('unchanged');
+    expect(await timing(1, 1)).toMatchObject({ expiresAt: String(nowMs + capMs) });
+  });
+
+  it('eskimis on okuma (kullanici farkli) stale: uzatma da kisaltma da HICBIR sey yazmaz', async () => {
+    const nowMs = systemClock.now();
+    await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 1 }], nowMs);
+    const keys = [
+      reservationKey(MARKET, orderId(1)),
+      reservationIndexKey(MARKET),
+      userReservationKey(userId(2)),
+    ];
+
+    expect(await extendScript.run(keys, [orderId(1), userId(2), nowMs, ADD_MS, 60_000, 3])).toEqual(
+      ['stale'],
+    );
+    expect(await shortenScript.run(keys, [orderId(1), userId(2), nowMs, 1_000, 60_000])).toEqual([
+      'stale',
+    ]);
+    expect(await timing(1, 1)).toMatchObject({
+      expiresAt: String(nowMs + TTL_MS),
+      extended: '0',
+      score: String(nowMs + TTL_MS),
+    });
+  });
+
+  it('SCRIPT FLUSH sonrasi uzatma ve kisaltma calisir; kullanici kilidi beyanli (yuklemede bir kez bilgi)', async () => {
+    await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 1 }]);
+    await connection.redis.script('FLUSH');
+
+    expect((await extend(1)).status).toBe('extended');
+    expect((await shorten(1, 60_000)).status).toBe('shortened');
+    for (const script of [LUA_SCRIPTS.EXTEND, LUA_SCRIPTS.SHORTEN]) {
+      expect(
+        loadLines.filter((line) => line.level === 'info' && line.fields['script'] === script),
+      ).toHaveLength(1);
+    }
   });
 });
 

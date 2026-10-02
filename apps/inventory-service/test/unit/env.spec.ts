@@ -36,6 +36,19 @@ describe('stok servisi ortami (supurucu, T10.3)', () => {
   });
 });
 
+describe('stok servisi ortami: uzatma hakki (T11.3, B21)', () => {
+  it('verilmezse 3 (.env.example); 0 uzatmayi kapatir; 0-10 disi acilisi durdurur', () => {
+    expect(loadEnv(serviceSchema, {}).RESERVATION_MAX_EXTENSIONS).toBe(3);
+    expect(
+      loadEnv(serviceSchema, { RESERVATION_MAX_EXTENSIONS: '0' }).RESERVATION_MAX_EXTENSIONS,
+    ).toBe(0);
+    expect(() => loadEnv(serviceSchema, { RESERVATION_MAX_EXTENSIONS: '-1' })).toThrow(AppError);
+    expect(() => loadEnv(serviceSchema, { RESERVATION_MAX_EXTENSIONS: '11' })).toThrow(
+      /RESERVATION_MAX_EXTENSIONS/,
+    );
+  });
+});
+
 describe('stok servisi ortami: Mongo islem suresi (#51)', () => {
   afterEach(() => {
     vi.unstubAllEnvs();

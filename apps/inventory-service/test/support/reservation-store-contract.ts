@@ -1,7 +1,7 @@
 /**
- * Rezervasyon sozlesmesi (T10.1; birakma ve onay T10.2; sure dolumu T10.3):
- * bellek (MOCK) ve Redis (reserve.lua, release.lua, commit.lua) uygulamalari
- * AYNI senaryolardan gecer.
+ * Rezervasyon sozlesmesi (T10.1; birakma ve onay T10.2; sure dolumu T10.3;
+ * uzatma ve kisaltma T11.3): bellek (MOCK) ve Redis (reserve.lua, release.lua,
+ * commit.lua, extend.lua, shorten.lua) uygulamalari AYNI senaryolardan gecer.
  * Bellekteki birim testinde, Redis entegrasyon testinde kosar.
  *
  * Saat GERCEKTIR: Redis'te kullanici kilidi ve kayit gercek sureyle (PX,
@@ -419,6 +419,164 @@ export function describeReservationStoreContract(
       expect(await expire(2)).toMatchObject({ status: 'settled', settlement: 'committed' });
       expect(await counts(MARKET, ['KOLA-1L'])).toEqual({ 'KOLA-1L': 2 });
       expect(await expire(9)).toEqual({ status: 'absent' });
+    });
+
+    // ---------- uzatma ve kisaltma (T11.3, B21) ----------
+    const ONE_MINUTE_MS = 60_000;
+    const extend = (
+      order: number,
+      options: { additionalMs?: number; maxExtensions?: number; nowMs?: number } = {},
+    ) =>
+      stock.reservations.extend({
+        orderId: orderId(order),
+        marketId: MARKET,
+        nowMs: options.nowMs ?? systemClock.now(),
+        additionalMs: options.additionalMs ?? ONE_MINUTE_MS,
+        maxExtensions: options.maxExtensions ?? 3,
+      });
+    const shorten = (order: number, maxRemainingMs: number, nowMs = systemClock.now()) =>
+      stock.reservations.shorten({
+        orderId: orderId(order),
+        marketId: MARKET,
+        nowMs,
+        maxRemainingMs,
+      });
+
+    it('uzatma: bitis eklenen sure kadar ileri, sayac 1; kalemler SKU sirasinda doner', async () => {
+      const nowMs = systemClock.now();
+      await reserve(
+        1,
+        1,
+        [
+          { sku: 'SUT-1L', quantity: 2 },
+          { sku: 'KOLA-1L', quantity: 1 },
+        ],
+        { nowMs },
+      );
+
+      expect(await extend(1)).toEqual({
+        status: 'extended',
+        expiresAt: nowMs + TEN_MINUTES_MS + ONE_MINUTE_MS,
+        extensionCount: 1,
+        lines: [
+          { sku: 'KOLA-1L', quantity: 1 },
+          { sku: 'SUT-1L', quantity: 2 },
+        ],
+      });
+      expect(await counts(MARKET, ['SUT-1L', 'KOLA-1L'])).toEqual({ 'SUT-1L': 3, 'KOLA-1L': 2 });
+    });
+
+    it('hak sinirli (B21): ucuncu uzatmadan sonra sure DEGISMEZ, limit-reached; hak 0 ise hic uzamaz', async () => {
+      const nowMs = systemClock.now();
+      await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 1 }], { nowMs });
+      await extend(1);
+      await extend(1);
+      const third = await extend(1);
+
+      expect(third).toMatchObject({
+        status: 'extended',
+        expiresAt: nowMs + TEN_MINUTES_MS + 3 * ONE_MINUTE_MS,
+        extensionCount: 3,
+      });
+      expect(await extend(1)).toEqual({
+        status: 'limit-reached',
+        expiresAt: nowMs + TEN_MINUTES_MS + 3 * ONE_MINUTE_MS,
+        extensionCount: 3,
+      });
+
+      await reserve(2, 2, [{ sku: 'KOLA-1L', quantity: 1 }], { nowMs });
+      expect(await extend(2, { maxExtensions: 0 })).toEqual({
+        status: 'limit-reached',
+        expiresAt: nowMs + TEN_MINUTES_MS,
+        extensionCount: 0,
+      });
+    });
+
+    it('uzatilan rezervasyona sure dolumu DOKUNMAZ: eski bitis gecse de not-due, listDue bos', async () => {
+      const nowMs = systemClock.now();
+      await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 2 }], { nowMs, ttlMs: 5_000 });
+      await extend(1, { nowMs });
+      const afterOldExpiry = nowMs + 10_000;
+
+      expect(await stock.reservations.listDue(MARKET, afterOldExpiry, 10)).toEqual([]);
+      expect(
+        await stock.reservations.expire({
+          orderId: orderId(1),
+          marketId: MARKET,
+          nowMs: afterOldExpiry,
+        }),
+      ).toEqual({ status: 'not-due' });
+      expect(await counts(MARKET, ['SUT-1L'])).toEqual({ 'SUT-1L': 3 });
+    });
+
+    it('kullanici kilidi uzatmayla BIRLIKTE uzar: eski bitis gecince ayni kullanici ikinci kilit ACAMAZ (B22)', async () => {
+      await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 1 }], { ttlMs: SHORT_TTL_MS });
+      await extend(1, { additionalMs: 2_000 });
+      await sleep(AFTER_SHORT_TTL_MS);
+
+      expect(await reserve(2, 1, [{ sku: 'KOLA-1L', quantity: 1 }])).toEqual({
+        status: 'user-has-active',
+        activeOrderId: orderId(1),
+      });
+    });
+
+    it('bitis ani gecmis rezervasyon UZATILMAZ (due): dusmus kilit diriltilmez; supurucu yine birakir', async () => {
+      await expiredAgo(1, 1, [{ sku: 'SUT-1L', quantity: 2 }]);
+
+      expect(await extend(1)).toEqual({ status: 'inactive', reason: 'due' });
+      expect(await expire(1)).toMatchObject({ status: 'expired' });
+      expect(await counts(MARKET, ['SUT-1L'])).toEqual({ 'SUT-1L': 5 });
+    });
+
+    it('aktif olmayan uzatilmaz, kisaltilmaz: birakilmis ve onaylanmis settled, hic olmamis absent', async () => {
+      await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 1 }]);
+      await release(1);
+      await reserve(2, 2, [{ sku: 'KOLA-1L', quantity: 1 }]);
+      await commit(2);
+
+      expect(await extend(1)).toEqual({ status: 'inactive', reason: 'settled' });
+      expect(await extend(2)).toEqual({ status: 'inactive', reason: 'settled' });
+      expect(await extend(9)).toEqual({ status: 'inactive', reason: 'absent' });
+      expect(await shorten(1, ONE_MINUTE_MS)).toEqual({ status: 'inactive', reason: 'settled' });
+      expect(await shorten(9, ONE_MINUTE_MS)).toEqual({ status: 'inactive', reason: 'absent' });
+    });
+
+    it('kisaltma: kalan sure sinira iner; zaten kisaysa unchanged; ASLA uzatmaz', async () => {
+      const nowMs = systemClock.now();
+      await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 1 }], { nowMs });
+
+      expect(await shorten(1, 2 * ONE_MINUTE_MS, nowMs)).toEqual({
+        status: 'shortened',
+        expiresAt: nowMs + 2 * ONE_MINUTE_MS,
+      });
+      expect(await shorten(1, 5 * ONE_MINUTE_MS, nowMs)).toEqual({
+        status: 'unchanged',
+        expiresAt: nowMs + 2 * ONE_MINUTE_MS,
+      });
+      expect(await counts(MARKET, ['SUT-1L'])).toEqual({ 'SUT-1L': 4 });
+    });
+
+    it('kisaltilan rezervasyon yeni bitiste duser: kullanici kilidi de; supurucu birakir', async () => {
+      await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 2 }]);
+      await shorten(1, SHORT_TTL_MS);
+      await sleep(AFTER_SHORT_TTL_MS);
+
+      expect(await stock.reservations.listDue(MARKET, systemClock.now(), 10)).toEqual([orderId(1)]);
+      expect(await expire(1)).toMatchObject({ status: 'expired' });
+      expect((await reserve(2, 1, [{ sku: 'KOLA-1L', quantity: 1 }])).status).toBe('reserved');
+      expect(await counts(MARKET, ['SUT-1L'])).toEqual({ 'SUT-1L': 5 });
+    });
+
+    it('kisaltmadan sonra uzatma kisaltilmis bitise eklenir (orta bant + odeme denemesi)', async () => {
+      const nowMs = systemClock.now();
+      await reserve(1, 1, [{ sku: 'SUT-1L', quantity: 1 }], { nowMs });
+      await shorten(1, 2 * ONE_MINUTE_MS, nowMs);
+
+      expect(await extend(1, { nowMs })).toMatchObject({
+        status: 'extended',
+        expiresAt: nowMs + 3 * ONE_MINUTE_MS,
+        extensionCount: 1,
+      });
     });
 
     it('tekrar eden SKU depoya ulasirsa INTERNAL; hicbir sey yazilmaz (fazla satis olurdu)', async () => {

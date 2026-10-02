@@ -94,6 +94,8 @@ export async function openStockSource(
           reserve: scripts.get(LUA_SCRIPTS.RESERVE),
           release: scripts.get(LUA_SCRIPTS.RELEASE),
           commit: scripts.get(LUA_SCRIPTS.COMMIT),
+          extend: scripts.get(LUA_SCRIPTS.EXTEND),
+          shorten: scripts.get(LUA_SCRIPTS.SHORTEN),
         },
         {
           holdAfterExpiryMs: RESERVATION_HOLD_AFTER_EXPIRY_MS,

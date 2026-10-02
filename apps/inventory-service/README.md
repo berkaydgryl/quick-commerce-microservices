@@ -8,16 +8,17 @@ hareket eder.
 Bu serviste **olmayanlar**, bilinçli: ürün adı, fiyatı ve kategorisi `catalog-service`'in;
 sipariş durumu ve rezervasyon süresinin **ne kadar** olacağı `order-service`'in işidir.
 
-## Bugünkü durum (T9.1 + T9.2 + T10.1 + T10.2 + T10.3 + T11.1)
+## Bugünkü durum (T9.1 + T9.2 + T10.1 + T10.2 + T10.3 + T11.1 + T11.3)
 
-| RPC                 | Durum                                                                                                             |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `CheckAvailability` | ✅ Toplu (en fazla 100 SKU, B27): satılabilir adetler + `unknown_skus` (bu markette kaydı olmayan ya da biçimsiz) |
-| `Reserve`           | ✅ Sepetin tamamı tek atomik adımda ya da hiç (`reserve.lua`, T10.1); aşağıda                                     |
-| `Release`           | ✅ Rezervasyonu bırakır, adetler sayaca döner; stok defterine yazar (`release.lua`, T10.2 PR 1); aşağıda          |
-| `Commit`            | ✅ Onay: eldeki adet kalıcı düşer, defterde −adet (`commit.lua` + tek Mongo transaction'ı, T10.2 PR 2); aşağıda   |
-| `ExtendReservation` | ⏳ `NOT_IMPLEMENTED` — T11.3                                                                                      |
-| `GetReservation`    | ⏳ `NOT_IMPLEMENTED` — T10                                                                                        |
+| RPC                  | Durum                                                                                                             |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `CheckAvailability`  | ✅ Toplu (en fazla 100 SKU, B27): satılabilir adetler + `unknown_skus` (bu markette kaydı olmayan ya da biçimsiz) |
+| `Reserve`            | ✅ Sepetin tamamı tek atomik adımda ya da hiç (`reserve.lua`, T10.1); aşağıda                                     |
+| `Release`            | ✅ Rezervasyonu bırakır, adetler sayaca döner; stok defterine yazar (`release.lua`, T10.2 PR 1); aşağıda          |
+| `Commit`             | ✅ Onay: eldeki adet kalıcı düşer, defterde −adet (`commit.lua` + tek Mongo transaction'ı, T10.2 PR 2); aşağıda   |
+| `ExtendReservation`  | ✅ Bitişi ileri alır, en çok 3 kez; her uzatma defterde (`extend.lua`, T11.3, B21); aşağıda                       |
+| `ShortenReservation` | ✅ Kalan süreyi indirir, asla uzatmaz (`shorten.lua`, T11.3: orta risk bandı 2 dk); aşağıda                       |
+| `GetReservation`     | ⏳ `NOT_IMPLEMENTED` — T10                                                                                        |
 
 ## Stok nerede durur (ADR-03)
 
@@ -76,8 +77,7 @@ giremez: kısmi rezervasyon imkânsızdır. Rezervasyonun kimliği siparişin ki
 - **Saat:** "şimdi" servisin saatidir (`Clock`); testler sabit saat verir.
 - **MOCK** (B16): bellekte aynı kurallar; sayaçlar ve rezervasyonlar aynı haritayı paylaşır, rezervasyon
   müsaitlikte hemen görünür. İki uygulama da `test/support/reservation-store-contract.ts` senaryolarından geçer.
-- **Henüz yok:** uzatma (`ExtendReservation`, T11.3); order'ın `Reserve`'ü çağırması (T11.2). Bırakma, onay
-  ve süre dolumu (süpürücü) geldi (aşağıda).
+- Bırakma, onay, süre dolumu (süpürücü), uzatma ve kısaltma aşağıda; order taslakta `Reserve`'ü çağırır (T11.2).
 
 ## Stok yarışı (T11.1)
 
@@ -198,6 +198,30 @@ Süresi dolan rezervasyonun stoğunu geri verir. Keyspace notification kullanıl
   (düşen tur). Uç `localhost:51052/metrics`. Sağlık durumu (health) süpürücüye bağlı değil (bekleyen iş #12).
 - **MOCK** (B16): süpürücü bellekte aynı kurallarla; tek süreç, kilit hep bizde.
 
+## Uzatma ve kısaltma (T11.3, B21)
+
+Kilidi order taslak açılırken alır (T11.2, 10 dk); risk ise ödeme adımında sorulur. İki RPC kilidin süresini
+sonradan ayarlar. Süreyi order verir; inventory yalnızca sınırları korur.
+
+- **`ExtendReservation`** (`lua/extend.lua`): bitişi `additional_seconds` (1-300) kadar ileri alır. Ödeme ya da
+  3DS denemesi kilit düşmeden bitsin diye order denemeden **önce** çağırır.
+  - **Hak sınırlı** (B21): rezervasyon başına en çok `RESERVATION_MAX_EXTENSIONS` kez (varsayılan 3, 0 kapatır).
+    Sayaç kaydın `extended` alanında. Hak bitince süre **değişmez**, `already_extended: true` (hata değil).
+  - **Defter:** her uzatma kalem başına bir `extend` kaydı (`delta: 0`, gerekçe `payment_attempt`,
+    `sequence` 1..3; kimlik `sipariş/sku/extend-sıra`). Sipariş sonucu değildir. Defter yazılamazsa uzatma
+    geçerli kalır, uyarı yazılır: hata dönmek order'ın tekrar denerken bir hakkı boşa yakmasına yol açardı.
+- **`ShortenReservation`** (`lua/shorten.lua`): kalan süreyi en çok `max_remaining_seconds`'e (30-900) indirir.
+  Kalan süre zaten kısaysa dokunmaz (`shortened: false`); **asla uzatmaz**. Defter yazılmaz (stok hareket
+  etmedi; karar order'ın kaydında, risk bandı).
+- **Üç yer birlikte:** kayıt (`expiresAt` alanı ve ömrü), süre indeksi (skor) ve kullanıcı kilidi (yalnızca bu
+  siparişinse). İndeks geride kalsaydı süpürücü uzatılmış kilidi bırakırdı; kullanıcı kilidi geride kalsaydı
+  aynı kullanıcı ikinci kilit açardı (B22).
+- **Aktif değilse** (bırakılmış, onaylanmış, hiç olmamış ya da bitiş anı geçmiş): `FAILED_PRECONDITION` /
+  `RESERVATION_EXPIRED`, ayrıntıda `reason`. Bitiş anı geçmiş ama süpürücünün henüz bırakmadığı kilit de
+  **uzatılmaz**: düşmüş kilit diriltilirse ödeme, süpürücünün her an bırakabileceği stokla alınırdı.
+- **Eşzamanlılık:** aynı rezervasyona 10 eşzamanlı uzatmadan tam 3'ü uzatır (script atomik).
+- **MOCK** (B16): bellekte aynı kurallar; iki uygulama aynı sözleşme senaryolarından geçer.
+
 ## Redis boşalınca (T10.1 PR 2, ADR-17)
 
 Redis boşalırsa (FLUSHALL, kalıcılık olmadan yeniden başlatma) sayaçların tamamı gider. Servis bunu
@@ -282,10 +306,11 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/inventory/v1/i
 ## Klasörler
 
 ```text
-lua/               reserve.lua (T10.1), release.lua ve commit.lua (T10.2), leader.lua (T10.3); imaja
-                   package.json "files" ile girer
+lua/               reserve.lua (T10.1), release.lua ve commit.lua (T10.2), leader.lua (T10.3),
+                   extend.lua ve shorten.lua (T11.3); imaja package.json "files" ile girer
 src/
   application/     check-availability, reserve-stock, release-reservation, commit-reservation,
+                   extend-reservation, shorten-reservation, inactive-reservation (T11.3),
                    reservation-result, sweep-expired, seed-stock, seed-counters, counter-recovery,
                    check-ledger
   domain/          stock.ts, reservation.ts, stock-ledger.ts, stock-ports.ts, leader-lock.ts: kavramlar ve

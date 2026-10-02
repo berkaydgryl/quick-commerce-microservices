@@ -13,19 +13,25 @@ import type { UntypedServiceImplementation } from '@grpc/grpc-js';
 
 import type { CheckAvailability } from '../../application/check-availability.js';
 import type { CommitReservation } from '../../application/commit-reservation.js';
+import type { ExtendReservation } from '../../application/extend-reservation.js';
 import type { ReleaseReservation } from '../../application/release-reservation.js';
 import type { ReserveStock } from '../../application/reserve-stock.js';
+import type { ShortenReservation } from '../../application/shorten-reservation.js';
 import {
   toCheckAvailabilityResponse,
   toCommitResponse,
+  toExtendResponse,
   toReleaseResponse,
   toReserveResponse,
+  toShortenResponse,
 } from './mappers.js';
 import {
   checkAvailabilityRequestSchema,
   commitRequestSchema,
+  extendRequestSchema,
   releaseRequestSchema,
   reserveRequestSchema,
+  shortenRequestSchema,
 } from './schemas.js';
 
 export interface InventoryHandlerDeps {
@@ -33,6 +39,8 @@ export interface InventoryHandlerDeps {
   readonly reserveStock: ReserveStock;
   readonly releaseReservation: ReleaseReservation;
   readonly commitReservation: CommitReservation;
+  readonly extendReservation: ExtendReservation;
+  readonly shortenReservation: ShortenReservation;
   readonly logger?: Logger;
 }
 
@@ -74,9 +82,24 @@ export function createInventoryImplementation(
         toCommitResponse(await deps.commitReservation(input)),
     }),
 
-    // Sozlesmede tanimli ama HENUZ UYGULANMAMIS RPC'ler: NOT_IMPLEMENTED (501),
-    // gerekce @getir/service-kit grpc/unimplemented.ts'te. Uzatma T11.3'te.
-    extendReservation: unimplemented('ExtendReservation', 'T10', deps.logger),
+    extendReservation: unaryHandler({
+      name: 'ExtendReservation',
+      schema: extendRequestSchema,
+      ...logger,
+      handle: async (input): Promise<inventoryV1.ExtendReservationResponse> =>
+        toExtendResponse(await deps.extendReservation(input)),
+    }),
+
+    shortenReservation: unaryHandler({
+      name: 'ShortenReservation',
+      schema: shortenRequestSchema,
+      ...logger,
+      handle: async (input): Promise<inventoryV1.ShortenReservationResponse> =>
+        toShortenResponse(await deps.shortenReservation(input)),
+    }),
+
+    // Sozlesmede tanimli ama HENUZ UYGULANMAMIS RPC: NOT_IMPLEMENTED (501),
+    // gerekce @getir/service-kit grpc/unimplemented.ts'te.
     getReservation: unimplemented('GetReservation', 'T10', deps.logger),
   };
 }

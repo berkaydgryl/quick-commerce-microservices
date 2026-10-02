@@ -69,7 +69,7 @@ export interface CommitCommand {
 /**
  * Sure dolumu komutu (T10.3): supurucu verir. Script, indeks skorunun (bitis
  * ani) hala `nowMs`'ten once oldugunu YENIDEN denetler; uzatilmis rezervasyon
- * (T11.3) birakilmaz.
+ * (T11.3, ExtendCommand) birakilmaz.
  */
 export type ExpireCommand = CommitCommand;
 
@@ -153,13 +153,70 @@ export type ExpireOutcome =
   | OrphanedReservation;
 
 /**
- * Rezervasyonun yazilmasi: Redis'te reserve.lua, release.lua ve commit.lua;
- * MOCK'ta bellek.
+ * Uzatma komutu (T11.3, B21): odeme ya da 3DS denemesi kilit dusmeden bitsin.
+ * Hak sayisini servis verir (RESERVATION_MAX_EXTENSIONS); depo sayaci kayitta
+ * tutar ve sinira ulasinca sureye dokunmaz.
+ */
+export interface ExtendCommand extends CommitCommand {
+  readonly additionalMs: number;
+  readonly maxExtensions: number;
+}
+
+/** Kisaltma komutu (T11.3): kalan sure en cok `maxRemainingMs` olsun. */
+export interface ShortenCommand extends CommitCommand {
+  readonly maxRemainingMs: number;
+}
+
+/**
+ * Aktif olmayan rezervasyon (uzatma ve kisaltma icin ayni anlam): kilit dusmus,
+ * HICBIR SEY yazilmadi. Sebep gunluk icindir:
+ *   settled  - birakilmis, onaylanmis ya da suresi dolup geri alinmis (iz duruyor);
+ *   absent   - hic olmamis ya da izi silinmis;
+ *   orphaned - indekste var, kaydi yok (birakma ve supurucu temizler);
+ *   due      - kayit duruyor ama bitis ani gecmis (supurucu henuz birakmadi);
+ *              dusmus kilit uzatilarak diriltilmez.
+ */
+export interface InactiveReservation {
+  readonly status: 'inactive';
+  readonly reason: 'settled' | 'absent' | 'orphaned' | 'due';
+}
+
+/** Deponun uzatma cevabi. Sinira ulasmak hata degil SONUCTUR (B21). */
+export type ExtendOutcome =
+  /** Uzatildi; `extensionCount` bu uzatma dahil toplam. */
+  | {
+      readonly status: 'extended';
+      readonly expiresAt: number;
+      readonly extensionCount: number;
+      readonly lines: readonly ReservationLine[];
+    }
+  /** Hak bitmisti: sure DEGISMEDI. */
+  | {
+      readonly status: 'limit-reached';
+      readonly expiresAt: number;
+      readonly extensionCount: number;
+    }
+  | InactiveReservation;
+
+/** Deponun kisaltma cevabi. */
+export type ShortenOutcome =
+  | { readonly status: 'shortened'; readonly expiresAt: number }
+  /** Kalan sure zaten sinirin altindaydi: HICBIR SEY yazilmadi. */
+  | { readonly status: 'unchanged'; readonly expiresAt: number }
+  | InactiveReservation;
+
+/**
+ * Rezervasyonun yazilmasi: Redis'te reserve.lua, release.lua, commit.lua,
+ * extend.lua ve shorten.lua; MOCK'ta bellek.
  */
 export interface ReservationStore {
   reserve(command: ReserveCommand): Promise<ReserveOutcome>;
   release(command: ReleaseCommand): Promise<ReleaseOutcome>;
   commit(command: CommitCommand): Promise<CommitOutcome>;
+  /** Bitis anini ileri alir; kayit, indeks ve kullanici kilidi birlikte (T11.3). */
+  extend(command: ExtendCommand): Promise<ExtendOutcome>;
+  /** Kalan sureyi kisaltir; asla uzatmaz (T11.3). */
+  shorten(command: ShortenCommand): Promise<ShortenOutcome>;
   /** Suresi dolani birakir (release.lua'nin sure dolumu kipi, T10.3). */
   expire(command: ExpireCommand): Promise<ExpireOutcome>;
   /**

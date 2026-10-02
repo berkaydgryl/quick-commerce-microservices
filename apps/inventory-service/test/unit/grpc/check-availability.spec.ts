@@ -52,23 +52,15 @@ describe('CheckAvailability (T9.1, B27)', () => {
   });
 });
 
-describe('uzatma ve okuma henuz yok (T11.3+)', () => {
-  // Her cagri kendi mesajiyla (bos istek): yanlis mesaj istemci tarafinda
-  // kodlanamaz ve INTERNAL doner, sinanan sey sunucu olmazdi. Reserve T10.1'de,
-  // Release ve Commit T10.2'de geldi (test/unit/grpc/reserve, release, commit).
-  const cases = [
-    [
-      'ExtendReservation',
-      () => call(service.extendReservation, inventoryV1.ExtendReservationRequest.fromPartial({})),
-    ],
-    [
-      'GetReservation',
-      () => call(service.getReservation, inventoryV1.GetReservationRequest.fromPartial({})),
-    ],
-  ] as const;
-
-  it.each(cases)('%s UNIMPLEMENTED / NOT_IMPLEMENTED', async (_name, invoke) => {
-    const { error } = await invoke();
+describe('okuma henuz yok (T10+)', () => {
+  // Kendi mesajiyla (bos istek): yanlis mesaj istemci tarafinda kodlanamaz ve
+  // INTERNAL doner, sinanan sey sunucu olmazdi. Reserve T10.1'de, Release ve
+  // Commit T10.2'de, uzatma ve kisaltma T11.3'te geldi (test/unit/grpc/).
+  it('GetReservation UNIMPLEMENTED / NOT_IMPLEMENTED', async () => {
+    const { error } = await call(
+      service.getReservation,
+      inventoryV1.GetReservationRequest.fromPartial({}),
+    );
 
     expect(error?.code).toBe(GRPC_STATUS.UNIMPLEMENTED);
     expect(appErrorOf(error)?.code).toBe(ERROR_CODES.NOT_IMPLEMENTED);

@@ -551,6 +551,95 @@ describe('stok defteri (T10.2, ADR-18)', () => {
     }
   });
 
+  it('gercek gRPC: ExtendReservation (T11.3) her uzatmada kalem basina SIRALI kayit (delta 0); hak bitince sure ayni; birakilinca RESERVATION_EXPIRED', async () => {
+    const source = await openStockSource(env, silentLogger);
+    const { server, reserve, release } = await serve(source);
+    const extend = () =>
+      server.call(
+        service.extendReservation,
+        inventoryV1.ExtendReservationRequest.fromPartial({
+          orderId: ORDER,
+          marketId: MIGROS,
+          additionalSeconds: 60,
+        }),
+      );
+    try {
+      expect((await reserve()).error).toBeUndefined();
+      const answers = [await extend(), await extend(), await extend(), await extend()];
+
+      expect(answers.map((answer) => answer.response?.extensionCount)).toEqual([1, 2, 3, 3]);
+      expect(answers.map((answer) => answer.response?.alreadyExtended)).toEqual([
+        false,
+        false,
+        false,
+        true,
+      ]);
+      expect(answers[3]?.response?.expiresAt).toEqual(answers[2]?.response?.expiresAt);
+      const extensions = await ledgerCollection()
+        .find({ orderId: ORDER, kind: 'extend' })
+        .sort({ _id: 1 })
+        .toArray();
+      expect(
+        extensions.map((entry) => [entry._id, entry.delta, entry.sequence, entry.reason]),
+      ).toEqual([
+        [`${ORDER}/PEYNIR-500/extend-1`, 0, 1, 'payment_attempt'],
+        [`${ORDER}/PEYNIR-500/extend-2`, 0, 2, 'payment_attempt'],
+        [`${ORDER}/PEYNIR-500/extend-3`, 0, 3, 'payment_attempt'],
+        [`${ORDER}/SUT-1L/extend-1`, 0, 1, 'payment_attempt'],
+        [`${ORDER}/SUT-1L/extend-2`, 0, 2, 'payment_attempt'],
+        [`${ORDER}/SUT-1L/extend-3`, 0, 3, 'payment_attempt'],
+      ]);
+      // Uzatma bir siparis sonucu degildir; defter onHand ile tutmaya devam eder.
+      expect(await stores.ledger.settlementOf(MIGROS, ORDER)).toBeUndefined();
+      expect(await ledgerMismatches()).toEqual([]);
+
+      await release();
+      const refused = await extend();
+      expect(refused.error?.code).toBe(GRPC_STATUS.FAILED_PRECONDITION);
+      expect(appErrorOf(refused.error)).toMatchObject({
+        code: ERROR_CODES.RESERVATION_EXPIRED,
+        // Birakma defteri yazinca izi siler: kayit artik yok (absent).
+        details: { orderId: ORDER, reason: 'absent' },
+      });
+      expect(await stores.ledger.settlementOf(MIGROS, ORDER)).toBe('released');
+    } finally {
+      await server.stop();
+      await source.close();
+    }
+  });
+
+  it('gercek gRPC: ShortenReservation (T11.3) kalan sureyi indirir, defter yazmaz; ikinci kez shortened=false', async () => {
+    const source = await openStockSource(env, silentLogger);
+    const { server, reserve } = await serve(source);
+    const shorten = () =>
+      server.call(
+        service.shortenReservation,
+        inventoryV1.ShortenReservationRequest.fromPartial({
+          orderId: ORDER,
+          marketId: MIGROS,
+          maxRemainingSeconds: 120,
+        }),
+      );
+    try {
+      const before = Date.now();
+      expect((await reserve()).error).toBeUndefined();
+
+      const first = await shorten();
+      const second = await shorten();
+
+      expect(first.response?.shortened).toBe(true);
+      expect(second.response?.shortened).toBe(false);
+      expect(second.response?.expiresAt).toEqual(first.response?.expiresAt);
+      const expiresAt = first.response?.expiresAt?.getTime() ?? 0;
+      expect(expiresAt).toBeGreaterThanOrEqual(before + 120_000);
+      expect(expiresAt).toBeLessThanOrEqual(Date.now() + 120_000);
+      expect(await ledgerCollection().countDocuments({ orderId: ORDER })).toBe(0);
+    } finally {
+      await server.stop();
+      await source.close();
+    }
+  });
+
   it('defter yazilamazsa UNAVAILABLE ama sayaclar dondu; tekrar gelen istek defteri tamamlar, stok BIR kez', async () => {
     const source = await openStockSource(env, silentLogger);
     let failures = 1;

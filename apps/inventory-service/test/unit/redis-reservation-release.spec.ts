@@ -48,7 +48,11 @@ function storeWith(hash: Record<string, string>, ...replies: unknown[]) {
   };
   const redis = { hgetall: () => Promise.resolve(hash) } as unknown as RedisClient;
   return {
-    store: new RedisReservationStore(redis, { reserve: unused, release, commit: unused }, OPTIONS),
+    store: new RedisReservationStore(
+      redis,
+      { reserve: unused, release, commit: unused, extend: unused, shorten: unused },
+      OPTIONS,
+    ),
     calls,
   };
 }
@@ -219,7 +223,7 @@ describe('RedisReservationStore.expire ve listDue (T10.3)', () => {
     const unused: LuaScript = { name: 'x', sha: 'x', run: () => Promise.reject(new Error('yok')) };
     const store = new RedisReservationStore(
       redis,
-      { reserve: unused, release: unused, commit: unused },
+      { reserve: unused, release: unused, commit: unused, extend: unused, shorten: unused },
       OPTIONS,
     );
 

@@ -144,6 +144,7 @@ function toDocument(entry: LedgerEntry): StockLedgerDocument {
     quantity: entry.quantity,
     reason: entry.reason,
     ...(entry.orderId === undefined ? {} : { orderId: entry.orderId }),
+    ...(entry.sequence === undefined ? {} : { sequence: entry.sequence }),
     createdAt: entry.at,
   };
 }

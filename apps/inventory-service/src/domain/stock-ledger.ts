@@ -10,8 +10,10 @@
  *   - commit: odeme onaylandi, adet kalici dustu (T10.2 PR 2): delta = -adet.
  *     Eldeki adet AYNI transaction'da duser (StockCommitter).
  *   - expire: supurucu suresi dolani birakti (T10.3). onHand DEGISMEZ: delta 0.
- * Siparis kayitlari siparisin nasil sonuclandigini da soyler: tekrar gelen
- * cagri "zaten uygulandi" alir.
+ *   - extend: rezervasyon uzatildi (T11.3, B21). onHand DEGISMEZ: delta 0;
+ *     siparisin sonucu degildir, kacinci uzatma oldugu `sequence`'tadir.
+ * Sonuc kayitlari (release, commit, expire) siparisin nasil sonuclandigini da
+ * soyler: tekrar gelen cagri "zaten uygulandi" alir.
  *
  * Burada depo yoktur; yalnizca kavramlar, port ve kayit kurallari.
  */
@@ -23,6 +25,7 @@ export const LEDGER_KINDS = {
   RELEASE: 'release',
   COMMIT: 'commit',
   EXPIRE: 'expire',
+  EXTEND: 'extend',
 } as const;
 
 export type LedgerKind = (typeof LEDGER_KINDS)[keyof typeof LEDGER_KINDS];
@@ -36,6 +39,9 @@ export const COMMIT_REASON = 'order_paid';
 /** Sure dolumu kaydinin gerekcesi (supurucu, T10.3). */
 export const EXPIRE_REASON = 'expired';
 
+/** Uzatma kaydinin gerekcesi (T11.3): odeme adimi kilidi uzatti. */
+export const EXTEND_REASON = 'payment_attempt';
+
 export interface LedgerEntry {
   readonly marketId: string;
   readonly sku: string;
@@ -48,19 +54,24 @@ export interface LedgerEntry {
   readonly reason: string;
   /** Siparis hareketlerinde siparis; acilis kaydinda yok. */
   readonly orderId?: string;
+  /** Ayni turden birden fazla kayit olabilen harekette sira (uzatma: 1, 2, 3). */
+  readonly sequence?: number;
   readonly at: Date;
 }
 
 /**
- * Kaydin kimligi: ayni hareket (siparis x sku x tur; acilista market x sku)
- * ayni kimlige duser ve ikinci kez yazilmaz (B14).
+ * Kaydin kimligi: ayni hareket (siparis x sku x tur [x sira]; acilista market
+ * x sku) ayni kimlige duser ve ikinci kez yazilmaz (B14). Uzatmanin sirasi
+ * kimlikte: ikinci uzatma birincinin uzerine dusmez, ayni uzatmanin tekrari duser.
  */
 export function ledgerEntryId(
-  entry: Pick<LedgerEntry, 'marketId' | 'sku' | 'kind' | 'orderId'>,
+  entry: Pick<LedgerEntry, 'marketId' | 'sku' | 'kind' | 'orderId' | 'sequence'>,
 ): string {
-  return entry.orderId === undefined
-    ? `${entry.kind}/${entry.marketId}/${entry.sku}`
-    : `${entry.orderId}/${entry.sku}/${entry.kind}`;
+  if (entry.orderId === undefined) {
+    return `${entry.kind}/${entry.marketId}/${entry.sku}`;
+  }
+  const kind = entry.sequence === undefined ? entry.kind : `${entry.kind}-${entry.sequence}`;
+  return `${entry.orderId}/${entry.sku}/${kind}`;
 }
 
 export interface StockLedger {
@@ -104,6 +115,21 @@ export function expireEntries(input: Omit<ReleaseEntriesInput, 'reason'>): Ledge
   }));
 }
 
+export interface ExtendEntriesInput extends Omit<ReleaseEntriesInput, 'reason'> {
+  /** Kacinci uzatma (1'den baslar). */
+  readonly sequence: number;
+}
+
+/** Uzatilan rezervasyonun kalem basina kaydi: onHand degismez (delta 0). */
+export function extendEntries(input: ExtendEntriesInput): LedgerEntry[] {
+  const { sequence, ...rest } = input;
+  return releaseEntries({ ...rest, reason: EXTEND_REASON }).map((entry) => ({
+    ...entry,
+    kind: LEDGER_KINDS.EXTEND,
+    sequence,
+  }));
+}
+
 /** Birakilan rezervasyonun kalem basina kaydi: onHand degismez (delta 0). */
 export function releaseEntries(input: ReleaseEntriesInput): LedgerEntry[] {
   const { marketId, orderId, reason, lines, at } = input;
@@ -119,7 +145,7 @@ export function releaseEntries(input: ReleaseEntriesInput): LedgerEntry[] {
   }));
 }
 
-/** Defterdeki tur -> siparisin sonucu (acilis bir siparis sonucu degildir). */
+/** Defterdeki tur -> siparisin sonucu (acilis ve uzatma bir siparis sonucu degildir). */
 export function settlementOfKind(kind: LedgerKind): ReservationSettlement | undefined {
   switch (kind) {
     case LEDGER_KINDS.RELEASE:
@@ -129,6 +155,7 @@ export function settlementOfKind(kind: LedgerKind): ReservationSettlement | unde
     case LEDGER_KINDS.EXPIRE:
       return 'expired';
     case LEDGER_KINDS.OPENING:
+    case LEDGER_KINDS.EXTEND:
       return undefined;
   }
 }
