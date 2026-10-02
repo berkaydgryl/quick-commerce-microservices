@@ -17,6 +17,7 @@ Müşteri arayüzü: React 18 + Vite + TypeScript. Tarayıcı yalnızca gateway 
 | Zustand (sepet, oturum) | ✅ Sepet (`useCartStore`, `getir.cart`); seçili adres (`useAddressStore`, `getir.address`); oturum (bellekte)                                   |
 | Kimlik (T8.5, T11.6)    | ✅ Karşılama kartında telefon → şifre / kayıt; `/hesabim` (korumalı); sessiz yenileme, sekmeler arası kilit (aşağıda)                           |
 | Teslimat adresi (T9.5)  | ✅ Ana sayfada aramanın üstünde; hesabın adresleri; marketler ve arama seçili adresin konumuyla (aşağıda)                                       |
+| Adres ekleme (T11.8)    | ✅ Adressiz hesap `/`'da karşılama ekranının üstünde iki adımlı pencere: harita (Leaflet + OSM) ve detay; kaydedince ana sayfa (aşağıda)        |
 
 ## Karşılama ve giriş ekranı (T11.6)
 
@@ -124,6 +125,31 @@ kapalı**; kapalıyken seçici ve persona verisi pakete hiç girmez.
 - Paket taraması: `pnpm web:bundle:check` (CI'da "Paket taraması" adımı, `pnpm verify` içinde)
   `dist/`'te demo şifresini, personaların telefonunu (E.164 ve ulusal), kimliğini ve ad soyadını arar;
   değerleri `personas.json`'dan okur. Geliştirme kipinde derlenen paket bu taramada kalır.
+
+## Adres ekleme (T11.8)
+
+Oturum açık ama kayıtlı adres yoksa (yeni kayıt da, adressiz eski hesap da) `/` karşılama ekranının **üstünde**
+adres penceresi açar (referans getir.com "Teslimat Adresi Ekle"). Kapının kararı `features/address/services/address-gate.ts`:
+oturum ve defter belli olana kadar hiçbir şey çizilmez (adresi olan kullanıcı pencereyi bir an görmez); defter
+okunamazsa ana sayfa açılır.
+
+| Parça        | Dosya                                                         | İş                                                                                                                            |
+| ------------ | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Kapı         | `pages/root/RootPage.tsx`, `pages/address-setup`              | Karşılama / adres ekleme / ana sayfa; pencere karşılama ekranının üstünde                                                     |
+| Pencere      | `features/address/ui/AddressSetupDialog.tsx`, `AddressDialog` | İki adım; 1. adımda X (ve Esc) **çıkış**, 2. adımda X yerine geri oku (Esc de geri). Karartmaya tıklama kapatmaz              |
+| 1. adım      | `AddressMapStep`, `AddressSearch`, `AddressMap`               | Arama (gönderince sorulur), ortasında pin olan harita, "Bu adresi kullan" (nokta seçilene kadar pasif); "Konumumu kullan" yok |
+| 2. adım      | `AddressDetailsForm`, `KindSelect`                            | Önizleme haritası, tür + başlık, satır (haritadan dolu), bina/kat/daire, tarif; market yoksa uyarı (kaydı engellemez)         |
+| Uçlar        | `api/addresses.api.ts`, `api/geo.api.ts`, `api/queries.ts`    | `POST /v1/me/addresses` (anahtar niyet başına), `GET /v1/geo/reverse`, `GET /v1/geo/search` (yetkili istemci)                 |
+| Saf kurallar | `services/address-form.ts`, `line-notice.ts`                  | Form şeması (sözleşmeden), türle gelen başlık, istek gövdesi; satır bulunamadığında uyarı                                     |
+
+- **Harita:** Leaflet ve OpenStreetMap karoları; karo adresi, atıf ve başlangıç noktası içerik ucundan
+  (`addressSetup.map`). Leaflet **ayrı pakette** yüklenir (`LazyAddressMap`): yalnızca adres ekleyen kullanıcı
+  indirir. Pin sayfanın öğesidir (marker görseli yok), harita onun altında kayar.
+- **Adres servisi gateway'de:** tarayıcı Nominatim'e gitmez; gateway tek sırayla (saniyede bir) ve önbellekle
+  sorar. Aynı nokta ikinci kez sorulmaz (sorgu önbelleği). Adres bulunamazsa (404) ya da servis yoğunsa (503) 2. adım yine açılır, satırı kullanıcı yazar.
+- **Kaydet:** cevap güncel defterdir, sorgu önbelleğine yazılır ve yeni adres seçilir (`getir.address`); kapı
+  ana sayfaya geçer. Anahtar `createIntentKeys`: aynı gövdenin tekrarı aynı anahtar, düzeltilen gövde yeni
+  anahtar (409 CONFLICT yaşanmaz). Aynı ad başlığın altında, dolu defter formun üstünde gösterilir.
 
 ## Teslimat adresi (T9.5) — tasarımsız kabuk
 
@@ -277,7 +303,8 @@ tarayıcı aynı kaynakla konuşur, gateway'de CORS gerekmez. Gateway başka adr
 
 Giriş için gateway yeterlidir: `MOCK=true` iken demo personaları açılışta belleğe yüklenir
 (`http://localhost:5173/giris`, "Demo hesaplar"dan biri, "Giriş yap"). Karşılama ekranı
-`GET /v1/content/welcome` ister: gateway T11.6'dan eskiyse ekran hata gösterir, gateway yeniden başlatılır.
+`GET /v1/content/welcome` ister: gateway T11.6'dan eskiyse ekran hata gösterir, gateway yeniden başlatılır
+(içeriğe alan eklendiğinde de, ör. T11.8 `addressSetup`).
 
 ## Klasörler
 

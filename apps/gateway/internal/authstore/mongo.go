@@ -60,10 +60,14 @@ type geoPointDocument struct {
 }
 
 type addressDocument struct {
-	Title    string           `bson:"title"`
-	Line     string           `bson:"line"`
-	Location geoPointDocument `bson:"location"`
-	Note     string           `bson:"note,omitempty"`
+	Title     string           `bson:"title"`
+	Kind      string           `bson:"kind,omitempty"`
+	Line      string           `bson:"line"`
+	Location  geoPointDocument `bson:"location"`
+	Building  string           `bson:"building,omitempty"`
+	Floor     string           `bson:"floor,omitempty"`
+	Apartment string           `bson:"apartment,omitempty"`
+	Note      string           `bson:"note,omitempty"`
 }
 
 // EnsureIndexes, indeksleri kurar; tekrar calistirmak guvenlidir (ayni tanim).
@@ -156,6 +160,49 @@ func (m *MongoUsers) RecordLogin(ctx context.Context, userID string, login auth.
 	return auth.LoginState{IPAddress: before.LastLoginIP, Location: fromGeoPointDocument(before.LastLocation)}, nil
 }
 
+// AddAddress, adresi TEK atomik guncellemeyle defterin sonuna ekler (T11.8).
+// Filtre iki kurali birlikte ister: ayni adla adres yok ve defter max'in
+// altinda. Es zamanli iki ekleme siniri asamaz, ayni adi iki kez yazamaz.
+// Eslesme yoksa sebep kayit okunarak ayirt edilir.
+func (m *MongoUsers) AddAddress(ctx context.Context, userID string, address auth.SavedAddress, max int) (auth.User, error) {
+	addressCount := bson.D{{Key: "$size", Value: bson.D{{Key: "$ifNull", Value: bson.A{"$addresses", bson.A{}}}}}}
+	filter := bson.D{
+		{Key: "_id", Value: userID},
+		{Key: "addresses.title", Value: bson.D{{Key: "$ne", Value: address.Title}}},
+		{Key: "$expr", Value: bson.D{{Key: "$lt", Value: bson.A{addressCount, max}}}},
+	}
+	update := bson.D{{Key: "$push", Value: bson.D{{Key: "addresses", Value: toAddressDocument(address)}}}}
+	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
+	var doc userDocument
+	err := m.collection.FindOneAndUpdate(ctx, filter, update, opts).Decode(&doc)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return auth.User{}, m.addressRejection(ctx, userID, address.Title, max)
+	}
+	if err != nil {
+		return auth.User{}, fmt.Errorf("adres eklenemedi: %w", err)
+	}
+	return fromUserDocument(doc), nil
+}
+
+// addressRejection, AddAddress'in filtresi eslesmediginde sebebi soyler.
+func (m *MongoUsers) addressRejection(ctx context.Context, userID, title string, max int) error {
+	user, err := m.ByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	for _, address := range user.Addresses {
+		if address.Title == title {
+			return auth.ErrAddressTitleTaken
+		}
+	}
+	if len(user.Addresses) >= max {
+		return auth.ErrAddressBookFull
+	}
+	// Okuma ile guncelleme arasinda baska bir ekleme/silme oldu: istemci
+	// tekrar dener (Idempotency-Key ayni kalir).
+	return fmt.Errorf("adres eklenemedi: defter es zamanli degisti")
+}
+
 // CountByRegistrationDevice, cihazdan acilmis hesap sayisi (seyrek indeksle).
 func (m *MongoUsers) CountByRegistrationDevice(ctx context.Context, deviceID string) (int, error) {
 	count, err := m.collection.CountDocuments(ctx, bson.D{{Key: "registrationDeviceId", Value: deviceID}})
@@ -236,11 +283,23 @@ func toUserDocument(user auth.User) userDocument {
 		LastLocation: toGeoPointDocumentPtr(user.LastLocation),
 	}
 	for _, address := range user.Addresses {
-		doc.Addresses = append(doc.Addresses, addressDocument{
-			Title: address.Title, Line: address.Line, Location: toGeoPointDocument(address.Location), Note: address.Note,
-		})
+		doc.Addresses = append(doc.Addresses, toAddressDocument(address))
 	}
 	return doc
+}
+
+func toAddressDocument(address auth.SavedAddress) addressDocument {
+	return addressDocument{
+		Title: address.Title, Kind: address.Kind, Line: address.Line, Location: toGeoPointDocument(address.Location),
+		Building: address.Building, Floor: address.Floor, Apartment: address.Apartment, Note: address.Note,
+	}
+}
+
+func fromAddressDocument(doc addressDocument) auth.SavedAddress {
+	return auth.SavedAddress{
+		Title: doc.Title, Kind: doc.Kind, Line: doc.Line, Location: auth.GeoPoint(doc.Location),
+		Building: doc.Building, Floor: doc.Floor, Apartment: doc.Apartment, Note: doc.Note,
+	}
 }
 
 func fromUserDocument(doc userDocument) auth.User {
@@ -250,9 +309,7 @@ func fromUserDocument(doc userDocument) auth.User {
 		LastLocation: fromGeoPointDocument(doc.LastLocation),
 	}
 	for _, address := range doc.Addresses {
-		user.Addresses = append(user.Addresses, auth.SavedAddress{
-			Title: address.Title, Line: address.Line, Location: auth.GeoPoint(address.Location), Note: address.Note,
-		})
+		user.Addresses = append(user.Addresses, fromAddressDocument(address))
 	}
 	return user
 }

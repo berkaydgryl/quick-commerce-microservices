@@ -1,0 +1,105 @@
+/*
+ * Adres aramasi (T11.8): buyutec solda (gonder dugmesi). Sonuclar kutunun altinda, haritanin USTUNDE acilan panel.
+ */
+.c-address-search {
+  position: relative;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.c-address-search__form {
+  position: relative;
+}
+
+.c-address-search__input {
+  width: 100%;
+  min-height: var(--size-field-min-height);
+  padding: var(--space-3) var(--space-3) var(--space-3)
+    calc(var(--space-3) * 2 + var(--size-field-icon));
+  font-size: var(--font-size-md);
+  background: var(--bg-page);
+  border: var(--border-width-thin) solid transparent;
+  border-radius: var(--radius-md);
+  transition: border-color var(--duration-fast) var(--easing-standard);
+}
+
+.c-address-search__input::placeholder {
+  color: var(--text-muted);
+}
+
+.c-address-search__input:focus {
+  border-color: var(--color-brand-primary);
+}
+
+.c-address-search__input[aria-invalid='true'] {
+  border-color: var(--border-danger);
+}
+
+.c-address-search__submit {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--space-3) * 2 + var(--size-field-icon));
+  padding: var(--space-3);
+  color: var(--color-brand-primary);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--radius-md);
+}
+
+.c-address-search__submit:disabled {
+  cursor: progress;
+  opacity: var(--opacity-disabled);
+}
+
+.c-address-search__problem {
+  font-size: var(--font-size-xs);
+  color: var(--text-danger);
+}
+
+.c-address-search__results {
+  position: absolute;
+  inset-block-start: calc(100% + var(--space-1));
+  inset-inline: 0;
+  z-index: var(--z-popover);
+  overflow: hidden;
+  background: var(--bg-surface);
+  border: var(--border-width-thin) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-raised);
+}
+
+.c-address-search__results[aria-busy='true'] {
+  opacity: var(--opacity-disabled);
+}
+
+.c-address-search__message {
+  padding: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.c-address-search__list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.c-address-search__option {
+  width: 100%;
+  padding: var(--space-3);
+  font-size: var(--font-size-sm);
+  text-align: start;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-block-end: var(--border-width-thin) solid var(--border-subtle);
+}
+
+.c-address-search__option:hover {
+  background: var(--color-brand-primary-subtle);
+}

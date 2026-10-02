@@ -11,6 +11,7 @@ package httpapi
 //   order_body.go - siparis uclarinin istek govdeleri ve bicim dogrulamasi
 //   auth.go       - /v1/auth, /v1/me ve /v1/me/addresses uclari (T8.1, T9.5)
 //   auth_body.go  - kimlik uclarinin istek govdeleri
+//   geo.go        - /v1/geo/reverse ve /v1/geo/search (harita adres, T11.8)
 //   identity.go   - kullanici kimligi (Bearer erisim jetonu, T8.1)
 //   device.go     - cihaz cerezi (risk sinyali, T8.1)
 //   idempotency.go- Idempotency-Key basligi ve tekrar korumasi (ADR-08, T8.2)
@@ -39,6 +40,7 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/catalog"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/content"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/geo"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
 )
@@ -141,6 +143,21 @@ type AddressBookGetter interface {
 	Addresses(ctx context.Context, userID string) (auth.AddressBook, error)
 }
 
+// AddressAdder, POST /v1/me/addresses (adres ekleme, T11.8).
+type AddressAdder interface {
+	AddAddress(ctx context.Context, userID string, input auth.AddressInput) (auth.AddressBook, error)
+}
+
+// GeoReverser, GET /v1/geo/reverse (noktanin adres satiri, T11.8).
+type GeoReverser interface {
+	Reverse(ctx context.Context, lat, lng float64) (geo.ReverseResult, error)
+}
+
+// GeoSearcher, GET /v1/geo/search (adres aramasi, T11.8).
+type GeoSearcher interface {
+	Search(ctx context.Context, query string) (geo.SearchResult, error)
+}
+
 // CheckoutSignalReader, POST /v1/orders'in risk sinyalleri (T8.1): oturum ve
 // kullanici kaydindan; gercegi auth.Service.
 type CheckoutSignalReader interface {
@@ -179,7 +196,11 @@ type Deps struct {
 	SessionRevoker    SessionRevoker
 	ProfileGetter     ProfileGetter
 	AddressBook       AddressBookGetter
+	AddressAdder      AddressAdder
 	CheckoutSignals   CheckoutSignalReader
+	// Harita adres uclari (T11.8); bugun ikisini geo.Service karsilar.
+	GeoReverser GeoReverser
+	GeoSearcher GeoSearcher
 	// AccessTokens, korumali uclarin jeton dogrulayicisi.
 	AccessTokens AccessTokenVerifier
 	// Idempotency, mutasyon uclarinin tekrar korumasi (ADR-08, T8.2).
@@ -278,6 +299,9 @@ func New(deps Deps) *fiber.App {
 	user := requireUser(deps.AccessTokens)
 	v1.Get("/me", user, generalByUser, meHandler(deps.ProfileGetter))
 	v1.Get("/me/addresses", user, generalByUser, addressesHandler(deps.AddressBook))
+	v1.Post("/me/addresses", user, generalByUser, mutation, addAddressHandler(deps.AddressAdder))
+	v1.Get("/geo/reverse", user, generalByUser, reverseGeocodeHandler(deps.GeoReverser))
+	v1.Get("/geo/search", user, generalByUser, searchPlacesHandler(deps.GeoSearcher))
 	v1.Post("/cart/reserve", user, orderByUser, mutation, reserveCartHandler(deps.CartReserver))
 	v1.Post("/orders", user, orderByUser, checkout, placeOrderHandler(deps.OrderPlacer, deps.CheckoutSignals))
 	v1.Post("/orders/:"+orderIDParam+"/3ds", user, orderByUser, checkout, confirmThreeDSHandler(deps.ThreeDSConfirmer))

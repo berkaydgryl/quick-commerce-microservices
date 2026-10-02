@@ -37,12 +37,18 @@ type GeoPoint struct {
 	Lng float64
 }
 
-// SavedAddress, kayitli adres (@getir/contracts savedAddressSchema).
+// SavedAddress, kayitli adres (@getir/contracts savedAddressSchema). Kind,
+// Building, Floor ve Apartment T11.8'de eklendi: persona seed'inin
+// adreslerinde bostur.
 type SavedAddress struct {
-	Title    string
-	Line     string
-	Location GeoPoint
-	Note     string
+	Title     string
+	Kind      string
+	Line      string
+	Location  GeoPoint
+	Building  string
+	Floor     string
+	Apartment string
+	Note      string
 }
 
 // Profile, istemciye giden kullanici (@getir/contracts userProfileSchema).
@@ -74,12 +80,16 @@ type AddressBook struct {
 }
 
 // AddressEntry, istemciye giden kayitli adres (@getir/contracts savedAddressSchema).
+// Istege bagli alanlar bossa hic yazilmaz.
 type AddressEntry struct {
-	Title    string        `json:"title"`
-	Line     string        `json:"line"`
-	Location rest.GeoPoint `json:"location"`
-	// Note istege baglidir: bossa alan hic yazilmaz.
-	Note string `json:"note,omitempty"`
+	Title     string        `json:"title"`
+	Kind      string        `json:"kind,omitempty"`
+	Line      string        `json:"line"`
+	Location  rest.GeoPoint `json:"location"`
+	Building  string        `json:"building,omitempty"`
+	Floor     string        `json:"floor,omitempty"`
+	Apartment string        `json:"apartment,omitempty"`
+	Note      string        `json:"note,omitempty"`
 }
 
 // AddressBook, kaydin adres defteri: kayit sirasinda, en fazla MaxSavedAddresses.
@@ -91,10 +101,14 @@ func (u User) AddressBook() AddressBook {
 	items := make([]AddressEntry, 0, len(addresses))
 	for _, address := range addresses {
 		items = append(items, AddressEntry{
-			Title:    address.Title,
-			Line:     address.Line,
-			Location: rest.GeoPoint{Lat: address.Location.Lat, Lng: address.Location.Lng},
-			Note:     address.Note,
+			Title:     address.Title,
+			Kind:      address.Kind,
+			Line:      address.Line,
+			Location:  rest.GeoPoint{Lat: address.Location.Lat, Lng: address.Location.Lng},
+			Building:  address.Building,
+			Floor:     address.Floor,
+			Apartment: address.Apartment,
+			Note:      address.Note,
 		})
 	}
 	return AddressBook{Items: items}

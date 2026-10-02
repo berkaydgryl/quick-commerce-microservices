@@ -25,7 +25,9 @@ packages/contracts/
 │   ├── errors.ts      # ErrorCode -> Türkçe kullanıcı mesajı
 │   ├── auth.ts        # register, login, oturum, profil
 │   ├── catalog.ts     # kategori, ürün, karanlık mağaza
-│   ├── cart.ts        # sepet girdisi, rezervasyon, serbest bırakma
+│   ├── content.ts     # ekran metinleri ve görselleri (karşılama, adres penceresi T11.8)
+│   ├── geo.ts         # harita adres çözümleme ve arama (T11.8)
+│   ├── cart.ts        # sepet girdisi, rezervasyon, serbest bırakma, adres defteri ve ekleme
 │   ├── order.ts       # sipariş, adres, 3DS, kurye özeti
 │   ├── socket.ts      # oda adları, olay payload'ları, olay sözlüğü
 │   ├── events.ts      # servisler arası olay gövdeleri (payment.refund_requested T7.4, payment.cancel_requested T11.2)

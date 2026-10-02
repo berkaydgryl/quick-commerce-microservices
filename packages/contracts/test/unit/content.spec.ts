@@ -34,6 +34,40 @@ const FEATURE = {
   text: 'Siparişin dakikalar içinde kapında!',
 };
 
+const ADDRESS_SETUP = {
+  title: 'Teslimat Adresi Ekle',
+  backLabel: 'Geri',
+  pinHint: "Adresini seçmek için Pin'i sürükle",
+  searchLabel: 'Adres ara',
+  searchPlaceholder: 'Sokağını veya posta kodunu arat',
+  searchSubmitLabel: 'Ara',
+  searchEmptyNotice: 'Sonuç bulunamadı.',
+  useAddressLabel: 'Bu adresi kullan',
+  resolvingLabel: 'Adres bulunuyor…',
+  unresolvedNotice: 'Bu nokta için adres bulunamadı; adresini kendin yazabilirsin.',
+  kindLabel: 'Adres türü',
+  kinds: [
+    { kind: 'HOME' as const, label: 'Ev', icon: '🏠' },
+    { kind: 'WORK' as const, label: 'İş', icon: '🏢' },
+    { kind: 'OTHER' as const, label: 'Diğer', icon: '📍' },
+  ],
+  titleLabel: 'Başlık (Ev, işyeri)',
+  lineLabel: 'Adres',
+  buildingLabel: 'Bina',
+  floorLabel: 'Kat',
+  apartmentLabel: 'Daire',
+  noteLabel: 'Adres Tarifi',
+  saveLabel: 'Kaydet',
+  savingLabel: 'Kaydediliyor…',
+  noMarketNotice: 'Bu adrese şu an hizmet veren market yok; yine de kaydedebilirsin.',
+  map: {
+    tileUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '© OpenStreetMap katkıcıları',
+    center: { lat: 40.9885, lng: 29.027 },
+    zoom: 15,
+  },
+};
+
 const WELCOME: WelcomeContent = {
   header: { brand: 'getir', service: 'market', loginLabel: 'Giriş yap', registerLabel: 'Kayıt Ol' },
   hero: {
@@ -82,6 +116,7 @@ const WELCOME: WelcomeContent = {
     stores: [STORE],
   },
   features: [FEATURE],
+  addressSetup: ADDRESS_SETUP,
 };
 
 const withAppDownload = (appDownload: Partial<WelcomeContent['appDownload']>) => ({
@@ -184,5 +219,27 @@ describe('welcomeContentSchema', () => {
   it('gorselin dogal boyutu pozitif olmali (yer onceden ayrilir)', () => {
     const image = { ...WELCOME.appDownload.image, height: 0 };
     expect(welcomeContentSchema.safeParse(withAppDownload({ image })).success).toBe(false);
+  });
+
+  it('harita karosu https ve {z}/{x}/{y} tasimali (T11.8)', () => {
+    const withTile = (tileUrl: string) => ({
+      ...WELCOME,
+      addressSetup: { ...ADDRESS_SETUP, map: { ...ADDRESS_SETUP.map, tileUrl } },
+    });
+    expect(
+      welcomeContentSchema.safeParse(withTile('http://tile.openstreetmap.org/{z}/{x}/{y}.png'))
+        .success,
+    ).toBe(false);
+    expect(
+      welcomeContentSchema.safeParse(withTile('https://tile.openstreetmap.org/sabit.png')).success,
+    ).toBe(false);
+  });
+
+  it('ayni adres turu iki kez yazilamaz (T11.8)', () => {
+    const kinds = [ADDRESS_SETUP.kinds[0], ADDRESS_SETUP.kinds[0]];
+    expect(
+      welcomeContentSchema.safeParse({ ...WELCOME, addressSetup: { ...ADDRESS_SETUP, kinds } })
+        .success,
+    ).toBe(false);
   });
 });

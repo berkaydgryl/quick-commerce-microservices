@@ -1,0 +1,37 @@
+/* Adres detayi (T11.8; 2. adim): onizleme haritasi, uyarilar, alanlar, Kaydet. */
+.c-address-form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.c-address-form__notice {
+  padding: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-default);
+  background: var(--color-brand-primary-subtle);
+  border-radius: var(--radius-md);
+}
+
+.c-address-form__alert {
+  padding: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-danger);
+  border: var(--border-width-thin) solid var(--border-danger);
+  border-radius: var(--radius-md);
+}
+
+/* Tur secicisi ve baslik yan yana; hata metni basligin altinda, secici ustte hizali. */
+.c-address-form__title-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-2);
+  align-items: start;
+}
+
+/* Bina, kat, daire: dar ekranda da uc sutun (kisa degerler). */
+.c-address-form__unit-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  align-items: start;
+}

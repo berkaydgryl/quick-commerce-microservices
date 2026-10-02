@@ -183,3 +183,28 @@ export const COUNTRY_CODE_PATTERN = /^[A-Z]{2}$/;
  */
 export const CONTENT_STORE_LINKS_MAX = 4;
 export const CONTENT_FEATURES_MAX = 6;
+
+/**
+ * Adres penceresindeki haritanin baslangic yakinlastirmasi (T11.8):
+ * OpenStreetMap karolari 0-19 arasidir; 0 butun dunyadir, ise yaramaz.
+ * Gateway'deki karsiliklari content.MinMapZoom ve content.MaxMapZoom.
+ */
+export const CONTENT_MAP_ZOOM_MIN = 1;
+export const CONTENT_MAP_ZOOM_MAX = 19;
+
+/**
+ * Adres ekleme (T11.8; POST /v1/me/addresses): kayitli adresin adi ("Ev", "Is")
+ * ve bina, kat, daire alanlari (kisa serbest metin: "19C3", "3", "12").
+ * Gateway'deki karsiliklari auth.AddressTitleMaxLength ve
+ * auth.AddressUnitMaxLength (esitligi rules_contract_test denetler).
+ */
+export const ADDRESS_TITLE_MAX_LENGTH = 40;
+export const ADDRESS_UNIT_MAX_LENGTH = 20;
+
+/**
+ * Adres aramasi (T11.8; GET /v1/geo/search): en kisa ve en uzun sorgu, en
+ * fazla sonuc. Gateway'deki karsiliklari geo paketindedir.
+ */
+export const GEO_SEARCH_QUERY_MIN_LENGTH = 3;
+export const GEO_SEARCH_QUERY_MAX_LENGTH = 100;
+export const GEO_SEARCH_RESULTS_MAX = 5;

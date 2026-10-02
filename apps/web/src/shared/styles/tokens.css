@@ -120,6 +120,15 @@
   --size-landing-phones: 39.625rem;
   --size-feature-image: clamp(7.5rem, 6rem + 4vw, 9.5rem);
 
+  /* Adres ekleme penceresi (T11.8): harita icin giris penceresinden genis;
+     1. adimin haritasi ekran yuksekligiyle olceklenir, 2. adimda kucuk
+     onizleme. Pin haritanin ortasindadir (harita altinda kayar). */
+  --container-max-address-dialog: 36rem;
+  --size-address-map: clamp(15rem, 45dvh, 24rem);
+  --size-address-map-preview: 7.5rem;
+  --size-map-pin: 2.75rem;
+  --size-map-pin-icon: 1.25rem;
+
   /* --- Kenar, yaricap, golge --- */
   --border-width-thin: 0.0625rem;
   --focus-ring-width: 0.1875rem;
@@ -147,4 +156,9 @@
      alttaki icerigin ustunde, sabit ust barin (--z-header) ALTINDA kalir;
      sayfa kaydirilirken bara binmez. */
   --z-popover: 5;
+
+  /* Haritanin ustundeki pin ve ipucu (T11.8): Leaflet katmanlari (400-700) ve
+     kontrolleri (1000) haritanin KENDI yigininda kalir (isolation); bu deger
+     yalnizca o yigin icinde gecerlidir, sayfanin katmanlariyla yarismaz. */
+  --z-map-overlay: 1001;
 }

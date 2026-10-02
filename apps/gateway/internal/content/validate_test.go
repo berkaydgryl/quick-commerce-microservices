@@ -149,3 +149,56 @@ func TestValidateFeatures(t *testing.T) {
 	welcome.AppDownload.Image.Height = 0
 	expectProblem(t, welcome, "appDownload.image dogal boyutu")
 }
+
+func TestValidateAddressKinds(t *testing.T) {
+	welcome := validWelcome(t)
+	welcome.AddressSetup.Kinds = nil
+	expectProblem(t, welcome, "addressSetup.kinds 0 satir")
+
+	welcome = validWelcome(t)
+	welcome.AddressSetup.Kinds[1].Kind = "HOME"
+	expectProblem(t, welcome, `addressSetup.kinds[1].kind "HOME" iki kez`)
+
+	welcome = validWelcome(t)
+	welcome.AddressSetup.Kinds[0].Kind = "EV"
+	expectProblem(t, welcome, `addressSetup.kinds[0].kind "EV"`)
+
+	welcome = validWelcome(t)
+	home := welcome.AddressSetup.Kinds[0]
+	welcome.AddressSetup.Kinds = []AddressKindOption{home, home, home, home}
+	expectProblem(t, welcome, "addressSetup.kinds 4 satir")
+
+	welcome = validWelcome(t)
+	welcome.AddressSetup.Kinds[0].Icon = ""
+	expectProblem(t, welcome, "addressSetup.kinds[0].icon bos")
+}
+
+func TestValidateMap(t *testing.T) {
+	for _, tileURL := range []string{
+		"http://tile.openstreetmap.org/{z}/{x}/{y}.png",
+		"javascript:alert(1)//{z}{x}{y}",
+		"/karolar/{z}/{x}/{y}.png",
+	} {
+		welcome := validWelcome(t)
+		welcome.AddressSetup.Map.TileURL = tileURL
+		expectProblem(t, welcome, "addressSetup.map.tileUrl")
+	}
+
+	welcome := validWelcome(t)
+	welcome.AddressSetup.Map.TileURL = "https://tile.openstreetmap.org/{z}/{x}.png"
+	expectProblem(t, welcome, "{y} yer tutucusu yok")
+
+	welcome = validWelcome(t)
+	welcome.AddressSetup.Map.Center.Lat = 91
+	expectProblem(t, welcome, "addressSetup.map.center")
+
+	for _, zoom := range []int{0, 20} {
+		welcome = validWelcome(t)
+		welcome.AddressSetup.Map.Zoom = zoom
+		expectProblem(t, welcome, "addressSetup.map.zoom")
+	}
+
+	welcome = validWelcome(t)
+	welcome.AddressSetup.Map.Attribution = " "
+	expectProblem(t, welcome, "addressSetup.map.attribution bos")
+}

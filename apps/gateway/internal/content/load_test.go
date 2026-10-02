@@ -45,7 +45,18 @@ const validJSON = `{
     "stores": [{"label": "App Store'dan indir", "url": "https://apps.apple.com/app/id995280265",
       "badge": {"url": "/img/store/app-store.svg", "width": 160, "height": 48}}]
   },
-  "features": [{"image": {"url": "/img/tanitim/teslimat.png", "width": 300, "height": 300}, "text": "Dakikalar içinde kapında!"}]
+  "features": [{"image": {"url": "/img/tanitim/teslimat.png", "width": 300, "height": 300}, "text": "Dakikalar içinde kapında!"}],
+  "addressSetup": {
+    "title": "Teslimat Adresi Ekle", "backLabel": "Geri", "pinHint": "Adresini seçmek için Pin'i sürükle",
+    "searchLabel": "Adres ara", "searchPlaceholder": "Sokağını veya posta kodunu arat", "searchSubmitLabel": "Ara",
+    "searchEmptyNotice": "Sonuç bulunamadı.", "useAddressLabel": "Bu adresi kullan", "resolvingLabel": "Adres bulunuyor…",
+    "unresolvedNotice": "Bu nokta için adres bulunamadı.", "kindLabel": "Adres türü",
+    "kinds": [{"kind": "HOME", "label": "Ev", "icon": "🏠"}, {"kind": "WORK", "label": "İş", "icon": "🏢"}],
+    "titleLabel": "Başlık", "lineLabel": "Adres", "buildingLabel": "Bina", "floorLabel": "Kat", "apartmentLabel": "Daire",
+    "noteLabel": "Adres Tarifi", "saveLabel": "Kaydet", "savingLabel": "Kaydediliyor…", "noMarketNotice": "Hizmet veren market yok.",
+    "map": {"tileUrl": "https://tile.openstreetmap.org/{z}/{x}/{y}.png", "attribution": "© OpenStreetMap katkıcıları",
+      "center": {"lat": 40.9885, "lng": 29.027}, "zoom": 15}
+  }
 }`
 
 func TestEmbeddedWelcomeLoads(t *testing.T) {
@@ -74,6 +85,10 @@ func TestEmbeddedWelcomeLoads(t *testing.T) {
 	}
 	if len(welcome.Features) != 3 {
 		t.Errorf("uc tanitim kutusu bekleniyordu: %d", len(welcome.Features))
+	}
+	// Adres penceresi (T11.8): uc tur, karo adresi disari giden adres oldugu gibi.
+	if setup := welcome.AddressSetup; len(setup.Kinds) != 3 || setup.Map.TileURL != "https://tile.openstreetmap.org/{z}/{x}/{y}.png" {
+		t.Errorf("adres penceresi: %d tur, karo %q", len(setup.Kinds), setup.Map.TileURL)
 	}
 }
 

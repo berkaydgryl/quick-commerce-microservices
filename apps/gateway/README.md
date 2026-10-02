@@ -36,6 +36,8 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `POST /v1/auth/logout` | ✅ Yenileme jetonunu iptal eder; tekrarı zararsız (`revoked:false`) |
 | `GET /v1/me`         | ✅ Jetondaki kullanıcının profili |
 | `GET /v1/me/addresses` | ✅ Adres defteri (T9.5): kayıtlı adresler, kayıt sırasında; en fazla 10 (sınırlı liste); önbelleğe alınmaz |
+| `POST /v1/me/addresses` | ✅ Adres ekleme (T11.8): tür, bina/kat/daire, tarif; aynı ad ve 11. adres tek atomik Mongo yazımında reddedilir; `Idempotency-Key` ister, cevap güncel defter |
+| `GET /v1/geo/reverse?lat&lng`, `GET /v1/geo/search?q` | ✅ Harita adres servisi (T11.8, `internal/geo`): OpenStreetMap Nominatim'e **tek sıra** (saniyede en fazla bir istek, kullanım koşulu) ve 24 saat önbellekle; sıra `GEO_TIMEOUT_MS` içinde ilerlemezse 503, adres yoksa 404. Oturum ister |
 | Kullanıcı kimliği    | ✅ `Authorization: Bearer` JWT (HS256); `X-User-Id` kalktı (T8.1) |
 | Kimlik deposu        | ✅ Mongo `users` + `sessions` (TTL indeksi); MOCK'ta bellek |
 | Sipariş risk sinyalleri | ✅ `CheckoutSignals`'ın 7 alanı oturum ve kullanıcı kaydından (T8.1); cihaz çerezi `getir_device` |
@@ -315,6 +317,7 @@ bellek içi sayaç sınırı örnek sayısı kadar gevşetirdi (proje kuralları
 | `POST /v1/cart/reserve`, `/v1/orders`, `/v1/orders/{id}/3ds` | `RATE_LIMIT_ORDER_MAX_REQUESTS` (20) | kullanıcı   |
 | Katalog, market ve genel arama uçları                     | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
 | `GET /v1/me`, `/v1/me/addresses`, `GET /v1/orders/{id}`   | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
+| `POST /v1/me/addresses`, `/v1/geo/*` (T11.8)               | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
 | `/healthz`                                                | sınırsız                         | —           |
 
 - **Anahtar:** `rate:{ozne}:POST_/v1/orders/id/3ds` (`@getir/redis-kit` `rateLimitKey`;
@@ -508,6 +511,9 @@ curl -s "localhost:8080/v1/search?lat=40.9885&lng=29.0262&q=s%C3%BCt" \
 | `RATE_LIMIT_ORDER_MAX_REQUESTS` | `20`           | Rezervasyon, sipariş, 3DS (kullanıcı başına) |
 | `NODE_ENV`                   | `development`     | `development/test/production`                   |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | yok              | İzlerin OTLP/HTTP taban adresi (D15; yerelde `http://localhost:4318`, Jaeger). Boşsa izler oluşur ama gönderilmez |
+| `GEO_BASE_URL`               | `https://nominatim.openstreetmap.org` | Harita adres servisinin kökü (T11.8); kendi Nominatim'ini kuran ortam değiştirir |
+| `GEO_USER_AGENT`             | `getir-demo-gateway/1.0 (+…)` | Nominatim'e uygulamayı tanıtan ad (kullanım koşulu) |
+| `GEO_TIMEOUT_MS`             | `5000`            | Tek adres sorusunun üst sınırı: sırada bekleme + Nominatim cevabı; aşılırsa 503 |
 
 ## Görsel adresleri (`ASSET_BASE_URL`)
 

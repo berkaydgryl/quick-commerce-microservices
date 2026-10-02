@@ -24,6 +24,37 @@ type loginBody struct {
 	Password string `json:"password"`
 }
 
+// addressCreateBody, POST /v1/me/addresses (createAddressRequestSchema; T11.8).
+type addressCreateBody struct {
+	Title     string        `json:"title"`
+	Kind      string        `json:"kind"`
+	Line      string        `json:"line"`
+	Location  *geoPointBody `json:"location"`
+	Building  string        `json:"building"`
+	Floor     string        `json:"floor"`
+	Apartment string        `json:"apartment"`
+	Note      string        `json:"note"`
+}
+
+// toInput, adres govdesini girdiye cevirir; kural sorunlarini errs'e yazar.
+// Konum gonderilip bir koordinati eksikse sorun o koordinattadir
+// ("location.lat"); ayrica "location zorunlu" yazilmaz.
+func (b addressCreateBody) toInput(errs fieldErrors) auth.AddressInput {
+	input := auth.AddressInput{
+		Title: b.Title, Kind: b.Kind, Line: b.Line,
+		Building: b.Building, Floor: b.Floor, Apartment: b.Apartment, Note: b.Note,
+	}
+	if point := b.Location.toPoint(auth.FieldLocation, errs); point != nil {
+		input.Location = &auth.GeoPoint{Lat: point.Lat, Lng: point.Lng}
+	}
+	problems := input.Check()
+	if b.Location != nil {
+		delete(problems, auth.FieldLocation)
+	}
+	collect(errs, problems)
+	return input
+}
+
 // phoneCheckBody, POST /v1/auth/phone-check (phoneCheckRequestSchema).
 type phoneCheckBody struct {
 	Phone string `json:"phone"`

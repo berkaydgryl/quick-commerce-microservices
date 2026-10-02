@@ -1,0 +1,10 @@
+/* Harita paketi gelene kadar ayni boyda yer tutucu (AddressMap ile ayni olculer). */
+.c-address-map-placeholder {
+  height: var(--size-address-map);
+  background: var(--bg-page);
+  border-radius: var(--radius-md);
+}
+
+.c-address-map-placeholder--preview {
+  height: var(--size-address-map-preview);
+}

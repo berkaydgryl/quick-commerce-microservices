@@ -59,6 +59,17 @@ const (
 	maxRateLimit = 10000
 )
 
+// Harita adres servisi varsayilanlari (T11.8). Adlar ve degerler .env.example ile ayni.
+const (
+	// GEO_BASE_URL: OpenStreetMap'in genel Nominatim sunucusu (ucretsiz;
+	// saniyede en fazla bir istek, gateway siraya dizer).
+	defaultGeoBaseURL = "https://nominatim.openstreetmap.org"
+	// GEO_USER_AGENT: Nominatim kosulu geregi uygulamayi tanitan ad.
+	defaultGeoUserAgent = "getir-demo-gateway/1.0 (+https://github.com/berkaydgryl/quick-commerce-microservices)"
+	// GEO_TIMEOUT_MS=5000: sirada bekleme dahil tek sorunun ust siniri.
+	defaultGeoTimeout = 5 * time.Second
+)
+
 // NODE_ENV degerleri (Node servisleriyle ayni sozluk). Production, gelistirme
 // kolayliklarinin KAPALI oldugu tek ortamdir (ornek sir reddedilir, T8.1).
 const (

@@ -79,5 +79,38 @@
       "image": { "url": "/img/tanitim/dakikalar.png", "width": 300, "height": 300 },
       "text": "Siparişin Getir güvencesiyle dakikalar içinde kapında!"
     }
-  ]
+  ],
+  "addressSetup": {
+    "title": "Teslimat Adresi Ekle",
+    "backLabel": "Geri",
+    "pinHint": "Adresini seçmek için Pin'i sürükle",
+    "searchLabel": "Adres ara",
+    "searchPlaceholder": "Sokağını veya posta kodunu arat",
+    "searchSubmitLabel": "Ara",
+    "searchEmptyNotice": "Sonuç bulunamadı.",
+    "useAddressLabel": "Bu adresi kullan",
+    "resolvingLabel": "Adres bulunuyor…",
+    "unresolvedNotice": "Bu nokta için adres bulunamadı; adresini kendin yazabilirsin.",
+    "kindLabel": "Adres türü",
+    "kinds": [
+      { "kind": "HOME", "label": "Ev", "icon": "🏠" },
+      { "kind": "WORK", "label": "İş", "icon": "🏢" },
+      { "kind": "OTHER", "label": "Diğer", "icon": "📍" }
+    ],
+    "titleLabel": "Başlık (Ev, işyeri)",
+    "lineLabel": "Adres",
+    "buildingLabel": "Bina",
+    "floorLabel": "Kat",
+    "apartmentLabel": "Daire",
+    "noteLabel": "Adres Tarifi",
+    "saveLabel": "Kaydet",
+    "savingLabel": "Kaydediliyor…",
+    "noMarketNotice": "Bu adrese şu an hizmet veren market yok; yine de kaydedebilirsin.",
+    "map": {
+      "tileUrl": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      "attribution": "© OpenStreetMap katkıcıları",
+      "center": { "lat": 40.9885, "lng": 29.027 },
+      "zoom": 15
+    }
+  }
 }

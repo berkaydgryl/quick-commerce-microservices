@@ -26,3 +26,46 @@ export function CheckIcon() {
     </svg>
   );
 }
+
+export function BackIcon() {
+  return (
+    <svg {...STROKE_PROPS}>
+      <path d="M19 12H5" />
+      <path d="M11 6l-6 6 6 6" />
+    </svg>
+  );
+}
+
+export function CloseIcon() {
+  return (
+    <svg {...STROKE_PROPS}>
+      <path d="M6 6l12 12" />
+      <path d="M18 6L6 18" />
+    </svg>
+  );
+}
+
+export function SearchIcon() {
+  return (
+    <svg {...STROKE_PROPS}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="M20 20l-4-4" />
+    </svg>
+  );
+}
+
+/** Haritanin ortasindaki pin (T11.8): dolu damla + ev; renkler CSS'ten (currentColor). */
+export function HomePinIcon() {
+  return (
+    <svg viewBox="0 0 40 48" aria-hidden focusable={false}>
+      <path d="M20 47s17-15.6 17-28A17 17 0 0 0 3 19c0 12.4 17 28 17 28z" fill="currentColor" />
+      <path
+        d="M12 20.5 20 13l8 7.5V28a1 1 0 0 1-1 1h-4.5v-5h-5v5H13a1 1 0 0 1-1-1z"
+        fill="none"
+        style={{ stroke: 'var(--text-on-brand)' }}
+        strokeWidth={2}
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}

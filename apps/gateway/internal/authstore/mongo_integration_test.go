@@ -523,3 +523,96 @@ func TestAddressBookOnMongoFollowsThePersonaSeed(t *testing.T) {
 		t.Errorf("konum ve adres satiri Mongo'dan aynen donmeli: %+v", first)
 	}
 }
+
+func savedAddress(title string) auth.SavedAddress {
+	return auth.SavedAddress{
+		Title: title, Kind: auth.AddressKindHome, Line: "Acıbadem, 34660 Üsküdar/İstanbul, Türkiye",
+		Location: auth.GeoPoint{Lat: 40.9885, Lng: 29.027}, Building: "19C3", Floor: "3", Apartment: "12", Note: "Zil bozuk",
+	}
+}
+
+func TestAddAddressRoundTripAndRules(t *testing.T) {
+	users := authstore.NewMongoUsers(testDatabase(t))
+	user := newUser("+905321234567")
+	if err := users.Create(t.Context(), user); err != nil {
+		t.Fatalf("kullanici yazilamadi: %v", err)
+	}
+
+	// Adres alani hic yazilmamis hesap ($ifNull): ilk adres eklenir.
+	added, err := users.AddAddress(t.Context(), user.ID, savedAddress("Ev"), auth.MaxSavedAddresses)
+	if err != nil || len(added.Addresses) != 1 || added.Addresses[0] != savedAddress("Ev") {
+		t.Fatalf("eklenen adres butun alanlariyla donmeli: %+v %v", added.Addresses, err)
+	}
+	if read, err := users.ByID(t.Context(), user.ID); err != nil || len(read.Addresses) != 1 || read.Addresses[0] != savedAddress("Ev") {
+		t.Errorf("okunan defter eklenenle ayni olmali: %+v %v", read.Addresses, err)
+	}
+
+	if _, err := users.AddAddress(t.Context(), user.ID, savedAddress("Ev"), auth.MaxSavedAddresses); !errors.Is(err, auth.ErrAddressTitleTaken) {
+		t.Errorf("ayni ad ErrAddressTitleTaken donmeli: %v", err)
+	}
+	for i := 1; i < auth.MaxSavedAddresses; i++ {
+		if _, err := users.AddAddress(t.Context(), user.ID, savedAddress(fmt.Sprintf("Adres %d", i)), auth.MaxSavedAddresses); err != nil {
+			t.Fatalf("%d. adres eklenmeli: %v", i+1, err)
+		}
+	}
+	if _, err := users.AddAddress(t.Context(), user.ID, savedAddress("Fazla"), auth.MaxSavedAddresses); !errors.Is(err, auth.ErrAddressBookFull) {
+		t.Errorf("dolu defter ErrAddressBookFull donmeli: %v", err)
+	}
+	if _, err := users.AddAddress(t.Context(), ids.New(ids.User), savedAddress("Ev"), auth.MaxSavedAddresses); !errors.Is(err, auth.ErrUserNotFound) {
+		t.Errorf("olmayan kullanici ErrUserNotFound donmeli: %v", err)
+	}
+}
+
+func TestConcurrentAddAddressKeepsTitleUniqueAndBookBounded(t *testing.T) {
+	// "Once oku, sonra yaz" bu yarista ayni adi iki kez ya da siniri asan
+	// adresi yazardi; karar tek FindOneAndUpdate'in filtresinde.
+	db := testDatabase(t)
+	users := authstore.NewMongoUsers(db)
+	user := newUser("+905321234567")
+	for i := range auth.MaxSavedAddresses - 2 {
+		user.Addresses = append(user.Addresses, savedAddress(fmt.Sprintf("Adres %d", i)))
+	}
+	if err := users.Create(t.Context(), user); err != nil {
+		t.Fatalf("kullanici yazilamadi: %v", err)
+	}
+
+	// Ayni ad: bir kez.
+	sameTitle := race(func() error {
+		_, err := users.AddAddress(t.Context(), user.ID, savedAddress("Ev"), auth.MaxSavedAddresses)
+		return err
+	})
+	if added, taken := countOutcomes(sameTitle, auth.ErrAddressTitleTaken); added != 1 || taken != concurrency-1 {
+		t.Errorf("ayni ad bir kez eklenmeli: eklenen %d, reddedilen %d (%v)", added, taken, sameTitle)
+	}
+
+	// Farkli adlar, tek bos yer: siniri yalnizca biri doldurur.
+	var mu sync.Mutex
+	next := 0
+	distinct := race(func() error {
+		mu.Lock()
+		next++
+		title := fmt.Sprintf("Yeni %d", next)
+		mu.Unlock()
+		_, err := users.AddAddress(t.Context(), user.ID, savedAddress(title), auth.MaxSavedAddresses)
+		return err
+	})
+	if added, full := countOutcomes(distinct, auth.ErrAddressBookFull); added != 1 || full != concurrency-1 {
+		t.Errorf("son bos yeri bir istek almali: eklenen %d, dolu %d (%v)", added, full, distinct)
+	}
+	if read, err := users.ByID(t.Context(), user.ID); err != nil || len(read.Addresses) != auth.MaxSavedAddresses {
+		t.Errorf("defter siniri asmamali: %d adres (%v)", len(read.Addresses), err)
+	}
+}
+
+// countOutcomes, yaris sonucunda basarili ve beklenen hatayla reddedilen sayisi.
+func countOutcomes(errs []error, rejection error) (succeeded, rejected int) {
+	for _, err := range errs {
+		switch {
+		case err == nil:
+			succeeded++
+		case errors.Is(err, rejection):
+			rejected++
+		}
+	}
+	return succeeded, rejected
+}

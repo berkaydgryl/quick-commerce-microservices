@@ -246,6 +246,25 @@ func (s *Service) Profile(ctx context.Context, userID string) (Profile, error) {
 	return user.Profile(), nil
 }
 
+// AddAddress, adres defterine yeni adres ekler ve guncel defteri doner
+// (T11.8: adresi olmayan kullanicinin adres ekleme penceresi). Girdi
+// dogrulanmis gelir (AddressInput.Check). Ayni ad ve dolu defter alanin
+// altinda gosterilen VALIDATION_FAILED'dir.
+func (s *Service) AddAddress(ctx context.Context, userID string, input AddressInput) (AddressBook, error) {
+	user, err := s.deps.Users.AddAddress(ctx, userID, input.Address(), MaxSavedAddresses)
+	switch {
+	case errors.Is(err, ErrUserNotFound):
+		return AddressBook{}, apperror.New(apperror.CodeUnauthorized, nil)
+	case errors.Is(err, ErrAddressTitleTaken):
+		return AddressBook{}, apperror.New(apperror.CodeValidationFailed, map[string]string{FieldTitle: addressTitleTakenReason})
+	case errors.Is(err, ErrAddressBookFull):
+		return AddressBook{}, apperror.New(apperror.CodeValidationFailed, map[string]string{FieldAddresses: addressBookFullReason})
+	case err != nil:
+		return AddressBook{}, fmt.Errorf("adres eklenemedi: %w", err)
+	}
+	return user.AddressBook(), nil
+}
+
 // Addresses, oturumdaki kullanicinin adres defteri (T9.5): web'in adres
 // secimi buradan okur. Kullanici silinmisse UNAUTHORIZED (Profile gibi).
 func (s *Service) Addresses(ctx context.Context, userID string) (AddressBook, error) {

@@ -1,0 +1,26 @@
+/* Adres penceresinin ana dugmesi (T11.8): mor zemin, beyaz yazi, tam genislik. */
+.c-address-button {
+  width: 100%;
+  min-height: var(--size-field-min-height);
+  padding: var(--space-3) var(--space-4);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-on-brand);
+  cursor: pointer;
+  background: var(--color-brand-primary);
+  border: none;
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast) var(--easing-standard);
+}
+
+.c-address-button:disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
+}
+
+.c-address-button:hover:not(:disabled) {
+  background: var(--color-brand-primary-strong);
+}
+
+.c-address-button[aria-busy='true'] {
+  cursor: progress;
+}

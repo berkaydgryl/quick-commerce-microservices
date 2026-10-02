@@ -12,6 +12,10 @@ var (
 	ErrPhoneTaken      = errors.New("telefon numarasi kayitli")
 	ErrUserNotFound    = errors.New("kullanici bulunamadi")
 	ErrSessionNotFound = errors.New("oturum bulunamadi ya da suresi dolmus")
+	// ErrAddressTitleTaken, ayni adla kayitli adres var (T11.8; secici adla secer).
+	ErrAddressTitleTaken = errors.New("bu adla kayitli adres var")
+	// ErrAddressBookFull, adres defteri MaxSavedAddresses'a ulasti.
+	ErrAddressBookFull = errors.New("adres defteri dolu")
 )
 
 // UserStore, kullanici kayitlari. Arayuz KULLANAN tarafta (servis) tanimlidir;
@@ -30,6 +34,11 @@ type UserStore interface {
 	RecordLogin(ctx context.Context, userID string, login LoginState) (LoginState, error)
 	// CountByRegistrationDevice, cihazdan acilmis hesap sayisi.
 	CountByRegistrationDevice(ctx context.Context, deviceID string) (int, error)
+	// AddAddress, adresi adres defterinin sonuna ATOMIK ekler ve guncel
+	// kullaniciyi doner (T11.8). Ayni adla adres varsa ErrAddressTitleTaken,
+	// defterde max adres varsa ErrAddressBookFull, kullanici yoksa
+	// ErrUserNotFound. Es zamanli iki ekleme siniri asamaz.
+	AddAddress(ctx context.Context, userID string, address SavedAddress, max int) (User, error)
 }
 
 // SessionStore, oturum kayitlari.
