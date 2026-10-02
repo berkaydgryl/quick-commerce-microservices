@@ -62,6 +62,8 @@ tags:
     description: Kayıt ve oturum açma
   - name: catalog
     description: Kategori ve ürün listeleme
+  - name: content
+    description: Ekran metinleri ve görselleri (T11.6)
   - name: darkstore
     description: Konumdan karanlık mağaza çözümleme
   - name: cart
@@ -518,6 +520,50 @@ paths:
                       details:
                         categoryID: "bu uc bu parametreyi kabul etmiyor"
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /v1/content/welcome:
+    get:
+      tags: [content]
+      operationId: getWelcomeContent
+      summary: Karşılama ekranının metinleri ve görselleri
+      description: |
+        Oturumsuz ziyaretçinin karşılama ekranı (T11.6): üst bar, banner, giriş
+        kartı ve kategori bölümünün başlığı. Web bu ekranda metin ve görsel
+        adresi SABİT YAZMAZ; hepsi bu uçtan gelir. Kategori listesinin kendisi
+        `/v1/categories`'tedir.
+
+        Bugün kaynak gateway'e gömülü dosyadır; açılışta doğrulanır, bozuksa
+        gateway açılmaz. Bir CMS bağlanınca uç ve şema değişmez.
+
+        Sorgu parametresi ALMAZ; tanınmayan parametre `400 VALIDATION_FAILED`.
+      security: []
+      responses:
+        "200":
+          description: Karşılama içeriği
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/WelcomeContent"
+        "400":
+          description: Tanınmayan sorgu parametresi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -2059,6 +2105,147 @@ components:
             kökünü ekler. Görsel yoksa alan hiç gönderilmez.
         sortOrder:
           type: integer
+
+    ContentText:
+      type: string
+      minLength: 1
+      maxLength: 200
+      description: Ekranda görünen metin; boş olamaz (CONTENT_TEXT_MAX_LENGTH).
+
+    WelcomeContent:
+      type: object
+      description: |
+        Karşılama ekranı (T11.6). Form KURALLARI ve hata cümleleri burada
+        değildir; onlar kimlik şemalarından gelir.
+      required: [header, hero, loginCard, categories]
+      properties:
+        header:
+          type: object
+          required: [brand, service, loginLabel, registerLabel]
+          properties:
+            brand: { $ref: "#/components/schemas/ContentText" }
+            service: { $ref: "#/components/schemas/ContentText" }
+            loginLabel: { $ref: "#/components/schemas/ContentText" }
+            registerLabel: { $ref: "#/components/schemas/ContentText" }
+        hero:
+          type: object
+          required: [title, banner]
+          properties:
+            title:
+              $ref: "#/components/schemas/ContentText"
+              description: Sayfanın h1'i ve banner'ın alt metni; slogan görselin içinde yazılıdır.
+            banner:
+              $ref: "#/components/schemas/Banner"
+        loginCard:
+          $ref: "#/components/schemas/LoginCardContent"
+        categories:
+          type: object
+          required: [title]
+          properties:
+            title: { $ref: "#/components/schemas/ContentText" }
+
+    Banner:
+      type: object
+      description: |
+        Aynı görselin boyları (srcset) ve doğal boyutu; boyut oran içindir,
+        tarayıcı yeri önceden ayırır. Aynı genişlik iki kez yazılamaz.
+      required: [sources, width, height]
+      properties:
+        sources:
+          type: array
+          minItems: 1
+          maxItems: 4
+          items:
+            type: object
+            required: [url, width]
+            properties:
+              url:
+                type: string
+                format: uri
+                description: Her zaman MUTLAK URL (gateway `ASSET_BASE_URL` ile kurar).
+              width:
+                type: integer
+                minimum: 1
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+
+    PhoneCountry:
+      type: object
+      description: |
+        Ülke kodu seçicisinin bir satırı. Telefon kuralı bugün yalnızca `+90`
+        kabul eder; listedeki başka bir kod formda reddedilir.
+      required: [code, name, dialCode, flagUrl]
+      properties:
+        code:
+          type: string
+          pattern: "^[A-Z]{2}$"
+          example: TR
+        name:
+          $ref: "#/components/schemas/ContentText"
+        dialCode:
+          type: string
+          pattern: "^\\+[1-9][0-9]{0,2}$"
+          example: "+90"
+        flagUrl:
+          type: string
+          format: uri
+
+    LoginCardContent:
+      type: object
+      description: |
+        Giriş kartı: telefon adımı, ardından aynı kartta şifre (giriş) ya da ad
+        soyad + şifre (kayıt) adımı. Geliştirmeye özel demo hesap listesinin
+        metni burada yoktur: o araç production paketine girmez.
+      required:
+        - title
+        - countryLabel
+        - phoneLabel
+        - phonePlaceholder
+        - continueLabel
+        - editPhoneLabel
+        - showPasswordLabel
+        - countries
+        - login
+        - register
+      properties:
+        title: { $ref: "#/components/schemas/ContentText" }
+        countryLabel: { $ref: "#/components/schemas/ContentText" }
+        phoneLabel: { $ref: "#/components/schemas/ContentText" }
+        phonePlaceholder: { $ref: "#/components/schemas/ContentText" }
+        continueLabel: { $ref: "#/components/schemas/ContentText" }
+        editPhoneLabel: { $ref: "#/components/schemas/ContentText" }
+        showPasswordLabel: { $ref: "#/components/schemas/ContentText" }
+        countries:
+          type: array
+          minItems: 1
+          maxItems: 10
+          description: Ülke kodları tekildir.
+          items:
+            $ref: "#/components/schemas/PhoneCountry"
+        login:
+          type: object
+          required: [passwordLabel, submitLabel, pendingLabel, registerPrompt, registerLinkLabel]
+          properties:
+            passwordLabel: { $ref: "#/components/schemas/ContentText" }
+            submitLabel: { $ref: "#/components/schemas/ContentText" }
+            pendingLabel: { $ref: "#/components/schemas/ContentText" }
+            registerPrompt: { $ref: "#/components/schemas/ContentText" }
+            registerLinkLabel: { $ref: "#/components/schemas/ContentText" }
+        register:
+          type: object
+          required:
+            [fullNameLabel, passwordLabel, submitLabel, pendingLabel, loginPrompt, loginLinkLabel]
+          properties:
+            fullNameLabel: { $ref: "#/components/schemas/ContentText" }
+            passwordLabel: { $ref: "#/components/schemas/ContentText" }
+            submitLabel: { $ref: "#/components/schemas/ContentText" }
+            pendingLabel: { $ref: "#/components/schemas/ContentText" }
+            loginPrompt: { $ref: "#/components/schemas/ContentText" }
+            loginLinkLabel: { $ref: "#/components/schemas/ContentText" }
 
     Product:
       type: object

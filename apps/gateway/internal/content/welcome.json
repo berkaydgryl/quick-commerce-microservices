@@ -1,0 +1,50 @@
+{
+  "header": {
+    "brand": "getir",
+    "service": "market",
+    "loginLabel": "Giriş yap",
+    "registerLabel": "Kayıt ol"
+  },
+  "hero": {
+    "title": "Kapına gelen market: getirmarket",
+    "banner": {
+      "sources": [
+        { "url": "/img/banner/kapina-gelen-market-960.jpg", "width": 960 },
+        { "url": "/img/banner/kapina-gelen-market-1920.jpg", "width": 1920 },
+        { "url": "/img/banner/kapina-gelen-market-3200.jpg", "width": 3200 }
+      ],
+      "width": 3200,
+      "height": 925
+    }
+  },
+  "loginCard": {
+    "title": "Giriş yap veya kayıt ol",
+    "countryLabel": "Ülke kodu",
+    "phoneLabel": "Telefon numarası",
+    "phonePlaceholder": "5XX XXX XX XX",
+    "continueLabel": "Devam Et",
+    "editPhoneLabel": "Numarayı değiştir",
+    "showPasswordLabel": "Şifreyi göster",
+    "countries": [
+      { "code": "TR", "name": "Türkiye", "dialCode": "+90", "flagUrl": "/img/flag/tr.svg" }
+    ],
+    "login": {
+      "passwordLabel": "Şifren",
+      "submitLabel": "Giriş yap",
+      "pendingLabel": "Giriş yapılıyor…",
+      "registerPrompt": "Hesabın yok mu?",
+      "registerLinkLabel": "Kayıt ol"
+    },
+    "register": {
+      "fullNameLabel": "Adın soyadın",
+      "passwordLabel": "Şifre belirle",
+      "submitLabel": "Kayıt ol",
+      "pendingLabel": "Kaydın yapılıyor…",
+      "loginPrompt": "Zaten hesabın var mı?",
+      "loginLinkLabel": "Giriş yap"
+    }
+  },
+  "categories": {
+    "title": "Kategoriler"
+  }
+}

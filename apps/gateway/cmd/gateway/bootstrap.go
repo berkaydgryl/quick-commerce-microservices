@@ -18,6 +18,7 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/catalog"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/clients"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/config"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/content"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/httpapi"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/inventory"
@@ -36,6 +37,14 @@ import (
 // acilis durur. Donen cleanup havuzu, Mongo ve Redis baglantilarini kapatir;
 // cagiran, sunucu durduktan SONRA calistirir.
 func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, tracing *telemetry.Tracing, recorder httpapi.RequestMetrics) (*fiber.App, func(), error) {
+	// Ekran icerigi (T11.6) baglantilardan ONCE: gomulu dosya bozuksa
+	// acilacak, sonra kapatilacak bir sey yoktur.
+	images := assets.NewResolver(cfg.AssetBaseURL)
+	welcome, err := content.LoadWelcome(images)
+	if err != nil {
+		return nil, nil, fmt.Errorf("icerik: %w", err)
+	}
+
 	targets := make([]clients.Target, 0, len(cfg.Services))
 	for _, service := range cfg.Services {
 		targets = append(targets, clients.Target{Name: service.Name, Address: service.Address})
@@ -116,7 +125,7 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 	catalogService := catalog.New(
 		catalogv1.NewCatalogServiceClient(catalogConn),
 		cfg.RequestTimeout,
-		assets.NewResolver(cfg.AssetBaseURL),
+		images,
 	)
 
 	// Urun listesi ve genel arama katalog + stoktur (T8.4, B27; T9.6): stok
@@ -131,6 +140,7 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 	app := httpapi.New(httpapi.Deps{
 		Health:           health.New(healthClients, mergePingers(identity.pingers, shared.pingers), cfg.RequestTimeout, cfg.Mock, logger),
 		Categories:       catalogService,
+		WelcomeContent:   content.NewStatic(welcome),
 		NearbyMarkets:    catalogService,
 		Market:           catalogService,
 		MarketCategories: catalogService,

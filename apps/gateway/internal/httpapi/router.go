@@ -4,6 +4,7 @@ package httpapi
 // kendi dosyasi var; bir sebeple degisen kod tek dosyada kalsin diye bolundu:
 //   health.go     - /healthz
 //   categories.go - /v1/categories
+//   content.go    - /v1/content/welcome (karsilama ekrani icerigi, T11.6)
 //   markets.go    - /v1/markets ve alt uclari (pazaryeri)
 //   search.go     - /v1/search (genel arama, T9.6)
 //   orders.go     - /v1/cart/reserve ve /v1/orders uclari (T7.5)
@@ -37,6 +38,7 @@ import (
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/catalog"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/content"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
 )
@@ -52,6 +54,11 @@ type HealthReporter interface {
 // CategoryLister, GET /v1/categories ucunun ihtiyaci olan tek davranis.
 type CategoryLister interface {
 	ListCategories(ctx context.Context) (catalog.CategoryList, error)
+}
+
+// WelcomeContentGetter, GET /v1/content/welcome (T11.6); gercegi content.Static.
+type WelcomeContentGetter interface {
+	Welcome(ctx context.Context) (content.Welcome, error)
 }
 
 // NearbyMarketLister, GET /v1/markets ucunun ihtiyaci olan tek davranis.
@@ -149,6 +156,7 @@ type AccessTokenVerifier interface {
 type Deps struct {
 	Health           HealthReporter
 	Categories       CategoryLister
+	WelcomeContent   WelcomeContentGetter
 	NearbyMarkets    NearbyMarketLister
 	Market           MarketGetter
 	MarketCategories MarketCategoryLister
@@ -233,6 +241,7 @@ func New(deps Deps) *fiber.App {
 
 	v1 := app.Group("/v1")
 	v1.Get("/categories", generalByIP, listCategoriesHandler(deps.Categories))
+	v1.Get("/content/welcome", generalByIP, welcomeContentHandler(deps.WelcomeContent))
 	v1.Get("/markets", generalByIP, listNearbyMarketsHandler(deps.NearbyMarkets))
 	v1.Get("/markets/:marketId", generalByIP, getMarketHandler(deps.Market))
 	v1.Get("/markets/:marketId/categories", generalByIP, listMarketCategoriesHandler(deps.MarketCategories))

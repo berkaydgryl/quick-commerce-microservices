@@ -151,3 +151,27 @@ export const CATALOG_ID_MAX_LENGTH = 64;
 /** Market puani araligi (sabit seed verisi; yorum sistemi kapsam disi). */
 export const RATING_MIN = 0;
 export const RATING_MAX = 5;
+
+/**
+ * Icerik uclari (T11.6): ekrandaki metin ve gorseller koddan degil sunucudan
+ * gelir. Sinirlar icerik dosyasinin (gateway internal/content) acilista
+ * dogrulanmasi icindir; gateway'deki karsiliklari content.MaxTextLength,
+ * content.MaxBannerSources ve content.MaxPhoneCountries (esitligi Go testi
+ * denetler).
+ */
+export const CONTENT_TEXT_MAX_LENGTH = 200;
+
+/** Banner gorselinin en fazla boy sayisi (srcset). */
+export const CONTENT_BANNER_SOURCES_MAX = 4;
+
+/**
+ * Ulke kodu secicisinin en fazla satiri. Telefon kurali (PHONE_PATTERN) bugun
+ * yalnizca +90 kabul eder; listeye baska ulke eklemek o kurali da degistirir.
+ */
+export const CONTENT_PHONE_COUNTRIES_MAX = 10;
+
+/** Ulke telefon kodu: "+" ve 1-3 rakam, sifirla baslamaz ("+90"). */
+export const DIAL_CODE_PATTERN = /^\+[1-9][0-9]{0,2}$/;
+
+/** Ulke kodu: ISO 3166-1 alfa-2, buyuk harf ("TR"). */
+export const COUNTRY_CODE_PATTERN = /^[A-Z]{2}$/;
