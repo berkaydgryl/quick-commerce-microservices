@@ -50,6 +50,11 @@ const RECORDS: Readonly<Record<string, paymentV1.Payment | 'kapali'>> = {
     method: paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY,
     status: S.PAYMENT_STATUS_PENDING,
   }),
+  ord_iptal: paymentV1.Payment.fromPartial({
+    orderId: 'ord_iptal',
+    method: paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY,
+    status: S.PAYMENT_STATUS_CANCELLED,
+  }),
   ord_yontemsiz: paymentV1.Payment.fromPartial({
     orderId: 'ord_yontemsiz',
     status: S.PAYMENT_STATUS_SUCCEEDED,
@@ -248,6 +253,13 @@ describe('GrpcPayments.getPayment (T11.2 PR 2)', () => {
       method: PAYMENT_METHOD.CASH_ON_DELIVERY,
     });
     expect(seenLookups.at(-1)).toEqual({ orderId: 'ord_kapida', requestId: scope.requestId });
+  });
+
+  it('tahsil edilmeden kapatilmis odeme (T11.2 PR 3) CANCELLED okunur', async () => {
+    await expect(payments.getPayment('ord_iptal', scope)).resolves.toEqual({
+      status: PAYMENT_STATUS.CANCELLED,
+      method: PAYMENT_METHOD.CASH_ON_DELIVERY,
+    });
   });
 
   it('kayit yoksa (NOT_FOUND) null: o siparis icin hic cekim istenmedi', async () => {

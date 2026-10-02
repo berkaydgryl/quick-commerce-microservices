@@ -51,12 +51,20 @@ describe('cancelOrder use-case', () => {
     const order = await cancel({ orderId: id, userId: 'usr_1', reason: 'CHANGED_MIND' }, scope);
 
     expect(order.timeline.at(-1)?.note).toBe('CHANGED_MIND');
-    // Iptal de bir gecistir: olayi gerekcesiyle yazilir (T7.3).
-    expect(repository.recordedEvents.at(-1)).toMatchObject({
-      topic: 'order.status_changed',
-      orderId: id,
-      payload: { from: 'AWAITING_PAYMENT', to: 'CANCELLED', note: 'CHANGED_MIND' },
-    });
+    // Iptal de bir gecistir: olayi gerekcesiyle yazilir (T7.3). Odeme asamasindan
+    // iptal oldugu icin ayni yazimda payment'a iptal komutu da gider (T11.2 PR 3).
+    expect(repository.recordedEvents.slice(-2)).toMatchObject([
+      {
+        topic: 'order.status_changed',
+        orderId: id,
+        payload: { from: 'AWAITING_PAYMENT', to: 'CANCELLED', note: 'CHANGED_MIND' },
+      },
+      {
+        topic: 'payment.cancel_requested',
+        orderId: id,
+        payload: { orderId: id, reason: 'order_cancelled' },
+      },
+    ]);
   });
 
   it('odenmis siparisi kullanici iptal EDEMEZ (iade sistemin telafi adimi, B20c)', async () => {

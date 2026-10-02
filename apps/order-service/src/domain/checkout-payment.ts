@@ -25,6 +25,8 @@ export const PAYMENT_STATUS = {
   SUCCEEDED: 'SUCCEEDED',
   FAILED: 'FAILED',
   REFUNDED: 'REFUNDED',
+  /** Tahsil edilmeden kapatildi: siparis iptal edildi (T11.2 PR 3). */
+  CANCELLED: 'CANCELLED',
 } as const;
 
 export type PaymentStatus = (typeof PAYMENT_STATUS)[keyof typeof PAYMENT_STATUS];
@@ -75,6 +77,10 @@ export function decidePayment(
       return { kind: 'failed', code: result.failureCode ?? ERROR_CODES.PAYMENT_DECLINED };
     case PAYMENT_STATUS.REFUNDED:
       throw AppError.internal('Odeme adiminda iade edilmis odeme', { details: { orderId } });
+    case PAYMENT_STATUS.CANCELLED:
+      // Odeme yalnizca siparis iptal edildikten sonra kapatilir (T11.2 PR 3);
+      // iptal edilmis siparis odeme adimina gelmez.
+      throw AppError.internal('Odeme adiminda kapatilmis odeme', { details: { orderId } });
   }
 }
 

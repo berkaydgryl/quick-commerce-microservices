@@ -46,6 +46,8 @@ export interface PaymentDocument extends BaseDocument {
   threeDS?: ThreeDsDocument;
   /** Yalnizca iade edilmis odemede yazilir. */
   refundReason?: string;
+  /** Yalnizca iptal edilmis (tahsil edilmeden kapatilmis) odemede yazilir (T11.2 PR 3). */
+  cancelReason?: string;
   attempts: AttemptDocument[];
   idempotencyKey: string;
   /** Iyimser kilit surumu; guncelleme filtresi bunu kosul olarak kullanir. */

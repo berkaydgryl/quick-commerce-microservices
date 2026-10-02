@@ -8,6 +8,7 @@ import type { EventSubscriber } from '@getir/event-bus';
 import { paymentV1 } from '@getir/proto';
 import type { GrpcServiceRegistration } from '@getir/service-kit';
 
+import { createCancelPayment } from './application/cancel-payment.js';
 import { createCharge } from './application/charge.js';
 import { createConfirm3Ds } from './application/confirm-3ds.js';
 import { createGetPayment } from './application/get-payment.js';
@@ -24,6 +25,7 @@ import type { PaymentRepository } from './domain/payment-repository.js';
 import { InMemoryPaymentStore } from './infrastructure/memory/in-memory-payment-store.js';
 import { MockPaymentProvider } from './infrastructure/mock-provider/mock-payment-provider.js';
 import { createPaymentImplementation } from './interfaces/grpc/payment-handlers.js';
+import { createCancelRequestedHandler } from './interfaces/workers/cancel-requested.js';
 import { createRefundRequestedHandler } from './interfaces/workers/refund-requested.js';
 
 export interface BootstrapOptions {
@@ -80,7 +82,8 @@ export interface PaymentEventOptions {
 }
 
 /**
- * Olay dinleme kayitlari (T7.4): payment.refund_requested -> Refund use-case.
+ * Olay dinleme kayitlari: payment.refund_requested -> Refund use-case (T7.4),
+ * payment.cancel_requested -> CancelPayment use-case (T11.2 PR 3).
  * Dinlemeyi baslatmak (start) ve durdurmak main.ts'in isidir; burada yalnizca
  * hangi konunun hangi isleyiciye gidecegi baglanir.
  */
@@ -93,6 +96,16 @@ export function subscribePaymentEvents(
     EVENT_CONSUMER_GROUP,
     createRefundRequestedHandler({
       refund: createRefund({ repository: options.repository, clock: options.clock ?? systemClock }),
+    }),
+  );
+  subscriber.subscribe(
+    EVENTS.PAYMENT_CANCEL_REQUESTED,
+    EVENT_CONSUMER_GROUP,
+    createCancelRequestedHandler({
+      cancel: createCancelPayment({
+        repository: options.repository,
+        clock: options.clock ?? systemClock,
+      }),
     }),
   );
 }

@@ -1,7 +1,7 @@
 /**
  * Domain <-> Mongo belgesi cevirisi. Tek yer: alan adi degisirse tek dosya degisir.
  *
- * Istege bagli alanlar (failureCode, threeDS, closedReason, refundReason) yoksa belgeye HIC
+ * Istege bagli alanlar (failureCode, threeDS, closedReason, refundReason, cancelReason) yoksa belgeye HIC
  * yazilmaz: exactOptionalPropertyTypes altinda "alan undefined" ile "alan yok"
  * ayni sey degildir ve geri okunan kayit yazilanla birebir esit olmalidir.
  */
@@ -42,6 +42,7 @@ export function toPaymentDocument(payment: Payment): PaymentDocument {
     ...(payment.failureCode === undefined ? {} : { failureCode: payment.failureCode }),
     ...(payment.challenge === undefined ? {} : { threeDS: toThreeDsDocument(payment.challenge) }),
     ...(payment.refundReason === undefined ? {} : { refundReason: payment.refundReason }),
+    ...(payment.cancelReason === undefined ? {} : { cancelReason: payment.cancelReason }),
     attempts: payment.attempts.map((attempt) => ({ ...attempt })),
     idempotencyKey: payment.idempotencyKey,
     version: payment.version,
@@ -61,6 +62,7 @@ export function fromPaymentDocument(document: PaymentDocument): Payment {
     ...(document.failureCode === undefined ? {} : { failureCode: document.failureCode }),
     ...(document.threeDS === undefined ? {} : { challenge: fromThreeDsDocument(document.threeDS) }),
     ...(document.refundReason === undefined ? {} : { refundReason: document.refundReason }),
+    ...(document.cancelReason === undefined ? {} : { cancelReason: document.cancelReason }),
     attempts: document.attempts.map((attempt) => ({
       kind: attempt.kind,
       outcome: attempt.outcome,

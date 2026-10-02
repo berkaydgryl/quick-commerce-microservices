@@ -17,7 +17,8 @@ Kafka olabilir — değişen tek şey fabrikada seçilen uygulama olur.
 | `InMemoryEventPublisher`                               | Testler için bellek içi yayıncı (MOCK modunda yayıncı ve tüketici hiç kurulmaz)              |
 
 Olayların **gövde şemaları** burada değil, `@getir/contracts` `events.ts`'tedir: üreten servis
-gövdeyi o tipten kurar, tüketen aynı şemadan geçirir (bugün `payment.refund_requested`).
+gövdeyi o tipten kurar, tüketen aynı şemadan geçirir (bugün `payment.refund_requested` ve
+`payment.cancel_requested`).
 
 ## Korelasyon ve iz (D16, ADR-07 eki, ADR-20)
 

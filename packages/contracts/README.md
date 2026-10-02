@@ -28,7 +28,7 @@ packages/contracts/
 │   ├── cart.ts        # sepet girdisi, rezervasyon, serbest bırakma
 │   ├── order.ts       # sipariş, adres, 3DS, kurye özeti
 │   ├── socket.ts      # oda adları, olay payload'ları, olay sözlüğü
-│   ├── events.ts      # servisler arası olay gövdeleri (payment.refund_requested, T7.4)
+│   ├── events.ts      # servisler arası olay gövdeleri (payment.refund_requested T7.4, payment.cancel_requested T11.2)
 │   └── index.ts
 └── test/unit/
 ```

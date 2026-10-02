@@ -149,7 +149,7 @@ describe('iade komutu: gecici hata firlatilir (olay yeniden teslim edilir)', () 
 });
 
 describe('subscribePaymentEvents', () => {
-  it('iade komutu "payment" grubunda dinlenir ve verilen depoya baglanir', async () => {
+  it('iade ve iptal komutu "payment" grubunda dinlenir ve verilen depoya baglanir', async () => {
     const subscriptions: { topic: string; group: string; handler: EventHandler }[] = [];
     const subscriber: EventSubscriber = {
       subscribe: (topic, group, handler) => {
@@ -162,6 +162,7 @@ describe('subscribePaymentEvents', () => {
 
     expect(subscriptions.map(({ topic, group }) => [topic, group])).toEqual([
       [EVENTS.PAYMENT_REFUND_REQUESTED, 'payment'],
+      [EVENTS.PAYMENT_CANCEL_REQUESTED, 'payment'],
     ]);
     await subscriptions[0]?.handler(refundCommand(), delivery);
     await expect(repository.findByOrderId(orderId)).resolves.toMatchObject({

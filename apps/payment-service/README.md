@@ -13,6 +13,7 @@ idempotency ve durum makinesi baştan yerinde.
 | `payments`                 | ✅ Mongo (`MOCK=false`) ya da bellek (`MOCK=true`); `attempts[]` geçmişi (T5.3)                                  |
 | `Refund`                   | ✅ Saga'nın telafisi (T7.1): yalnızca tamamlanmış çekim; tekrar istek `already_refunded`                         |
 | `payment.refund_requested` | ✅ Olay tüketicisi (T7.4): saga'nın kalıcı iade komutu `stream:events`'ten, grup `payment`                       |
+| `payment.cancel_requested` | ✅ Olay tüketicisi (T11.2 PR 3): iptal edilen siparişin tahsil edilmemiş ödemesi `CANCELLED`                     |
 | `GetPayment`               | ✅ Siparişin ödeme kaydı (yöntem, durum); kayıt yoksa `NOT_FOUND`. Çağıran order: iptal ve süpürücü (T11.2 PR 2) |
 
 ## Test kartları
@@ -94,6 +95,28 @@ tipten kurar, payment aynı şemadan geçirir. Gerekçe ve anahtar kuralı `Refu
   (`event_consumer_events_total{group="payment",…}`), gecikmesi (`event_consumer_lag`) ve onaylanmamış
   kayıtları (`event_consumer_pending`). Tanımları `@getir/event-bus` README'sinde.
 - `MOCK=true` iken dinleme **kapalıdır** (Redis yok).
+
+## İptal komutu (`payment.cancel_requested`, T11.2 PR 3)
+
+Sipariş ödeme aşamasından (`AWAITING_PAYMENT` ya da `PAID`) `CANCELLED`'a geçince order, siparişi
+iptal eden yazımla **aynı transaction'da** bu komutu outbox'a yazar (kullanıcı iptali, süpürücü,
+kilidi düşmüş ödeme). Order ödeme yöntemini bilmez; kararı payment verir
+(`domain/cancel.ts`, `application/cancel-payment.ts`, `interfaces/workers/cancel-requested.ts`).
+Grup ve teslim kuralları iade komutuyla aynı (`payment` grubu, en az bir kez).
+
+| Ödeme kaydı                                            | Sonuç                                                                         |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| Kapıda ödeme `PENDING` · 3DS bekleyen (`REQUIRES_3DS`) | `CANCELLED` + `cancelReason` (`order_cancelled`), geçmişe `CANCEL`; onaylanır |
+| Zaten `CANCELLED` (komut tekrar geldi)                 | değişmez; onaylanır                                                           |
+| `SUCCEEDED` · `REFUNDED` · `FAILED` · kayıt yok        | dokunulmaz (para alınmışsa iade ayrı akış); onaylanır                         |
+| Kart çekimi hâlâ `PENDING`                             | onaylanmaz (`REQUEST_IN_PROGRESS`); 30 sn sonra yeniden                       |
+| Gövde sözleşmeye uymuyor                               | **ret**: beklemeden `stream:events:dead`                                      |
+| Geçici hata (veritabanı kapalı, sürüm çakışması)       | onaylanmaz; yeniden denenir (sürüm çakışmasında önce bir kez yeniden okunur)  |
+
+- **`CANCELLED` yeni durum** (proto `PAYMENT_STATUS_CANCELLED = 6`, ekleme): "tahsil edilmeden
+  kapatıldı", para hiç alınmadı. İade edilmiş (`REFUNDED`) ödemeden ayrıdır. İptal edilmiş ödemenin
+  3DS'i onaylanamaz (`Confirm3Ds` → `NOT_FOUND`), iadesi de yoktur (`Refund` → `CONFLICT`).
+- `MOCK=true` iken dinleme kapalıdır (Redis yok); order da MOCK'ta olay yayınlamaz.
 
 ## Veri kaynağı: Mongo ya da MOCK
 

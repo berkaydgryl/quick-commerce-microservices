@@ -8,12 +8,14 @@
  *
  *   order.created         taslak acildiginda (B8: siparis kimligi burada dogar)
  *   order.status_changed  her durum gecisinde, gecis basina BIR olay
+ *   payment.cancel_requested  iptal komutu: siparis odeme asamasindan CANCELLED'a
+ *                         gecti; status_changed ile AYNI yazimda (T11.2 PR 3)
  *   payment.refund_requested  telafi komutu: iade dogrudan yapilamadi (T7.1 borcu)
  */
 
-import type { RefundRequestedPayload } from '@getir/contracts';
-import { EVENTS, ID_PREFIX, newId } from '@getir/core';
-import type { EventName } from '@getir/core';
+import type { PaymentCancelRequestedPayload, RefundRequestedPayload } from '@getir/contracts';
+import { EVENTS, ID_PREFIX, newId, ORDER_STATUS } from '@getir/core';
+import type { EventName, OrderStatus } from '@getir/core';
 
 import type { Order } from './order.js';
 
@@ -55,16 +57,36 @@ export function orderCreatedEvents(order: Order): readonly OrderEvent[] {
 }
 
 /**
+ * Iptal komutunun gerekcesi: payment kayda yazar (iade gerekcesiyle ayni
+ * anahtar kurali). Siparisin iptal sebebi order.status_changed'in notundadir.
+ */
+export const PAYMENT_CANCEL_REASON = 'order_cancelled';
+
+/**
+ * Odemesi olabilecek durumlar: siparis bunlardan CANCELLED'a gecerse payment'a
+ * iptal komutu gider (T11.2 PR 3). Order odeme yontemini bilmez; tahsil
+ * edilmemis odemeyi (kapida odeme, 3DS bekleyen) kapatma karari payment'ta.
+ */
+const PAYMENT_STAGE_STATUSES: readonly OrderStatus[] = [
+  ORDER_STATUS.AWAITING_PAYMENT,
+  ORDER_STATUS.PAID,
+];
+
+/**
  * `before`'dan `after`'a gecerken eklenen her zaman cizelgesi kaydi icin bir
  * order.status_changed. Tek yazimda birden fazla gecis olabilir (risk adimi:
  * RISK_CHECK -> RESERVED -> AWAITING_PAYMENT); tuketici her adimi gorur.
+ *
+ * Odeme asamasindan CANCELLED'a gecis ayrica payment.cancel_requested uretir:
+ * iptal eden HER yazim (kullanici, supurucu, kilidi dusmus odeme) bu fonksiyonu
+ * kullandigi icin hicbir yol komutu unutmaz; komut siparisle ayni yazimdadir.
  */
 export function statusChangedEvents(before: Order, after: Order): readonly OrderEvent[] {
   const added = after.timeline.slice(before.timeline.length);
-  return added.map((entry, index) => {
+  return added.flatMap((entry, index) => {
     const previous = after.timeline[before.timeline.length + index - 1];
     const version = before.version + index + 1;
-    return {
+    const changed: OrderEvent = {
       eventId: newId(ID_PREFIX.EVENT),
       topic: EVENTS.ORDER_STATUS_CHANGED,
       orderId: after.id,
@@ -80,7 +102,26 @@ export function statusChangedEvents(before: Order, after: Order): readonly Order
         version,
       },
     };
+    const cancelsPayment =
+      entry.status === ORDER_STATUS.CANCELLED &&
+      previous !== undefined &&
+      PAYMENT_STAGE_STATUSES.includes(previous.status);
+    return cancelsPayment
+      ? [changed, paymentCancelRequestedEvent(after.id, version, entry.at)]
+      : [changed];
   });
+}
+
+function paymentCancelRequestedEvent(orderId: string, version: number, at: Date): OrderEvent {
+  const payload: PaymentCancelRequestedPayload = { orderId, reason: PAYMENT_CANCEL_REASON };
+  return {
+    eventId: newId(ID_PREFIX.EVENT),
+    topic: EVENTS.PAYMENT_CANCEL_REQUESTED,
+    orderId,
+    version,
+    occurredAt: at,
+    payload,
+  };
 }
 
 export interface RefundRequest {

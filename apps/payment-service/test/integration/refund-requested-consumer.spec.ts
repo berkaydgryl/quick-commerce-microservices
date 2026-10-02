@@ -33,6 +33,7 @@ import { PAYMENT_STATUS } from '../../src/domain/payment.js';
 import type { PaymentMongoStore } from '../../src/infrastructure/mongo/payment-mongo-store.js';
 import { chargeOrder } from '../support/charge-order.js';
 import { openPaymentStore } from '../support/mongo-payment-service.js';
+import { cancelCommand } from '../support/cancel-command.js';
 import { refundCommand } from '../support/refund-command.js';
 
 /** infra/docker/docker-compose.dev.yml ile ayni surumler. */
@@ -187,5 +188,43 @@ describe('payment.refund_requested uctan uca (Mongo + Redis)', () => {
     expect(valueOf(DEAD_LETTER_FIELD.GROUP)).toBe(EVENT_CONSUMER_GROUP);
     expect(valueOf(DEAD_LETTER_FIELD.ERROR)).toContain('Odeme bulunamadi');
     await waitFor(() => groupDrained(streams));
+  });
+});
+
+describe('payment.cancel_requested uctan uca (Mongo + Redis, T11.2 PR 3)', () => {
+  it('iptal edilen siparisin kapida odeme kaydi CANCELLED olur; ayni komut tekrar gelirse yazilmaz', async () => {
+    const streams = freshStreams();
+    const orderId = newId(ID_PREFIX.ORDER);
+    await chargeOrder({
+      repository: store,
+      clock: systemClock,
+      orderId,
+      cardToken: '',
+      cashOnDelivery: true,
+    });
+    await startPaymentConsumer(streams);
+    const command = cancelCommand(orderId, new Date());
+
+    await publish(streams, command);
+    await waitFor(async () => (await statusOf(orderId)) === PAYMENT_STATUS.CANCELLED);
+    await publish(streams, command);
+    await waitFor(() => groupDrained(streams));
+
+    const payment = await store.findByOrderId(orderId);
+    expect(payment?.cancelReason).toBe('order_cancelled');
+    // Kapida odemede saglayiciya cekim gitmez (deneme yok); tek kayit iptalin.
+    expect(payment?.attempts.map((attempt) => attempt.kind)).toEqual(['CANCEL']);
+  });
+
+  it('parasi alinmis odemeye dokunulmaz; komut onaylanir (olu olaylara gitmez)', async () => {
+    const streams = freshStreams();
+    const orderId = await chargedOrder();
+    await startPaymentConsumer(streams);
+
+    await publish(streams, cancelCommand(orderId, new Date()));
+    await waitFor(() => groupDrained(streams));
+
+    await expect(statusOf(orderId)).resolves.toBe(PAYMENT_STATUS.SUCCEEDED);
+    expect(await admin.redis.xlen(streams.deadLetterKey)).toBe(0);
   });
 });
