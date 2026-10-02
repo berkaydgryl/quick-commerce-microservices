@@ -8,12 +8,14 @@
  *     siparis DRAFT kalir, kullanici tekrar dener.
  *  3. Odeme yontemi YAZMADAN ONCE kontrol edilir: orta bantta kapida odeme
  *     secildiyse siparis DRAFT kalir ve kullanici kartla tekrar dener.
- *  4. Karar tek yazmayla (surum kontrollu) kaydedilir; durdurulan siparis
- *     (REVIEW, REJECTED) kaydedildikten SONRA hata doner.
+ *  4. Bant kilidi kisaltiyorsa (orta risk, T11.3) YAZMADAN ONCE inventory'de
+ *     kisaltilir: inventory'ye ulasilamazsa hicbir sey yazilmaz, kilit dusmusse
+ *     siparis CANCELLED + 410 (lock-timing.ts).
+ *  5. Karar (ve kilidin yeni bitisi) tek yazmayla (surum kontrollu) kaydedilir;
+ *     durdurulan siparis (REVIEW, REJECTED) kaydedildikten SONRA hata doner.
  */
 
 import { AppError, ORDER_STATUS } from '@getir/core';
-import type { Clock } from '@getir/core';
 
 import type { PaymentMethod } from '../domain/checkout-payment.js';
 import {
@@ -25,20 +27,18 @@ import {
 import type { CheckoutSignals } from '../domain/checkout-risk.js';
 import { statusChangedEvents } from '../domain/order-events.js';
 import type { OrderHistoryReader } from '../domain/order-history-reader.js';
-import type { OrderRepository } from '../domain/order-repository.js';
 import { assertTransition } from '../domain/order-state-machine.js';
 import type { Order } from '../domain/order.js';
 import { RELEASE_REASON } from '../domain/stock-reservation.js';
+import { lockForBand } from './lock-timing.js';
+import type { LockTimingDeps } from './lock-timing.js';
 import type { RequestScope } from './request-scope.js';
 import type { RiskAssessment } from './risk-assessment.js';
 import { releaseStock } from './stock-step.js';
-import type { StockStepDeps } from './stock-step.js';
 
-export interface RiskStepDeps extends StockStepDeps {
-  readonly repository: Pick<OrderRepository, 'update'>;
+export interface RiskStepDeps extends LockTimingDeps {
   readonly history: Pick<OrderHistoryReader, 'riskHistory'>;
   readonly risk: RiskAssessment;
-  readonly clock: Clock;
 }
 
 /** @returns Odeme bekleyen (AWAITING_PAYMENT) siparis. */
@@ -60,8 +60,10 @@ export async function passRiskStep(
   if (decision.kind === 'proceed') {
     assertPaymentMethodAllowed(order.id, method, decision.policy);
   }
+  const timed =
+    decision.kind === 'proceed' ? await lockForBand(deps, order, evaluation.band, scope) : order;
 
-  const next = applyRiskDecision(order, evaluation.band, decision, deps.clock);
+  const next = applyRiskDecision(timed, evaluation.band, decision, deps.clock);
   await deps.repository.update(next, order.version, statusChangedEvents(order, next));
   scope.logger.info(
     { orderId: order.id, band: evaluation.band, score: evaluation.score, status: next.status },

@@ -7,13 +7,14 @@
  * oncedir, onlari gormez. Diger sozlesmelerin taslaklari kilitsizdir.
  */
 
-import { ORDER_STATUS } from '@getir/core';
+import { ERROR_CODES, ORDER_STATUS } from '@getir/core';
 import type { OrderStatus } from '@getir/core';
 import { fixedClock } from '@getir/core';
 import { describe, expect, it } from 'vitest';
 
 import type { Order } from '../../src/domain/order.js';
 import { transitionOrder } from '../../src/domain/order.js';
+import { rescheduleReservation } from '../../src/domain/stock-reservation.js';
 import type { OrderStoreFixtures, OrderStoreUnderTest } from './order-store-fixtures.js';
 import { MINUTE_MS, START_MS } from './order-store-fixtures.js';
 
@@ -88,6 +89,37 @@ export function describeExpiredOrderFinderContract(
 
       const [smaller] = pair.map((order) => order.id).sort();
       expect(first.map((order) => order.id)).toEqual([smaller]);
+    });
+
+    it('odeme oncesi uzatilan kilit (T11.3): yeni bitis yazilir, supurucu eski bitiste BULMAZ, eski surumle yazan CONFLICT', async () => {
+      const store = getStore();
+      const base = START_MS - 30 * DAY_MS;
+      const awaiting = lockedAt(base, base + MINUTE_MS, TO_AWAITING);
+      await store.insert(awaiting, []);
+      const extended = rescheduleReservation(
+        awaiting,
+        new Date(base + 2 * MINUTE_MS),
+        new Date(base + 30_000),
+      );
+
+      await store.update(extended, awaiting.version, []);
+
+      const atOldExpiry = new Date(base + MINUTE_MS + 30_000);
+      expect((await store.findExpiredReservations(atOldExpiry, 10)).map((o) => o.id)).not.toContain(
+        awaiting.id,
+      );
+      expect(await store.findById(awaiting.id)).toEqual(extended);
+      await expect(
+        store.update(
+          transitionOrder(awaiting, ORDER_STATUS.CANCELLED, fixedClock(base)),
+          awaiting.version,
+          [],
+        ),
+      ).rejects.toMatchObject({ code: ERROR_CODES.CONFLICT });
+      const atNewExpiry = new Date(base + 2 * MINUTE_MS);
+      expect((await store.findExpiredReservations(atNewExpiry, 10)).map((o) => o.id)).toContain(
+        awaiting.id,
+      );
     });
   });
 }

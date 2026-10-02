@@ -69,6 +69,43 @@ describe('order ortami: stok kilidi (T11.2)', () => {
   );
 });
 
+describe('order ortami: banda gore kilit ve uzatma (T11.3)', () => {
+  it('verilmezse orta risk 2 dk, uzatma 60 sn (.env.example); verilenler okunur', () => {
+    vi.stubEnv('MOCK', 'true');
+    expect(loadServiceEnv()).toMatchObject({
+      RESERVATION_TTL_MEDIUM_RISK_SECONDS: 120,
+      RESERVATION_EXTEND_SECONDS: 60,
+    });
+
+    vi.stubEnv('RESERVATION_TTL_MEDIUM_RISK_SECONDS', '45');
+    vi.stubEnv('RESERVATION_EXTEND_SECONDS', '30');
+    expect(loadServiceEnv()).toMatchObject({
+      RESERVATION_TTL_MEDIUM_RISK_SECONDS: 45,
+      RESERVATION_EXTEND_SECONDS: 30,
+    });
+  });
+
+  it.each([
+    ['RESERVATION_TTL_MEDIUM_RISK_SECONDS', '29'],
+    ['RESERVATION_TTL_MEDIUM_RISK_SECONDS', '901'],
+    ['RESERVATION_EXTEND_SECONDS', '0'],
+    ['RESERVATION_EXTEND_SECONDS', '301'],
+  ])("inventory'nin kabul etmeyecegi %s=%s acilista reddedilir", (name, value) => {
+    vi.stubEnv('MOCK', 'true');
+    vi.stubEnv(name, value);
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const written: string[] = [];
+    vi.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => {
+      written.push(String(chunk));
+      return true;
+    });
+
+    expect(() => loadServiceEnv()).toThrow();
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(written.join('')).toContain(name);
+  });
+});
+
 describe('order ortami: supurucu (T11.2 PR 2)', () => {
   it('verilmezse 10 sn; verilen aralik okunur', () => {
     vi.stubEnv('MOCK', 'true');

@@ -18,7 +18,7 @@ import { createConfirmPayment } from '../../src/application/confirm-payment.js';
 import { transitionOrder } from '../../src/domain/order.js';
 import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-order-store.js';
 import { FAKE_CHALLENGE_ID, FakePayments } from '../support/fake-payments.js';
-import { FakeStockReservations } from '../support/fake-stock-reservations.js';
+import { FakeStockReservations, TEST_LOCK_POLICY } from '../support/fake-stock-reservations.js';
 import { insertAwaitingPayment, insertDraft } from '../support/order-builders.js';
 
 const clock = fixedClock(1_760_000_000_000);
@@ -33,7 +33,14 @@ beforeEach(() => {
   repository = new InMemoryOrderStore();
   payments = new FakePayments();
   stock = new FakeStockReservations();
-  confirm = createConfirmPayment({ repository, payments, stock, outbox: repository, clock });
+  confirm = createConfirmPayment({
+    repository,
+    payments,
+    stock,
+    outbox: repository,
+    clock,
+    lockPolicy: TEST_LOCK_POLICY,
+  });
 });
 
 /** 3DS bekleyen (MEDIUM bant) siparis. */

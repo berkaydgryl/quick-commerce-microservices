@@ -21,7 +21,7 @@ import type { Order } from '../../src/domain/order.js';
 import { transitionOrder } from '../../src/domain/order.js';
 import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-order-store.js';
 import { FakePayments, TEST_CARD } from '../support/fake-payments.js';
-import { FakeStockReservations } from '../support/fake-stock-reservations.js';
+import { FakeStockReservations, TEST_LOCK_POLICY } from '../support/fake-stock-reservations.js';
 import { FakeRiskAssessment } from '../support/fake-risk-assessment.js';
 import { insertDraft } from '../support/order-builders.js';
 
@@ -47,6 +47,7 @@ beforeEach(() => {
     stock,
     outbox: repository,
     clock,
+    lockPolicy: TEST_LOCK_POLICY,
   });
 });
 
@@ -260,6 +261,7 @@ describe('CreateOrder - telafi (P3: PAID yazilamazsa iade)', () => {
       stock,
       outbox: brokenOutbox,
       clock,
+      lockPolicy: TEST_LOCK_POLICY,
     });
 
     await expect(

@@ -19,8 +19,11 @@ import { createRelayOutbox } from './application/relay-outbox.js';
 import { createSweepExpiredReservations } from './application/sweep-expired-reservations.js';
 import type { Payments } from './application/payments.js';
 import type { RiskAssessment } from './application/risk-assessment.js';
+import type { LockPolicy } from './application/lock-timing.js';
 import type { StockReservations } from './application/stock-reservations.js';
 import {
+  DEFAULT_MEDIUM_RISK_RESERVATION_SECONDS,
+  DEFAULT_RESERVATION_EXTEND_SECONDS,
   DEFAULT_RESERVATION_TTL_SECONDS,
   ORDER_SERVICE_FULL_NAME,
   DEFAULT_ORDER_SWEEPER_INTERVAL_MS,
@@ -58,6 +61,11 @@ export interface BootstrapOptions {
   readonly stock: StockReservations;
   /** Kilidin omru (sn); verilmezse 600 (RESERVATION_TTL_SECONDS'un varsayilani). */
   readonly reservationTtlSeconds?: number;
+  /**
+   * Banda gore kilit ve odeme oncesi uzatma (T11.3); verilmezse 120 ve 60 sn
+   * (RESERVATION_TTL_MEDIUM_RISK_SECONDS, RESERVATION_EXTEND_SECONDS).
+   */
+  readonly lockPolicy?: LockPolicy;
   readonly logger?: Logger;
   /** Siparis portlari. Verilmezse bellek kullanilir (testler). */
   readonly store?: OrderPorts;
@@ -74,6 +82,10 @@ export function buildOrderService(options: BootstrapOptions): GrpcServiceRegistr
   const { repository, history, outbox } = options.store ?? inMemoryPorts();
   const clock = options.clock ?? systemClock;
   const { stock } = options;
+  const lockPolicy = options.lockPolicy ?? {
+    mediumRiskSeconds: DEFAULT_MEDIUM_RISK_RESERVATION_SECONDS,
+    extendSeconds: DEFAULT_RESERVATION_EXTEND_SECONDS,
+  };
 
   const implementation = createOrderImplementation({
     createDraftOrder: createCreateDraftOrder({
@@ -92,6 +104,7 @@ export function buildOrderService(options: BootstrapOptions): GrpcServiceRegistr
       stock,
       outbox,
       clock,
+      lockPolicy,
     }),
     confirmPayment: createConfirmPayment({
       repository,
@@ -99,6 +112,7 @@ export function buildOrderService(options: BootstrapOptions): GrpcServiceRegistr
       stock,
       outbox,
       clock,
+      lockPolicy,
     }),
     getOrder: createGetOrder({ repository }),
     listMyOrders: createListMyOrders({ history }),
