@@ -4,6 +4,8 @@ export const AUTH_ROUTES = {
   welcome: '/',
   login: '/giris',
   register: '/kayit',
+  /** Sifre yenileme penceresi (T11.9; yalnizca gelistirme paketinde). */
+  forgotPassword: '/sifremi-unuttum',
   account: '/hesabim',
 } as const;
 

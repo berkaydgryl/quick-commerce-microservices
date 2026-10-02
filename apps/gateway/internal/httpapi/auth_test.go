@@ -58,6 +58,7 @@ func authAppWith(t *testing.T, logger *slog.Logger, secureCookies bool) *fiber.A
 		UserRegistrar:     service,
 		UserAuthenticator: service,
 		PhoneChecker:      service,
+		PasswordResetter:  service,
 		SessionRefresher:  service,
 		SessionRevoker:    service,
 		ProfileGetter:     service,

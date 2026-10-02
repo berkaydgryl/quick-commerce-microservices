@@ -99,10 +99,6 @@ func (s *Service) Register(ctx context.Context, input RegisterInput, meta Reques
 	})
 }
 
-// Login, telefon ve sifreyle oturum acar.
-//
-// Hangi alanin hatali oldugu SOYLENMEZ ve olmayan kullanicida da ayni surede
-// cevap verilir (Burn): kayitli numaralar ne mesajdan ne sureden taranabilir.
 // PhoneRegistered, numarayla kayitli bir hesap olup olmadigini soyler (T11.7):
 // karsilama ekraninin giris ve kayit penceresi numara yazilinca kullaniciyi
 // erken uyarir. BILINCLI ODUNLESIM (2 Ekim karari): bu cevap bir numaranin
@@ -119,6 +115,10 @@ func (s *Service) PhoneRegistered(ctx context.Context, input PhoneCheckInput) (b
 	return true, nil
 }
 
+// Login, telefon ve sifreyle oturum acar.
+//
+// Hangi alanin hatali oldugu SOYLENMEZ ve olmayan kullanicida da ayni surede
+// cevap verilir (Burn): kayitli numaralar ne mesajdan ne sureden taranabilir.
 func (s *Service) Login(ctx context.Context, input LoginInput, meta RequestMeta) (Grant, error) {
 	user, err := s.deps.Users.ByPhone(ctx, input.Phone)
 	if errors.Is(err, ErrUserNotFound) {
@@ -135,13 +135,54 @@ func (s *Service) Login(ctx context.Context, input LoginInput, meta RequestMeta)
 	if !matches {
 		return Grant{}, apperror.New(apperror.CodeInvalidCredentials, nil)
 	}
+	return s.signIn(ctx, user, meta, apperror.New(apperror.CodeInvalidCredentials, nil))
+}
 
-	// Giris kaydi: onceki IP oturuma "onceki IP" olarak yazilir; konum IP'den
-	// cozulemezse oturum kullanicinin son bilinen konumunu devralir.
+// ResetPassword, telefonu kayitli hesabin sifresini degistirir, butun eski
+// oturumlarini kapatir ve yeni oturum acar (T11.9; kullanici sifre degisince
+// dogrudan girer).
+//
+// DEMO AKISI (2 Ekim karari): kimlik kanitlanmaz (SMS kodu yok); numarayi
+// bilen sifreyi degistirebilir. Bu yuzden uc yalnizca production DISINDA
+// baglanir (bootstrap, config.Config.DemoPasswordReset) ve giris gibi IP
+// basina sinirlidir. Numaranin kayitli olmadigini soylemek yeni bir sizinti
+// degildir (numara kontrolu, T11.7, ayni bilgiyi verir).
+func (s *Service) ResetPassword(ctx context.Context, input ResetPasswordInput, meta RequestMeta) (Grant, error) {
+	unknown := apperror.New(apperror.CodeValidationFailed, map[string]string{FieldPhone: phoneUnknownReason})
+	user, err := s.deps.Users.ByPhone(ctx, input.Phone)
+	if errors.Is(err, ErrUserNotFound) {
+		return Grant{}, unknown
+	}
+	if err != nil {
+		return Grant{}, fmt.Errorf("kullanici okunamadi: %w", err)
+	}
+	hash, err := s.deps.Passwords.Hash(input.Password)
+	if err != nil {
+		return Grant{}, err
+	}
+	err = s.deps.Users.SetPasswordHash(ctx, user.ID, hash)
+	if errors.Is(err, ErrUserNotFound) {
+		return Grant{}, unknown
+	}
+	if err != nil {
+		return Grant{}, fmt.Errorf("sifre yazilamadi: %w", err)
+	}
+	// Eski sifreyle acilmis oturumlar (baska cihazlar) kapanir; yeni oturum sonra acilir.
+	if _, err := s.deps.Sessions.RevokeAllForUser(ctx, user.ID); err != nil {
+		return Grant{}, fmt.Errorf("eski oturumlar kapatilamadi: %w", err)
+	}
+	return s.signIn(ctx, user, meta, unknown)
+}
+
+// signIn, kimligi dogrulanmis kullanicinin girisini kaydeder ve oturum acar
+// (giris ve sifre yenileme). Onceki IP oturuma "onceki IP" olarak yazilir;
+// konum IP'den cozulemezse oturum kullanicinin son bilinen konumunu devralir.
+// Kullanici bu arada silindiyse gone doner.
+func (s *Service) signIn(ctx context.Context, user User, meta RequestMeta, gone error) (Grant, error) {
 	located := s.locate(meta.IPAddress)
 	previous, err := s.deps.Users.RecordLogin(ctx, user.ID, LoginState{IPAddress: meta.IPAddress, Location: located.location()})
 	if errors.Is(err, ErrUserNotFound) {
-		return Grant{}, apperror.New(apperror.CodeInvalidCredentials, nil)
+		return Grant{}, gone
 	}
 	if err != nil {
 		return Grant{}, fmt.Errorf("giris kaydedilemedi: %w", err)

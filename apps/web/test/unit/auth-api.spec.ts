@@ -6,6 +6,7 @@ import {
   loginUser,
   logoutSession,
   registerUser,
+  resetPassword,
 } from '../../src/features/auth/api/auth.api';
 import { createHttpClient } from '../../src/shared/api/http-client';
 
@@ -101,5 +102,20 @@ describe('kimlik uclari (T8.5)', () => {
 
     await expect(fetchProfile(client)).resolves.toEqual(USER);
     expect(sentRequest(fetchMock)).toMatchObject({ url: '/v1/me', method: 'GET' });
+  });
+});
+
+describe('resetPassword (T11.9: demo sifre yenileme)', () => {
+  it('POST /v1/auth/password-reset: giris gibi oturum ucu, anahtarsiz; cevap oturum', async () => {
+    const { client, fetchMock } = clientReturning(success(sessionWith('j')));
+    const request = { phone: '+905550000001', password: 'Yeni-Parola-2026' };
+
+    await expect(resetPassword(client, request)).resolves.toMatchObject({ user: USER });
+    expect(sentRequest(fetchMock)).toMatchObject({
+      url: '/v1/auth/password-reset',
+      method: 'POST',
+      body: JSON.stringify(request),
+      idempotencyKey: null,
+    });
   });
 });

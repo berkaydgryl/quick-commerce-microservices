@@ -203,6 +203,19 @@ func (m *MongoUsers) addressRejection(ctx context.Context, userID, title string,
 	return fmt.Errorf("adres eklenemedi: defter es zamanli degisti")
 }
 
+// SetPasswordHash, sifre ozetini degistirir (T11.9).
+func (m *MongoUsers) SetPasswordHash(ctx context.Context, userID, passwordHash string) error {
+	result, err := m.collection.UpdateOne(ctx, bson.D{{Key: "_id", Value: userID}},
+		bson.D{{Key: "$set", Value: bson.D{{Key: "passwordHash", Value: passwordHash}}}})
+	if err != nil {
+		return fmt.Errorf("sifre yazilamadi: %w", err)
+	}
+	if result.MatchedCount == 0 {
+		return auth.ErrUserNotFound
+	}
+	return nil
+}
+
 // CountByRegistrationDevice, cihazdan acilmis hesap sayisi (seyrek indeksle).
 func (m *MongoUsers) CountByRegistrationDevice(ctx context.Context, deviceID string) (int, error) {
 	count, err := m.collection.CountDocuments(ctx, bson.D{{Key: "registrationDeviceId", Value: deviceID}})
@@ -261,6 +274,16 @@ func (m *MongoSessions) Revoke(ctx context.Context, tokenHash string) (bool, err
 		return false, fmt.Errorf("oturum silinemedi: %w", err)
 	}
 	return result.DeletedCount > 0, nil
+}
+
+// RevokeAllForUser, kullanicinin butun oturumlarini tek komutla siler
+// (T11.9; userId indeksi).
+func (m *MongoSessions) RevokeAllForUser(ctx context.Context, userID string) (int, error) {
+	result, err := m.collection.DeleteMany(ctx, bson.D{{Key: "userId", Value: userID}})
+	if err != nil {
+		return 0, fmt.Errorf("oturumlar silinemedi: %w", err)
+	}
+	return int(result.DeletedCount), nil
 }
 
 // ByID, kimlige gore oturum.

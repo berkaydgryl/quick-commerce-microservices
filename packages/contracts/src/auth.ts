@@ -31,10 +31,15 @@ import {
   PHONE_PATTERN,
 } from './constants.js';
 
-/** E.164 bicimi telefon; users.phone uzerinde unique indeks vardir. */
-export const phoneSchema = z
-  .string()
-  .regex(PHONE_PATTERN, "+90'dan sonra 10 rakam olmalı (örnek +905321234567)");
+/**
+ * Telefon kuralinin cumlesi: sunucu (gateway) ve form ayni cumleyi gosterir.
+ * Form ilk rakam 5 degilse numara bitmeden de bu cumleyi gosterir (T11.9).
+ */
+export const PHONE_MESSAGE =
+  'Cep telefonu numarası 5 ile başlayan 10 rakam olmalı (örnek 532 123 45 67)';
+
+/** E.164 bicimi cep telefonu; users.phone uzerinde unique indeks vardir. */
+export const phoneSchema = z.string().regex(PHONE_PATTERN, PHONE_MESSAGE);
 
 const utf8 = new TextEncoder();
 
@@ -66,6 +71,18 @@ export const registerRequestSchema = z.object({
 });
 
 export const loginRequestSchema = z.object({
+  phone: phoneSchema,
+  password: passwordSchema,
+});
+
+/**
+ * POST /v1/auth/password-reset (T11.9): "Sifremi unuttum". DEMO akisi
+ * (kullanicinin karari): kimlik kanitlanmaz (SMS kodu yok); gateway ucu
+ * yalnizca production DISINDA baglar. Cevap girisle aynidir (authSessionSchema):
+ * eski oturumlar kapanir, yeni oturum acilir. Numarayla kayitli hesap yoksa
+ * VALIDATION_FAILED (phone).
+ */
+export const resetPasswordRequestSchema = z.object({
   phone: phoneSchema,
   password: passwordSchema,
 });
@@ -120,6 +137,7 @@ export const authSessionSchema = z.object({
 export type Phone = z.infer<typeof phoneSchema>;
 export type RegisterRequest = z.infer<typeof registerRequestSchema>;
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
+export type ResetPasswordRequest = z.infer<typeof resetPasswordRequestSchema>;
 export type PhoneCheckRequest = z.infer<typeof phoneCheckRequestSchema>;
 export type PhoneCheckResult = z.infer<typeof phoneCheckResultSchema>;
 export type LogoutResult = z.infer<typeof logoutResultSchema>;

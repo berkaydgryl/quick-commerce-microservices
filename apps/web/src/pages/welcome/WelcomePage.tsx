@@ -9,6 +9,7 @@ import type { AuthRouteState, PhoneEntry } from '../../features/auth/services/au
 import { countryOfPhone } from '../../features/auth/services/country';
 import { AuthCard } from '../../features/auth/ui/AuthCard';
 import { AuthSwitch } from '../../features/auth/ui/AuthSwitch';
+import { ForgotPasswordLink } from '../../features/auth/ui/ForgotPasswordLink';
 import type { LoginCredentials } from '../../features/auth/ui/LoginForm';
 import { PhoneEntryForm } from '../../features/auth/ui/PhoneEntryForm';
 
@@ -42,7 +43,8 @@ interface WelcomePageProps {
  * gorseller icerik ucundan gelir (GET /v1/content/welcome).
  *
  * Giris ve kayit bu ekranin USTUNDE pencere olarak acilir (/giris, /kayit):
- * kartta "Devam Et" numarayla giris penceresini, kartin altindaki "Kayit ol"
+ * kartta "Devam Et" numarayla giris penceresini, altindaki "Sifremi unuttum"
+ * (T11.9, yalnizca gelistirmede) sifre yenileme penceresini, "Kayit ol"
  * (yazilan numarayla) kayit penceresini acar; kategoriler ve ust bar da
  * pencereleri acar. Gelistirmede kartin altindaki demo hesaplar giris
  * penceresini telefon ve sifre dolu acar. Numara adrese yazilmaz, gecmis
@@ -80,6 +82,17 @@ export function WelcomePage({ renderDialog }: WelcomePageProps) {
                       navigate(AUTH_ROUTES.login, { state: { ...FROM_APP, phoneEntry: accepted } })
                     }
                   />
+                  {__DEMO_PASSWORD_RESET__ && (
+                    <ForgotPasswordLink
+                      label={content.loginCard.forgotPasswordLabel}
+                      target={{
+                        to: AUTH_ROUTES.forgotPassword,
+                        state: { ...FROM_APP, phoneEntry: entry ?? undefined },
+                      }}
+                      align="center"
+                      replace={false}
+                    />
+                  )}
                   <AuthSwitch
                     prompt={content.loginCard.login.registerPrompt}
                     label={content.loginCard.login.registerLinkLabel}

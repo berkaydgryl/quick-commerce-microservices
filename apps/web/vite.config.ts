@@ -35,6 +35,8 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     define: {
       __DEMO_PERSONAS__: JSON.stringify(demoPersonasEnabled(mode, env)),
+      // Kodsuz sifre yenileme (T11.9): production derlemesinde HER ZAMAN kapali.
+      __DEMO_PASSWORD_RESET__: JSON.stringify(mode !== 'production'),
     },
     resolve: {
       // @getir/core'daki node:crypto importu icin tarayici karsiligi (dosyadaki aciklama).

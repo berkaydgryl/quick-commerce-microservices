@@ -36,7 +36,11 @@ const validJSON = `{
       "unknownPhoneNotice": "Bu numarayla kayıtlı bir hesap yok."},
     "register": {"fullNameLabel": "Adın soyadın", "passwordLabel": "Şifre belirle", "submitLabel": "Kayıt ol",
       "pendingLabel": "Kaydın yapılıyor…", "loginPrompt": "Zaten hesabın var mı?", "loginLinkLabel": "Giriş yap",
-      "knownPhoneNotice": "Bu numarayla kayıtlı bir hesap var."}
+      "knownPhoneNotice": "Bu numarayla kayıtlı bir hesap var."},
+    "forgotPasswordLabel": "Şifremi unuttum",
+    "resetPassword": {"title": "Şifreni yenile", "description": "Telefonunu ve yeni şifreni yaz.", "passwordLabel": "Yeni şifre",
+      "submitLabel": "Şifreyi değiştir", "pendingLabel": "Şifren değiştiriliyor…", "loginPrompt": "Şifreni hatırladın mı?",
+      "loginLinkLabel": "Giriş yap"}
   },
   "categories": {"title": "Kategoriler"},
   "appDownload": {

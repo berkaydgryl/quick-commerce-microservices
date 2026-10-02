@@ -616,3 +616,38 @@ func countOutcomes(errs []error, rejection error) (succeeded, rejected int) {
 	}
 	return succeeded, rejected
 }
+
+func TestSetPasswordHashAndRevokeAllForUser(t *testing.T) {
+	db := testDatabase(t)
+	users, sessions := authstore.NewMongoUsers(db), authstore.NewMongoSessions(db)
+	user, neighbour := newUser("+905321234567"), newUser("+905321234568")
+	for _, u := range []auth.User{user, neighbour} {
+		if err := users.Create(t.Context(), u); err != nil {
+			t.Fatalf("kullanici yazilamadi: %v", err)
+		}
+	}
+	expires := time.Now().Add(time.Hour)
+	for _, s := range []auth.Session{newSession(user.ID, "ozet-1", expires), newSession(user.ID, "ozet-2", expires), newSession(neighbour.ID, "ozet-3", expires)} {
+		if err := sessions.Create(t.Context(), s); err != nil {
+			t.Fatalf("oturum yazilamadi: %v", err)
+		}
+	}
+
+	if err := users.SetPasswordHash(t.Context(), user.ID, "$2a$04$yeni"); err != nil {
+		t.Fatalf("sifre yazilamadi: %v", err)
+	}
+	if read, err := users.ByID(t.Context(), user.ID); err != nil || read.PasswordHash != "$2a$04$yeni" || read.Phone != user.Phone {
+		t.Errorf("yalnizca ozet degismeli: %+v %v", read, err)
+	}
+	if err := users.SetPasswordHash(t.Context(), ids.New(ids.User), "$2a$04$x"); !errors.Is(err, auth.ErrUserNotFound) {
+		t.Errorf("olmayan kullanici ErrUserNotFound donmeli: %v", err)
+	}
+
+	revoked, err := sessions.RevokeAllForUser(t.Context(), user.ID)
+	if err != nil || revoked != 2 {
+		t.Fatalf("kullanicinin iki oturumu silinmeli: %d %v", revoked, err)
+	}
+	if count, err := db.Collection(authstore.SessionsCollection).CountDocuments(t.Context(), bson.D{}); err != nil || count != 1 {
+		t.Errorf("baska kullanicinin oturumu kalmali: %d %v", count, err)
+	}
+}

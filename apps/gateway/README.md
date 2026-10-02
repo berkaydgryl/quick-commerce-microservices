@@ -31,6 +31,7 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `GET /v1/orders/{id}` | ✅ order `GetOrder`; başkasının siparişi 404 |
 | `POST /v1/auth/register` | ✅ Kayıt + oturum (201); telefon benzersiz, şifre bcrypt (T8.1) |
 | `POST /v1/auth/login` | ✅ Giriş (200); yanlış şifre ile kayıtsız numara aynı cevabı alır |
+| `POST /v1/auth/password-reset` | ✅ Demo şifre yenileme (T11.9): telefon + yeni şifre, kod yok; eski oturumlar kapanır, yeni oturum açılır. **Yalnızca `NODE_ENV` production değilken bağlanır**; IP başına kimlik sınırı, anahtar istemez |
 | `POST /v1/auth/phone-check` | ✅ Numarayla kayıtlı hesap var mı (T11.7): karşılama pencereleri erken uyarır. Bilinçli ödünleşim: numaranın kayıtlı olduğu öğrenilebilir; IP başına kimlik sınırı (ayrı sayaç), numara günlüğe yazılmaz, anahtar istemez |
 | `POST /v1/auth/refresh` | ✅ Yenileme jetonu her kullanımda değişir; eskisi bir daha geçmez |
 | `POST /v1/auth/logout` | ✅ Yenileme jetonunu iptal eder; tekrarı zararsız (`revoked:false`) |
@@ -312,7 +313,7 @@ bellek içi sayaç sınırı örnek sayısı kadar gevşetirdi (proje kuralları
 
 | Uçlar                                                    | Sınır (pencere başına)           | Kim sayılır |
 | -------------------------------------------------------- | -------------------------------- | ----------- |
-| `POST /v1/auth/register`, `/v1/auth/login`               | `RATE_LIMIT_AUTH_MAX_REQUESTS` (10) | IP          |
+| `POST /v1/auth/register`, `/login`, `/phone-check`, `/password-reset` | `RATE_LIMIT_AUTH_MAX_REQUESTS` (10) | IP          |
 | `POST /v1/auth/refresh`, `/v1/auth/logout` (T8.5)         | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
 | `POST /v1/cart/reserve`, `/v1/orders`, `/v1/orders/{id}/3ds` | `RATE_LIMIT_ORDER_MAX_REQUESTS` (20) | kullanıcı   |
 | Katalog, market ve genel arama uçları                     | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |

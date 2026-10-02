@@ -142,7 +142,7 @@ paths:
                       message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
                       details:
                         Idempotency-Key: zorunlu
-                        phone: "+90'dan sonra 10 rakam olmalı (örnek +905321234567)"
+                        phone: "Cep telefonu numarası 5 ile başlayan 10 rakam olmalı (örnek 532 123 45 67)"
                         password: en az 8 karakter olmalı
                         fullName: en az 2 karakter olmalı
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
@@ -244,7 +244,7 @@ paths:
                       code: VALIDATION_FAILED
                       message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
                       details:
-                        phone: "+90'dan sonra 10 rakam olmalı (örnek +905321234567)"
+                        phone: "Cep telefonu numarası 5 ile başlayan 10 rakam olmalı (örnek 532 123 45 67)"
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "401":
           description: Telefon numarası ya da şifre hatalı (hangisi olduğu söylenmez)
@@ -261,6 +261,75 @@ paths:
                       code: INVALID_CREDENTIALS
                       message: "Telefon numarası ya da şifre hatalı."
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /v1/auth/password-reset:
+    post:
+      tags: [auth]
+      operationId: resetPassword
+      summary: Şifre yenileme — demo (T11.9)
+      description: |
+        "Şifremi unuttum": telefonu kayıtlı hesabın şifresini değiştirir, BÜTÜN
+        eski oturumlarını kapatır ve girişteki gibi yeni oturum açar (kullanıcı
+        doğrudan girer).
+
+        **Demo akışı:** kimlik kanıtlanmaz (SMS kodu yok). Bu yüzden uç yalnızca
+        `NODE_ENV` production DEĞİLKEN bağlanır; production'da yoktur (`404`).
+        Girişle aynı IP sınırına tabidir. Giriş gibi oturum ucudur:
+        `Idempotency-Key` istemez. Numaranın kayıtlı olmadığını söylemesi yeni
+        bir sızıntı değildir (`/v1/auth/phone-check` aynı bilgiyi verir).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Şifre değişti, oturum açıldı
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            Set-Cookie:
+              $ref: "#/components/headers/SessionCookies"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AuthSession"
+        "400":
+          description: Biçim hatası ya da numarayla kayıtlı hesap yok (`details.phone`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                unknownPhone:
+                  summary: VALIDATION_FAILED (kayıtsız numara)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        phone: "Bu numarayla kayıtlı bir hesap yok"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+        "404":
+          description: Production'da uç yoktur (demo akışı canlıya çıkmaz).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -2296,8 +2365,11 @@ components:
 
     Phone:
       type: string
-      pattern: "^\\+90[0-9]{10}$"
-      description: E.164 biçimi, yalnızca Türkiye. `users.phone` üzerinde benzersiz indeks vardır.
+      pattern: "^\\+905[0-9]{9}$"
+      description: |
+        E.164 biçimi, yalnızca Türkiye ve yalnızca cep numarası (BTK: `5XX` + 7
+        rakam; sabit hat ve servis numaraları reddedilir). `users.phone`
+        üzerinde benzersiz indeks vardır.
       example: "+905321234567"
 
     Password:
@@ -2645,8 +2717,10 @@ components:
         - closeLabel
         - showPasswordLabel
         - countries
+        - forgotPasswordLabel
         - login
         - register
+        - resetPassword
       properties:
         title: { $ref: "#/components/schemas/ContentText" }
         countryLabel: { $ref: "#/components/schemas/ContentText" }
@@ -2704,6 +2778,30 @@ components:
             knownPhoneNotice:
               $ref: "#/components/schemas/ContentText"
               description: Kayıtlı numara yazılınca telefonun altında (T11.7).
+        forgotPasswordLabel:
+          $ref: "#/components/schemas/ContentText"
+          description: Kartta ve giriş penceresinde "Şifremi unuttum" (T11.9; yalnızca geliştirmede görünür).
+        resetPassword:
+          type: object
+          description: Şifre yenileme penceresi (T11.9); kayıtsız numara uyarısı `login.unknownPhoneNotice`.
+          required:
+            [
+              title,
+              description,
+              passwordLabel,
+              submitLabel,
+              pendingLabel,
+              loginPrompt,
+              loginLinkLabel,
+            ]
+          properties:
+            title: { $ref: "#/components/schemas/ContentText" }
+            description: { $ref: "#/components/schemas/ContentText" }
+            passwordLabel: { $ref: "#/components/schemas/ContentText" }
+            submitLabel: { $ref: "#/components/schemas/ContentText" }
+            pendingLabel: { $ref: "#/components/schemas/ContentText" }
+            loginPrompt: { $ref: "#/components/schemas/ContentText" }
+            loginLinkLabel: { $ref: "#/components/schemas/ContentText" }
 
     Product:
       type: object

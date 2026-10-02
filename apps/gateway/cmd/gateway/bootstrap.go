@@ -141,6 +141,12 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 	// Harita adres servisi (T11.8): Nominatim'e tek sira ve onbellekle gider.
 	places := geo.New(geo.Options{BaseURL: cfg.GeoBaseURL, UserAgent: cfg.GeoUserAgent, Timeout: cfg.GeoTimeout})
 
+	// Demo sifre yenileme (T11.9): production'da uc hic baglanmaz.
+	var passwordResetter httpapi.PasswordResetter
+	if cfg.DemoPasswordReset() {
+		passwordResetter = identity.service
+	}
+
 	app := httpapi.New(httpapi.Deps{
 		Health:           health.New(healthClients, mergePingers(identity.pingers, shared.pingers), cfg.RequestTimeout, cfg.Mock, logger),
 		Categories:       catalogService,
@@ -158,6 +164,7 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 		UserRegistrar:     identity.service,
 		UserAuthenticator: identity.service,
 		PhoneChecker:      identity.service,
+		PasswordResetter:  passwordResetter,
 		SessionRefresher:  identity.service,
 		SessionRevoker:    identity.service,
 		ProfileGetter:     identity.service,

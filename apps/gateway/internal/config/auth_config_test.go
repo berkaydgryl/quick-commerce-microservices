@@ -114,3 +114,13 @@ func TestSecretIsRedactedInOutput(t *testing.T) {
 		t.Errorf("hata metni sirri icermemeli: %v", err)
 	}
 }
+
+func TestDemoPasswordResetIsClosedInProduction(t *testing.T) {
+	// T11.9: kodsuz sifre yenileme canli ortama cikmaz.
+	for env, open := range map[string]bool{EnvDevelopment: true, EnvTest: true, EnvProduction: false} {
+		cfg := Config{NodeEnv: env}
+		if cfg.DemoPasswordReset() != open {
+			t.Errorf("%s: demo sifre yenileme %v olmali", env, open)
+		}
+	}
+}

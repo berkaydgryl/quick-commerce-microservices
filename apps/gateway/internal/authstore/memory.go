@@ -112,6 +112,19 @@ func (m *MemoryUsers) CountByRegistrationDevice(_ context.Context, deviceID stri
 	return count, nil
 }
 
+// SetPasswordHash, sifre ozetini degistirir (T11.9).
+func (m *MemoryUsers) SetPasswordHash(_ context.Context, userID, passwordHash string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	user, found := m.byID[userID]
+	if !found {
+		return auth.ErrUserNotFound
+	}
+	user.PasswordHash = passwordHash
+	m.byID[userID] = user
+	return nil
+}
+
 // MemorySessions, bellek ici sessions.
 type MemorySessions struct {
 	mu     sync.Mutex
@@ -152,6 +165,20 @@ func (m *MemorySessions) Revoke(_ context.Context, tokenHash string) (bool, erro
 	_, found := m.byHash[tokenHash]
 	delete(m.byHash, tokenHash)
 	return found, nil
+}
+
+// RevokeAllForUser, kullanicinin butun oturumlarini siler (T11.9).
+func (m *MemorySessions) RevokeAllForUser(_ context.Context, userID string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	revoked := 0
+	for hash, session := range m.byHash {
+		if session.UserID == userID {
+			delete(m.byHash, hash)
+			revoked++
+		}
+	}
+	return revoked, nil
 }
 
 // ByID, kimlige gore oturum. Oturum sayisi kucuk (bellek yalnizca MOCK ve

@@ -16,6 +16,7 @@ import type {
   PhoneCheckRequest,
   PhoneCheckResult,
   RegisterRequest,
+  ResetPasswordRequest,
   UserProfile,
 } from '@getir/contracts';
 
@@ -38,6 +39,23 @@ export function registerUser(
 /** POST /v1/auth/login: yanlis telefon ya da sifre INVALID_CREDENTIALS (hangisi oldugu soylenmez). */
 export function loginUser(client: HttpClient, request: LoginRequest): Promise<AuthSession> {
   return client.request('/v1/auth/login', {
+    method: 'POST',
+    session: true,
+    body: request,
+    schema: authSessionSchema,
+  });
+}
+
+/**
+ * POST /v1/auth/password-reset (T11.9; demo, yalnizca gelistirmede): sifreyi
+ * degistirir, eski oturumlari kapatir ve giris gibi oturum acar. Giris gibi
+ * oturum ucudur: anahtar istemez.
+ */
+export function resetPassword(
+  client: HttpClient,
+  request: ResetPasswordRequest,
+): Promise<AuthSession> {
+  return client.request('/v1/auth/password-reset', {
     method: 'POST',
     session: true,
     body: request,
