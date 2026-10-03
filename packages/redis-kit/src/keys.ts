@@ -169,6 +169,24 @@ export function courierLastKey(courierId: string): string {
 }
 
 /**
+ * realtime:{orderId}:seq -- siparis odasina yayinlanan son surum (T12.3).
+ *
+ * realtime-service yazar ve okur: olay hatti ayni siparisin olaylarini sirasiz
+ * teslim edebilir (yeniden teslim, birden cok kopya); daha eski surum odaya
+ * yayinlanmaz. Tek uyeli sorted set (puan = surum; ZADD GT ile atomik), TTL'li:
+ * her yazimda yenilenir. Suresi dolsa bile istemci kendi seq kuralini uygular.
+ * Kimlik yalnizca siparis kimligi (ord_ + 32 hex) olabilir.
+ */
+export function realtimeSeqKey(orderId: string): string {
+  if (!isId(ID_PREFIX.ORDER, orderId)) {
+    throw AppError.validation('Gecersiz Redis anahtar parcasi: orderId', {
+      details: { field: 'orderId', value: orderId },
+    });
+  }
+  return `realtime:${hashTag(orderId)}:seq`;
+}
+
+/**
  * Kimligi dogrulanmamis istegin idempotency kapsami (kayit ucu): anahtar tum
  * anonim isteklerde ortaktir, farkli govdeyle gelen ayni anahtari istek parmak
  * izi ayirir (ADR-08 eki, T8.2).

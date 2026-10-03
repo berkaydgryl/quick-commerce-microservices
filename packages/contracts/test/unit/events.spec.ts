@@ -11,6 +11,7 @@ import {
   IDEMPOTENCY_KEY_MIN_LENGTH,
   REFUND_REASON_MAX_LENGTH,
   idempotencyKeySchema,
+  orderStatusChangedPayloadSchema,
   paymentCancelRequestedPayloadSchema,
   refundReasonSchema,
   refundRequestedPayloadSchema,
@@ -104,5 +105,39 @@ describe('idempotencyKeySchema', () => {
     ]) {
       expect(idempotencyKeySchema.safeParse(key).success).toBe(false);
     }
+  });
+});
+
+describe('orderStatusChangedPayloadSchema (T12.3)', () => {
+  const changed = {
+    orderId,
+    userId: newId(ID_PREFIX.USER),
+    marketId: 'mkt_migros-jet-moda',
+    from: 'AWAITING_PAYMENT',
+    to: 'PAID',
+    version: 5,
+  };
+
+  it('order un urettigi govdeyi kabul eder; ilk geciste from ve not yok', () => {
+    expect(orderStatusChangedPayloadSchema.parse(changed)).toEqual(changed);
+    const { from: _from, ...first } = changed;
+    expect(
+      orderStatusChangedPayloadSchema.parse({ ...first, to: 'RISK_CHECK', version: 2 }),
+    ).toMatchObject({
+      to: 'RISK_CHECK',
+    });
+    expect(orderStatusChangedPayloadSchema.parse({ ...changed, note: 'CART_RELEASED' }).note).toBe(
+      'CART_RELEASED',
+    );
+  });
+
+  it.each([
+    ['bilinmeyen durum', { to: 'SHIPPED' }],
+    ['siparis kimligi degil', { orderId: newId(ID_PREFIX.USER) }],
+    ['surum sifir', { version: 0 }],
+    ['surum kesirli', { version: 1.5 }],
+    ['market kimligi bicim disi', { marketId: 'migros' }],
+  ])('%s reddedilir', (_name, patch) => {
+    expect(orderStatusChangedPayloadSchema.safeParse({ ...changed, ...patch }).success).toBe(false);
   });
 });

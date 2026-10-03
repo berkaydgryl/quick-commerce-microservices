@@ -3,6 +3,7 @@
  */
 
 import {
+  orderStatusChangedPayloadSchema,
   paymentCancelRequestedPayloadSchema,
   refundRequestedPayloadSchema,
 } from '@getir/contracts';
@@ -92,6 +93,28 @@ describe('statusChangedEvents', () => {
     const order = draft();
 
     expect(statusChangedEvents(order, order)).toEqual([]);
+  });
+
+  it('govde realtime in okudugu sozlesme semasindan gecer (T12.3)', () => {
+    // Sozlesme gercek kimlik bicimi ister; ortak ornek kisa kimlik (usr_1) kullaniyor.
+    const before = createDraftOrder(
+      sampleDraftInput({ userId: 'usr_0123456789abcdef0123456789abcdef' }),
+      fixedClock(T0),
+    );
+    const after = transitionOrder(
+      transitionOrder(before, ORDER_STATUS.RISK_CHECK, fixedClock(T0 + 1_000)),
+      ORDER_STATUS.CANCELLED,
+      fixedClock(T0 + 2_000),
+      TIMELINE_NOTE.CART_RELEASED,
+    );
+
+    const payloads = statusChangedEvents(before, after)
+      .filter((event) => event.topic === EVENTS.ORDER_STATUS_CHANGED)
+      .map((event) => event.payload);
+
+    expect(payloads.map((payload) => orderStatusChangedPayloadSchema.parse(payload))).toEqual(
+      payloads,
+    );
   });
 });
 

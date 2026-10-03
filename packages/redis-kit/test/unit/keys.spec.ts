@@ -16,6 +16,7 @@ import {
   IDEMPOTENCY_ANONYMOUS_SCOPE,
   idempotencyKey,
   rateLimitKey,
+  realtimeSeqKey,
   RECONCILE_LOCK_KEY,
   reservationIndexKey,
   reservationKey,
@@ -172,4 +173,20 @@ describe('dogrulama', () => {
     // Kapsam da anahtar parcasidir: ayirici tasiyamaz.
     expect(() => idempotencyKey('usr:7', 'anahtar-0001')).toThrow(AppError);
   });
+});
+
+describe('realtimeSeqKey (T12.3)', () => {
+  const ORDER = 'ord_0123456789abcdef0123456789abcdef';
+
+  it('siparis kimligini hash-tag icinde tasir', () => {
+    expect(realtimeSeqKey(ORDER)).toBe(`realtime:{${ORDER}}:seq`);
+    expect(hashTagOf(realtimeSeqKey(ORDER))).toBe(ORDER);
+  });
+
+  it.each(['ord_1', 'usr_0123456789abcdef0123456789abcdef', 'ord_{x}', ''])(
+    'siparis kimligi olmayan parcayi (%j) reddeder',
+    (value) => {
+      expect(() => realtimeSeqKey(value)).toThrow(AppError);
+    },
+  );
 });

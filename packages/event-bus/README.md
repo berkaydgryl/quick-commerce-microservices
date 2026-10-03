@@ -61,7 +61,8 @@ await consumer.stop();
 ```
 
 - **Grup = servis adı.** Bir grubun her olayı grubun **tek** tüketicisine gider: servisin
-  kopyaları işi paylaşır. Farklı gruplar aynı olayı ayrı ayrı alır (payment ve ileride realtime).
+  kopyaları işi paylaşır. Farklı gruplar aynı olayı ayrı ayrı alır (bugün `payment` ve `realtime`; realtime
+  T12.3'ten beri `order.status_changed`'i `LATEST` ile dinler).
 - **Tek akış, tüm konular:** grup `stream:events`'teki her kaydı okur; dinlemediği konuyu işleyiciye
   vermeden onaylar (tur sonunda tek `XACK`). Kayıtlar bu yüzden `start`'tan önce yapılır.
 - **Grup başına ayrı bağlantı:** `XREADGROUP BLOCK` beklerken bağlantı başka komut çalıştıramaz.

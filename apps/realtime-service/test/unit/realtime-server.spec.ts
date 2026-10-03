@@ -368,4 +368,42 @@ describe('kapanis', () => {
     await expect(closed).resolves.toBe('transport close');
     expect(lines).toContainEqual(expect.objectContaining({ message: 'realtime kapandi' }));
   });
+
+  it('olay dinleme ONCE durur: o anda soketler ve port hala acik (D9, T12.3)', async () => {
+    let seenAtStop: { connected: boolean; health: number } | undefined;
+    const tab: { socket?: Socket } = {};
+    const realtime = await startRealtimeServer({
+      host: '127.0.0.1',
+      port: 0,
+      logger: recordingLogger(lines),
+      tokenSecret: TEST_SECRET,
+      clock: fixedClock(NOW_MS),
+      events: () =>
+        Promise.resolve({
+          stop: async () => {
+            const health = await fetch(`http://127.0.0.1:${realtime.port}/healthz`);
+            seenAtStop = { connected: tab.socket?.connected ?? false, health: health.status };
+          },
+        }),
+    });
+    server = realtime;
+    tab.socket = await client();
+
+    await realtime.shutdown('SIGTERM');
+
+    // Dinleme durdurulurken Socket.io kapanmamisti: eldeki olaylar hala yayinlanabilir.
+    expect(seenAtStop).toEqual({ connected: true, health: 503 });
+  });
+
+  it('olay dinleme baslatilamazsa acilis hata verir ve port kapanir', async () => {
+    await expect(
+      startRealtimeServer({
+        host: '127.0.0.1',
+        port: 0,
+        logger: recordingLogger(lines),
+        tokenSecret: TEST_SECRET,
+        events: () => Promise.reject(new Error('redis yok')),
+      }),
+    ).rejects.toThrow('redis yok');
+  });
 });

@@ -7,15 +7,16 @@
  * derlemede ya da sozlesme testinde yakalanir. Degisiklik kurali "alan ekle,
  * alan silme"dir (ADR-07, sema kayit defteri yok).
  *
- * Yalnizca DINLENEN olaylarin govdesi burada durur. order.created ve
- * order.status_changed'i bugun kimse dinlemiyor; tuketicisi gelince (T12.3,
- * realtime) semasi buraya eklenir.
+ * Yalnizca DINLENEN olaylarin govdesi burada durur. order.status_changed'i
+ * T12.3'ten beri realtime dinliyor; order.created'i bugun kimse dinlemiyor,
+ * tuketicisi gelince semasi buraya eklenir.
  */
 
 import { z } from 'zod';
 
-import { idempotencyKeySchema, idSchema } from './common.js';
+import { idempotencyKeySchema, idSchema, marketIdSchema, orderIdSchema } from './common.js';
 import { REFUND_REASON_MAX_LENGTH, REFUND_REASON_PATTERN } from './constants.js';
+import { orderStatusSchema } from './order-status.js';
 
 /** Iade gerekcesi anahtari: Refund RPC'si ve iade komutu ayni kurali kullanir. */
 export const refundReasonSchema = z
@@ -54,3 +55,28 @@ export const paymentCancelRequestedPayloadSchema = z.object({
 });
 
 export type PaymentCancelRequestedPayload = z.infer<typeof paymentCancelRequestedPayloadSchema>;
+
+/**
+ * order.status_changed (T7.3 uretir, T12.3 realtime dinler): siparisin bir
+ * durum gecisi. Tek yazimda birden cok gecis olabilir (risk adimi); her biri
+ * ayri olaydir ve `version`'lari ardisiktir. Zarfin `occurredAt`'i gecisin
+ * zaman cizelgesindeki anidir.
+ *
+ * `userId` ve `note` IC alanlardir: realtime sokete yalnizca orderId, durum,
+ * onceki durum, an ve `version`'dan turettigi `seq`'i cikarir
+ * (socket.ts orderStatusEventSchema).
+ */
+export const orderStatusChangedPayloadSchema = z.object({
+  orderId: orderIdSchema,
+  userId: idSchema,
+  marketId: marketIdSchema,
+  /** Ilk gecisin oncesi yoktur (zaman cizelgesinin ilk kaydi). */
+  from: orderStatusSchema.optional(),
+  to: orderStatusSchema,
+  /** Gecisin gerekce anahtari (or. CART_RELEASED); yalnizca ic kullanim. */
+  note: z.string().optional(),
+  /** Gecisin siparise getirdigi surum; soket olayinin seq'i olur. */
+  version: z.number().int().positive(),
+});
+
+export type OrderStatusChangedPayload = z.infer<typeof orderStatusChangedPayloadSchema>;

@@ -14,6 +14,7 @@ export const METRIC_NAMES = {
   ROOM_JOINS: 'realtime_room_joins_total',
   EVENTS_EMITTED: 'realtime_events_emitted_total',
   EVENTS_DROPPED: 'realtime_events_dropped_total',
+  EVENTS_STALE: 'realtime_events_stale_total',
 } as const;
 
 /** Odanin ayristirilamadigi deneme icin oda etiketi. */
@@ -39,6 +40,12 @@ const eventsEmitted = counter<'event'>({
   labelNames: ['event'],
 });
 
+const eventsStale = counter<'event'>({
+  name: METRIC_NAMES.EVENTS_STALE,
+  help: 'Daha yeni surum zaten yayinlandigi icin atlanan olaylar (T12.3)',
+  labelNames: ['event'],
+});
+
 const eventsDropped = counter<'event'>({
   name: METRIC_NAMES.EVENTS_DROPPED,
   help: 'Sema ya da oda kuralina uymadigi icin yayinlanmayan olaylar',
@@ -52,6 +59,7 @@ export interface RealtimeMetrics {
   roomJoin(room: RoomKind | typeof INVALID_ROOM_LABEL, outcome: string): void;
   eventEmitted(event: SocketEventName): void;
   eventDropped(event: SocketEventName): void;
+  eventStale(event: SocketEventName): void;
 }
 
 export const realtimeMetrics: RealtimeMetrics = {
@@ -69,5 +77,8 @@ export const realtimeMetrics: RealtimeMetrics = {
   },
   eventDropped: (event) => {
     eventsDropped.inc({ event });
+  },
+  eventStale: (event) => {
+    eventsStale.inc({ event });
   },
 };

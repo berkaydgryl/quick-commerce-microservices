@@ -357,7 +357,7 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/cat
 | [`order-service`](apps/order-service/README.md) (T7.5)     | 50053 | Taslak (catalog fiyatıyla), saga (risk → ödeme → 3DS), iptal, geçmiş, outbox → olay                                   |
 | [`payment-service`](apps/payment-service/README.md) (T5.3) | 50054 | `Charge`, `Confirm3Ds` — mock kart + 3DS, idempotent; Mongo `payments` ya da `MOCK`                                   |
 | [`risk-service`](apps/risk-service/README.md) (T6.3)       | 50055 | `Evaluate`, `GetLastEvaluation` — 6 kural, veto, `risk_events` (Mongo ya da `MOCK`)                                   |
-| [`realtime-service`](apps/realtime-service/README.md)      | 3001  | Socket.io odaları: `room.join` + oda jetonu (T12.2), Redis adapter; iş olayı yayını T12.3                             |
+| [`realtime-service`](apps/realtime-service/README.md)      | 3001  | Socket.io odaları: `room.join` + oda jetonu (T12.2), Redis adapter; `order.status` canlı (T12.3)                      |
 | [`gateway`](apps/gateway/README.md) (Go, T7.5)             | 8080  | Katalog uçları (stoksuz) ve sipariş uçları: `POST /v1/cart/reserve`, `POST /v1/orders`, `/3ds`, `GET /v1/orders/{id}` |
 
 Katalog T4.1'den beri Mongo'dan okur: `MOCK=true` ise aynı demo verisini bellekten döndürür
