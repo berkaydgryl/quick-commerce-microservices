@@ -7,7 +7,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { createDebouncer } from '../../../shared/services/debounce';
 import { SEARCH_DEBOUNCE_MS } from '../../catalog/constants';
 import { searchQueryFrom } from '../../catalog/services/search-query';
-import { SEARCH_PARAM, SEARCH_PATH, searchHref } from '../services/search-route';
+import { SEARCH_PARAM, SEARCH_PATH } from '../services/search-route';
 
 import styles from './HeaderSearch.module.css';
 import { ClearIcon, SearchIcon } from './icons';
@@ -16,6 +16,11 @@ interface HeaderSearchProps {
   readonly content: AppHeaderContent;
   /** Kutunun sag ucundaki teslimat adresi (uygulama verir: adres ozelligi). */
   readonly address: ReactNode;
+  /**
+   * Baska sayfada Enter'in gidecegi adres (uygulama verir: oturumsuz ziyaretci
+   * giris ekranina, donus arama sonuclari; arama ozelligi kimlik yollarini tanimaz).
+   */
+  readonly resultsHref: (query: string) => string;
 }
 
 /**
@@ -25,13 +30,14 @@ interface HeaderSearchProps {
  *  - Ana sayfada yazdikca arar: yazim SEARCH_DEBOUNCE_MS durunca `?ara=`
  *    guncellenir, sonuclar sayfada gorunur (T9.6 davranisi).
  *  - Baska sayfada (market, hesabim) yazarken sayfa degismez; Enter aramayi
- *    ana sayfaya, sonuclara tasir. Yazarken gecis olsaydi kutu yeniden kurulur
- *    ve klavye odagi kaybolurdu.
+ *    ana sayfaya, sonuclara tasir (oturumsuz ziyaretci once giris ekranina;
+ *    adresi uygulama verir). Yazarken gecis olsaydi kutu yeniden kurulur ve
+ *    klavye odagi kaybolurdu.
  *
  * Adresteki arama disaridan da degisebilir (geri tusu, temizleme): kutu adresi
  * izler ama kendi yaydigi aramaya donen adres yazilani EZMEZ.
  */
-export function HeaderSearch({ content, address }: HeaderSearchProps) {
+export function HeaderSearch({ content, address, resultsHref }: HeaderSearchProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -72,7 +78,7 @@ export function HeaderSearch({ content, address }: HeaderSearchProps) {
       debouncer.cancel();
       emit(next);
     } else if (next !== undefined) {
-      navigate(searchHref(next));
+      navigate(resultsHref(next));
     }
   };
 
@@ -120,4 +126,30 @@ export function HeaderSearch({ content, address }: HeaderSearchProps) {
 /** Icerik gelene kadar ayni boyda bos kutu: bar ziplamaz. */
 export function HeaderSearchPlaceholder() {
   return <div className={styles['c-header-search']} aria-busy="true" />;
+}
+
+interface HeaderSearchFallbackProps {
+  /** Icerik ucunun hatasi (sozlukten gelen Turkce mesaj). */
+  readonly message: string;
+  /** "Tekrar dene" (uygulama verir: icerik yedegi). */
+  readonly retryLabel: string;
+  readonly onRetry: () => void;
+}
+
+/**
+ * Icerik ucu hata verirse kutunun yerinde mesaj ve "Tekrar dene" (T11.10
+ * duzeltmesi): kutu sessizce bos kalmaz, kullanici yeniden isteyebilir.
+ */
+export function HeaderSearchFallback({ message, retryLabel, onRetry }: HeaderSearchFallbackProps) {
+  return (
+    <div
+      className={`${styles['c-header-search']} ${styles['c-header-search--fallback']}`}
+      role="alert"
+    >
+      <p className={styles['c-header-search__message']}>{message}</p>
+      <button type="button" className={styles['c-header-search__retry']} onClick={onRetry}>
+        {retryLabel}
+      </button>
+    </div>
+  );
 }

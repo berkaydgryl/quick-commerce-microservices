@@ -140,7 +140,11 @@
   /* --- Kenar, yaricap, golge --- */
   --border-width-thin: 0.0625rem;
   --focus-ring-width: 0.1875rem;
-  --focus-ring-offset: 0.125rem;
+
+  /* Halka mesafesi: kutunun icine cizen bilesen (ust bar aramasi) degistirir;
+     icindeki pencereler taban degere doner (T11.10 duzeltmesi). */
+  --focus-ring-offset-base: 0.125rem;
+  --focus-ring-offset: var(--focus-ring-offset-base);
   --radius-sm: 0.5rem;
   --radius-md: 0.75rem;
   --radius-lg: 1rem;

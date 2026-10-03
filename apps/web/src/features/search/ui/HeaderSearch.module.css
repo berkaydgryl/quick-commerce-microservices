@@ -4,6 +4,12 @@
  * adresi. Adres listesi kutunun altinda acilir (adres bileseni).
  */
 .c-header-search {
+  /* Beyaz kutunun icindeki odak halkasi mor ve kutunun ICINE cizilir: barin
+     beyaz halkasi beyaz kutuda, mor halka mor barda gorunmezdi (QA B1). Alt
+     ogeler (yazi, temizle, adres) degiskenleri kalitir. */
+  --focus-ring-color: var(--color-brand-primary);
+  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
+
   display: flex;
   align-items: stretch;
   min-height: var(--size-header-search);
@@ -73,4 +79,35 @@
   flex: none;
   align-items: stretch;
   border-inline-start: var(--border-width-thin) solid var(--border-subtle);
+}
+
+/* Icerik gelmeyince: kutunun yerinde mesaj ve "Tekrar dene". */
+.c-header-search--fallback {
+  gap: var(--space-2);
+  align-items: center;
+  padding-inline: var(--space-3) var(--space-2);
+}
+
+.c-header-search__message {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.c-header-search__retry {
+  flex: none;
+  padding: var(--space-1) var(--space-3);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-on-brand);
+  cursor: pointer;
+  background: var(--color-brand-primary);
+  border: none;
+  border-radius: var(--radius-sm);
+}
+
+.c-header-search__retry:hover {
+  background: var(--color-brand-primary-strong);
 }

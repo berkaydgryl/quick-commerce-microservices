@@ -38,8 +38,9 @@ type GeoPoint struct {
 }
 
 // SavedAddress, kayitli adres (@getir/contracts savedAddressSchema). Kind,
-// Building, Floor ve Apartment T11.8'de eklendi: persona seed'inin
-// adreslerinde bostur.
+// Building, Floor ve Apartment T11.8'de eklendi. Persona seed'inin hazir
+// adreslerinde Kind doludur (T11.10: ust bardaki ikon); bina, kat ve daire
+// bostur. T11.8 oncesi kayitlarda Kind olmayabilir.
 type SavedAddress struct {
 	Title     string
 	Kind      string

@@ -6,6 +6,7 @@ import { useSessionStore } from '../../../shared/session/session-store';
 import { QueryError, QueryLoading } from '../../../shared/ui/query-status/QueryStatus';
 import { useAddressBook } from '../hooks/useAddressBook';
 import { selectedAddressIndex } from '../services/delivery-address';
+import { deliveryLabel } from '../services/delivery-label';
 
 import { AddressBookDialog } from './AddressBookDialog';
 import { AddressSetupDialog } from './AddressSetupDialog';
@@ -63,6 +64,8 @@ export function HeaderAddressPicker({
   }
 
   const current = addresses[selectedAddressIndex(addresses, delivery.title)];
+  // Gorunen ad: hesabin adresi kendi adiyla, varsayilan adres icerikteki "Ev" etiketiyle.
+  const label = deliveryLabel(delivery, setup.kinds);
   // Varsayilan adres "Ev"dir; hesabin adresi kendi turunun ikonunu gosterir.
   const icon = kindIcon(setup.kinds, delivery.source === 'account' ? current?.kind : 'HOME');
   const face = (
@@ -70,7 +73,7 @@ export function HeaderAddressPicker({
       <span className={styles['c-header-address__icon']} aria-hidden="true">
         {icon ?? <PinIcon />}
       </span>
-      <span className={styles['c-header-address__title']}>{delivery.title}</span>
+      <span className={styles['c-header-address__title']}>{label}</span>
       <span className={styles['c-header-address__chevron']}>
         <ChevronRightIcon />
       </span>
@@ -82,7 +85,7 @@ export function HeaderAddressPicker({
       <Link
         to={loginHref}
         className={styles['c-header-address__trigger']}
-        aria-label={`${content.addressLabel}: ${delivery.title}. ${content.addressLoginLabel}`}
+        aria-label={`${content.addressLabel}: ${label}. ${content.addressLoginLabel}`}
       >
         {face}
       </Link>
@@ -106,7 +109,7 @@ export function HeaderAddressPicker({
       <button
         type="button"
         className={styles['c-header-address__trigger']}
-        aria-label={`${content.addressLabel}: ${delivery.title}`}
+        aria-label={`${content.addressLabel}: ${label}`}
         aria-haspopup="dialog"
         onClick={() => setOpen('book')}
       >
