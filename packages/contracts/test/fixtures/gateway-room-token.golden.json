@@ -1,0 +1,10 @@
+{
+  "secret": "qa-altin-oda-jetonu-sirri-yalnizca-test-icin",
+  "userId": "usr_0123456789abcdef0123456789abcdef",
+  "orderId": "ord_0123456789abcdef0123456789abcdef",
+  "signedAt": "2026-10-03T12:00:00.250Z",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb29tIjoib3JkZXI6b3JkXzAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5YWJjZGVmIiwiaXNzIjoiZ2V0aXItZ2F0ZXdheSIsInN1YiI6InVzcl8wMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZiIsImF1ZCI6WyJyZWFsdGltZSJdLCJleHAiOjE3OTEwMjg4NjAsImlhdCI6MTc5MTAyODgwMH0.qRH5cHvK6ubEXgomXKqaza4qsFdkjnbJOaE05ChvQ8U",
+  "room": "order:ord_0123456789abcdef0123456789abcdef",
+  "expiresAt": "2026-10-03T12:01:00Z",
+  "ttlSeconds": 60
+}
