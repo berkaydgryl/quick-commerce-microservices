@@ -8,7 +8,8 @@
 //
 // Calistirma (zorunlu ortam degiskenleri ve tum tablo: README.md):
 //
-//	ASSET_BASE_URL=http://localhost:5173 JWT_SECRET="$(openssl rand -hex 32)" MOCK=true go run ./cmd/gateway
+//	ASSET_BASE_URL=http://localhost:5173 JWT_SECRET="$(openssl rand -hex 32)" \
+//	REALTIME_TOKEN_SECRET="$(openssl rand -hex 32)" MOCK=true go run ./cmd/gateway
 //	curl -s localhost:8080/healthz | jq
 //	curl -s localhost:8080/v1/categories | jq
 package main

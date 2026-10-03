@@ -1791,8 +1791,19 @@ paths:
       operationId: getOrderRealtimeToken
       summary: "order:{orderId} odası için kısa ömürlü Socket.io jetonu"
       description: |
-        Jeton yalnızca tek bir sipariş odasına katılım yetkisi taşır ve
-        kısa ömürlüdür (bkz. `ttlSeconds`). Sözleşme: docs/api/socket-events.md
+        Siparişin SAHİBİNE, `order:{orderId}` odasına katılmak için kısa ömürlü
+        oda jetonu verir (T12.2). İstemci jetonu `room.join { room, token }`
+        gövdesinde taşır ve içini okumaz (opak). Jeton yalnızca bu tek odaya
+        yetkilidir, ömrü 60 sn'dir (`ttlSeconds`) ve yalnızca katılımda
+        denetlenir: süresi dolunca odadaki soket atılmaz, yeniden bağlanan
+        istemci yeni jeton alır. Erişim jetonundan ayrı bir sırla imzalanır;
+        erişim jetonu oda jetonu yerine geçmez.
+
+        Başkasının siparişi ya da olmayan sipariş `404` döner (var olduğu
+        sızdırılmaz). Siparişin durumuna bakılmaz: iptal ya da teslim edilmiş
+        siparişin sahibi de jeton alır ve son durumu izleyebilir.
+
+        Sözleşme: docs/api/socket-events.md
       parameters:
         - $ref: "#/components/parameters/OrderIdPathId"
       responses:
@@ -1810,29 +1821,26 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/RealtimeToken"
+              examples:
+                token:
+                  summary: Siparişin sahibi
+                  value:
+                    success: true
+                    data:
+                      token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.…"
+                      room: "order:ord_db77f4c0e24f49919cc1d78a649c9c94"
+                      expiresAt: "2026-10-03T12:01:00Z"
+                      ttlSeconds: 60
         "401":
           $ref: "#/components/responses/Unauthenticated"
-        "403":
-          description: Sipariş başka kullanıcıya ait
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorResponse"
-              examples:
-                forbidden:
-                  summary: FORBIDDEN
-                  value:
-                    success: false
-                    error:
-                      code: FORBIDDEN
-                      message: "Bu sipariş odası için jeton alamazsınız."
-                      details:
-                        room: "order:ord_db77f4c0e24f49919cc1d78a649c9c94"
-                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "404":
           $ref: "#/components/responses/OrderNotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
         "500":
           $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
 components:
   securitySchemes:
@@ -3421,17 +3429,24 @@ components:
     # --- Gerçek zamanlı -----------------------------------------------------
     RealtimeToken:
       type: object
+      description: |
+        Sipariş odası jetonu (T12.2). `token` istemci için opaktır; `room.join`
+        gövdesinde aynen gönderilir. İçeriği (HS256, `aud = realtime`, 60 sn)
+        docs/api/socket-events.md "Oda jetonu" bölümünde.
       required: [token, room, expiresAt, ttlSeconds]
       properties:
         token:
           type: string
         room:
           type: string
-          description: Jetonun yetkili olduğu tek oda.
+          description: Jetonun yetkili olduğu tek oda (`order:` + sipariş kimliği).
+          pattern: "^order:ord_[0-9a-f]{32}$"
           examples: ["order:ord_db77f4c0e24f49919cc1d78a649c9c94"]
         expiresAt:
           type: string
           format: date-time
+          description: Jetonun bitişi (imza anı + 60 sn); yalnızca katılımda önemlidir.
         ttlSeconds:
           type: integer
           minimum: 1
+          description: Jetonun ömrü (saniye); bugün 60.

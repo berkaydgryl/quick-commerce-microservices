@@ -64,6 +64,9 @@ type Config struct {
 	// JWTSecret, erisim jetonunun imza sirri (HS256). Tipi Secret: yanlislikla
 	// gunluge ya da hataya yazilsa bile "[gizli]" gorunur.
 	JWTSecret Secret
+	// RealtimeTokenSecret, oda jetonunun imza sirri (T12.2, HS256). JWTSecret'tan
+	// farklidir; realtime-service ayni degerle dogrular.
+	RealtimeTokenSecret Secret
 	// JWTTTL, erisim jetonu omru; RefreshTTL, yenileme jetonu omru.
 	JWTTTL     time.Duration
 	RefreshTTL time.Duration
@@ -198,6 +201,12 @@ func Load(getenv Getenv) (Config, error) {
 		problems = append(problems, err)
 	}
 
+	// Oda jetonu (T12.2): ayri sir, JWT_SECRET'tan farkli olmali.
+	realtimeTokenSecret, err := readRealtimeTokenSecret(getenv, nodeEnv, jwtSecret)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
 	jwtTTL, err := readSeconds(getenv, "JWT_TTL", defaultJWTTTL)
 	if err != nil {
 		problems = append(problems, err)
@@ -289,6 +298,7 @@ func Load(getenv Getenv) (Config, error) {
 		MongoDB:                     readString(getenv, "GATEWAY_MONGO_DB", defaultMongoDB),
 		MongoServerSelectionTimeout: mongoTimeout,
 		JWTSecret:                   jwtSecret,
+		RealtimeTokenSecret:         realtimeTokenSecret,
 		JWTTTL:                      jwtTTL,
 		RefreshTTL:                  refreshTTL,
 		RedisURL:                    redisURL,

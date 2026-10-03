@@ -1,0 +1,35 @@
+{
+  "name": "@getir/realtime-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Realtime servisi: Socket.io odalari (siparis ve market), oda jetonu dogrulamasi ve Redis adapter ile kopyalar arasi yayin",
+  "main": "./dist/main.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "dev": "node --env-file-if-exists=../../.env --watch dist/main.js",
+    "start": "node --env-file-if-exists=../../.env dist/main.js",
+    "healthcheck": "node dist/healthcheck.js",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\""
+  },
+  "dependencies": {
+    "@getir/contracts": "workspace:*",
+    "@getir/core": "workspace:*",
+    "@getir/observability": "workspace:*",
+    "@getir/redis-kit": "workspace:*",
+    "@getir/service-kit": "workspace:*",
+    "@opentelemetry/api": "^1.9.1",
+    "@socket.io/redis-adapter": "^8.3.0",
+    "jose": "^6.2.12",
+    "socket.io": "^4.8.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@testcontainers/redis": "^12.1.0",
+    "socket.io-client": "^4.8.4"
+  }
+}

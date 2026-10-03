@@ -337,6 +337,7 @@ pnpm --filter @getir/inventory-service build && MOCK=true pnpm --filter @getir/i
 pnpm --filter @getir/order-service   build && pnpm --filter @getir/order-service   start  # :50053
 pnpm --filter @getir/payment-service build && pnpm --filter @getir/payment-service start  # :50054, mock kart
 pnpm --filter @getir/risk-service    build && pnpm --filter @getir/risk-service    start  # :50055, risk motoru
+pnpm --filter @getir/realtime-service build && pnpm --filter @getir/realtime-service start  # :3001, Socket.io (MOCK: Redis'siz)
 pnpm proto:gen && (cd apps/gateway && ASSET_BASE_URL=http://localhost:5173 go run ./cmd/gateway)  # :8080
 
 curl -s localhost:8080/healthz          # iki servisin durumu; biri dusukse 503
@@ -356,6 +357,7 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/cat
 | [`order-service`](apps/order-service/README.md) (T7.5)     | 50053 | Taslak (catalog fiyatıyla), saga (risk → ödeme → 3DS), iptal, geçmiş, outbox → olay                                   |
 | [`payment-service`](apps/payment-service/README.md) (T5.3) | 50054 | `Charge`, `Confirm3Ds` — mock kart + 3DS, idempotent; Mongo `payments` ya da `MOCK`                                   |
 | [`risk-service`](apps/risk-service/README.md) (T6.3)       | 50055 | `Evaluate`, `GetLastEvaluation` — 6 kural, veto, `risk_events` (Mongo ya da `MOCK`)                                   |
+| [`realtime-service`](apps/realtime-service/README.md)      | 3001  | Socket.io odaları: `room.join` + oda jetonu (T12.2), Redis adapter; iş olayı yayını T12.3                             |
 | [`gateway`](apps/gateway/README.md) (Go, T7.5)             | 8080  | Katalog uçları (stoksuz) ve sipariş uçları: `POST /v1/cart/reserve`, `POST /v1/orders`, `/3ds`, `GET /v1/orders/{id}` |
 
 Katalog T4.1'den beri Mongo'dan okur: `MOCK=true` ise aynı demo verisini bellekten döndürür

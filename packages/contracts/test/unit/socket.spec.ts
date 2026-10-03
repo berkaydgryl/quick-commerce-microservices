@@ -2,6 +2,8 @@ import { EVENTS, ORDER_STATUS } from '@getir/core';
 import { describe, expect, it } from 'vitest';
 
 import {
+  REALTIME_TOKEN,
+  ROOM_NAME_MAX_LENGTH,
   SOCKET_EVENTS,
   SOCKET_EVENT_SCHEMAS,
   courierLocationEventSchema,
@@ -31,6 +33,28 @@ describe('oda adlari', () => {
     expect(roomSchema.safeParse(orderRoom(ORDER_ID)).success).toBe(true);
     expect(roomSchema.safeParse(storeRoom(MARKET_ID)).success).toBe(true);
     expect(roomSchema.safeParse(`admin:${ORDER_ID}`).success).toBe(false);
+  });
+
+  it.each([
+    ['bos siparis odasi', 'order:'],
+    ['bos market odasi', 'store:'],
+    ['onek buyuk harfli', `ORDER:${ORDER_ID}`],
+    ['siparis kimligi bicim disi', 'order:123'],
+    ['siparis odasinda baska onekli kimlik', 'order:usr_db77f4c0e24f49919cc1d78a649c9c94'],
+    ['siparis odasinda ek parca', `order:${ORDER_ID}:x`],
+    ['market kimligi bicim disi', 'store:../../etc'],
+    ['market odasinda urun kimligi', 'store:prd_sut-1l'],
+    ['asiri uzun ad', `store:mkt_${'a'.repeat(ROOM_NAME_MAX_LENGTH)}`],
+  ])('%s oda adi sayilmaz (T12.2)', (_name, room) => {
+    expect(roomSchema.safeParse(room).success).toBe(false);
+    expect(roomJoinPayloadSchema.safeParse({ room }).success).toBe(false);
+  });
+
+  it('en uzun market kimligiyle oda adi sinirin icindedir', () => {
+    const longest = storeRoom(`mkt_${'a'.repeat(60)}`);
+
+    expect(longest.length).toBe(ROOM_NAME_MAX_LENGTH);
+    expect(roomSchema.safeParse(longest).success).toBe(true);
   });
 
   it('jeton tek bir odaya yetkilidir', () => {
@@ -144,5 +168,18 @@ describe('olay sozlugu', () => {
     expect(SOCKET_EVENTS.RESERVATION_RELEASED).toBe('reservation.released');
     expect(EVENTS.STOCK_RELEASED).toBe('stock.released');
     expect(SOCKET_EVENTS.ORDER_STATUS).not.toBe(EVENTS.ORDER_STATUS_CHANGED);
+  });
+});
+
+describe('oda jetonu sabitleri (T12.2)', () => {
+  it('yalnizca HS256, ayri alici ve 60 sn omur', () => {
+    // Gateway'in sozlesme testi (internal/roomtoken/contract_test.go) ayni degerleri bu dosyadan okur.
+    expect(REALTIME_TOKEN).toEqual({
+      ALGORITHM: 'HS256',
+      ISSUER: 'getir-gateway',
+      AUDIENCE: 'realtime',
+      ROOM_CLAIM: 'room',
+      TTL_SECONDS: 60,
+    });
   });
 });

@@ -43,6 +43,7 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/geo"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/roomtoken"
 )
 
 // HealthReporter, /healthz ucunun ihtiyaci olan tek davranis.
@@ -111,6 +112,12 @@ type ThreeDSConfirmer interface {
 // OrderGetter, GET /v1/orders/{id}.
 type OrderGetter interface {
 	Get(ctx context.Context, userID, orderID string) (order.Order, error)
+}
+
+// OrderRoomTokenIssuer, GET /v1/orders/{id}/token (T12.2): siparis odasinin
+// kisa omurlu jetonu; gercegi roomtoken.Service (sahiplik + imza).
+type OrderRoomTokenIssuer interface {
+	Issue(ctx context.Context, userID, orderID string) (roomtoken.Token, error)
 }
 
 // UserRegistrar, POST /v1/auth/register.
@@ -200,6 +207,8 @@ type Deps struct {
 	OrderPlacer         OrderPlacer
 	ThreeDSConfirmer    ThreeDSConfirmer
 	OrderGetter         OrderGetter
+	// OrderRoomTokens, siparis odasi jetonu (T12.2); bugun roomtoken.Service.
+	OrderRoomTokens OrderRoomTokenIssuer
 	// Kimlik uclari (T8.1); bugun hepsini auth.Service karsilar.
 	UserRegistrar     UserRegistrar
 	UserAuthenticator UserAuthenticator
@@ -326,6 +335,7 @@ func New(deps Deps) *fiber.App {
 	v1.Post("/orders", user, orderByUser, checkout, placeOrderHandler(deps.OrderPlacer, deps.CheckoutSignals))
 	v1.Post("/orders/:"+orderIDParam+"/3ds", user, orderByUser, checkout, confirmThreeDSHandler(deps.ThreeDSConfirmer))
 	v1.Get("/orders/:"+orderIDParam, user, generalByUser, getOrderHandler(deps.OrderGetter))
+	v1.Get("/orders/:"+orderIDParam+"/token", user, generalByUser, orderRoomTokenHandler(deps.OrderRoomTokens))
 
 	return app
 }

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -135,6 +136,29 @@ func readJWTSecret(getenv Getenv, nodeEnv string) (Secret, error) {
 		return nil, fmt.Errorf("JWT_SECRET: en az %d bayt olmali, verilen %d bayt", minJWTSecretBytes, len(value))
 	case nodeEnv == EnvProduction && value == exampleJWTSecret:
 		return nil, errors.New("JWT_SECRET: production'da .env.example'daki ornek sir kullanilamaz")
+	}
+	return Secret(value), nil
+}
+
+// readRealtimeTokenSecret, oda jetonunun imza sirrini okur (ZORUNLU, T12.2).
+//
+// Kurallar JWT_SECRET'inkiyle ayni (en az 32 bayt, production'da ornek deger
+// yok) ve BIR fazlasi: erisim jetonunun sirriyla AYNI OLAMAZ. Iki sir ayri
+// tutulur ki biri sizarsa digeri gecerli kalsin; ikisinin bir arada durdugu tek
+// yer gateway oldugu icin esitlik burada denetlenir (realtime JWT_SECRET'i
+// bilmez). Ayni deger realtime-service'e de verilir. Hata metni sirri icermez.
+func readRealtimeTokenSecret(getenv Getenv, nodeEnv string, jwtSecret Secret) (Secret, error) {
+	const name = "REALTIME_TOKEN_SECRET"
+	value := strings.TrimSpace(getenv(name))
+	switch {
+	case value == "":
+		return nil, fmt.Errorf("%s: zorunlu, en az %d bayt, realtime ile ayni deger; uretmek icin: openssl rand -hex 32", name, minJWTSecretBytes)
+	case len(value) < minJWTSecretBytes:
+		return nil, fmt.Errorf("%s: en az %d bayt olmali, verilen %d bayt", name, minJWTSecretBytes, len(value))
+	case nodeEnv == EnvProduction && value == exampleRealtimeTokenSecret:
+		return nil, fmt.Errorf("%s: production'da .env.example'daki ornek sir kullanilamaz", name)
+	case len(jwtSecret) > 0 && subtle.ConstantTimeCompare([]byte(value), jwtSecret.Bytes()) == 1:
+		return nil, fmt.Errorf("%s: JWT_SECRET ile ayni olamaz; iki jeton ayri sirla imzalanir", name)
 	}
 	return Secret(value), nil
 }

@@ -33,6 +33,9 @@ const (
 	minJWTSecretBytes = 32
 	// exampleJWTSecret, .env.example'daki ornek sir: production'da REDDEDILIR.
 	exampleJWTSecret = "dev-only-insecure-secret-change-me"
+	// exampleRealtimeTokenSecret, .env.example'daki ornek oda jetonu sirri (T12.2):
+	// production'da REDDEDILIR. realtime-service'in EXAMPLE_TOKEN_SECRET'i ile ayni.
+	exampleRealtimeTokenSecret = "dev-only-insecure-realtime-secret-change-me"
 )
 
 // Redis ve tekrar korumasi varsayilanlari (T8.2). Adlar ve degerler .env.example ile ayni.
