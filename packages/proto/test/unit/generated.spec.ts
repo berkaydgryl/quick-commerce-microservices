@@ -126,6 +126,8 @@ describe('pazaryeri sozlesmesi (ADR-15)', () => {
       name: 'Migros Jet - Moda',
       brand: 'Migros Jet',
       logoUrl: '/img/market/migros-jet.png',
+      storeType: catalogV1.StoreType.STORE_TYPE_MARKET,
+      coverUrl: '/img/market/market.jpg',
       location: { lat: 40.9867, lng: 29.0258 },
       deliveryRadiusMeters: 2500,
       isOpen: true,

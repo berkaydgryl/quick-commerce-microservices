@@ -37,7 +37,10 @@ describe('ListNearbyMarkets', () => {
     expect(migros?.rating).toEqual({ averageTenths: 47, count: 1200 });
     expect(migros?.pricingRules?.minBasket).toEqual({ amountMinor: 4000, currency: CURRENCY });
     expect(migros?.deliveryTime).toEqual({ minMinutes: 15, maxMinutes: 25 });
-    expect(migros?.logoUrl).toBe('/img/market/migros-jet.png');
+    // T11.11: logo yok (istemci bas harf rozeti); tur ve kapak telde.
+    expect(migros?.logoUrl).toBe('');
+    expect(migros?.storeType).toBe(catalogV1.StoreType.STORE_TYPE_MARKET);
+    expect(migros?.coverUrl).toBe('/img/market/market.jpg');
   });
 
   it('Yazlik: BOS liste - "bolgende market yok" hata degil', async () => {

@@ -49,3 +49,19 @@ func PatternConstant(t *testing.T, source, name string) string {
 	}
 	return match[1]
 }
+
+// StringEnum, `export const AD = z.enum(['A', 'B']);` satirindaki degerler,
+// sozlesmedeki sirayla (dizi birden cok satira bolunebilir).
+func StringEnum(t *testing.T, source, name string) []string {
+	t.Helper()
+	match := regexp.MustCompile(`export const ` + name + ` = z\.enum\(\[([^\]]*)\]\);`).FindStringSubmatch(source)
+	if match == nil {
+		t.Fatalf("%s sozlesmede bulunamadi", name)
+	}
+	values := regexp.MustCompile(`'([^']*)'`).FindAllStringSubmatch(match[1], -1)
+	names := make([]string, 0, len(values))
+	for _, value := range values {
+		names = append(names, value[1])
+	}
+	return names
+}

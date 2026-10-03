@@ -10,6 +10,20 @@ import (
 // Float'u telde tasimamak yuvarlama farkini onler; ondaliga cevrim tek yerde.
 const ratingScale = 10.0
 
+// storeTypeNames, proto dukkan turu -> sozlesmedeki metin (@getir/contracts
+// storeTypeSchema; T11.11). UNSPECIFIED bilerek yok: tur bilinmiyorsa (eski
+// catalog-service ya da gateway'in tanimadigi yeni tur) alan hic yazilmaz.
+var storeTypeNames = map[catalogv1.StoreType]string{
+	catalogv1.StoreType_STORE_TYPE_MARKET:    "MARKET",
+	catalogv1.StoreType_STORE_TYPE_MANAV:     "MANAV",
+	catalogv1.StoreType_STORE_TYPE_KASAP:     "KASAP",
+	catalogv1.StoreType_STORE_TYPE_SARKUTERI: "SARKUTERI",
+	catalogv1.StoreType_STORE_TYPE_KURUYEMIS: "KURUYEMIS",
+	catalogv1.StoreType_STORE_TYPE_FIRIN:     "FIRIN",
+	catalogv1.StoreType_STORE_TYPE_PETSHOP:   "PETSHOP",
+	catalogv1.StoreType_STORE_TYPE_CICEKCI:   "CICEKCI",
+}
+
 // Money ve GeoPoint, REST'in ortak ilkel tipleridir (internal/rest); order
 // adaptoru de ayni bicimi uretir (T7.5'te tasindi, adlar burada korunur).
 type (
@@ -42,7 +56,11 @@ type Market struct {
 	Name  string `json:"name"`
 	Brand string `json:"brand"`
 	// Istege bagli ve MUTLAK URL: bos ise alan hic yazilmaz (Category ile ayni gerekce).
-	LogoURL              string       `json:"logoUrl,omitempty"`
+	LogoURL string `json:"logoUrl,omitempty"`
+	// Dukkan turu (T11.11); bilinmiyorsa alan yok (storeTypeNames).
+	StoreType string `json:"storeType,omitempty"`
+	// Kapak gorseli, MUTLAK URL (T11.11); logo ile ayni kural.
+	CoverURL             string       `json:"coverUrl,omitempty"`
 	Location             GeoPoint     `json:"location"`
 	DeliveryRadiusMeters int32        `json:"deliveryRadiusMeters"`
 	IsOpen               bool         `json:"isOpen"`
@@ -85,6 +103,8 @@ func toMarket(market *catalogv1.Market, images ImageResolver) Market {
 		Name:                 market.GetName(),
 		Brand:                market.GetBrand(),
 		LogoURL:              images.Resolve(market.GetLogoUrl()),
+		StoreType:            storeTypeNames[market.GetStoreType()],
+		CoverURL:             images.Resolve(market.GetCoverUrl()),
 		Location:             rest.GeoPointFromProto(market.GetLocation()),
 		DeliveryRadiusMeters: market.GetDeliveryRadiusMeters(),
 		IsOpen:               market.GetIsOpen(),

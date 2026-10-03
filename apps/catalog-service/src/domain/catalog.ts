@@ -20,6 +20,20 @@ export const PRODUCT_UNIT = {
 
 export type ProductUnit = (typeof PRODUCT_UNIT)[keyof typeof PRODUCT_UNIT];
 
+/** Dukkan turu (T11.11). Proto'daki StoreType enum'unun domain karsiligi. */
+export const STORE_TYPE = {
+  MARKET: 'MARKET',
+  MANAV: 'MANAV',
+  KASAP: 'KASAP',
+  SARKUTERI: 'SARKUTERI',
+  KURUYEMIS: 'KURUYEMIS',
+  FIRIN: 'FIRIN',
+  PETSHOP: 'PETSHOP',
+  CICEKCI: 'CICEKCI',
+} as const;
+
+export type StoreType = (typeof STORE_TYPE)[keyof typeof STORE_TYPE];
+
 export interface Category {
   readonly id: string;
   readonly name: string;
@@ -55,8 +69,12 @@ export interface Market {
   readonly id: string;
   readonly name: string;
   readonly brand: string;
-  /** GORELI yol; mutlak URL'yi gateway kurar. */
+  /** GORELI yol; mutlak URL'yi gateway kurar. Bos: logo yok (istemci bas harf rozeti gosterir). */
   readonly logoUrl: string;
+  /** Market listesinin sol menusu bu alana gore suzer (T11.11). */
+  readonly storeType: StoreType;
+  /** Kapak gorseli, GORELI yol; mutlak URL'yi gateway kurar. Bos: kapak yok. */
+  readonly coverUrl: string;
   readonly lat: number;
   readonly lng: number;
   readonly deliveryRadiusMeters: number;

@@ -17,6 +17,7 @@ import {
   SEARCH_RESULT_PRODUCTS_MAX,
   searchQuerySchema,
   searchResultListSchema,
+  storeTypeSchema,
 } from '../../src/index.js';
 
 const TRY = (amountMinor: number) => ({ amountMinor, currency: 'TRY' as const });
@@ -26,6 +27,8 @@ const MIGROS_MODA = {
   name: 'Migros Jet - Moda',
   brand: 'Migros Jet',
   logoUrl: 'https://cdn.example.com/img/market/migros-jet.png',
+  storeType: 'MARKET',
+  coverUrl: 'https://cdn.example.com/img/market/market.jpg',
   location: { lat: 40.9867, lng: 29.0258 },
   deliveryRadiusMeters: 2500,
   isOpen: true,
@@ -75,6 +78,36 @@ describe('marketSchema', () => {
     const { logoUrl: _omitted, ...withoutLogo } = MIGROS_MODA;
 
     expect(marketSchema.safeParse(withoutLogo).success).toBe(true);
+  });
+
+  it('kapak GORELI yol olamaz; kapagi olmayan market gecerlidir (T11.11)', () => {
+    const { coverUrl: _omitted, ...withoutCover } = MIGROS_MODA;
+
+    expect(
+      marketSchema.safeParse({ ...MIGROS_MODA, coverUrl: '/img/market/market.jpg' }).success,
+    ).toBe(false);
+    expect(marketSchema.safeParse(withoutCover).success).toBe(true);
+  });
+
+  it('dukkan turu yalnizca bilinen degerlerden biri; turu olmayan market gecerlidir', () => {
+    const { storeType: _omitted, ...withoutType } = MIGROS_MODA;
+
+    expect(marketSchema.safeParse({ ...MIGROS_MODA, storeType: 'BAKKAL' }).success).toBe(false);
+    expect(marketSchema.safeParse(withoutType).success).toBe(true);
+  });
+
+  // Proto StoreType ve gateway ile esi: apps/gateway/internal/catalog/contract_test.go.
+  it('dukkan turleri sabit sirada (T11.11)', () => {
+    expect(storeTypeSchema.options).toEqual([
+      'MARKET',
+      'MANAV',
+      'KASAP',
+      'SARKUTERI',
+      'KURUYEMIS',
+      'FIRIN',
+      'PETSHOP',
+      'CICEKCI',
+    ]);
   });
 });
 

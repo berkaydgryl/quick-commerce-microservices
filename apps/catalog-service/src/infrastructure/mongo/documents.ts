@@ -8,7 +8,7 @@
 
 import type { BaseDocument } from '@getir/mongo-kit';
 
-import type { ProductUnit } from '../../domain/catalog.js';
+import type { ProductUnit, StoreType } from '../../domain/catalog.js';
 
 /** Koleksiyon adlari - roadmap "MongoDB Veri Modeli" tablosuyla ayni. */
 export const COLLECTIONS = {
@@ -46,6 +46,10 @@ export interface MarketDocument extends BaseDocument {
   name: string;
   brand: string;
   logoUrl: string;
+  /** T11.11 oncesi seed edilen belgede yok; seed tekrar kosunca gelir. */
+  storeType?: StoreType;
+  /** T11.11 oncesi seed edilen belgede yok; seed tekrar kosunca gelir. */
+  coverUrl?: string;
   /** 2dsphere indeksi bu alan uzerindedir (ListNearbyMarkets, $geoNear). */
   location: GeoPoint;
   deliveryRadiusMeters: number;

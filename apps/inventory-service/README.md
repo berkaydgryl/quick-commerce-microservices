@@ -296,7 +296,7 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/inventory/v1/i
 
 ## Demo stoğu
 
-`src/infrastructure/fixtures/stock-levels.ts`: kataloğun 71 teklifinin **her birinin** stok kaydı var
+`src/infrastructure/fixtures/stock-levels.ts`: kataloğun 166 teklifinin **her birinin** stok kaydı var
 (`test/unit/stock-fixtures.spec.ts` kataloğun demo verisiyle karşılaştırır). Bilerek konanlar:
 
 - her markette bir **"tükendi"** (0) ve bir **"son 2 adet"** kalemi;

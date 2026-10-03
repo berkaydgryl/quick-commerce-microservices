@@ -23,7 +23,7 @@ describe('seedCatalog', () => {
 
     const counts = await seed();
 
-    expect(counts).toEqual({ categories: 13, products: 15, markets: 6, offers: 71 });
+    expect(counts).toEqual({ categories: 13, products: 49, markets: 21, offers: 166 });
     expect(writer.written).toEqual([CATALOG_SNAPSHOT]);
   });
 

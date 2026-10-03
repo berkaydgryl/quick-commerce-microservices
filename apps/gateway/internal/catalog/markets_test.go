@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -67,6 +68,8 @@ func migrosJet() *catalogv1.Market {
 	return &catalogv1.Market{
 		Id: "mkt_migros-jet-moda", Name: "Migros Jet Moda", Brand: "Migros Jet",
 		LogoUrl:              "/img/market/migros-jet.png",
+		StoreType:            catalogv1.StoreType_STORE_TYPE_MARKET,
+		CoverUrl:             "/img/market/market.jpg",
 		Location:             &commonv1.GeoPoint{Lat: 40.98, Lng: 29.03},
 		DeliveryRadiusMeters: 2500, IsOpen: true,
 		DeliveryTime: &catalogv1.DeliveryTime{MinMinutes: 15, MaxMinutes: 25},
@@ -80,10 +83,12 @@ func migrosJet() *catalogv1.Market {
 }
 
 // migrosJetJSON, migrosJet()'in REST bicimi: puan onda birden ondaliga
-// (47 -> 4.7), bos para birimi TRY'ye, goreli logo mutlak URL'ye cevrilir;
-// alan adlari sozlesmedeki camelCase.
+// (47 -> 4.7), bos para birimi TRY'ye, goreli logo ve kapak mutlak URL'ye,
+// dukkan turu enum adindan sozlesme metnine cevrilir; alan adlari
+// sozlesmedeki camelCase.
 const migrosJetJSON = `{"id":"mkt_migros-jet-moda","name":"Migros Jet Moda","brand":"Migros Jet",` +
-	`"logoUrl":"https://cdn.example/img/market/migros-jet.png","location":{"lat":40.98,"lng":29.03},` +
+	`"logoUrl":"https://cdn.example/img/market/migros-jet.png","storeType":"MARKET",` +
+	`"coverUrl":"https://cdn.example/img/market/market.jpg","location":{"lat":40.98,"lng":29.03},` +
 	`"deliveryRadiusMeters":2500,"isOpen":true,"deliveryTime":{"minMinutes":15,"maxMinutes":25},` +
 	`"rating":{"average":4.7,"count":1200},"pricingRules":{"minBasket":{"amountMinor":4000,"currency":"TRY"},` +
 	`"deliveryFee":{"amountMinor":1999,"currency":"TRY"},"freeDeliveryThreshold":{"amountMinor":25000,"currency":"TRY"}}}`
@@ -168,5 +173,27 @@ func TestNearbyMarketsRenamesLocationFields(t *testing.T) {
 
 	if details := testkit.AppErrorOf(t, err).Details; details["lat"] != "en fazla 90" {
 		t.Errorf("location.lat -> lat bekleniyordu: %v", details)
+	}
+}
+
+func TestMarketWithoutStoreTypeOrCoverOmitsFields(t *testing.T) {
+	// Eski catalog-service turu ve kapagi gondermez (UNSPECIFIED, ""); gateway'in
+	// tanimadigi yeni tur de ayni kalir: sozlesme alanlari istege baglidir.
+	for _, storeType := range []catalogv1.StoreType{catalogv1.StoreType_STORE_TYPE_UNSPECIFIED, catalogv1.StoreType(99)} {
+		market := migrosJet()
+		market.StoreType = storeType
+		market.CoverUrl = ""
+		market.LogoUrl = ""
+
+		got := toMarket(market, testResolver(t))
+		if got.StoreType != "" || got.CoverURL != "" || got.LogoURL != "" {
+			t.Errorf("tur %d: alanlar bos kalmali, %+v geldi", storeType, got)
+		}
+		encoded := testkit.JSON(t, got)
+		for _, field := range []string{`"storeType"`, `"coverUrl"`, `"logoUrl"`} {
+			if strings.Contains(encoded, field) {
+				t.Errorf("tur %d: %s yazilmamali: %s", storeType, field, encoded)
+			}
+		}
 	}
 }

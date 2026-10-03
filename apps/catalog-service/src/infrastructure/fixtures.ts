@@ -11,11 +11,12 @@
  * verisidir ve ADR-05 geregi onlara yalnizca bu servis yazar; (2) .dockerignore
  * infra/'yi imaja almaz - MOCK modundaki konteyner veriyi bulamazdi.
  *
- * Icerik (docs/roadmap.md "Pazaryeri demo verisi" tablosu): 13 kategori, 15
- * ortak urun, iki semtte 6 market. Her market kendi fiyati, kurali ve
- * cesidiyle gelir: A101 daha ucuz, Carrefour daha pahali; manav yalnizca
- * meyve-sebze satar; A101 Abbasaga KAPALIDIR. Degerler market panelinin
- * girecegi degerleri temsil eder (panel kapsam disi).
+ * Icerik (docs/roadmap.md "Pazaryeri demo verisi" tablosu): 13 kategori, 49
+ * ortak urun, iki semtte 21 market (T11.11'den beri her dukkan turunden).
+ * Her market kendi fiyati, kurali ve cesidiyle gelir: A101 daha ucuz,
+ * Carrefour daha pahali; dukkan yalnizca turunun kategorilerini satar (manav
+ * meyve-sebze, kasap et-tavuk...); A101 Abbasaga KAPALIDIR. Degerler market
+ * panelinin girecegi degerleri temsil eder (panel kapsam disi).
  *
  * Fiyatlar KURUS cinsinden tam sayidir (3490 = 34,90 TL). Gorseller GORELI
  * yoldur; mutlak URL'yi gateway (BFF) ASSET_BASE_URL ile kurar.

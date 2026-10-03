@@ -78,6 +78,21 @@ Tanıtım bölümlerinin görselleri (T11.7) kullanıcının getir.com'dan sağl
 | `bebek.jpg`         | Bebek             | [rawpixel](https://www.rawpixel.com/image/5913298/image-background-public-domain-hand)            | —                 | CC0 1.0 |
 | `evcil-hayvan.jpg`  | Evcil Hayvan      | [rawpixel](https://www.rawpixel.com/image/5958959/free-public-domain-cc0-photo)                   | —                 | CC0 1.0 |
 
+Market kapakları (T11.11, `img/market/`, 640×360 px, her biri 60 KB'ın altında) dükkân türüne göredir: aynı türdeki
+marketler aynı kapağı kullanır, veri `coverUrl` alanında `/img/market/<tür>.jpg` yolunu saklar. Logo yoktur; liste
+kartı marketin baş harflerini rozet olarak gösterir. Hepsi **CC0 1.0** (Openverse aramasıyla).
+
+| Dosya           | Dükkân türü | Kaynak                                                                                                | Yazar          | Lisans  |
+| --------------- | ----------- | ----------------------------------------------------------------------------------------------------- | -------------- | ------- |
+| `market.jpg`    | Market      | [rawpixel](https://www.rawpixel.com/image/6082112/vegetables-supermarket)                             | —              | CC0 1.0 |
+| `manav.jpg`     | Manav       | [rawpixel](https://www.rawpixel.com/image/447819/free-photo-image-supermarket-produce-farmers-market) | Jakub Kapusnak | CC0 1.0 |
+| `kasap.jpg`     | Kasap       | [rawpixel](https://www.rawpixel.com/image/5975314/butcher-shop)                                       | —              | CC0 1.0 |
+| `sarkuteri.jpg` | Şarküteri   | [rawpixel](https://www.rawpixel.com/image/5917446/image-public-domain-food-free)                      | —              | CC0 1.0 |
+| `kuruyemis.jpg` | Kuruyemiş   | [rawpixel](https://www.rawpixel.com/image/5912517/image-public-domain-plant-wooden)                   | —              | CC0 1.0 |
+| `firin.jpg`     | Fırın       | [rawpixel](https://www.rawpixel.com/image/6028941/photo-image-public-domain-food-free)                | —              | CC0 1.0 |
+| `petshop.jpg`   | Pet shop    | [rawpixel](https://www.rawpixel.com/image/5926065/photo-image-background-public-domain-dog)           | —              | CC0 1.0 |
+| `cicekci.jpg`   | Çiçekçi     | [rawpixel](https://www.rawpixel.com/image/5974957/photo-image-flower-lights-leaves)                   | —              | CC0 1.0 |
+
 ## Kimlik akışı (T8.5)
 
 Giriş (`/giris`) ve kayıt (`/kayit`) T11.6'dan beri karşılama ekranının üstünde pencere (yukarıda). Kurallar ve alan mesajları sözleşmeden; göster/gizle düğmeli şifre; "Şifremi unuttum" ve sosyal
