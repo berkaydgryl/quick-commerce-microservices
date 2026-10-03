@@ -159,6 +159,8 @@ export function describeOrderHistoryReaderContract(
       await store.insert(cancelledWith(START_MS, 'STOCK_INSUFFICIENT'), []);
       await store.insert(cancelledWith(START_MS + 1, 'RESERVATION_EXPIRED'), []);
       await store.insert(cancelledWith(START_MS + 2, 'CART_REPLACED'), []);
+      // Kullanici taslagi birakti (T11.4): sepeti terk etmek siparis iptali degil.
+      await store.insert(cancelledWith(START_MS + 7, 'CART_RELEASED'), []);
       // Odeme sirasinda kilit dustu: odeme bekleyen siparis sistemce iptal.
       await store.insert(
         cancelledWith(START_MS + 3, 'RESERVATION_EXPIRED', TO_PAID.slice(0, 3)),

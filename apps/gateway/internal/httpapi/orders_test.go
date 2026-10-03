@@ -24,6 +24,7 @@ type fakeOrders struct {
 	reserveInput order.ReserveInput
 	placeInput   order.PlaceInput
 	confirmInput order.ConfirmInput
+	releaseInput order.ReleaseInput
 	getUserID    string
 	getOrderID   string
 	ctx          context.Context
@@ -46,6 +47,11 @@ func (f *fakeOrders) Place(ctx context.Context, input order.PlaceInput) (order.P
 func (f *fakeOrders) ConfirmThreeDS(ctx context.Context, input order.ConfirmInput) (order.Placement, error) {
 	f.called, f.ctx, f.confirmInput, f.calls = true, ctx, input, f.calls+1
 	return order.Placement{OrderID: input.OrderID, Status: "PAID"}, f.err
+}
+
+func (f *fakeOrders) Release(ctx context.Context, input order.ReleaseInput) (order.ReservationRelease, error) {
+	f.called, f.ctx, f.releaseInput, f.calls = true, ctx, input, f.calls+1
+	return order.ReservationRelease{OrderID: input.OrderID, Released: true, ReleasedAt: "2026-10-02T12:00:00Z"}, f.err
 }
 
 func (f *fakeOrders) Get(ctx context.Context, userID, orderID string) (order.Order, error) {
@@ -81,15 +87,16 @@ func orderApp(orders *fakeOrders) *fiber.App {
 
 func orderAppWithSignals(orders *fakeOrders, signals *fakeSignals) *fiber.App {
 	return New(Deps{
-		Health:           fakeReporter{report: healthyReport()},
-		CartReserver:     orders,
-		OrderPlacer:      orders,
-		ThreeDSConfirmer: orders,
-		OrderGetter:      orders,
-		CheckoutSignals:  signals,
-		AccessTokens:     testTokens(),
-		Idempotency:      testIdempotency(),
-		Logger:           silentLogger(),
+		Health:              fakeReporter{report: healthyReport()},
+		CartReserver:        orders,
+		ReservationReleaser: orders,
+		OrderPlacer:         orders,
+		ThreeDSConfirmer:    orders,
+		OrderGetter:         orders,
+		CheckoutSignals:     signals,
+		AccessTokens:        testTokens(),
+		Idempotency:         testIdempotency(),
+		Logger:              silentLogger(),
 	})
 }
 
@@ -276,5 +283,71 @@ func TestMalformedOrderDoesNotReadSignals(t *testing.T) {
 
 	if status != http.StatusBadRequest || signals.called || orders.called {
 		t.Errorf("400 ve sinyal okunmamasi bekleniyordu: %d, sinyal %v, siparis %v", status, signals.called, orders.called)
+	}
+}
+
+func TestReleaseReservationUsesPathIDUserAndKey(t *testing.T) {
+	orders := &fakeOrders{}
+	app := orderApp(orders)
+
+	status, envelope := send(t, app, orderRequest(t, http.MethodDelete, "/v1/cart/reserve/"+testOrderID, "",
+		map[string]string{RequestIDHeader: testRequestID}))
+
+	if status != http.StatusOK || !envelope.Success {
+		t.Fatalf("200 + success bekleniyordu: %d %+v", status, envelope)
+	}
+	want := order.ReleaseInput{UserID: testUserID, OrderID: testOrderID, IdempotencyKey: "anahtar-0001"}
+	if orders.releaseInput != want {
+		t.Errorf("kimlik, yol kimligi ve anahtar tasinmali: %+v", orders.releaseInput)
+	}
+	if data, isMap := envelope.Data.(map[string]any); !isMap || data["released"] != true || data["orderId"] != testOrderID {
+		t.Errorf("cevap birakma sonucunu tasimali: %+v", envelope.Data)
+	}
+}
+
+func TestReleaseReservationRequiresIdempotencyKey(t *testing.T) {
+	orders := &fakeOrders{}
+	app := orderApp(orders)
+
+	status, envelope := send(t, app, orderRequest(t, http.MethodDelete, "/v1/cart/reserve/"+testOrderID, "",
+		map[string]string{IdempotencyKeyHeader: ""}))
+
+	if status != http.StatusBadRequest || envelope.Error.Code != apperror.CodeValidationFailed {
+		t.Fatalf("400 VALIDATION_FAILED bekleniyordu: %d %+v", status, envelope)
+	}
+	if orders.called {
+		t.Error("anahtarsiz istekte adaptor cagrilmamali")
+	}
+}
+
+func TestReleaseReservationReplaysSameKeyWithoutSecondCall(t *testing.T) {
+	orders := &fakeOrders{}
+	app := orderApp(orders)
+	request := func() *http.Request {
+		return orderRequest(t, http.MethodDelete, "/v1/cart/reserve/"+testOrderID, "", nil)
+	}
+
+	first, _ := send(t, app, request())
+	second, envelope := send(t, app, request())
+
+	if first != http.StatusOK || second != http.StatusOK || !envelope.Success {
+		t.Fatalf("ikisi de 200 olmali: %d %d %+v", first, second, envelope)
+	}
+	if orders.calls != 1 {
+		t.Errorf("ayni anahtarla ikinci istek adaptore gitmemeli: %d cagri", orders.calls)
+	}
+}
+
+func TestReleaseReservationPassesServiceErrors(t *testing.T) {
+	orders := &fakeOrders{err: &apperror.Error{
+		Code:    apperror.CodeRequestInProgress,
+		Details: map[string]any{"orderId": testOrderID, "paymentStatus": "SUCCEEDED"},
+	}}
+	app := orderApp(orders)
+
+	status, envelope := send(t, app, orderRequest(t, http.MethodDelete, "/v1/cart/reserve/"+testOrderID, "", nil))
+
+	if status != http.StatusConflict || envelope.Error.Code != apperror.CodeRequestInProgress {
+		t.Fatalf("409 REQUEST_IN_PROGRESS bekleniyordu: %d %+v", status, envelope)
 	}
 }

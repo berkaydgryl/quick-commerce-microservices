@@ -45,6 +45,13 @@ var confirmFieldNames = renamer(
 	nil,
 )
 
+// releaseFieldNames, CancelOrder -> DELETE /v1/cart/reserve/{orderId}: yol
+// parametresinin REST adi orderId (openapi OrderIdPath).
+var releaseFieldNames = renamer(
+	map[string]string{"idempotencyKey": idempotencyKeyField},
+	nil,
+)
+
 // getFieldNames, GetOrder -> GET /v1/orders/{id}.
 var getFieldNames = renamer(map[string]string{"orderId": "id"}, nil)
 

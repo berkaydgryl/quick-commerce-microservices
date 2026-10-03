@@ -1222,8 +1222,11 @@ paths:
         `409 PRICE_CHANGED` güncel toplamla döner. Kalem `sku` taşımaz; sunucu
         onu catalog teklifinden alır.
 
-        Stok rezervasyonu (Redis + Lua, süre sınırı) T11.2/T11.4 ile gelir; bugün
-        stok kilitlenmez ve cevapta `expiresAt` yoktur.
+        Stok taslak açılırken kilitlenir (T11.2; inventory, Redis + Lua). Cevapta
+        kilidin bitiş anı (`expiresAt`) ve sunucunun saatiyle kalan saniye
+        (`ttlSeconds`, T11.4) döner: istemci geri sayımı bundan başlatır. Sepet tek
+        markettendir (`marketId`); o markette satılmayan ürün `400 VALIDATION_FAILED`.
+        Kilidi bırakmak için `DELETE /v1/cart/reserve/{orderId}`.
       security:
         - bearerAuth: []
       parameters:
@@ -1369,6 +1372,18 @@ paths:
       tags: [cart]
       operationId: releaseCartReservation
       summary: Rezervasyonu iptal et, stoğu geri ver
+      description: |
+        Taslağı ya da ödeme bekleyen siparişi bırakır, stok geri döner (T11.4,
+        order-service `CancelOrder`). Taslağı bırakmak risk geçmişinde sipariş
+        iptali sayılmaz (`CART_RELEASED`); ödeme aşamasından iptal sayılır.
+
+        Zaten bırakılmış (kullanıcı iptali ya da süresi dolup süpürülmüş) rezervasyon
+        HATA DEĞİLDİR: `200`, `released: false`, `releasedAt` o an. Başkasının
+        siparişi `404` (var olduğu sızdırılmaz). Parası alınmış ya da kart çekimi
+        süren sipariş `409 REQUEST_IN_PROGRESS`; ödenmiş ya da başka son durumdaki
+        sipariş `409 ORDER_STATE_INVALID`.
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/OrderIdPath"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -1405,24 +1420,8 @@ paths:
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "401":
           $ref: "#/components/responses/Unauthenticated"
-        "403":
-          description: Rezervasyon başka kullanıcıya ait
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorResponse"
-              examples:
-                forbidden:
-                  summary: FORBIDDEN
-                  value:
-                    success: false
-                    error:
-                      code: FORBIDDEN
-                      message: "Bu rezervasyon size ait değil."
-                      details: null
-                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "404":
-          description: Rezervasyon yok
+          description: Rezervasyon yok ya da başka kullanıcıya ait
           content:
             application/json:
               schema:
@@ -1439,31 +1438,22 @@ paths:
                         orderId: "ord_db77f4c0e24f49919cc1d78a649c9c94"
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "409":
-          description: Rezervasyon zaten kapanmış
+          description: Sipariş bu durumda bırakılamaz
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
               examples:
-                alreadyReleased:
-                  summary: CONFLICT
+                paymentInProgress:
+                  summary: REQUEST_IN_PROGRESS
                   value:
                     success: false
                     error:
-                      code: CONFLICT
-                      message: "Rezervasyon daha önce serbest bırakıldı."
+                      code: REQUEST_IN_PROGRESS
+                      message: "Ödeme işleniyor; sipariş tamamlanınca ya da süresi dolunca iade edilir."
                       details:
-                        releasedAt: "2026-09-20T18:31:05.000Z"
-                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
-                expired:
-                  summary: RESERVATION_EXPIRED
-                  value:
-                    success: false
-                    error:
-                      code: RESERVATION_EXPIRED
-                      message: "Rezervasyon süresi dolmuş, stok geri verildi."
-                      details:
-                        expiredAt: "2026-09-20T18:30:00.000Z"
+                        orderId: "ord_db77f4c0e24f49919cc1d78a649c9c94"
+                        paymentStatus: SUCCEEDED
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
                 orderStateInvalid:
                   summary: ORDER_STATE_INVALID
@@ -1471,12 +1461,15 @@ paths:
                     success: false
                     error:
                       code: ORDER_STATE_INVALID
-                      message: "Ödemesi alınmış siparişin rezervasyonu iptal edilemez."
+                      message: "Bu durumdaki sipariş iptal edilemez: PAID"
                       details:
+                        orderId: "ord_db77f4c0e24f49919cc1d78a649c9c94"
                         status: PAID
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "500":
           $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /v1/orders:
     post:
@@ -3077,7 +3070,13 @@ components:
         expiresAt:
           type: string
           format: date-time
-          description: Geri sayımın biteceği an. Stok rezervasyonu (T11.2) gelene kadar yoktur.
+          description: Stok kilidinin biteceği an (T11.2). Yalnızca kilitsiz eski taslakta yoktur.
+        ttlSeconds:
+          type: integer
+          minimum: 0
+          description: |
+            Kilidin kalan saniyesi, sunucunun saatiyle (T11.4); `expiresAt` ile birlikte
+            gelir, dolmuşsa 0. İstemcinin saati kaysa da geri sayım bundan başlar.
 
     ReservationRelease:
       type: object
@@ -3365,6 +3364,16 @@ components:
         updatedAt:
           type: string
           format: date-time
+        reservationExpiresAt:
+          type: string
+          format: date-time
+          description: |
+            Stok kilidinin bitiş anı; yalnızca kilit canlıyken (DRAFT, RESERVED,
+            AWAITING_PAYMENT) gelir (T11.4).
+        reservationTtlSeconds:
+          type: integer
+          minimum: 0
+          description: Kilidin sunucunun saatiyle kalan saniyesi; `reservationExpiresAt` ile birlikte gelir.
 
     # --- Gerçek zamanlı -----------------------------------------------------
     RealtimeToken:

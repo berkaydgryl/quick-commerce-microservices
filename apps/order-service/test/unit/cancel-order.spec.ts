@@ -29,7 +29,7 @@ beforeEach(() => {
 });
 
 describe('cancelOrder use-case', () => {
-  it('DRAFT siparisi iptal eder; gerekce yoksa USER_CANCELLED yazar', async () => {
+  it('DRAFT siparisi iptal eder; gerekce yoksa CART_RELEASED yazar (sepeti birakmak, T11.4)', async () => {
     const { id } = await insertDraft(repository, clock);
 
     const order = await cancel({ orderId: id, userId: 'usr_1' }, scope);
@@ -38,11 +38,27 @@ describe('cancelOrder use-case', () => {
     expect(order.timeline.at(-1)).toEqual({
       status: ORDER_STATUS.CANCELLED,
       at: clock.date(),
-      note: 'USER_CANCELLED',
+      note: 'CART_RELEASED',
     });
     await expect(repository.findById(id)).resolves.toMatchObject({
       status: ORDER_STATUS.CANCELLED,
     });
+  });
+
+  it('odeme bekleyen siparis gerekcesiz iptal edilirse USER_CANCELLED (risk gecmisinde sayilir)', async () => {
+    const { id } = await insertAwaitingPayment(repository, clock);
+
+    const order = await cancel({ orderId: id, userId: 'usr_1' }, scope);
+
+    expect(order.timeline.at(-1)?.note).toBe('USER_CANCELLED');
+  });
+
+  it('taslak gerekceyle iptal edilirse gerekce yazilir (CART_RELEASED yalnizca gerekcesizde)', async () => {
+    const { id } = await insertDraft(repository, clock);
+
+    const order = await cancel({ orderId: id, userId: 'usr_1', reason: 'CHANGED_MIND' }, scope);
+
+    expect(order.timeline.at(-1)?.note).toBe('CHANGED_MIND');
   });
 
   it('odeme bekleyen siparisi verilen gerekceyle iptal eder', async () => {
@@ -90,22 +106,24 @@ describe('cancelOrder use-case', () => {
     const { id } = await insertDraft(repository, clock);
     await cancel({ orderId: id, userId: 'usr_1' }, scope);
 
+    // Ayrintidaki status CANCELLED: gateway bunu "zaten birakilmis" sayar (T11.4).
     await expect(cancel({ orderId: id, userId: 'usr_1' }, scope)).rejects.toMatchObject({
       code: ERROR_CODES.ORDER_STATE_INVALID,
+      details: { orderId: id, status: ORDER_STATUS.CANCELLED },
     });
   });
 
   it.each([
-    ['taslak', () => insertDraft(repository, clock)],
-    ['odeme bekleyen', () => insertAwaitingPayment(repository, clock)],
+    ['taslak', 'cart_released', () => insertDraft(repository, clock)],
+    ['odeme bekleyen', 'user_cancelled', () => insertAwaitingPayment(repository, clock)],
   ])(
-    '%s siparisin stok kilidi iptalden SONRA birakilir (user_cancelled, T11.2)',
-    async (_name, given) => {
+    '%s siparisin stok kilidi iptalden SONRA birakilir (%s; T11.2, T11.4)',
+    async (_name, reason, given) => {
       const { id, marketId } = await given();
 
       await cancel({ orderId: id, userId: 'usr_1' }, scope);
 
-      expect(stock.releases).toEqual([{ orderId: id, marketId, reason: 'user_cancelled' }]);
+      expect(stock.releases).toEqual([{ orderId: id, marketId, reason }]);
     },
   );
 

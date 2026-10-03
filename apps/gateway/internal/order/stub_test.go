@@ -24,6 +24,7 @@ type stubServer struct {
 	placeRequest   *orderv1.CreateOrderRequest
 	confirmRequest *orderv1.ConfirmPaymentRequest
 	getRequest     *orderv1.GetOrderRequest
+	cancelRequest  *orderv1.CancelOrderRequest
 
 	draftResponse *orderv1.CreateDraftOrderResponse
 	placeResponse *orderv1.CreateOrderResponse
@@ -31,6 +32,10 @@ type stubServer struct {
 
 	err     error
 	trailer metadata.MD
+	// cancelErr ve cancelTrailer yalnizca CancelOrder'i dusurur: "zaten iptal"
+	// yolunda ardindan gelen GetOrder basarili olmali (T11.4).
+	cancelErr     error
+	cancelTrailer metadata.MD
 }
 
 // fail, sahte hatayi (ve varsa x-app-error trailer'ini) dondurur.
@@ -65,6 +70,19 @@ func (s *stubServer) ConfirmPayment(ctx context.Context, in *orderv1.ConfirmPaym
 		return nil, s.fail(ctx)
 	}
 	return &orderv1.ConfirmPaymentResponse{OrderId: in.GetOrderId(), Status: orderv1.OrderStatus_ORDER_STATUS_PAID}, nil
+}
+
+func (s *stubServer) CancelOrder(ctx context.Context, in *orderv1.CancelOrderRequest) (*orderv1.CancelOrderResponse, error) {
+	s.cancelRequest = in
+	if s.cancelErr != nil {
+		if s.cancelTrailer != nil {
+			if err := grpc.SetTrailer(ctx, s.cancelTrailer); err != nil {
+				return nil, err
+			}
+		}
+		return nil, s.cancelErr
+	}
+	return &orderv1.CancelOrderResponse{Status: orderv1.OrderStatus_ORDER_STATUS_CANCELLED}, nil
 }
 
 func (s *stubServer) GetOrder(ctx context.Context, in *orderv1.GetOrderRequest) (*orderv1.GetOrderResponse, error) {

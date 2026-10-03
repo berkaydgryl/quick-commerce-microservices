@@ -518,9 +518,15 @@ import { ok, err } from './result.js';
 | Faz 4 | Gerçek zamanlı katman: kurye simülatörü, Socket.io, canlı harita            | 12–15 | Bekliyor         |
 | Faz 5 | Tasarım, cila ve teslim                                                     | 16–20 | Bekliyor         |
 
-Kapsam iki halkadan oluşur: **Opsiyon A** (Gün 8'de kapanan zorunlu taban) ve **Opsiyon B**
-(Gün 20'de teslim edilen taahhüt). Gerçek ödeme entegrasyonu, gerçek harita rotalama servisi,
-çoklu dil, mobil uygulama ve Kubernetes bilinçli olarak kapsam dışıdır.
+Kapsam iki halkadan oluşur: **Opsiyon A** (zorunlu taban; Gün 11'de T11.4 ile kapanır, B19) ve
+**Opsiyon B** (Gün 20'de teslim edilen taahhüt). Gerçek ödeme entegrasyonu, gerçek harita rotalama
+servisi, çoklu dil, mobil uygulama ve Kubernetes bilinçli olarak kapsam dışıdır.
+
+**Opsiyon A kapandı (T11.4, 2 Ekim):** kullanıcı yakındaki marketi seçer, sepeti sunucuda
+fiyatlanır, stok atomik olarak kilitlenir (`POST /v1/cart/reserve`: `expiresAt`, `ttlSeconds`;
+risk bandına göre süre, T11.3), geri sayım siparişte görünür, kilit bırakılabilir
+(`DELETE /v1/cart/reserve/{orderId}`) ya da süresi dolunca süpürücü stoğu geri verir; ödeme risk
+ve 3DS'ten geçer, ödenince stok kesinleşir.
 
 **Şu anki durum — Gün 1 devam ediyor.** T1.1–T1.5 tamamlandı; sırada **T1.6** var.
 

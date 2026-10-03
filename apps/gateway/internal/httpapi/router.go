@@ -7,7 +7,7 @@ package httpapi
 //   content.go    - /v1/content/welcome (karsilama ekrani icerigi, T11.6)
 //   markets.go    - /v1/markets ve alt uclari (pazaryeri)
 //   search.go     - /v1/search (genel arama, T9.6)
-//   orders.go     - /v1/cart/reserve ve /v1/orders uclari (T7.5)
+//   orders.go     - /v1/cart/reserve (T7.5, birakma T11.4) ve /v1/orders uclari (T7.5)
 //   order_body.go - siparis uclarinin istek govdeleri ve bicim dogrulamasi
 //   auth.go       - /v1/auth, /v1/me ve /v1/me/addresses uclari (T8.1, T9.5)
 //   auth_body.go  - kimlik uclarinin istek govdeleri
@@ -91,6 +91,11 @@ type NearbySearcher interface {
 // CartReserver, POST /v1/cart/reserve.
 type CartReserver interface {
 	Reserve(ctx context.Context, input order.ReserveInput) (order.Reservation, error)
+}
+
+// ReservationReleaser, DELETE /v1/cart/reserve/{orderId} (T11.4).
+type ReservationReleaser interface {
+	Release(ctx context.Context, input order.ReleaseInput) (order.ReservationRelease, error)
 }
 
 // OrderPlacer, POST /v1/orders.
@@ -190,9 +195,11 @@ type Deps struct {
 	MarketProducts   MarketProductLister
 	NearbySearch     NearbySearcher
 	CartReserver     CartReserver
-	OrderPlacer      OrderPlacer
-	ThreeDSConfirmer ThreeDSConfirmer
-	OrderGetter      OrderGetter
+	// ReservationReleaser, rezervasyonu birakma (T11.4); bugun order adaptoru.
+	ReservationReleaser ReservationReleaser
+	OrderPlacer         OrderPlacer
+	ThreeDSConfirmer    ThreeDSConfirmer
+	OrderGetter         OrderGetter
 	// Kimlik uclari (T8.1); bugun hepsini auth.Service karsilar.
 	UserRegistrar     UserRegistrar
 	UserAuthenticator UserAuthenticator
@@ -315,6 +322,7 @@ func New(deps Deps) *fiber.App {
 	v1.Get("/geo/reverse", user, generalByUser, reverseGeocodeHandler(deps.GeoReverser))
 	v1.Get("/geo/search", user, generalByUser, searchPlacesHandler(deps.GeoSearcher))
 	v1.Post("/cart/reserve", user, orderByUser, mutation, reserveCartHandler(deps.CartReserver))
+	v1.Delete("/cart/reserve/:"+reservationIDParam, user, orderByUser, mutation, releaseReservationHandler(deps.ReservationReleaser))
 	v1.Post("/orders", user, orderByUser, checkout, placeOrderHandler(deps.OrderPlacer, deps.CheckoutSignals))
 	v1.Post("/orders/:"+orderIDParam+"/3ds", user, orderByUser, checkout, confirmThreeDSHandler(deps.ThreeDSConfirmer))
 	v1.Get("/orders/:"+orderIDParam, user, generalByUser, getOrderHandler(deps.OrderGetter))

@@ -80,10 +80,13 @@ notsuz yazılır. Eski kayıtlarda not durur, okuyan bir şey yok.
 **Kullanıcı iptali (B29):** kullanıcı yalnızca `DRAFT`, `RESERVED` ve `AWAITING_PAYMENT`
 durumundaki **kendi** siparişini iptal edebilir (`USER_CANCELLABLE`). `PAID → CANCELLED` tabloda
 var ama sistemin telafi adımıdır (iade, B20c). Gerekçe bir anahtardır (`CHANGED_MIND`); yoksa
-`USER_CANCELLED` yazılır. İptalden sonra stok kilidi bırakılır (T11.2). Ödeme bekleyen siparişte
-önce payment-svc'deki kayda bakılır: para alınmışsa ya da kart çekimi sürüyorsa iptal edilmez
-(`REQUEST_IN_PROGRESS`; T11.2 PR 2, aşağıda). Sistemin iptal notları
-(`STOCK_INSUFFICIENT`, `RESERVATION_EXPIRED`, `CART_REPLACED`) gerekçe olarak kabul edilmez
+taslakta `CART_RELEASED` (sepeti bırakmak, T11.4: gateway `DELETE /v1/cart/reserve/{orderId}`; risk
+geçmişinde iptal sayılmaz, inventory'ye `cart_released`), diğer durumlarda `USER_CANCELLED` yazılır.
+İptalden sonra stok kilidi bırakılır (T11.2). Ödeme bekleyen siparişte önce payment-svc'deki kayda
+bakılır: para alınmışsa ya da kart çekimi sürüyorsa iptal edilmez (`REQUEST_IN_PROGRESS`; T11.2 PR 2,
+aşağıda). Zaten iptal edilmiş sipariş `ORDER_STATE_INVALID` alır, ayrıntıda `status: CANCELLED`
+(gateway bunu "zaten bırakılmış" sayar). Sistemin iptal notları (`STOCK_INSUFFICIENT`,
+`RESERVATION_EXPIRED`, `CART_REPLACED`, `CART_RELEASED`) gerekçe olarak kabul edilmez
 (`INVALID_ARGUMENT`): risk geçmişi o notlu iptalleri saymaz, kullanıcı kendi iptalini böyle
 gizleyemez.
 

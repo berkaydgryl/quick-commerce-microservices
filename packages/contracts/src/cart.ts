@@ -188,18 +188,23 @@ export const reservationSchema = z.object({
   orderId: idSchema,
   status: orderStatusSchema,
   /**
-   * Geri sayimin bitecegi an (UTC). Stok rezervasyonu (T11.2) gelene kadar
-   * YOKTUR: kilitlenmemis stok icin geri sayim olmaz.
+   * Stok kilidinin bitecegi an (UTC; T11.2). Taslak acilirken stok kilitlenir;
+   * yalnizca kilitsiz eski taslakta yoktur.
    */
   expiresAt: isoDateTimeSchema.optional(),
+  /**
+   * Kilidin kalan saniyesi, SUNUCUNUN saatiyle (T11.4): istemcinin saati kaysa
+   * da geri sayim bundan baslar. expiresAt ile birlikte gelir; dolmussa 0.
+   */
+  ttlSeconds: z.number().int().min(0).optional(),
 });
 
 /**
- * Rezervasyon serbest birakma cevabi.
+ * Rezervasyon serbest birakma cevabi (DELETE /v1/cart/reserve/{orderId}, T11.4).
  *
  * released alani false olabilir ve bu HATA DEGILDIR: rezervasyon zaten
- * suresi dolup supurucu tarafindan toplanmis olabilir. Istemci her iki
- * durumda da sepeti tazeler.
+ * birakilmis (kullanici iptali ya da suresi dolup supurucu toplamis); o zaman
+ * releasedAt o andir. Istemci her iki durumda da sepeti tazeler.
  */
 export const reservationReleaseSchema = z.object({
   orderId: idSchema,

@@ -117,6 +117,12 @@ export const orderSchema = z.object({
   courier: courierSummarySchema.optional(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema.optional(),
+  /**
+   * Stok kilidi canliyken (DRAFT, RESERVED, AWAITING_PAYMENT) bitis ani ve
+   * sunucunun saatiyle kalan saniye (T11.4); diger durumlarda yoktur.
+   */
+  reservationExpiresAt: isoDateTimeSchema.optional(),
+  reservationTtlSeconds: z.number().int().min(0).optional(),
 });
 
 export type PaymentMethod = z.infer<typeof paymentMethodSchema>;

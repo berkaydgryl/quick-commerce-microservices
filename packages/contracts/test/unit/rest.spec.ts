@@ -207,8 +207,17 @@ describe('savedAddressListSchema (adres defteri, T9.5)', () => {
 });
 
 describe('reservationSchema', () => {
-  it('stok rezervasyonu (T11.2) gelene kadar expiresAt yok; durum ve kimlik yeter', () => {
+  it('kilitsiz eski taslakta expiresAt yok; durum ve kimlik yeter', () => {
     expect(reservationSchema.safeParse({ orderId: ORDER_ID, status: 'DRAFT' }).success).toBe(true);
+  });
+
+  it('kilitli taslak: bitis ani ve kalan saniye (T11.4); kalan saniye tam sayi ve eksi olamaz', () => {
+    const locked = { orderId: ORDER_ID, status: 'DRAFT', expiresAt: '2026-10-02T12:10:00Z' };
+
+    expect(reservationSchema.safeParse({ ...locked, ttlSeconds: 600 }).success).toBe(true);
+    expect(reservationSchema.safeParse({ ...locked, ttlSeconds: 0 }).success).toBe(true);
+    expect(reservationSchema.safeParse({ ...locked, ttlSeconds: -1 }).success).toBe(false);
+    expect(reservationSchema.safeParse({ ...locked, ttlSeconds: 1.5 }).success).toBe(false);
   });
 });
 

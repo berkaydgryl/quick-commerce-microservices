@@ -361,8 +361,10 @@ message CancelOrderRequest {
   string user_id = 2;
 
   // Iptal gerekcesi anahtari; zaman cizelgesine ve outbox olayina yazilir.
-  // Sistemin iptal notlari (STOCK_INSUFFICIENT, RESERVATION_EXPIRED,
-  // CART_REPLACED) kullaniciya kapalidir: INVALID_ARGUMENT (T11.2).
+  // Bos ise taslakta (DRAFT) CART_RELEASED (sepeti birakmak, T11.4; risk
+  // gecmisinde iptal sayilmaz), diger durumlarda USER_CANCELLED. Sistemin iptal
+  // notlari (STOCK_INSUFFICIENT, RESERVATION_EXPIRED, CART_REPLACED,
+  // CART_RELEASED) kullaniciya kapalidir: INVALID_ARGUMENT (T11.2).
   string reason = 3;
 
   // ADR-08 geregi tum mutasyon uclari idempotency anahtari ister (REST'te
@@ -374,7 +376,9 @@ message CancelOrderRequest {
 // Iptal cevabi.
 //
 // Iptal edilemeyecek bir durumdan (ornegin DELIVERED) iptal denenirse durum
-// makinesi hata firlatir: FAILED_PRECONDITION doner, siparis degismez.
+// makinesi hata firlatir: FAILED_PRECONDITION + "ORDER_STATE_INVALID" (ayrinti:
+// orderId, status), siparis degismez. Gateway ayrintidaki status CANCELLED ise
+// bunu "zaten birakilmis" sayar (DELETE /v1/cart/reserve, T11.4).
 // Odeme bekleyen sipariste once odeme kaydina bakilir (T11.2 PR 2): para
 // alinmissa ya da kart cekimi suruyorsa ABORTED + "REQUEST_IN_PROGRESS"
 // (ayrinti: orderId, paymentStatus) doner, siparis degismez; saga siparisi

@@ -109,7 +109,7 @@ Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci 
   `/v1/auth/logout` istemez: giriş ve yenileme kalıcı bir kaynak yaratmaz,
   çıkışın tekrarı zararsızdır.
   Tekrar koruması gateway'dedir (T8.2, ADR-08 eki; `DELETE /v1/cart/reserve/{orderId}`
-  henüz gateway'de yok): anahtar 8-128 karakter, yalnızca harf, rakam, `-` ve
+  T11.4'te geldi): anahtar 8-128 karakter, yalnızca harf, rakam, `-` ve
   `_` (biçimsizse 400) ve kullanıcı başınadır. Aynı anahtarla aynı istek ucu
   ikinci kez çalıştırmaz, ilk cevap `Idempotent-Replayed: true` başlığıyla aynen
   döner; ilk istek sürüyorsa `409 REQUEST_IN_PROGRESS`, anahtar farklı gövdeyle
