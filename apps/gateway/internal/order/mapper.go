@@ -20,8 +20,21 @@ import (
 type Reservation struct {
 	OrderID string `json:"orderId"`
 	Status  string `json:"status"`
-	// Stok rezervasyonu (T11.2) gelene kadar bos; bos ise alan HIC yazilmaz.
+	// Stok kilidinin bitis ani (T11.2); kilitsiz eski taslakta bos ve HIC yazilmaz.
 	ExpiresAt string `json:"expiresAt,omitempty"`
+	// Kilidin kalan saniyesi, gateway'in saatiyle (T11.4): istemcinin saati
+	// kaysa da geri sayim dogru baslar. ExpiresAt ile birlikte yazilir; dolmus
+	// kilitte 0 (yazilir, bu yuzden isaretci).
+	TTLSeconds *int64 `json:"ttlSeconds,omitempty"`
+}
+
+// ReservationRelease, DELETE /v1/cart/reserve/{orderId} cevabi
+// (reservationReleaseSchema). Released false HATA DEGILDIR: rezervasyon zaten
+// birakilmisti (kullanici iptali ya da suresi dolup supurulmus); ReleasedAt o an.
+type ReservationRelease struct {
+	OrderID    string `json:"orderId"`
+	Released   bool   `json:"released"`
+	ReleasedAt string `json:"releasedAt"`
 }
 
 // ThreeDSChallenge, 3DS bekleyen siparisin dogrulama jetonu.
@@ -73,6 +86,10 @@ type Order struct {
 	Timeline    []TimelineEntry `json:"timeline"`
 	CreatedAt   string          `json:"createdAt"`
 	UpdatedAt   string          `json:"updatedAt,omitempty"`
+	// Stok kilidi canliyken (DRAFT, RESERVED, AWAITING_PAYMENT) bitis ani ve
+	// kalan saniye (T11.4, #68); diger durumlarda HIC yazilmaz.
+	ReservationExpiresAt  string `json:"reservationExpiresAt,omitempty"`
+	ReservationTTLSeconds *int64 `json:"reservationTtlSeconds,omitempty"`
 }
 
 // statusNames, proto durumu -> sozlesmedeki ad (@getir/core ORDER_STATUS).
@@ -113,15 +130,31 @@ func timeText(ts *timestamppb.Timestamp) string {
 	return ts.AsTime().UTC().Format(time.RFC3339Nano)
 }
 
-func toReservation(response *orderv1.CreateDraftOrderResponse) (Reservation, error) {
+// remainingSeconds, kilidin `now`'a gore kalan saniyesi (yukari yuvarlanir:
+// 0,4 sn kalmis kilit "0" degil "1" der, istemci dolmadan sifir gostermez);
+// dolmussa 0. Bitis yoksa nil: alan yazilmaz.
+func remainingSeconds(expiresAt *timestamppb.Timestamp, now time.Time) *int64 {
+	if expiresAt == nil {
+		return nil
+	}
+	remaining := expiresAt.AsTime().Sub(now)
+	seconds := int64(0)
+	if remaining > 0 {
+		seconds = int64((remaining + time.Second - 1) / time.Second)
+	}
+	return &seconds
+}
+
+func toReservation(response *orderv1.CreateDraftOrderResponse, now time.Time) (Reservation, error) {
 	status, err := statusName(response.GetStatus())
 	if err != nil {
 		return Reservation{}, err
 	}
 	return Reservation{
-		OrderID:   response.GetOrderId(),
-		Status:    status,
-		ExpiresAt: timeText(response.GetReservationExpiresAt()),
+		OrderID:    response.GetOrderId(),
+		Status:     status,
+		ExpiresAt:  timeText(response.GetReservationExpiresAt()),
+		TTLSeconds: remainingSeconds(response.GetReservationExpiresAt(), now),
 	}, nil
 }
 
@@ -139,7 +172,7 @@ func toPlacement(orderID string, status orderv1.OrderStatus, challengeID string)
 	return placement, nil
 }
 
-func toOrder(order *orderv1.Order) (Order, error) {
+func toOrder(order *orderv1.Order, now time.Time) (Order, error) {
 	// Basarili cevapta siparis bos gelirse servis sozlesmeyi bozmustur; bos bir
 	// siparis ("id": "") istemciye gecerli veri gibi gitmemeli.
 	if order == nil {
@@ -166,9 +199,11 @@ func toOrder(order *orderv1.Order) (Order, error) {
 			Line:     order.GetDeliveryAddress(),
 			Location: rest.GeoPointFromProto(order.GetDeliveryLocation()),
 		},
-		Timeline:  timeline,
-		CreatedAt: timeText(order.GetCreatedAt()),
-		UpdatedAt: timeText(order.GetUpdatedAt()),
+		Timeline:              timeline,
+		CreatedAt:             timeText(order.GetCreatedAt()),
+		UpdatedAt:             timeText(order.GetUpdatedAt()),
+		ReservationExpiresAt:  timeText(order.GetReservationExpiresAt()),
+		ReservationTTLSeconds: remainingSeconds(order.GetReservationExpiresAt(), now),
 	}, nil
 }
 

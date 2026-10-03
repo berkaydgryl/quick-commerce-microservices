@@ -9,7 +9,7 @@ Bu serviste **olmayanlar**, bilinçli: stok sayacı `inventory-service`'in, kart
 (kapıda ödeme kapalı, rezervasyon süresi, reddet) burada verilir — risk servisi yalnızca
 skor önerir.
 
-## Bugünkü durum (T11.2 PR 2 — kilidi dolan siparişlerin süpürücüsü)
+## Bugünkü durum (T11.3 — banda göre kilit ve ödeme öncesi uzatma)
 
 | RPC                | Durum                                                                                                                                                  |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -80,10 +80,13 @@ notsuz yazılır. Eski kayıtlarda not durur, okuyan bir şey yok.
 **Kullanıcı iptali (B29):** kullanıcı yalnızca `DRAFT`, `RESERVED` ve `AWAITING_PAYMENT`
 durumundaki **kendi** siparişini iptal edebilir (`USER_CANCELLABLE`). `PAID → CANCELLED` tabloda
 var ama sistemin telafi adımıdır (iade, B20c). Gerekçe bir anahtardır (`CHANGED_MIND`); yoksa
-`USER_CANCELLED` yazılır. İptalden sonra stok kilidi bırakılır (T11.2). Ödeme bekleyen siparişte
-önce payment-svc'deki kayda bakılır: para alınmışsa ya da kart çekimi sürüyorsa iptal edilmez
-(`REQUEST_IN_PROGRESS`; T11.2 PR 2, aşağıda). Sistemin iptal notları
-(`STOCK_INSUFFICIENT`, `RESERVATION_EXPIRED`, `CART_REPLACED`) gerekçe olarak kabul edilmez
+taslakta `CART_RELEASED` (sepeti bırakmak, T11.4: gateway `DELETE /v1/cart/reserve/{orderId}`; risk
+geçmişinde iptal sayılmaz, inventory'ye `cart_released`), diğer durumlarda `USER_CANCELLED` yazılır.
+İptalden sonra stok kilidi bırakılır (T11.2). Ödeme bekleyen siparişte önce payment-svc'deki kayda
+bakılır: para alınmışsa ya da kart çekimi sürüyorsa iptal edilmez (`REQUEST_IN_PROGRESS`; T11.2 PR 2,
+aşağıda). Zaten iptal edilmiş sipariş `ORDER_STATE_INVALID` alır, ayrıntıda `status: CANCELLED`
+(gateway bunu "zaten bırakılmış" sayar). Sistemin iptal notları (`STOCK_INSUFFICIENT`,
+`RESERVATION_EXPIRED`, `CART_REPLACED`, `CART_RELEASED`) gerekçe olarak kabul edilmez
 (`INVALID_ARGUMENT`): risk geçmişi o notlu iptalleri saymaz, kullanıcı kendi iptalini böyle
 gizleyemez.
 
@@ -224,7 +227,7 @@ Süre bütçesi değişmedi: denemeler çağrının kendi sınırını paylaşı
 Stok **taslak açılırken** inventory'de kilitlenir (`Reserve`, `application/draft-reservation.ts`),
 ödeme alınınca `PAID` yazılmadan **önce** kesinleşir (`Commit`), saga durursa bırakılır
 (`Release`, `application/stock-step.ts`). Kilit ömrü `RESERVATION_TTL_SECONDS` (varsayılan 600,
-inventory'nin sınırlarıyla 30–900); banda göre kısaltma T11.3'te. Kilit siparişe `reservation`
+inventory'nin sınırlarıyla 30–900); banda göre kısaltma ve ödeme öncesi uzatma aşağıda (T11.3). Kilit siparişe `reservation`
 (`reservedAt`, `expiresAt`) olarak yazılır; adres `INVENTORY_GRPC_ADDR` (gateway'le aynı
 değişken), süre sınırı 1 sn.
 
@@ -258,7 +261,31 @@ değişken), süre sınırı 1 sn.
   `payment.cancel_requested` üretir; iptal eden her yazım (kullanıcı, süpürücü, kilidi düşmüş ödeme)
   aynı fonksiyonu kullandığı için komut unutulamaz ve siparişle aynı transaction'dadır. Kapıda
   ödemenin `PENDING`'ini ve 3DS bekleyen kartı payment `CANCELLED` yapar (payment README).
-- **Kalan:** inventory istemcisine devre kesici D17 (PR 4).
+- **Devre kesici (D17, PR 4):** inventory istemcisi de bağımlılık başına devreli; kısaltma tekrar
+  güvenli olduğu için yeniden denenir, uzatma denenmez (her çağrı bir hak harcar).
+
+### Banda göre kilit ve ödeme öncesi uzatma (T11.3)
+
+Kilit taslakta uzun süreyle alınır, risk ödeme adımında sorulur. Kilidin süresi saga'da iki yerde
+ayarlanır (`application/lock-timing.ts`; inventory `ShortenReservation`, `ExtendReservation`):
+
+| An                                               | Ne olur                                                                                                   | Cevap                          |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| Risk `LOW`                                       | kilit taslaktaki gibi                                                                                     | —                              |
+| Risk `MEDIUM`                                    | kalan süre en çok `RESERVATION_TTL_MEDIUM_RISK_SECONDS` (120); yeni bitiş risk kararıyla **aynı** yazımda | `reservation_expires_at` yeni  |
+| Risk `HIGH` / `CRITICAL`                         | kısaltılmaz; kilit bırakılır (`REVIEW` / `REJECTED`, değişmedi)                                           | `RISK_REVIEW` / `RISK_BLOCKED` |
+| Çekim ya da 3DS onayı öncesi, kalan süre ≥ 60 sn | inventory'ye gidilmez (CreateOrder'ın zaman bütçesi, #69, değişmez)                                       | —                              |
+| Aynı an, kalan süre < 60 sn                      | `RESERVATION_EXTEND_SECONDS` (60) uzatılır; yeni bitiş **hemen** yazılır (sürüm +1, olay yok)             | —                              |
+| Uzatma hakkı bitmiş (inventory'de 3)             | süre aynı, WARN; ödeme kalan süreyle (kesinleştirmede kilit düşmüşse iade, değişmedi)                     | —                              |
+| Kısaltma ya da uzatmada kilit düşmüş             | sipariş `CANCELLED` (`RESERVATION_EXPIRED`), kilit bırakılır; **para çekilmez**, 3DS kodu gönderilmez     | `RESERVATION_EXPIRED` (410)    |
+| inventory'ye ulaşılamadı                         | hiçbir şey yazılmaz; risk adımında sipariş `DRAFT`, ödemede `AWAITING_PAYMENT` kalır                      | `SERVICE_UNAVAILABLE`          |
+
+- **Neden hemen yazılıyor:** 3DS beklenirken (durum değişmez) süpürücü siparişi eski bitişe göre
+  kapatmasın. Sürüm arttığı için eski kopyayla yazan süpürücü `CONFLICT` alır ve dokunmaz. Olay
+  sürümleri artan kalır ama ardışık olmayabilir (uzatmanın olayı yok).
+- **3DS penceresi (bulgu):** payment'ta 3DS kodu çekim anından itibaren **tek** 60 sn'lik pencerede
+  geçerli, 3 deneme bu pencerenin içinde (T5.2). Roadmap B21 "deneme başına 60 sn" varsayıyordu;
+  bugünkü kurgu en kötü durumda 60 sn ister, uzatma bunu karşılar. Bekleyen iş #77.
 
 ### Süpürücü (T11.2 PR 2)
 
@@ -358,7 +385,7 @@ src/
 │   ├── order-history-reader.ts  # port: listByUser, hasPaidOrder (ILK10), riskHistory (T7.1)
 │   ├── checkout-risk.ts         # saga risk adımı: bant → karar/politika, risk bağlamı (T7.1)
 │   ├── checkout-payment.ts      # saga ödeme adımı: ödeme sonucu → sipariş, anahtarlar (T7.1)
-│   ├── stock-reservation.ts     # stok kilidi kuralları: bırakma gerekçeleri, sistem iptalleri (T11.2)
+│   ├── stock-reservation.ts     # stok kilidi kuralları: bırakma gerekçeleri, sistem iptalleri (T11.2), banda göre kilit ve uzatma kararı (T11.3)
 │   ├── payment-standing.ts      # para alındı mı, çekim sürüyor mu (T11.2 PR 2)
 │   ├── expired-order-finder.ts  # port: kilidi dolmuş siparişler, süpürücünün kuyruğu (T11.2 PR 2)
 │   └── order-history-cursor.ts  # geçmiş sırası ve imleç
@@ -368,6 +395,7 @@ src/
 │   ├── risk-step.ts, payment-step.ts  # saga adımları (T7.1), use-case'ler paylaşır
 │   ├── draft-reservation.ts     # taslağın stok kilidi: kilitle / yetmedi / sepeti yenile (T11.2)
 │   ├── stock-step.ts            # saga'nın kesinleştirme ve en iyi gayretle bırakma adımı (T11.2)
+│   ├── lock-timing.ts           # kilidin süresi: orta bantta kısaltma, ödeme öncesi uzatma, düşmüş kilit (T11.3)
 │   ├── refund-step.ts           # telafi iadesi: doğrudan, olmazsa outbox komutu (T7.1, T7.3)
 │   ├── sweep-expired-reservations.ts  # süpürücünün tek turu (T11.2 PR 2)
 │   ├── relay-outbox.ts          # tek yayın turu: bekleyenler → hat → işaret (T7.3)
@@ -375,7 +403,7 @@ src/
 │   ├── catalog-pricing.ts       # port: marketRules, activeOffers (T7.2)
 │   ├── risk-assessment.ts       # port: evaluate (T7.1)
 │   ├── payments.ts              # port: charge, confirmThreeDs, refund (T7.1), getPayment (T11.2 PR 2)
-│   ├── stock-reservations.ts    # port: reserve, commit, release (T11.2)
+│   ├── stock-reservations.ts    # port: reserve, commit, release (T11.2), extend, shorten (T11.3)
 │   └── request-scope.ts         # use-case'e taşınan requestId + çağrının logger'ı
 ├── infrastructure/
 │   ├── order-store.ts           # MOCK ya da Mongo: depoyu açar, kapanışı verir

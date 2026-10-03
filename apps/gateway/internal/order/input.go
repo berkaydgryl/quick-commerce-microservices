@@ -56,6 +56,13 @@ type Signals struct {
 	AccountCreatedAt time.Time
 }
 
+// ReleaseInput, DELETE /v1/cart/reserve/{orderId} (T11.4).
+type ReleaseInput struct {
+	UserID         string
+	OrderID        string
+	IdempotencyKey string
+}
+
 // ConfirmInput, POST /v1/orders/{id}/3ds.
 type ConfirmInput struct {
 	UserID         string

@@ -152,6 +152,10 @@ const { handle, store, events } = await startOrExit(
           payments,
           stock,
           reservationTtlSeconds: env.RESERVATION_TTL_SECONDS,
+          lockPolicy: {
+            mediumRiskSeconds: env.RESERVATION_TTL_MEDIUM_RISK_SECONDS,
+            extendSeconds: env.RESERVATION_EXTEND_SECONDS,
+          },
         }),
       ],
       // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti

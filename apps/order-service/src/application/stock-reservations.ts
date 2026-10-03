@@ -2,9 +2,10 @@
  * inventory-svc PORTU (T11.2): siparisin stok kilidi. Uygulamasi
  * infrastructure/inventory'de (gRPC); testlerde sahtesi verilir.
  *
- * Uc cagri da siparis kimligiyle IDEMPOTENT'tir (inventory, ADR-08): ayni
- * siparis icin tekrar gelen Reserve sayaci ikinci kez dusmez, Commit ve
- * Release stoku bir kez hareket ettirir.
+ * Reserve, Commit, Release ve kisaltma siparis kimligiyle IDEMPOTENT'tir
+ * (inventory, ADR-08): tekrar gelen Reserve sayaci ikinci kez dusmez, Commit ve
+ * Release stoku bir kez hareket ettirir, kisaltma ayni sinira iner. Uzatma
+ * DEGILDIR: her cagri bir uzatma hakki harcar (T11.3).
  *
  * Beklenen sonuclar (stok yetmedi, kullanicinin baska aktif kilidi var) HATA
  * DEGIL sonuc olarak doner: saga onlara gore karar verir. Ulasilamama ve
@@ -56,8 +57,30 @@ export interface ReleaseStockRequest extends SettleStockRequest {
   readonly reason: ReleaseReason;
 }
 
+export interface ExtendLockRequest extends SettleStockRequest {
+  readonly additionalSeconds: number;
+}
+
+export interface ShortenLockRequest extends SettleStockRequest {
+  readonly maxRemainingSeconds: number;
+}
+
+/**
+ * Kilidin suresini ayarlayan cagrilarin sonucu (T11.3). Kilidin dusmus olmasi
+ * (inventory RESERVATION_EXPIRED) HATA DEGIL sonuctur: saga siparisi iptal eder.
+ */
+export type LockTiming =
+  /** Kilit duruyor; `changed`: bu cagri sureyi degistirdi (uzatma hakki bitmis ya da zaten kisa ise false). */
+  | { readonly kind: 'active'; readonly expiresAt: Date; readonly changed: boolean }
+  /** Kilit yok: birakilmis, onaylanmis ya da bitis ani gecmis. */
+  | { readonly kind: 'lapsed' };
+
 export interface StockReservations {
   reserve(request: ReserveStockRequest, scope: RequestScope): Promise<ReserveStockOutcome>;
   commit(request: SettleStockRequest, scope: RequestScope): Promise<Settlement>;
   release(request: ReleaseStockRequest, scope: RequestScope): Promise<Settlement>;
+  /** Bitis anini ileri alir; inventory'de rezervasyon basina en cok 3 kez (B21). */
+  extend(request: ExtendLockRequest, scope: RequestScope): Promise<LockTiming>;
+  /** Kalan sureyi kisaltir; asla uzatmaz. */
+  shorten(request: ShortenLockRequest, scope: RequestScope): Promise<LockTiming>;
 }

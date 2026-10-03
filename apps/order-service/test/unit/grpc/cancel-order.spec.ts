@@ -61,7 +61,7 @@ describe('CancelOrder', () => {
     expect(error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
   });
 
-  it.each(['STOCK_INSUFFICIENT', 'RESERVATION_EXPIRED', 'CART_REPLACED'])(
+  it.each(['STOCK_INSUFFICIENT', 'RESERVATION_EXPIRED', 'CART_REPLACED', 'CART_RELEASED'])(
     'sistemin iptal notu (%s) kullanici gerekcesi olamaz: risk gecmisinden iptal gizlenmesin',
     async (reason) => {
       const orderId = await newDraftId(call);

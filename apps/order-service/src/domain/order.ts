@@ -45,6 +45,11 @@ export const TIMELINE_NOTE = {
   PENDING_RESERVATION: 'PENDING_RESERVATION',
   /** Kullanici yeni sepetle rezervasyon istedi; eski taslak iptal edildi (T11.2). */
   CART_REPLACED: 'CART_REPLACED',
+  /**
+   * Kullanici taslagi gerekce vermeden birakti (T11.4, DELETE /v1/cart/reserve):
+   * sepeti terk etmek siparis iptali degildir, risk gecmisinde sayilmaz.
+   */
+  CART_RELEASED: 'CART_RELEASED',
   /** Kullanici gerekce vermeden iptal etti. */
   USER_CANCELLED: 'USER_CANCELLED',
   /** Kapida odeme (T7.1): cekim yok, tutar teslimatta alinacak; siparis yine PAID'e gecer. */
