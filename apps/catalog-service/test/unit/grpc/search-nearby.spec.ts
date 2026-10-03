@@ -49,6 +49,14 @@ describe('SearchNearby', () => {
         skus: ['CIKOLATA-80', 'SUT-1L'],
         total: 2,
       },
+      {
+        marketId: 'mkt_sok-moda',
+        meters: 459,
+        isOpen: true,
+        nameMatched: false,
+        skus: ['SUT-1L'],
+        total: 1,
+      },
     ]);
   });
 
@@ -60,17 +68,22 @@ describe('SearchNearby', () => {
     ).toEqual([
       ['mkt_a101-caferaga', { amountMinor: 3210, currency: CURRENCY }],
       [MIGROS_MODA, { amountMinor: 3490, currency: CURRENCY }],
+      ['mkt_sok-moda', { amountMinor: 3300, currency: CURRENCY }],
     ]);
   });
 
   it('Ev "su": market basina en fazla 3 teklif, toplam 4 (istemci "+1 urun daha" der)', async () => {
     const { response } = await searchNearby('Ev', 'su');
 
+    // A101 ve Migros 4 eslesme (3 gosterilir); SOK su + sut; kasap ve sarkuteri sucuk (T11.11).
     expect(
       response?.results.map((result) => [result.offers.length, result.totalOfferMatches]),
     ).toEqual([
       [3, 4],
       [3, 4],
+      [2, 2],
+      [1, 1],
+      [1, 1],
     ]);
   });
 

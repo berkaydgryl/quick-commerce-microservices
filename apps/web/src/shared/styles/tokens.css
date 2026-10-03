@@ -77,7 +77,8 @@
   --container-max-lg: 64rem;
 
   /* Genis kapsayici (karsilama ekrani, 90rem ve ustu; T11.6): giris karti ust
-     barin sag kenariyla hizali kalir ve afisin yazisindan uzak durur. */
+     barin sag kenariyla hizali kalir ve afisin yazisindan uzak durur. T11.12'den
+     beri oturumlu sayfalar da (PageLayout) bunu kullanir: iki bar ayni hizada. */
   --container-max-xl: 80rem;
 
   /* Kategori kutucugu: ikon kutusunun kenari. */

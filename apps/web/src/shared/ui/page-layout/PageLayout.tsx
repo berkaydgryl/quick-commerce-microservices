@@ -22,13 +22,16 @@ interface PageLayoutProps {
  * adresi) | Profil. Telefonda iki satir: ustte logo ve Profil, altta tam
  * genislikte arama (tek satira sigmazdi). Yuvalari (logo dahil: metni
  * icerikten) uygulama doldurur (header-slot.ts).
+ *
+ * Bar ve govde karsilama ekraniyla ayni genis kapsayicidadir (T11.12):
+ * karsilamadan girince logo ve Profil yerinden kaymaz.
  */
 export function PageLayout({ brandIsTitle = false, children }: PageLayoutProps) {
   const { logo, search, account } = useHeaderSlots();
   return (
     <>
       <header className={styles['c-page-layout__header']}>
-        <PageContainer>
+        <PageContainer wide>
           <div className={styles['c-page-layout__bar']}>
             {brandIsTitle ? (
               <h1 className={styles['c-page-layout__brand']}>{logo}</h1>
@@ -43,7 +46,7 @@ export function PageLayout({ brandIsTitle = false, children }: PageLayoutProps) 
         </PageContainer>
       </header>
       <main className={styles['c-page-layout__main']}>
-        <PageContainer>{children}</PageContainer>
+        <PageContainer wide>{children}</PageContainer>
       </main>
     </>
   );

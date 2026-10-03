@@ -8,9 +8,9 @@ import { PRODUCT_UNIT } from '../../domain/catalog.js';
 
 /**
  * Platform kategorileri (T11.6 PR 3'ten beri 13): once gida, sonra ev ve kisisel
- * bakim; ilk bestekinin birbirine gore sirasi korundu. Sekizine henuz urun
- * baglanmadi: karsilama ekraninin vitrini ve ana sayfa seridi icindir; market
- * sayfasi yalnizca teklifi olan kategorileri gosterir (ListMarketCategories).
+ * bakim; ilk bestekinin birbirine gore sirasi korundu. T11.11'den beri her
+ * kategorinin urunu var; market sayfasi yine yalnizca o marketin teklifi olan
+ * kategorileri gosterir (ListMarketCategories).
  * Gorseller web'in public/img/cat klasorundedir (CC0, apps/web/README.md).
  */
 export const CATEGORIES: readonly Category[] = [
@@ -166,6 +166,210 @@ export const PRODUCTS: readonly Product[] = [
     PRODUCT_UNIT.PIECE,
   ),
   product('CAMASIR-SUYU', 'Çamaşır Suyu 1 L', 'Mevsimsel ürün', 'cat_temizlik', PRODUCT_UNIT.PIECE),
+  // T11.11: bos kalan kategoriler ve dukkan turlerinin (kasap, sarkuteri,
+  // kuruyemis, firin, pet shop, cicekci) urunleri.
+  product(
+    'EKMEK-SOMUN',
+    'Somun Ekmek 350 g',
+    'Günlük taş fırın ekmeği',
+    'cat_firindan',
+    PRODUCT_UNIT.PIECE,
+  ),
+  product('SIMIT', 'Simit', 'Çıtır, pekmezli', 'cat_firindan', PRODUCT_UNIT.PIECE),
+  product(
+    'POGACA-PEYNIRLI',
+    'Peynirli Poğaça',
+    'Taze, yumuşak',
+    'cat_firindan',
+    PRODUCT_UNIT.PIECE,
+  ),
+  product('ACMA', 'Sade Açma', 'Yumuşak, sade', 'cat_firindan', PRODUCT_UNIT.PIECE),
+  product(
+    'PIRINC-1K',
+    'Baldo Pirinç 1 kg',
+    'Pilavlık baldo pirinç',
+    'cat_temel-gida',
+    PRODUCT_UNIT.PACK,
+  ),
+  product(
+    'MAKARNA-500',
+    'Spagetti 500 g',
+    'Durum buğdayı makarnası',
+    'cat_temel-gida',
+    PRODUCT_UNIT.PACK,
+  ),
+  product(
+    'AYCICEK-YAGI-1L',
+    'Ayçiçek Yağı 1 L',
+    'Rafine ayçiçek yağı',
+    'cat_temel-gida',
+    PRODUCT_UNIT.LITER,
+  ),
+  product(
+    'MERCIMEK-1K',
+    'Kırmızı Mercimek 1 kg',
+    'Çorbalık kırmızı mercimek',
+    'cat_temel-gida',
+    PRODUCT_UNIT.PACK,
+  ),
+  product(
+    'KIYMA-500',
+    'Dana Kıyma 500 g',
+    'Orta yağlı dana kıyma',
+    'cat_et-tavuk',
+    PRODUCT_UNIT.PIECE,
+  ),
+  product(
+    'KUSBASI-500',
+    'Dana Kuşbaşı 500 g',
+    'Sinirsiz dana kuşbaşı',
+    'cat_et-tavuk',
+    PRODUCT_UNIT.PIECE,
+  ),
+  product(
+    'TAVUK-GOGUS-1K',
+    'Tavuk Göğüs 1 kg',
+    'Derisiz tavuk göğüs fileto',
+    'cat_et-tavuk',
+    PRODUCT_UNIT.KILOGRAM,
+  ),
+  product(
+    'SUCUK-250',
+    'Kangal Sucuk 250 g',
+    'Baharatlı dana sucuk',
+    'cat_et-tavuk',
+    PRODUCT_UNIT.PIECE,
+  ),
+  product(
+    'PASTIRMA-100',
+    'Pastırma 100 g',
+    'Çemenli dana pastırma',
+    'cat_et-tavuk',
+    PRODUCT_UNIT.PIECE,
+  ),
+  product(
+    'KASAR-400',
+    'Kaşar Peyniri 400 g',
+    'Taze kaşar',
+    'cat_sut-kahvaltilik',
+    PRODUCT_UNIT.PIECE,
+  ),
+  product(
+    'ZEYTIN-500',
+    'Siyah Zeytin 500 g',
+    'Gemlik tipi, az tuzlu',
+    'cat_sut-kahvaltilik',
+    PRODUCT_UNIT.PIECE,
+  ),
+  product(
+    'DONDURMA-KAKAO',
+    'Kakaolu Dondurma 500 ml',
+    'Kutu dondurma',
+    'cat_dondurma',
+    PRODUCT_UNIT.PIECE,
+  ),
+  product(
+    'DONDURMA-CUBUK',
+    'Çubuk Dondurma',
+    'Vanilyalı, tek porsiyon',
+    'cat_dondurma',
+    PRODUCT_UNIT.PIECE,
+  ),
+  product(
+    'SAMPUAN-500',
+    'Şampuan 500 ml',
+    'Her saç tipi için',
+    'cat_kisisel-bakim',
+    PRODUCT_UNIT.PIECE,
+  ),
+  product(
+    'DIS-MACUNU',
+    'Diş Macunu 75 ml',
+    'Florürlü, nane aromalı',
+    'cat_kisisel-bakim',
+    PRODUCT_UNIT.PIECE,
+  ),
+  product(
+    'SIVI-SABUN',
+    'Sıvı Sabun 400 ml',
+    'Nemlendirici, pompalı',
+    'cat_kisisel-bakim',
+    PRODUCT_UNIT.PIECE,
+  ),
+  product('KAGIT-HAVLU-6', 'Kağıt Havlu 6’lı', 'Çift katlı', 'cat_ev-yasam', PRODUCT_UNIT.PACK),
+  product('COP-POSETI', 'Çöp Poşeti 20’li', 'Büzgülü, orta boy', 'cat_ev-yasam', PRODUCT_UNIT.PACK),
+  product(
+    'GUL-BUKET',
+    'Kırmızı Gül Buketi',
+    '11 adet, mevsim yeşilliğiyle',
+    'cat_ev-yasam',
+    PRODUCT_UNIT.PIECE,
+  ),
+  product(
+    'PAPATYA-BUKET',
+    'Papatya Buketi',
+    'Mevsim papatyası, kağıda sarılı',
+    'cat_ev-yasam',
+    PRODUCT_UNIT.PIECE,
+  ),
+  product(
+    'ORKIDE-SAKSI',
+    'Saksıda Orkide',
+    'Beyaz, çift dallı',
+    'cat_ev-yasam',
+    PRODUCT_UNIT.PIECE,
+  ),
+  product('BEBEK-BEZI-4', 'Bebek Bezi 4 Numara 40’lı', '7-14 kg', 'cat_bebek', PRODUCT_UNIT.PACK),
+  product(
+    'ISLAK-MENDIL',
+    'Islak Mendil 90’lı',
+    'Hassas ciltler için',
+    'cat_bebek',
+    PRODUCT_UNIT.PACK,
+  ),
+  product(
+    'KEDI-MAMASI',
+    'Kedi Maması 1,5 kg',
+    'Tavuklu, yetişkin kediler için',
+    'cat_evcil-hayvan',
+    PRODUCT_UNIT.PACK,
+  ),
+  product(
+    'KOPEK-MAMASI',
+    'Köpek Maması 3 kg',
+    'Kuzu etli, yetişkin köpekler için',
+    'cat_evcil-hayvan',
+    PRODUCT_UNIT.PACK,
+  ),
+  product(
+    'KEDI-KUMU',
+    'Kedi Kumu 10 L',
+    'Topaklanan, bentonit',
+    'cat_evcil-hayvan',
+    PRODUCT_UNIT.PACK,
+  ),
+  product(
+    'FINDIK-200',
+    'Fındık 200 g',
+    'Kavrulmuş iç fındık',
+    'cat_atistirmalik',
+    PRODUCT_UNIT.PACK,
+  ),
+  product(
+    'ANTEP-FISTIGI-200',
+    'Antep Fıstığı 200 g',
+    'Kavrulmuş, tuzlu',
+    'cat_atistirmalik',
+    PRODUCT_UNIT.PACK,
+  ),
+  product('KAJU-200', 'Kaju 200 g', 'Kavrulmuş kaju', 'cat_atistirmalik', PRODUCT_UNIT.PACK),
+  product(
+    'LEBLEBI-250',
+    'Sarı Leblebi 250 g',
+    'Çifte kavrulmuş',
+    'cat_atistirmalik',
+    PRODUCT_UNIT.PACK,
+  ),
 ];
 
 function product(

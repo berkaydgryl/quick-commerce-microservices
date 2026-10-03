@@ -96,6 +96,21 @@ export const ratingSchema = z.object({
   count: z.number().int().min(0),
 });
 
+/**
+ * Dukkan turu (T11.11): market listesinin sol menusu bu alana gore suzer.
+ * Proto StoreType ile ayni sira; yeni tur sona eklenir.
+ */
+export const storeTypeSchema = z.enum([
+  'MARKET',
+  'MANAV',
+  'KASAP',
+  'SARKUTERI',
+  'KURUYEMIS',
+  'FIRIN',
+  'PETSHOP',
+  'CICEKCI',
+]);
+
 export const marketSchema = z.object({
   id: marketIdSchema,
   /** Gorunen ad: "Migros Jet - Moda". */
@@ -104,6 +119,10 @@ export const marketSchema = z.object({
   brand: z.string(),
   /** Mutlak URL (gateway kurar); logosu olmayan market icin alan yok. */
   logoUrl: z.string().url().optional(),
+  /** Tur bilinmiyorsa alan yok (eski catalog-service); listede yalnizca "Tumu" altinda gorunur. */
+  storeType: storeTypeSchema.optional(),
+  /** Kapak gorseli, mutlak URL (gateway kurar); kapagi olmayan market icin alan yok. */
+  coverUrl: z.string().url().optional(),
   location: geoPointSchema,
   deliveryRadiusMeters: z.number().int().positive(),
   /** Kapali market listede gorunur ("Kapali" rozeti) ama siparis almaz. */
@@ -272,6 +291,7 @@ export type Category = z.infer<typeof categorySchema>;
 export type PricingRules = z.infer<typeof pricingRulesSchema>;
 export type DeliveryTime = z.infer<typeof deliveryTimeSchema>;
 export type Rating = z.infer<typeof ratingSchema>;
+export type StoreType = z.infer<typeof storeTypeSchema>;
 export type Market = z.infer<typeof marketSchema>;
 export type NearbyMarket = z.infer<typeof nearbyMarketSchema>;
 export type NearbyMarketsQuery = z.infer<typeof nearbyMarketsQuerySchema>;

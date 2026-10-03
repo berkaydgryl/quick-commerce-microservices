@@ -294,6 +294,34 @@ message Market {
   // Marketin kendi fiyat kurallari. Market paneli olmadigi icin bugun
   // seed'den gelir (ADR-15); panel geldiginde yalnizca kaynak degisir.
   PricingRules pricing_rules = 10;
+
+  // Dukkan turu (T11.11): market listesinin sol menusu bu alana gore suzer.
+  StoreType store_type = 11;
+
+  // Kapak gorselinin GORELI yolu (T11.11); mutlak URL'yi gateway kurar
+  // (ASSET_BASE_URL). Kapagi olmayan market icin bos.
+  string cover_url = 12;
+}
+
+// Dukkan turu (T11.11). Yeni tur sona eklenir; numara degismez.
+enum StoreType {
+  STORE_TYPE_UNSPECIFIED = 0;
+  // Genel market: her kategoriden satar.
+  STORE_TYPE_MARKET = 1;
+  // Manav: meyve ve sebze.
+  STORE_TYPE_MANAV = 2;
+  // Kasap: et ve tavuk.
+  STORE_TYPE_KASAP = 3;
+  // Sarkuteri: peynir, zeytin, sucuk.
+  STORE_TYPE_SARKUTERI = 4;
+  // Kuruyemisci.
+  STORE_TYPE_KURUYEMIS = 5;
+  // Firin ve pastane.
+  STORE_TYPE_FIRIN = 6;
+  // Pet shop: evcil hayvan urunleri.
+  STORE_TYPE_PETSHOP = 7;
+  // Cicekci.
+  STORE_TYPE_CICEKCI = 8;
 }
 
 // Tahmini teslimat suresi araligi, DAKIKA ("15-25 dk").

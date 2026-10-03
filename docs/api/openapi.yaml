@@ -2951,6 +2951,17 @@ components:
           type: string
           format: uri
           description: MUTLAK URL (gateway kurar); logosu olmayan markette alan yok.
+        storeType:
+          type: string
+          enum: [MARKET, MANAV, KASAP, SARKUTERI, KURUYEMIS, FIRIN, PETSHOP, CICEKCI]
+          description: |
+            Dükkân türü (T11.11); market listesinin sol menüsü bu alana göre
+            süzer. `getir.catalog.v1.StoreType` ile birebir aynı sözlük; tür
+            bilinmiyorsa alan yok. Türkçe etiket istemcide üretilir.
+        coverUrl:
+          type: string
+          format: uri
+          description: Kapak görseli (T11.11), MUTLAK URL (gateway kurar); kapağı olmayan markette alan yok.
         location:
           $ref: "#/components/schemas/GeoPoint"
         deliveryRadiusMeters:

@@ -23,7 +23,7 @@ const stockKeys = STOCK_LEVELS.map((level) => `${level.marketId}/${level.sku}`).
 describe('demo stogu (T9.1)', () => {
   it('katalogdaki her teklifin stok kaydi var, fazlasi yok', () => {
     expect(stockKeys).toEqual(catalogKeys);
-    expect(stockKeys).toHaveLength(71);
+    expect(stockKeys).toHaveLength(166);
   });
 
   it('seed dogrulamasindan gecer (yinelenen, negatif, bicimsiz kayit yok)', () => {

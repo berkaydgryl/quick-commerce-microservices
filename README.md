@@ -286,7 +286,7 @@ itibarıyla geçmelidir; geçmiyorsa kurulum tamamlanmamıştır, devam etme.
 
 ```bash
 pnpm infra:up     # Mongo (replica set) + Redis + Jaeger (D15)
-pnpm seed         # catalog'u derler; 13 kategori, 15 urun, 6 market, 71 teklif yazar (tekrar kosmak guvenli)
+pnpm seed         # catalog'u derler; 13 kategori, 49 urun, 21 market, 166 teklif yazar (tekrar kosmak guvenli)
 ```
 
 Seed kök `.env`'yi okur (yoksa ortam değişkenlerini). `NODE_ENV=production` iken reddeder.

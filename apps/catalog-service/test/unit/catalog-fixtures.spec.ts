@@ -4,10 +4,15 @@
  * (bos market sayfasi, yanlis fiyat) bozar.
  */
 
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
-import { offerIdFor } from '../../src/domain/catalog.js';
+import type { StoreType } from '../../src/domain/catalog.js';
+import { offerIdFor, STORE_TYPE } from '../../src/domain/catalog.js';
 import { CATALOG_SNAPSHOT } from '../../src/infrastructure/fixtures.js';
+import { EXPECTED_NEARBY } from '../support/demo-addresses.js';
 
 const { categories, products, markets, offers } = CATALOG_SNAPSHOT;
 
@@ -15,14 +20,29 @@ function duplicates(values: readonly string[]): string[] {
   return values.filter((value, index) => values.indexOf(value) !== index);
 }
 
+/**
+ * Dukkan turunun satabilecegi kategoriler (T11.11). Genel market her seyi
+ * satar; sarkuteri peynir-zeytin yaninda sucuk ve pastirma da satar.
+ */
+const STORE_CATEGORIES: Readonly<Record<StoreType, 'ALL' | readonly string[]>> = {
+  MARKET: 'ALL',
+  MANAV: ['cat_meyve-sebze'],
+  KASAP: ['cat_et-tavuk'],
+  SARKUTERI: ['cat_sut-kahvaltilik', 'cat_et-tavuk'],
+  KURUYEMIS: ['cat_atistirmalik'],
+  FIRIN: ['cat_firindan'],
+  PETSHOP: ['cat_evcil-hayvan'],
+  CICEKCI: ['cat_ev-yasam'],
+};
+
 /** @getir/contracts kimlik bicimi: onek + kucuk harf/rakam/tekli tire. */
 const CATALOG_ID = (prefix: string) => new RegExp(`^${prefix}_[a-z0-9]+(?:-[a-z0-9]+)*$`);
 
 describe('pazaryeri demo verisi', () => {
-  it('13 kategori, 15 ortak urun, 6 market (roadmap tablosu)', () => {
+  it('13 kategori, 49 ortak urun, 21 market (roadmap tablosu)', () => {
     expect(categories).toHaveLength(13);
-    expect(products).toHaveLength(15);
-    expect(markets).toHaveLength(6);
+    expect(products).toHaveLength(49);
+    expect(markets).toHaveLength(21);
   });
 
   it('kimlikler sozlesmedeki onekli bicimde (ADR-15)', () => {
@@ -52,6 +72,14 @@ describe('pazaryeri demo verisi', () => {
     for (const market of markets) {
       expect(offers.some((offer) => offer.marketId === market.id)).toBe(true);
     }
+  });
+
+  it('her urun en az bir markette satilir; her kategorinin urunu var (T11.11)', () => {
+    const offered = new Set(offers.map((offer) => offer.productId));
+    const filled = new Set(products.map((product) => product.categoryId));
+
+    expect(products.filter((product) => !offered.has(product.id))).toEqual([]);
+    expect(categories.filter((category) => !filled.has(category.id))).toEqual([]);
   });
 
   it('her urunun kategorisi var', () => {
@@ -90,13 +118,24 @@ describe('pazaryeri demo verisi', () => {
     }
   });
 
-  it('manav yalnizca meyve-sebze satar', () => {
+  it('dukkan yalnizca turunun kategorilerini satar (manav meyve-sebze; T11.11)', () => {
     const categoryOf = new Map(products.map((product) => [product.id, product.categoryId]));
-    const manav = offers.filter((offer) => offer.marketId === 'mkt_kardesler-manavi');
+    const typeOf = new Map(markets.map((market) => [market.id, market.storeType]));
+    const outOfType = offers.filter((offer) => {
+      const allowed = STORE_CATEGORIES[typeOf.get(offer.marketId) ?? STORE_TYPE.MARKET];
+      return allowed !== 'ALL' && !allowed.includes(categoryOf.get(offer.productId) ?? '');
+    });
 
-    expect(new Set(manav.map((offer) => categoryOf.get(offer.productId)))).toEqual(
-      new Set(['cat_meyve-sebze']),
-    );
+    expect(outOfType).toEqual([]);
+  });
+
+  it('Ev ve Is adresinde her dukkan turunden en az bir market var (sol menu bos kalmaz)', () => {
+    const typeOf = new Map(markets.map((market) => [market.id, market.storeType]));
+    for (const nearby of [EXPECTED_NEARBY.Ev, EXPECTED_NEARBY.İş]) {
+      const types = new Set(nearby.map((entry) => typeOf.get(entry.marketId)));
+
+      expect([...types].sort()).toEqual(Object.values(STORE_TYPE).sort());
+    }
   });
 
   it('tam olarak bir market kapali (STORE_CLOSED senaryosu)', () => {
@@ -117,11 +156,26 @@ describe('pazaryeri demo verisi', () => {
     const imageUrls = [
       ...categories.map((category) => category.imageUrl),
       ...products.map((product) => product.imageUrl),
-      ...markets.map((market) => market.logoUrl),
+      ...markets.map((market) => market.coverUrl),
     ];
     for (const imageUrl of imageUrls) {
       expect(imageUrl.startsWith('/')).toBe(true);
       expect(imageUrl).not.toContain('://');
+    }
+  });
+
+  it('logo yok (istemci bas harf rozeti); kapak dukkan turunun gorseli (T11.11)', () => {
+    for (const market of markets) {
+      expect(market.logoUrl, market.id).toBe('');
+      expect(market.coverUrl, market.id).toBe(`/img/market/${market.storeType.toLowerCase()}.jpg`);
+    }
+  });
+
+  it('kapak dosyalari web in public klasorunde var (apps/web/README.md lisans tablosu)', () => {
+    for (const coverUrl of new Set(markets.map((market) => market.coverUrl))) {
+      const file = fileURLToPath(new URL(`../../../web/public${coverUrl}`, import.meta.url));
+
+      expect(existsSync(file), coverUrl).toBe(true);
     }
   });
 });

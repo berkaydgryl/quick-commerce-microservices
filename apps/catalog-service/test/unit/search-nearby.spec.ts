@@ -16,6 +16,7 @@ import { demoLocation, EXPECTED_NEARBY } from '../support/demo-addresses.js';
 
 const A101_CAFERAGA = 'mkt_a101-caferaga';
 const MIGROS_MODA = 'mkt_migros-jet-moda';
+const SOK_MODA = 'mkt_sok-moda';
 
 const readers = createInMemoryReaders();
 const searchNearby = createSearchNearby(readers);
@@ -33,7 +34,7 @@ async function search(title: DemoAddressTitle, query: string) {
 }
 
 describe('searchNearby', () => {
-  it('Ev "süt": urunu olan marketler yakindan uzaga; sut satmayan manav yok', async () => {
+  it('Ev "süt": urunu olan marketler yakindan uzaga; sut satmayan manav ve dukkanlar yok', async () => {
     expect(await search('Ev', 'süt')).toEqual([
       {
         marketId: A101_CAFERAGA,
@@ -49,6 +50,7 @@ describe('searchNearby', () => {
         skus: ['CIKOLATA-80', 'SUT-1L'],
         total: 2,
       },
+      { marketId: SOK_MODA, isOpen: true, nameMatched: false, skus: ['SUT-1L'], total: 1 },
     ]);
   });
 
@@ -81,6 +83,22 @@ describe('searchNearby', () => {
         nameMatched: false,
         skus: ['CIKOLATA-80', 'PORTAKAL-SUYU-1L', 'SU-5L'],
         total: 4,
+      },
+      // T11.11: SOK su ve sut; kasap ile sarkuteri "sucuk".
+      { marketId: SOK_MODA, isOpen: true, nameMatched: false, skus: ['SU-5L', 'SUT-1L'], total: 2 },
+      {
+        marketId: 'mkt_moda-kasabi',
+        isOpen: true,
+        nameMatched: false,
+        skus: ['SUCUK-250'],
+        total: 1,
+      },
+      {
+        marketId: 'mkt_moda-sarkuteri',
+        isOpen: true,
+        nameMatched: false,
+        skus: ['SUCUK-250'],
+        total: 1,
       },
     ]);
   });

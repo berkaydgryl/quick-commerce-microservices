@@ -3,7 +3,7 @@
  */
 
 import type { Category, Market, Offer, Product } from '../../domain/catalog.js';
-import { searchTermsOf } from '../../domain/catalog.js';
+import { STORE_TYPE, searchTermsOf } from '../../domain/catalog.js';
 import type {
   CategoryDocument,
   MarketDocument,
@@ -61,6 +61,8 @@ export function toMarketDocument(market: Market): MarketDocument {
     name: market.name,
     brand: market.brand,
     logoUrl: market.logoUrl,
+    storeType: market.storeType,
+    coverUrl: market.coverUrl,
     location: { type: 'Point', coordinates: [market.lng, market.lat] },
     deliveryRadiusMeters: market.deliveryRadiusMeters,
     isOpen: market.isOpen,
@@ -77,6 +79,10 @@ export function fromMarketDocument(document: MarketDocument): Market {
     name: document.name,
     brand: document.brand,
     logoUrl: document.logoUrl,
+    // T11.11 oncesi belge: o gunun marketleri genel marketti (manav disinda;
+    // seed tekrar kosunca dogru tur gelir).
+    storeType: document.storeType ?? STORE_TYPE.MARKET,
+    coverUrl: document.coverUrl ?? '',
     lat,
     lng,
     deliveryRadiusMeters: document.deliveryRadiusMeters,

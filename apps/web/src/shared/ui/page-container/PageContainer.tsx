@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import styles from './PageContainer.module.css';
 
 interface PageContainerProps {
-  /** Cok genis ekranda (90rem ve ustu) 80rem'e kadar genisler (karsilama ekrani, T11.6). */
+  /** 90rem ve ustunde 80rem'e kadar genisler (karsilama T11.6; oturumlu sayfalar T11.12). */
   readonly wide?: boolean;
   readonly children: ReactNode;
 }

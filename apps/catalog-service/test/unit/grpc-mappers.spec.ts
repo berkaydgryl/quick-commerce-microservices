@@ -3,6 +3,7 @@
  * bicimi (deprecated products, teklifler, sayfa) burada tek basina sinanir.
  */
 
+import { catalogV1 } from '@getir/proto';
 import { describe, expect, it } from 'vitest';
 
 import type { Market } from '../../src/domain/catalog.js';
@@ -68,4 +69,17 @@ describe('toProtoNearbyMarket (D7: yuvarlama tasima katmaninda)', () => {
       toProtoMarket(market),
     );
   });
+});
+
+describe('toProtoMarket: dukkan turu ve kapak (T11.11)', () => {
+  it.each(MARKETS.map((market) => [market.id, market.storeType] as const))(
+    '%s (%s): tur proto enum una, kapak goreli yol olarak gider',
+    (id, storeType) => {
+      const market = MARKETS.find((candidate) => candidate.id === id) as Market;
+      const proto = toProtoMarket(market);
+
+      expect(catalogV1.StoreType[proto.storeType]).toBe(`STORE_TYPE_${storeType}`);
+      expect(proto.coverUrl).toBe(market.coverUrl);
+    },
+  );
 });

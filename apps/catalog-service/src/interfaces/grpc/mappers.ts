@@ -7,11 +7,10 @@
  */
 
 import { CURRENCY } from '@getir/core';
-import { commonV1 } from '@getir/proto';
-import type { catalogV1 } from '@getir/proto';
+import { catalogV1, commonV1 } from '@getir/proto';
 
-import type { Category, Market, Offer, ProductUnit } from '../../domain/catalog.js';
-import { PRODUCT_UNIT } from '../../domain/catalog.js';
+import type { Category, Market, Offer, ProductUnit, StoreType } from '../../domain/catalog.js';
+import { PRODUCT_UNIT, STORE_TYPE } from '../../domain/catalog.js';
 import type { MarketDistance } from '../../domain/market-coverage.js';
 import type { NearbySearchResult } from '../../domain/nearby-search.js';
 import type { OfferPage } from '../../domain/offer-reader.js';
@@ -22,6 +21,18 @@ const UNIT_TO_PROTO: Readonly<Record<ProductUnit, commonV1.Unit>> = {
   [PRODUCT_UNIT.KILOGRAM]: commonV1.Unit.UNIT_KILOGRAM,
   [PRODUCT_UNIT.LITER]: commonV1.Unit.UNIT_LITER,
   [PRODUCT_UNIT.PACK]: commonV1.Unit.UNIT_PACK,
+};
+
+/** Domain dukkan turu -> proto enum (T11.11). Eksik esleme derlemede yakalanir (Record). */
+const STORE_TYPE_TO_PROTO: Readonly<Record<StoreType, catalogV1.StoreType>> = {
+  [STORE_TYPE.MARKET]: catalogV1.StoreType.STORE_TYPE_MARKET,
+  [STORE_TYPE.MANAV]: catalogV1.StoreType.STORE_TYPE_MANAV,
+  [STORE_TYPE.KASAP]: catalogV1.StoreType.STORE_TYPE_KASAP,
+  [STORE_TYPE.SARKUTERI]: catalogV1.StoreType.STORE_TYPE_SARKUTERI,
+  [STORE_TYPE.KURUYEMIS]: catalogV1.StoreType.STORE_TYPE_KURUYEMIS,
+  [STORE_TYPE.FIRIN]: catalogV1.StoreType.STORE_TYPE_FIRIN,
+  [STORE_TYPE.PETSHOP]: catalogV1.StoreType.STORE_TYPE_PETSHOP,
+  [STORE_TYPE.CICEKCI]: catalogV1.StoreType.STORE_TYPE_CICEKCI,
 };
 
 /**
@@ -49,6 +60,8 @@ export function toProtoMarket(market: Market): catalogV1.Market {
     name: market.name,
     brand: market.brand,
     logoUrl: market.logoUrl,
+    storeType: STORE_TYPE_TO_PROTO[market.storeType],
+    coverUrl: market.coverUrl,
     location: { lat: market.lat, lng: market.lng },
     deliveryRadiusMeters: market.deliveryRadiusMeters,
     isOpen: market.isOpen,

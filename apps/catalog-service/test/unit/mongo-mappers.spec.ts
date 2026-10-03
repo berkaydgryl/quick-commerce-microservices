@@ -38,6 +38,13 @@ describe('mongo mappers', () => {
     expect(fromMarketDocument(document)).toEqual(market);
   });
 
+  it('T11.11 oncesi belge (tur ve kapak yok): genel market, kapaksiz', () => {
+    if (market === undefined) throw new Error('demo verisi eksik');
+    const { storeType: _type, coverUrl: _cover, ...legacy } = toMarketDocument(market);
+
+    expect(fromMarketDocument(legacy)).toEqual({ ...market, storeType: 'MARKET', coverUrl: '' });
+  });
+
   it('teklif belgesi urun kopyasi ve arama alanlarini tasir ama domain e sizdirmaz', () => {
     if (chocolate === undefined) throw new Error('demo verisi eksik');
 
