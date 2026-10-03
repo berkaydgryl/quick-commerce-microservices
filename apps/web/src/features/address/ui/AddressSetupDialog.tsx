@@ -6,7 +6,6 @@ import type { ResolvedLine } from '../services/line-notice';
 
 import { AddressDetailsForm } from './AddressDetailsForm';
 import { AddressDialog } from './AddressDialog';
-import type { AddressDialogAction } from './AddressDialog';
 import { AddressMapStep } from './AddressMapStep';
 import styles from './AddressSetupDialog.module.css';
 
@@ -15,12 +14,19 @@ interface AddressSetupDialogProps {
   /** 1. adimdaki kapat (X) dugmesinin erisilebilir adi (icerikten). */
   readonly closeLabel: string;
   readonly userId: string;
-  /** Kapatmak (X, Esc) = cikis: kullanici adres eklemeden uygulamaya giremez. */
+  /**
+   * Kapatmak (X, Esc). Ilk adres penceresinde CIKIS (kullanici adres eklemeden
+   * uygulamaya giremez); ust bardan acilan eklemede yalnizca pencere kapanir.
+   */
   readonly onClose: () => void;
-  /** Cikis suruyor: X bekler. */
-  readonly closing: boolean;
-  /** Cikis basarisiz (ag, 503): oturum yerinde kalir, mesaj gorunur. */
-  readonly closeError: string | null;
+  /** Kapatma suruyor (cikis): X bekler. */
+  readonly closing?: boolean;
+  /** Kapatma basarisiz (cikis: ag, 503): oturum yerinde kalir, mesaj gorunur. */
+  readonly closeError?: string | null;
+  /** true: detay adiminda geri okunun yaninda X da olur (ust bardan ekleme, T11.10). */
+  readonly closableOnDetails?: boolean;
+  /** Kayittan sonra (ust bardan eklemede pencere kapanir; ilk adreste kapi gecer). */
+  readonly onSaved?: () => void;
 }
 
 type Step =
@@ -34,16 +40,22 @@ type Step =
  *  1. Harita: nokta secilir (surukle ya da ara), "Bu adresi kullan" noktanin
  *     adres satirini sorar. Basliktaki X (ve Esc) CIKIS yapar.
  *  2. Detay: satir dolu gelir, bina/kat/daire ve tarif yazilir, "Kaydet".
- *     Baslikta X yerine geri oku vardir (Esc de geri): 1. adima doner, secilen
- *     nokta korunur.
+ *     Baslikta geri oku vardir (Esc de geri): 1. adima doner, secilen nokta
+ *     korunur. Ilk adres penceresinde X yoktur (kullanicinin karari); ust
+ *     bardan acilan eklemede X de vardir (T11.10, referans).
+ *
+ * Ayni pencere ust bardaki "Adreslerim"den de acilir (T11.10): orada X
+ * yalnizca kapatir ve kaydedince pencere kapanir.
  */
 export function AddressSetupDialog({
   content,
   closeLabel,
   userId,
   onClose,
-  closing,
-  closeError,
+  closing = false,
+  closeError = null,
+  closableOnDetails = false,
+  onSaved,
 }: AddressSetupDialogProps) {
   const [step, setStep] = useState<Step>({ name: 'map' });
   const [center, setCenter] = useState<GeoPoint>(content.map.center);
@@ -61,13 +73,19 @@ export function AddressSetupDialog({
     });
   };
 
-  const action: AddressDialogAction =
-    step.name === 'map'
-      ? { kind: 'close', label: closeLabel, onAction: onClose, disabled: closing }
-      : { kind: 'back', label: content.backLabel, onAction: () => setStep({ name: 'map' }) };
+  const close = { label: closeLabel, onAction: onClose, disabled: closing };
+  const onDetails = step.name === 'details';
 
   return (
-    <AddressDialog title={content.title} action={action}>
+    <AddressDialog
+      title={content.title}
+      back={
+        onDetails
+          ? { label: content.backLabel, onAction: () => setStep({ name: 'map' }) }
+          : undefined
+      }
+      close={onDetails && !closableOnDetails ? undefined : close}
+    >
       {step.name === 'map' ? (
         <>
           {closeError !== null && (
@@ -91,6 +109,7 @@ export function AddressSetupDialog({
           userId={userId}
           location={step.location}
           resolved={step.resolved}
+          onSaved={onSaved}
         />
       )}
     </AddressDialog>

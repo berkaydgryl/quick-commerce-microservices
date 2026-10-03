@@ -243,6 +243,39 @@ export const addressSetupContentSchema = z.object({
   map: mapContentSchema,
 });
 
+/**
+ * Uygulamanin ust bari (T11.10): oturumlu sayfalarin (ana sayfa, marketler,
+ * market, hesabim) mor bari. Logo | arama kutusu (icinde teslimat adresi) |
+ * Profil. Oturumsuz ziyaretci ayni bari "Giris yap" ile gorur
+ * (header.loginLabel).
+ */
+export const appHeaderContentSchema = z.object({
+  /** Arama kutusunun erisilebilir adi ve ipucu: "Market veya urun ara". */
+  searchLabel: contentTextSchema,
+  searchPlaceholder: contentTextSchema,
+  searchClearLabel: contentTextSchema,
+  /** Kutunun icindeki adres dugmesinin erisilebilir adinin basi: "Teslimat adresi: Ev". */
+  addressLabel: contentTextSchema,
+  addressListLabel: contentTextSchema,
+  /**
+   * Adres dugmesinin actigi "Adreslerim" penceresi: radyo listesi, "Adresi
+   * Onayla" ve alt bantta "Baska bir adreste misin? Adres Ekle" (harita +
+   * detay; T11.8'in penceresi).
+   */
+  addressBookTitle: contentTextSchema,
+  addressConfirmLabel: contentTextSchema,
+  addressAddPrompt: contentTextSchema,
+  addressAddLabel: contentTextSchema,
+  /** Oturumsuz ziyaretci varsayilan adresi gorur; dugme giris ekranina gider. */
+  addressLoginLabel: contentTextSchema,
+  noAddressNotice: contentTextSchema,
+  addressLoadingLabel: contentTextSchema,
+  profileLabel: contentTextSchema,
+  accountLabel: contentTextSchema,
+  logoutLabel: contentTextSchema,
+  logoutPendingLabel: contentTextSchema,
+});
+
 /** GET /v1/content/welcome - oturumsuz ziyaretcinin karsilama ekrani. */
 export const welcomeContentSchema = z.object({
   header: z.object({
@@ -264,6 +297,7 @@ export const welcomeContentSchema = z.object({
   appDownload: appDownloadContentSchema,
   features: z.array(featureContentSchema).min(1).max(CONTENT_FEATURES_MAX),
   addressSetup: addressSetupContentSchema,
+  appHeader: appHeaderContentSchema,
 });
 
 export type BannerSource = z.infer<typeof bannerSourceSchema>;
@@ -280,4 +314,5 @@ export type AddressKindOption = z.infer<typeof addressKindOptionSchema>;
 export type MapContent = z.infer<typeof mapContentSchema>;
 export type AddressSetupContent = z.infer<typeof addressSetupContentSchema>;
 export type ResetPasswordStepContent = z.infer<typeof resetPasswordStepContentSchema>;
+export type AppHeaderContent = z.infer<typeof appHeaderContentSchema>;
 export type WelcomeContent = z.infer<typeof welcomeContentSchema>;

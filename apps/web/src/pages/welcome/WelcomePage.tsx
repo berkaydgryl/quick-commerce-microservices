@@ -8,6 +8,7 @@ import { AUTH_ROUTES } from '../../features/auth/routes';
 import type { AuthRouteState, PhoneEntry } from '../../features/auth/services/auth-route-state';
 import { countryOfPhone } from '../../features/auth/services/country';
 import { AuthCard } from '../../features/auth/ui/AuthCard';
+import { AuthCardLinks } from '../../features/auth/ui/AuthCardLinks';
 import { AuthSwitch } from '../../features/auth/ui/AuthSwitch';
 import { ForgotPasswordLink } from '../../features/auth/ui/ForgotPasswordLink';
 import type { LoginCredentials } from '../../features/auth/ui/LoginForm';
@@ -82,24 +83,26 @@ export function WelcomePage({ renderDialog }: WelcomePageProps) {
                       navigate(AUTH_ROUTES.login, { state: { ...FROM_APP, phoneEntry: accepted } })
                     }
                   />
-                  {__DEMO_PASSWORD_RESET__ && (
-                    <ForgotPasswordLink
-                      label={content.loginCard.forgotPasswordLabel}
-                      target={{
-                        to: AUTH_ROUTES.forgotPassword,
-                        state: { ...FROM_APP, phoneEntry: entry ?? undefined },
-                      }}
-                      align="center"
+                  <AuthCardLinks>
+                    {__DEMO_PASSWORD_RESET__ && (
+                      <ForgotPasswordLink
+                        label={content.loginCard.forgotPasswordLabel}
+                        target={{
+                          to: AUTH_ROUTES.forgotPassword,
+                          state: { ...FROM_APP, phoneEntry: entry ?? undefined },
+                        }}
+                        align="center"
+                        replace={false}
+                      />
+                    )}
+                    <AuthSwitch
+                      prompt={content.loginCard.login.registerPrompt}
+                      label={content.loginCard.login.registerLinkLabel}
+                      to={AUTH_ROUTES.register}
+                      state={{ ...FROM_APP, phoneEntry: entry ?? undefined }}
                       replace={false}
                     />
-                  )}
-                  <AuthSwitch
-                    prompt={content.loginCard.login.registerPrompt}
-                    label={content.loginCard.login.registerLinkLabel}
-                    to={AUTH_ROUTES.register}
-                    state={{ ...FROM_APP, phoneEntry: entry ?? undefined }}
-                    replace={false}
-                  />
+                  </AuthCardLinks>
                   {renderDemo?.(openLoginAsDemo)}
                 </AuthCard>
               </WelcomeHero>

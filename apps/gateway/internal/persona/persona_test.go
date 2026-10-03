@@ -132,12 +132,27 @@ func TestDemoAddressesMatchTheRoadmapTable(t *testing.T) {
 	// Ev ve Is marketlerin yaricapinda, Yazlik hicbirinin (NO_STORE); konumlar
 	// catalog'un entegrasyon testinde de dogrulanir (demo-addresses.ts).
 	set := loadSet(t)
-	titles := []string{}
+	titles, kinds := []string{}, []string{}
 	for _, address := range set.Addresses {
 		titles = append(titles, address.Title)
+		kinds = append(kinds, address.Kind)
 	}
 	if len(titles) != 3 || titles[0] != "Ev" || titles[1] != "İş" || titles[2] != "Yazlık" {
 		t.Errorf("hazir adresler Ev, İş, Yazlık olmali: %v", titles)
+	}
+	// Tur ust barda ikon olur (T11.10): Ev evin, Is isyerinin ikonunu gosterir.
+	if len(kinds) != 3 || kinds[0] != auth.AddressKindHome || kinds[1] != auth.AddressKindWork || kinds[2] != auth.AddressKindOther {
+		t.Errorf("hazir adreslerin turu HOME, WORK, OTHER olmali: %v", kinds)
+	}
+}
+
+func TestDemoAddressesFollowTheAddressRules(t *testing.T) {
+	// Hazir adres kullanicinin ekledigiyle ayni kurallara uyar (T11.8).
+	set := loadSet(t)
+	set.Addresses[1].Kind = "IS"
+
+	if err := set.validate(); err == nil || !strings.Contains(err.Error(), `hazir adres "İş"`) {
+		t.Errorf("gecersiz turlu hazir adres reddedilmeli: %v", err)
 	}
 }
 

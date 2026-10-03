@@ -1,0 +1,76 @@
+/*
+ * Ust bardaki arama kutusu (T11.10; referans getircarsi): beyaz, kavisli kutu;
+ * solda buyutec, ortada yazi, sag ucunda ince bir cizgiyle ayrilmis teslimat
+ * adresi. Adres listesi kutunun altinda acilir (adres bileseni).
+ */
+.c-header-search {
+  display: flex;
+  align-items: stretch;
+  min-height: var(--size-header-search);
+  color: var(--text-default);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+}
+
+.c-header-search__form {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.c-header-search__input {
+  width: 100%;
+  min-width: 0;
+  padding-block: var(--space-2);
+  padding-inline: calc(var(--space-3) * 2 + var(--size-field-icon)) var(--space-2);
+  font-size: var(--font-size-md);
+  background: none;
+  border: none;
+  border-radius: var(--radius-md);
+}
+
+.c-header-search__input::placeholder {
+  color: var(--text-muted);
+}
+
+/* Tarayicinin kendi temizleme carpisi: kendi dugmemiz var, ikisi birden gorunmesin. */
+.c-header-search__input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.c-header-search__icon {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: var(--space-3);
+  display: flex;
+  align-items: center;
+  width: var(--size-field-icon);
+  color: var(--color-brand-primary);
+  pointer-events: none;
+}
+
+.c-header-search__clear {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--size-field-icon) + var(--space-3));
+  padding: 0;
+  color: var(--text-muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.c-header-search__clear:hover {
+  color: var(--text-default);
+}
+
+/* Adres: ince dikey cizgiyle ayrilir. */
+.c-header-search__address {
+  display: flex;
+  flex: none;
+  align-items: stretch;
+  border-inline-start: var(--border-width-thin) solid var(--border-subtle);
+}

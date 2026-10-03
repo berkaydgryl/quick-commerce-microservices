@@ -1,0 +1,50 @@
+/*
+ * Ust bar aramasinin sag ucundaki teslimat adresi (T11.10): ikon, ad, ok.
+ * Tiklayinca "Adreslerim" penceresi acilir (AddressBookDialog).
+ */
+.c-header-address__trigger {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+  max-width: 100%;
+  padding-inline: var(--space-3) var(--space-2);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-default);
+  text-decoration: none;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--radius-md);
+}
+
+.c-header-address__trigger:hover {
+  color: var(--color-brand-primary);
+}
+
+.c-header-address__icon {
+  display: flex;
+  width: var(--size-field-icon);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-tight);
+  color: var(--color-brand-primary);
+}
+
+/* Kullanicinin verdigi ad: uzun ad kutuyu tasirmaz, kisalir. */
+.c-header-address__title {
+  max-width: var(--size-header-address-title);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.c-header-address__chevron {
+  display: flex;
+  width: var(--size-field-icon);
+  color: var(--color-brand-primary);
+}
+
+.c-header-address__notice {
+  font-size: var(--font-size-sm);
+  color: var(--text-default);
+  text-align: center;
+}

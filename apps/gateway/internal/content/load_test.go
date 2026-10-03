@@ -60,6 +60,14 @@ const validJSON = `{
     "noteLabel": "Adres Tarifi", "saveLabel": "Kaydet", "savingLabel": "Kaydediliyor…", "noMarketNotice": "Hizmet veren market yok.",
     "map": {"tileUrl": "https://tile.openstreetmap.org/{z}/{x}/{y}.png", "attribution": "© OpenStreetMap katkıcıları",
       "center": {"lat": 40.9885, "lng": 29.027}, "zoom": 15}
+  },
+  "appHeader": {
+    "searchLabel": "Market veya ürün ara", "searchPlaceholder": "Market veya ürün ara", "searchClearLabel": "Aramayı temizle",
+    "addressLabel": "Teslimat adresi", "addressListLabel": "Kayıtlı adreslerin",
+    "addressBookTitle": "Adreslerim", "addressConfirmLabel": "Adresi Onayla", "addressAddPrompt": "Başka bir adreste misin?",
+    "addressAddLabel": "Adres Ekle", "addressLoginLabel": "Adres seçmek için giriş yap",
+    "noAddressNotice": "Kayıtlı adresin yok.", "addressLoadingLabel": "Adreslerin yükleniyor…", "profileLabel": "Profil",
+    "accountLabel": "Hesabım", "logoutLabel": "Çıkış yap", "logoutPendingLabel": "Çıkış yapılıyor…"
   }
 }`
 

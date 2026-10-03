@@ -11,6 +11,7 @@ import {
   initialAddressValues,
   titleForKind,
   toCreateAddressRequest,
+  uniqueTitle,
 } from '../../src/features/address/services/address-form';
 
 const KINDS: readonly AddressKindOption[] = [
@@ -84,5 +85,22 @@ describe('toCreateAddressRequest', () => {
       location: LOCATION,
       building: '19C3',
     });
+  });
+});
+
+describe('uniqueTitle ve defterdeki adlar (T11.10: ust bardan ikinci adres)', () => {
+  it('defterde olmayan ad oldugu gibi, varsa siradaki numara', () => {
+    expect(uniqueTitle('Ev', [])).toBe('Ev');
+    expect(uniqueTitle('Ev', ['Ev'])).toBe('Ev 2');
+    expect(uniqueTitle('Ev', ['Ev', 'Ev 2', 'Ev 3'])).toBe('Ev 4');
+  });
+
+  it('acilista "Ev" doluysa "Ev 2" onerilir', () => {
+    expect(initialAddressValues(KINDS, 'Moda', ['Ev']).title).toBe('Ev 2');
+  });
+
+  it('onerilen numarali ad da ture uyar; "İş" doluysa "İş 2"', () => {
+    expect(titleForKind(KINDS, 'Ev 2', 'WORK', ['Ev', 'İş'])).toBe('İş 2');
+    expect(titleForKind(KINDS, 'Annemler 2', 'WORK', ['Ev'])).toBe('Annemler 2');
   });
 });

@@ -2463,7 +2463,8 @@ components:
       description: |
         Karşılama ekranı (T11.6). Form KURALLARI ve hata cümleleri burada
         değildir; onlar kimlik şemalarından gelir.
-      required: [header, hero, loginCard, categories, appDownload, features, addressSetup]
+      required:
+        [header, hero, loginCard, categories, appDownload, features, addressSetup, appHeader]
       properties:
         header:
           type: object
@@ -2500,6 +2501,8 @@ components:
             $ref: "#/components/schemas/FeatureContent"
         addressSetup:
           $ref: "#/components/schemas/AddressSetupContent"
+        appHeader:
+          $ref: "#/components/schemas/AppHeaderContent"
 
     ContentImage:
       type: object
@@ -2620,6 +2623,46 @@ components:
           description: Seçilen yere hizmet veren market yok; uyarıdır, kaydı engellemez.
         map:
           $ref: "#/components/schemas/MapContent"
+
+    AppHeaderContent:
+      type: object
+      description: |
+        Oturumlu sayfaların üst barı (T11.10): logo | arama kutusu (içinde
+        teslimat adresi) | Profil. Yalnızca metinler.
+      required:
+        - searchLabel
+        - searchPlaceholder
+        - searchClearLabel
+        - addressLabel
+        - addressListLabel
+        - addressBookTitle
+        - addressConfirmLabel
+        - addressAddPrompt
+        - addressAddLabel
+        - addressLoginLabel
+        - noAddressNotice
+        - addressLoadingLabel
+        - profileLabel
+        - accountLabel
+        - logoutLabel
+        - logoutPendingLabel
+      properties:
+        searchLabel: { $ref: "#/components/schemas/ContentText" }
+        searchPlaceholder: { $ref: "#/components/schemas/ContentText" }
+        searchClearLabel: { $ref: "#/components/schemas/ContentText" }
+        addressLabel: { $ref: "#/components/schemas/ContentText" }
+        addressListLabel: { $ref: "#/components/schemas/ContentText" }
+        addressBookTitle: { $ref: "#/components/schemas/ContentText" }
+        addressConfirmLabel: { $ref: "#/components/schemas/ContentText" }
+        addressAddPrompt: { $ref: "#/components/schemas/ContentText" }
+        addressAddLabel: { $ref: "#/components/schemas/ContentText" }
+        addressLoginLabel: { $ref: "#/components/schemas/ContentText" }
+        noAddressNotice: { $ref: "#/components/schemas/ContentText" }
+        addressLoadingLabel: { $ref: "#/components/schemas/ContentText" }
+        profileLabel: { $ref: "#/components/schemas/ContentText" }
+        accountLabel: { $ref: "#/components/schemas/ContentText" }
+        logoutLabel: { $ref: "#/components/schemas/ContentText" }
+        logoutPendingLabel: { $ref: "#/components/schemas/ContentText" }
 
     AddressKindOption:
       type: object

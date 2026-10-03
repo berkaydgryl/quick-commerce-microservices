@@ -19,7 +19,7 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | Korelasyon kimliği   | ✅ `req_` + 32 hex; gelen kimlik yalnızca bu biçimdeyse korunur (D8) |
 | Zarif kapanış        | ✅ SIGINT/SIGTERM → devam eden istekler beklenir                |
 | `GET /v1/categories` | ✅ catalog `ListCategories`; bilinmeyen sorgu parametresi 400   |
-| `GET /v1/content/welcome` | ✅ Karşılama ekranının metin ve görselleri (T11.6; T11.7'de indirme bandı ve tanıtım kutuları): gömülü `internal/content/welcome.json`; açılışta doğrulanır, bozuksa gateway açılmaz; görseller `ASSET_BASE_URL` ile, mağaza bağlantıları yalnızca `https` ve olduğu gibi |
+| `GET /v1/content/welcome` | ✅ Ekran metin ve görselleri: karşılama (T11.6; T11.7'de indirme bandı ve tanıtım kutuları), adres penceresi (T11.8), şifre yenileme (T11.9), üst bar (T11.10): gömülü `internal/content/welcome.json`; açılışta doğrulanır, bozuksa gateway açılmaz; görseller `ASSET_BASE_URL` ile, mağaza bağlantıları yalnızca `https` ve olduğu gibi |
 | `GET /v1/markets?lat&lng` | ✅ Yakındaki marketler; boş bölge = boş liste, hata değil |
 | `GET /v1/markets/{id}` | ✅ Market sayfası başlığı; puan onda birden ondalığa (`47` → `4.7`) |
 | `GET /v1/markets/{id}/categories` | ✅ Marketin teklifi olan kategoriler |

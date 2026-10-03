@@ -48,6 +48,8 @@ type Welcome struct {
 	Features    []Feature   `json:"features"`
 	// AddressSetup, oturum acik ama adres yoksa acilan pencere (T11.8).
 	AddressSetup AddressSetup `json:"addressSetup"`
+	// AppHeader, oturumlu sayfalarin ust bari (T11.10).
+	AppHeader AppHeader `json:"appHeader"`
 }
 
 // Header, ust bar: logonun iki parcasi ve iki dugme.
@@ -200,6 +202,28 @@ type AddressSetup struct {
 	SavingLabel    string              `json:"savingLabel"`
 	NoMarketNotice string              `json:"noMarketNotice"`
 	Map            Map                 `json:"map"`
+}
+
+// AppHeader, uygulamanin ust bari (T11.10): logo | arama kutusu (icinde
+// teslimat adresi) | Profil. Yalnizca metinler; kural yok.
+type AppHeader struct {
+	SearchLabel       string `json:"searchLabel"`
+	SearchPlaceholder string `json:"searchPlaceholder"`
+	SearchClearLabel  string `json:"searchClearLabel"`
+	AddressLabel      string `json:"addressLabel"`
+	AddressListLabel  string `json:"addressListLabel"`
+	// Adreslerim penceresi: baslik, onay dugmesi, alt bant (Adres Ekle).
+	AddressBookTitle    string `json:"addressBookTitle"`
+	AddressConfirmLabel string `json:"addressConfirmLabel"`
+	AddressAddPrompt    string `json:"addressAddPrompt"`
+	AddressAddLabel     string `json:"addressAddLabel"`
+	AddressLoginLabel   string `json:"addressLoginLabel"`
+	NoAddressNotice     string `json:"noAddressNotice"`
+	AddressLoadingLabel string `json:"addressLoadingLabel"`
+	ProfileLabel        string `json:"profileLabel"`
+	AccountLabel        string `json:"accountLabel"`
+	LogoutLabel         string `json:"logoutLabel"`
+	LogoutPendingLabel  string `json:"logoutPendingLabel"`
 }
 
 // AddressKindOption, adres turu: sozlesmedeki tur ("HOME"), etiket ve ikon (emoji).

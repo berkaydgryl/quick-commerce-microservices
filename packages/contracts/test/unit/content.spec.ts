@@ -127,6 +127,24 @@ const WELCOME: WelcomeContent = {
   },
   features: [FEATURE],
   addressSetup: ADDRESS_SETUP,
+  appHeader: {
+    searchLabel: 'Market veya ürün ara',
+    searchPlaceholder: 'Market veya ürün ara',
+    searchClearLabel: 'Aramayı temizle',
+    addressLabel: 'Teslimat adresi',
+    addressListLabel: 'Kayıtlı adreslerin',
+    addressBookTitle: 'Adreslerim',
+    addressConfirmLabel: 'Adresi Onayla',
+    addressAddPrompt: 'Başka bir adreste misin?',
+    addressAddLabel: 'Adres Ekle',
+    addressLoginLabel: 'Adres seçmek için giriş yap',
+    noAddressNotice: 'Kayıtlı adresin yok.',
+    addressLoadingLabel: 'Adreslerin yükleniyor…',
+    profileLabel: 'Profil',
+    accountLabel: 'Hesabım',
+    logoutLabel: 'Çıkış yap',
+    logoutPendingLabel: 'Çıkış yapılıyor…',
+  },
 };
 
 const withAppDownload = (appDownload: Partial<WelcomeContent['appDownload']>) => ({
