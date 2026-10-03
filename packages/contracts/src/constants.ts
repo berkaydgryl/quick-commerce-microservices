@@ -158,6 +158,13 @@ export const CATALOG_ID_BODY_PATTERN = '[a-z0-9]+(?:-[a-z0-9]+)*';
 /** Katalog kimliginin en uzun hali; yol parametresi olarak URL'de tasinir. */
 export const CATALOG_ID_MAX_LENGTH = 64;
 
+/**
+ * Oda adinin en uzun hali: en uzun onek (store:) + en uzun katalog kimligi.
+ * Siparis odasi (order: + 36 karakter) her zaman bunun altindadir. Sinir, oda
+ * adini istemciden alan sunucuyu (realtime) uzun metni ayristirmaktan korur.
+ */
+export const ROOM_NAME_MAX_LENGTH = ROOM_PREFIX.store.length + CATALOG_ID_MAX_LENGTH;
+
 /** Market puani araligi (sabit seed verisi; yorum sistemi kapsam disi). */
 export const RATING_MIN = 0;
 export const RATING_MAX = 5;

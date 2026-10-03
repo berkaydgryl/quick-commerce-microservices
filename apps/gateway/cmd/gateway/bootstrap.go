@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"google.golang.org/grpc"
@@ -24,6 +25,7 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/httpapi"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/inventory"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/roomtoken"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rpc"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/storefront"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/telemetry"
@@ -138,6 +140,16 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 	// Tek siparis adaptoru dort siparis ucunu karsilar (T7.5).
 	orderService := order.New(orderv1.NewOrderServiceClient(orderConn), cfg.RequestTimeout)
 
+	// Siparis odasi jetonu (T12.2): sahiplik order GetOrder'la denetlenir, jeton
+	// erisim jetonundan ayri sirla imzalanir (realtime ayni sirla dogrular).
+	roomTokens := roomtoken.NewService(
+		func(ctx context.Context, userID, orderID string) error {
+			_, err := orderService.Get(ctx, userID, orderID)
+			return err
+		},
+		roomtoken.NewSigner(cfg.RealtimeTokenSecret.Bytes(), time.Now),
+	)
+
 	// Harita adres servisi (T11.8): Nominatim'e tek sira ve onbellekle gider.
 	places := geo.New(geo.Options{BaseURL: cfg.GeoBaseURL, UserAgent: cfg.GeoUserAgent, Timeout: cfg.GeoTimeout})
 
@@ -161,6 +173,7 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 		OrderPlacer:         orderService,
 		ThreeDSConfirmer:    orderService,
 		OrderGetter:         orderService,
+		OrderRoomTokens:     roomTokens,
 		// Tek kimlik servisi bes kimlik ucunu karsilar (T8.1).
 		UserRegistrar:     identity.service,
 		UserAuthenticator: identity.service,

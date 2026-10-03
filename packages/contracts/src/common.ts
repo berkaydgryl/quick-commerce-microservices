@@ -41,6 +41,15 @@ export const idSchema = z
   });
 
 /**
+ * Siparis kimligi: yalnizca `ord_` onekli calisma ani kimligi (siparis odasi,
+ * T12.2). idSchema her oneki kabul eder; oda adinda baska turden kimlik
+ * (kullanici, odeme) gecmemeli.
+ */
+export const orderIdSchema = z.string().regex(new RegExp(`^${ID_PREFIX.ORDER}_[0-9a-f]{32}$`), {
+  message: 'siparis kimligi bekleniyor',
+});
+
+/**
  * Katalog kimligi semasi uretir: "<onek>_<okunabilir-govde>" (ADR-15).
  * Seed ile gelen kimlikler icindir; UUID ya da 32 hex DEGILDIR.
  */

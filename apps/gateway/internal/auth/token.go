@@ -29,8 +29,9 @@ type accessClaims struct {
 	jwt.RegisteredClaims
 }
 
-// Tokens, erisim jetonunu (JWT, HS256) uretir ve dogrular (ADR-12). Ayni sirla
-// ileride realtime da dogrular (WebSocket el sikismasi, T13).
+// Tokens, erisim jetonunu (JWT, HS256) uretir ve dogrular (ADR-12). Realtime bu
+// jetonu KULLANMAZ: siparis odasi icin ayri sirla imzalanan kisa omurlu oda
+// jetonu vardir (internal/roomtoken, T12.2; room.join'de tasinir, ADR-06 eki).
 type Tokens struct {
 	secret []byte
 	ttl    time.Duration

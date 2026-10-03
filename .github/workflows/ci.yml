@@ -466,7 +466,7 @@ jobs:
   # ancak deploy'da duser. Ikisi de "pnpm verify"da gorunmez. Neye bakildigi
   # scripts/check-node-image.mjs'in basinda yazili.
   #
-  # Neden matris: dort imaj birbirinden bagimsiz; ayri runner'larda paralel
+  # Neden matris: imajlar birbirinden bagimsiz; ayri runner'larda paralel
   # derlenir ve kirmizi olan servis is adindan okunur. fail-fast kapali: bir
   # servisin hatasi digerlerinin sonucunu gizlemesin.
   #
@@ -484,7 +484,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [catalog-service, inventory-service, order-service, payment-service, risk-service]
+        service:
+          [
+            catalog-service,
+            inventory-service,
+            order-service,
+            payment-service,
+            realtime-service,
+            risk-service,
+          ]
     env:
       SERVICE: ${{ matrix.service }}
     steps:

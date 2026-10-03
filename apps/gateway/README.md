@@ -30,6 +30,7 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `POST /v1/orders`    | ✅ order `CreateOrder` (saga): 201 `PAID` ya da `AWAITING_PAYMENT` + `threeDs` |
 | `POST /v1/orders/{id}/3ds` | ✅ order `ConfirmPayment`; yanlış kod 402 + kalan hak |
 | `GET /v1/orders/{id}` | ✅ order `GetOrder`; başkasının siparişi 404; kilit canlıyken `reservationExpiresAt` ve `reservationTtlSeconds` (T11.4) |
+| `GET /v1/orders/{id}/token` | ✅ T12.2: sahiplik order `GetOrder` ile (başkasınınki 404, bitmiş sipariş 200); `order:{id}` odası için 60 sn'lik oda jetonu (`internal/roomtoken`, `REALTIME_TOKEN_SECRET`) |
 | `POST /v1/auth/register` | ✅ Kayıt + oturum (201); telefon benzersiz, şifre bcrypt (T8.1) |
 | `POST /v1/auth/login` | ✅ Giriş (200); yanlış şifre ile kayıtsız numara aynı cevabı alır |
 | `POST /v1/auth/password-reset` | ✅ Demo şifre yenileme (T11.9): telefon + yeni şifre, kod yok; eski oturumlar kapanır, yeni oturum açılır. **Yalnızca `NODE_ENV` production değilken bağlanır**; IP başına kimlik sınırı, anahtar istemez |
@@ -59,12 +60,14 @@ yoktur. İlk derlemeden (ve her `.proto` değişikliğinden) önce Go kodu üret
 ```bash
 pnpm proto:gen                       # TS + Go (Go icin buf + protoc eklentileri gerekir)
 cd apps/gateway
-# ASSET_BASE_URL ve JWT_SECRET zorunlu. MOCK=true: hesaplar ve tekrar kayitlari bellekte
-# (Mongo ve Redis gerekmez).
-ASSET_BASE_URL=http://localhost:5173 JWT_SECRET="$(openssl rand -hex 32)" MOCK=true go run ./cmd/gateway
+# ASSET_BASE_URL, JWT_SECRET ve REALTIME_TOKEN_SECRET zorunlu. MOCK=true: hesaplar ve tekrar
+# kayitlari bellekte (Mongo ve Redis gerekmez).
+ASSET_BASE_URL=http://localhost:5173 JWT_SECRET="$(openssl rand -hex 32)" \
+  REALTIME_TOKEN_SECRET="$(openssl rand -hex 32)" MOCK=true go run ./cmd/gateway
 # Hesaplar Mongo'da, tekrar kayitlari Redis'te kalsin (docker compose'daki Mongo ve Redis).
 # Gateway'in kendi Mongo kullanicisi (D14): kok .env'deki GATEWAY_MONGO_URI ile ayni.
 ASSET_BASE_URL=http://localhost:5173 JWT_SECRET="$(openssl rand -hex 32)" \
+  REALTIME_TOKEN_SECRET="$(openssl rand -hex 32)" \
   GATEWAY_MONGO_URI='mongodb://gateway:gateway-dev-only@localhost:27017/?directConnection=true&authSource=admin' \
   REDIS_URL=redis://localhost:6379 go run ./cmd/gateway
 curl -s localhost:8080/v1/categories | jq
@@ -76,7 +79,8 @@ go test -tags integration ./internal/authstore/ ./internal/idempotency/ ./intern
 
 `JWT_SECRET` her açılışta yeniden üretilirse önceki jetonlar geçersiz olur (kullanıcı yeniden
 giriş yapar). Kalıcı bir değer için `.env`'e bir kez yazın; `.env.example`'daki örnek değer
-production'da reddedilir.
+production'da reddedilir. `REALTIME_TOKEN_SECRET` (T12.2) aynı kurallara uyar, ayrıca `JWT_SECRET`
+ile **aynı olamaz** (gateway açılmaz) ve realtime-service'e de aynı değer verilir.
 
 Go kuralları (CI'daki golangci-lint ile aynı sürüm; Docker yeter, kurulum gerekmez):
 
@@ -92,6 +96,7 @@ docker build -f apps/gateway/Dockerfile -t getir/gateway .
 docker run --rm -p 8080:8080 \
   -e ASSET_BASE_URL=http://localhost:5173 \
   -e JWT_SECRET="$(openssl rand -hex 32)" \
+  -e REALTIME_TOKEN_SECRET="$(openssl rand -hex 32)" \
   -e GATEWAY_MONGO_URI='mongodb://gateway:gateway-dev-only@host.docker.internal:27017/?directConnection=true&authSource=admin' \
   -e REDIS_URL=redis://host.docker.internal:6379 \
   -e CATALOG_GRPC_ADDR=host.docker.internal:50051 \
@@ -319,7 +324,7 @@ bellek içi sayaç sınırı örnek sayısı kadar gevşetirdi (proje kuralları
 | `POST /v1/auth/refresh`, `/v1/auth/logout` (T8.5)         | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
 | `POST`/`DELETE /v1/cart/reserve`, `/v1/orders`, `/v1/orders/{id}/3ds` | `RATE_LIMIT_ORDER_MAX_REQUESTS` (20) | kullanıcı   |
 | Katalog, market ve genel arama uçları                     | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
-| `GET /v1/me`, `/v1/me/addresses`, `GET /v1/orders/{id}`   | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
+| `GET /v1/me`, `/v1/me/addresses`, `GET /v1/orders/{id}` (`/token` dahil) | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
 | `POST /v1/me/addresses`, `/v1/geo/*` (T11.8)               | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
 | `/healthz`                                                | sınırsız                         | —           |
 

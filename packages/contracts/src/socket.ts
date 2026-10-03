@@ -22,9 +22,10 @@ import {
   idSchema,
   isoDateTimeSchema,
   marketIdSchema,
+  orderIdSchema,
   productIdSchema,
 } from './common.js';
-import { ROOM_PREFIX } from './constants.js';
+import { ROOM_NAME_MAX_LENGTH, ROOM_PREFIX } from './constants.js';
 import { orderStatusSchema } from './order-status.js';
 
 /** Tarayiciya giden olay adlari. */
@@ -62,12 +63,30 @@ export function storeRoom(marketId: string): string {
  */
 export const seqSchema = z.number().int().positive();
 
-/** Oda adi: yalnizca iki onekten biri olabilir. */
+/**
+ * Oda adi: iki onekten biri ve ARDINDAN BICIMLI KIMLIK (T12.2).
+ *
+ * Yalnizca onek bakilsaydi "order:" ya da "order:<rastgele metin>" de oda adi
+ * sayilirdi; ad istemciden geldigi icin realtime onu kimlik semasindan gecirir:
+ * order:{orderId} (ord_ + 32 onaltilik), store:{marketId} (katalog kimligi).
+ * Uzunluk once bakilir: cok uzun metin ayristirilmaz.
+ */
 export const roomSchema = z
   .string()
-  .refine((value) => value.startsWith(ROOM_PREFIX.order) || value.startsWith(ROOM_PREFIX.store), {
-    message: 'Oda adi order: veya store: onekiyle baslamalidir',
+  .max(ROOM_NAME_MAX_LENGTH, { message: 'Oda adi cok uzun' })
+  .refine(isRoomName, {
+    message: 'Oda adi order:{siparis kimligi} ya da store:{market kimligi} olmalidir',
   });
+
+function isRoomName(value: string): boolean {
+  if (value.startsWith(ROOM_PREFIX.order)) {
+    return orderIdSchema.safeParse(value.slice(ROOM_PREFIX.order.length)).success;
+  }
+  if (value.startsWith(ROOM_PREFIX.store)) {
+    return marketIdSchema.safeParse(value.slice(ROOM_PREFIX.store.length)).success;
+  }
+  return false;
+}
 
 /**
  * Oda jetonu (GET /v1/orders/{id}/token cevabi).
@@ -81,6 +100,32 @@ export const realtimeTokenSchema = z.object({
   expiresAt: isoDateTimeSchema,
   ttlSeconds: z.number().int().positive(),
 });
+
+/**
+ * Oda jetonunun sabitleri (T12.2).
+ *
+ * Jeton ISTEMCI ICIN OPAKTIR: web yalnizca GET /v1/orders/{id}/token cevabindaki
+ * metni room.join'e koyar, icini okumaz. Bu degerler iki sunucu tarafi icindir:
+ * gateway (Go) imzalar, realtime-service dogrular. Erisim jetonundan ayri bir
+ * sirla imzalanir (REALTIME_TOKEN_SECRET): biri sizarsa digeri gecerli kalir.
+ *
+ * Go bu dosyayi import edemez; gateway'in sozlesme testi
+ * (internal/roomtoken/contract_test.go) asagidaki satirlari okuyup kendi
+ * sabitleriyle karsilastirir. Bu yuzden her alan TEK SATIRDA ve tirnakli/sayi
+ * olarak yazilir; bicim degisirse o test kirilir.
+ */
+export const REALTIME_TOKEN = {
+  /** Tek kabul edilen imza algoritmasi; baska algoritmayla gelen jeton reddedilir. */
+  ALGORITHM: 'HS256',
+  /** `iss`: erisim jetonuyla ayni verici (gateway). */
+  ISSUER: 'getir-gateway',
+  /** `aud`: erisim jetonunda yoktur; erisim jetonu oda jetonu yerine gecemez. */
+  AUDIENCE: 'realtime',
+  /** Jetonun yetkili oldugu TEK odanin tasindigi alan: order:{orderId}. */
+  ROOM_CLAIM: 'room',
+  /** Omur (sn). Yalnizca katilimda denetlenir; odadaki soket suresi dolunca atilmaz. */
+  TTL_SECONDS: 60,
+} as const;
 
 /** Istemci -> sunucu. store:* icin token gerekmez, order:* icin zorunludur. */
 export const roomJoinPayloadSchema = z.object({

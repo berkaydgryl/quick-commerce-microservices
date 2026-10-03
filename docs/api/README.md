@@ -96,6 +96,11 @@ Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci 
   yenilenince `/v1/auth/refresh` ile yeniden alır. Yanlış şifre ile kayıtsız numara aynı cevabı alır
   (`INVALID_CREDENTIALS`). Katalog uçları herkese açıktır. T7.5'teki
   `X-User-Id` geliştirme başlığı kaldırıldı.
+- **Oda jetonu** (T12.2): `GET /v1/orders/{id}/token` siparişin sahibine,
+  `order:{orderId}` odasına katılmak için 60 sn'lik jeton verir; başkasının
+  siparişi `404`. Jeton erişim jetonundan ayrı bir sırla imzalanır ve yalnızca
+  realtime'ın `room.join`'inde geçer; erişim jetonu realtime'da oda jetonu yerine
+  geçmez. Ayrıntı: [`socket-events.md`](socket-events.md) "Oda jetonu".
 - **Risk sinyalleri istemciden alınmaz** (B9): gateway bağlantının IP'sini
   order'a iletir; istemcinin yazabildiği `X-Forwarded-For` okunmaz. Cihaz, önceki
   giriş IP'si ve oturum konumu oturumdan; hesap yaşı ve hesabın açıldığı cihazdan
