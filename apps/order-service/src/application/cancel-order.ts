@@ -8,6 +8,10 @@
  * Iptalden sonra stok kilidi birakilir (T11.2, inventory Release): stok
  * baskasina acilir. Birakilamazsa kilit suresi dolunca inventory geri verir.
  *
+ * TASLAGI BIRAKMAK (T11.4, DELETE /v1/cart/reserve): gerekcesiz iptal edilen
+ * DRAFT'in notu CART_RELEASED'dir; sepeti terk etmek siparis iptali degildir ve
+ * risk gecmisinde sayilmaz. Odeme asamasindan iptal USER_CANCELLED (sayilir).
+ *
  * ODEME BEKLEYEN siparis (T11.2 PR 2, karar 5a): once payment-svc'deki kayda
  * bakilir. Para alinmissa ya da kart cekimi suruyorsa iptal EDILMEZ
  * (REQUEST_IN_PROGRESS): saga siparisi tamamlar ya da kilit dolunca supurucu
@@ -41,7 +45,7 @@ export interface CancelOrderDeps extends StockStepDeps {
 export interface CancelOrderInput {
   readonly orderId: string;
   readonly userId: string;
-  /** Gerekce ANAHTARI; verilmezse USER_CANCELLED. */
+  /** Gerekce ANAHTARI; verilmezse taslakta CART_RELEASED, digerlerinde USER_CANCELLED. */
   readonly reason?: string | undefined;
 }
 
@@ -67,14 +71,20 @@ export function createCancelOrder(deps: CancelOrderDeps): CancelOrder {
       await assertNoPaymentTaken(deps, order, scope);
     }
 
+    const releasesDraft = order.status === ORDER_STATUS.DRAFT && reason === undefined;
     const cancelled = transitionOrder(
       order,
       ORDER_STATUS.CANCELLED,
       deps.clock,
-      reason ?? TIMELINE_NOTE.USER_CANCELLED,
+      reason ?? (releasesDraft ? TIMELINE_NOTE.CART_RELEASED : TIMELINE_NOTE.USER_CANCELLED),
     );
     await deps.repository.update(cancelled, order.version, statusChangedEvents(order, cancelled));
-    await releaseStock(deps, order, RELEASE_REASON.USER_CANCELLED, scope);
+    await releaseStock(
+      deps,
+      order,
+      releasesDraft ? RELEASE_REASON.CART_RELEASED : RELEASE_REASON.USER_CANCELLED,
+      scope,
+    );
     return cancelled;
   };
 }

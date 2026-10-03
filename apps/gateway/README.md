@@ -25,10 +25,11 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `GET /v1/markets/{id}/categories` | ✅ Marketin teklifi olan kategoriler |
 | `GET /v1/markets/{id}/products` | ✅ `categoryId`, `q`, `pageToken`, `pageSize`; her üründe `availableQuantity` (T8.4, aşağıda); `isActive` (T7.6) |
 | `GET /v1/search?lat&lng&q` | ✅ Genel arama (T9.6): yakındaki marketlerde ürün ya da market adı; mesafe sırası, kapalılar sonda; market başına ilk 3 ürün + toplam; stok market başına, paralel |
-| `POST /v1/cart/reserve` | ✅ order `CreateDraftOrder` (T7.5): taslak, fiyat sunucuda; **stok kilidi yok** (T11.2) |
+| `POST /v1/cart/reserve` | ✅ order `CreateDraftOrder` (T7.5): taslak, fiyat sunucuda; stok kilitlenir (T11.2); cevapta `expiresAt` ve sunucunun saatiyle `ttlSeconds` (T11.4) |
+| `DELETE /v1/cart/reserve/{orderId}` | ✅ order `CancelOrder` (T11.4): taslağı ya da ödeme bekleyen siparişi bırakır, stok döner; zaten bırakılmışsa 200 `released:false`; parası alınmışsa 409 `REQUEST_IN_PROGRESS`; başkasının siparişi 404 |
 | `POST /v1/orders`    | ✅ order `CreateOrder` (saga): 201 `PAID` ya da `AWAITING_PAYMENT` + `threeDs` |
 | `POST /v1/orders/{id}/3ds` | ✅ order `ConfirmPayment`; yanlış kod 402 + kalan hak |
-| `GET /v1/orders/{id}` | ✅ order `GetOrder`; başkasının siparişi 404 |
+| `GET /v1/orders/{id}` | ✅ order `GetOrder`; başkasının siparişi 404; kilit canlıyken `reservationExpiresAt` ve `reservationTtlSeconds` (T11.4) |
 | `POST /v1/auth/register` | ✅ Kayıt + oturum (201); telefon benzersiz, şifre bcrypt (T8.1) |
 | `POST /v1/auth/login` | ✅ Giriş (200); yanlış şifre ile kayıtsız numara aynı cevabı alır |
 | `POST /v1/auth/password-reset` | ✅ Demo şifre yenileme (T11.9): telefon + yeni şifre, kod yok; eski oturumlar kapanır, yeni oturum açılır. **Yalnızca `NODE_ENV` production değilken bağlanır**; IP başına kimlik sınırı, anahtar istemez |
@@ -254,8 +255,9 @@ curl -s -X POST -c /tmp/getir-cerez -b /tmp/getir-cerez localhost:8080/v1/auth/l
 
 ## Tekrar koruması (`Idempotency-Key`, T8.2)
 
-Yazan dört uç (`POST /v1/auth/register`, `/v1/cart/reserve`, `/v1/orders`,
-`/v1/orders/{id}/3ds`) aynı niyetin ikinci kez işlenmesine karşı korunur (ADR-08 ve T8.2 eki).
+Yazan uçlar (`POST /v1/auth/register`, `/v1/cart/reserve`, `DELETE /v1/cart/reserve/{orderId}` (T11.4),
+`/v1/orders`, `/v1/orders/{id}/3ds`, `POST /v1/me/addresses`) aynı niyetin ikinci kez işlenmesine karşı korunur
+(ADR-08 ve T8.2 eki).
 Katmanlar: `internal/idempotency` (kayıt deposu: Redis ve bellek; HTTP bilmez),
 `internal/httpapi/idempotency.go` (ara katman: ne saklanır, ne tekrar edilir),
 `internal/redisdb` (bağlantı, `/healthz` pingi, sürücü günlüğünün JSON'a yönlendirilmesi).
@@ -315,7 +317,7 @@ bellek içi sayaç sınırı örnek sayısı kadar gevşetirdi (proje kuralları
 | -------------------------------------------------------- | -------------------------------- | ----------- |
 | `POST /v1/auth/register`, `/login`, `/phone-check`, `/password-reset` | `RATE_LIMIT_AUTH_MAX_REQUESTS` (10) | IP          |
 | `POST /v1/auth/refresh`, `/v1/auth/logout` (T8.5)         | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
-| `POST /v1/cart/reserve`, `/v1/orders`, `/v1/orders/{id}/3ds` | `RATE_LIMIT_ORDER_MAX_REQUESTS` (20) | kullanıcı   |
+| `POST`/`DELETE /v1/cart/reserve`, `/v1/orders`, `/v1/orders/{id}/3ds` | `RATE_LIMIT_ORDER_MAX_REQUESTS` (20) | kullanıcı   |
 | Katalog, market ve genel arama uçları                     | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
 | `GET /v1/me`, `/v1/me/addresses`, `GET /v1/orders/{id}`   | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
 | `POST /v1/me/addresses`, `/v1/geo/*` (T11.8)               | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |

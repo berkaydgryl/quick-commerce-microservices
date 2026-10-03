@@ -214,8 +214,9 @@ func assertLogged(t *testing.T, recorder *logRecorder, requestID string, result 
 // routeParamValues, rota taramasinin yol parametrelerine koydugu degerler.
 // Yeni bir parametre adi eklenince buraya deger yazilir; yoksa tarama durur.
 var routeParamValues = map[string]string{
-	marketIDParam: "mkt_a101-caferaga",
-	orderIDParam:  testOrderID,
+	marketIDParam:      "mkt_a101-caferaga",
+	orderIDParam:       testOrderID,
+	reservationIDParam: testOrderID,
 }
 
 type sweptRoute struct {

@@ -11,6 +11,7 @@ package order
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"google.golang.org/grpc"
@@ -20,6 +21,7 @@ import (
 	orderv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/order/v1"
 	paymentv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/payment/v1"
 
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rpc"
 )
 
@@ -33,22 +35,30 @@ type RPC interface {
 	CreateOrder(ctx context.Context, in *orderv1.CreateOrderRequest, opts ...grpc.CallOption) (*orderv1.CreateOrderResponse, error)
 	ConfirmPayment(ctx context.Context, in *orderv1.ConfirmPaymentRequest, opts ...grpc.CallOption) (*orderv1.ConfirmPaymentResponse, error)
 	GetOrder(ctx context.Context, in *orderv1.GetOrderRequest, opts ...grpc.CallOption) (*orderv1.GetOrderResponse, error)
+	CancelOrder(ctx context.Context, in *orderv1.CancelOrderRequest, opts ...grpc.CallOption) (*orderv1.CancelOrderResponse, error)
 }
+
+// cancelledStatus, order'in ORDER_STATE_INVALID ayrintisindaki "zaten iptal"
+// durumu (CancelOrder: details.status, domain adi).
+const cancelledStatus = "CANCELLED"
 
 // Service, siparis uclarinin gateway tarafi.
 type Service struct {
 	rpc     RPC
 	timeout time.Duration
+	// now, geri sayimin (ttlSeconds) ve birakma aninin saati; testte sabitlenir.
+	now func() time.Time
 }
 
 // New, adaptoru kurar. timeout, TEK bir gRPC cagrisinin ust siniridir; order
 // kendi icinde risk (1 sn) ve odeme (3 sn) cagirir, bu sinir onlardan uzun olmali.
 func New(rpc RPC, timeout time.Duration) *Service {
-	return &Service{rpc: rpc, timeout: timeout}
+	return &Service{rpc: rpc, timeout: timeout, now: time.Now}
 }
 
 // Reserve, sepeti taslak siparise cevirir (POST /v1/cart/reserve ->
-// CreateDraftOrder). Stok bugun kilitlenmez (T11.2); cevapta expiresAt yoktur.
+// CreateDraftOrder). Stok taslakta kilitlenir (T11.2): cevapta bitis ani ve
+// kalan saniye (T11.4).
 func (s *Service) Reserve(ctx context.Context, in ReserveInput) (Reservation, error) {
 	lines := make([]*orderv1.CartLine, 0, len(in.Items))
 	for _, item := range in.Items {
@@ -77,7 +87,57 @@ func (s *Service) Reserve(ctx context.Context, in ReserveInput) (Reservation, er
 	if err != nil {
 		return Reservation{}, rpc.RenameFields(err, reserveFieldNames)
 	}
-	return toReservation(response)
+	return toReservation(response, s.now())
+}
+
+// Release, rezervasyonu birakir (DELETE /v1/cart/reserve/{orderId} ->
+// CancelOrder, T11.4): taslak ya da odeme bekleyen siparis iptal edilir, stok
+// doner. Kurallar order'dadir: parasi alinmissa REQUEST_IN_PROGRESS, odenmis
+// ya da baska son durumdaki siparis ORDER_STATE_INVALID, baskasinin siparisi
+// NOT_FOUND.
+//
+// Zaten iptal edilmis siparis (kullanici iptali ya da suresi dolup supurulmus)
+// HATA DEGIL: released false ve iptal ani (siparisin son guncellenmesi). Istek
+// tekrar guvenlidir; farkli Idempotency-Key ile gelse de ayni cevabi alir.
+func (s *Service) Release(ctx context.Context, in ReleaseInput) (ReservationRelease, error) {
+	request := &orderv1.CancelOrderRequest{
+		OrderId:        in.OrderID,
+		UserId:         in.UserID,
+		IdempotencyKey: in.IdempotencyKey,
+	}
+
+	_, err := rpc.Invoke(ctx, s.timeout, service, "CancelOrder", s.rpc.CancelOrder, request)
+	if err == nil {
+		return ReservationRelease{
+			OrderID:    in.OrderID,
+			Released:   true,
+			ReleasedAt: s.now().UTC().Format(time.RFC3339Nano),
+		}, nil
+	}
+	if !alreadyCancelled(err) {
+		return ReservationRelease{}, rpc.RenameFields(err, releaseFieldNames)
+	}
+
+	found, err := s.Get(ctx, in.UserID, in.OrderID)
+	if err != nil {
+		return ReservationRelease{}, err
+	}
+	releasedAt := found.UpdatedAt
+	if releasedAt == "" {
+		releasedAt = found.CreatedAt
+	}
+	return ReservationRelease{OrderID: in.OrderID, Released: false, ReleasedAt: releasedAt}, nil
+}
+
+// alreadyCancelled, iptal edilemedi cunku siparis ZATEN iptal: order'in
+// ORDER_STATE_INVALID hatasi, ayrintida status CANCELLED.
+func alreadyCancelled(err error) bool {
+	var appErr *apperror.Error
+	if !errors.As(err, &appErr) || appErr.Code != apperror.CodeOrderStateInvalid {
+		return false
+	}
+	status, isText := appErr.Details["status"].(string)
+	return isText && status == cancelledStatus
 }
 
 // Place, taslagi siparise cevirir (POST /v1/orders -> CreateOrder): risk,
@@ -128,7 +188,7 @@ func (s *Service) Get(ctx context.Context, userID, orderID string) (Order, error
 	if err != nil {
 		return Order{}, rpc.RenameFields(err, getFieldNames)
 	}
-	return toOrder(response.GetOrder())
+	return toOrder(response.GetOrder(), s.now())
 }
 
 // toProtoSignals, sinyalleri proto'ya cevirir. Bilinmeyen konum ve hesap yasi

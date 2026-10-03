@@ -6,15 +6,20 @@ import (
 	"github.com/gofiber/fiber/v3"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
 )
 
-// Siparis uclari (T7.5; openapi: reserveCart, createOrder,
-// submitThreeDsChallenge, getOrder). Hepsi kimlik ister (requireUser); yazan
-// uclar Idempotency-Key ister. Her handler ayni sirayi kurar: bilinmeyen sorgu
+// Siparis uclari (T7.5; openapi: reserveCart, releaseCartReservation (T11.4),
+// createOrder, submitThreeDsChallenge, getOrder). Hepsi kimlik ister
+// (requireUser); yazan uclar Idempotency-Key ister. Her handler ayni sirayi kurar: bilinmeyen sorgu
 // parametresini reddet -> basligi ve govdeyi bicim olarak dogrula -> cagir ->
 // zarfla. Bicim hatalari TEK cevapta toplanir.
 
 const orderIDParam = "id"
+
+// reservationIDParam, DELETE /v1/cart/reserve/{orderId}'nin yol parametresi
+// (openapi OrderIdPath; siparis uclarindaki "id"den ayri ad).
+const reservationIDParam = "orderId"
 
 // reserveCartHandler, POST /v1/cart/reserve: sepeti taslak siparise cevirir.
 func reserveCartHandler(reserver CartReserver) fiber.Handler {
@@ -38,6 +43,32 @@ func reserveCartHandler(reserver CartReserver) fiber.Handler {
 			return err
 		}
 		return ok(c, http.StatusCreated, reservation)
+	}
+}
+
+// releaseReservationHandler, DELETE /v1/cart/reserve/{orderId}: taslagi ya da
+// odeme bekleyen siparisi birakir, stok doner (T11.4). Govde okunmaz.
+// Zaten birakilmissa 200 ve released false (hata degil).
+func releaseReservationHandler(releaser ReservationReleaser) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if err := rejectUnknownQuery(c); err != nil {
+			return err
+		}
+		errs := fieldErrors{}
+		key := idempotencyKeyOf(c, errs)
+		if len(errs) > 0 {
+			return apperror.New(apperror.CodeValidationFailed, errs)
+		}
+
+		released, err := releaser.Release(outgoingContext(c), order.ReleaseInput{
+			UserID:         userIDOf(c),
+			OrderID:        c.Params(reservationIDParam),
+			IdempotencyKey: key,
+		})
+		if err != nil {
+			return err
+		}
+		return ok(c, http.StatusOK, released)
 	}
 }
 

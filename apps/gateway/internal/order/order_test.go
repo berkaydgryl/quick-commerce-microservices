@@ -43,7 +43,7 @@ func TestReserveMapsRequestAndResponse(t *testing.T) {
 	if sent.GetExpectedTotal().GetAmountMinor() != 19_360 || sent.GetCouponCode() != "ILK10" {
 		t.Errorf("beklenen toplam ve kupon tasinmali: %v", sent)
 	}
-	// Stok rezervasyonu (T11.2) yok: expiresAt HIC yazilmamali.
+	// Kilitsiz (T11.2 oncesi) taslak: expiresAt ve ttlSeconds HIC yazilmamali.
 	if got := testkit.JSON(t, reservation); got != `{"orderId":"`+orderID+`","status":"DRAFT"}` {
 		t.Errorf("cevap: %s", got)
 	}

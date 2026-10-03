@@ -25,6 +25,8 @@ export const RELEASE_REASON = {
   RISK_REVIEW: 'risk_review',
   PAYMENT_FAILED: 'payment_failed',
   CART_REPLACED: 'cart_replaced',
+  /** Kullanici taslagi birakti (T11.4). */
+  CART_RELEASED: 'cart_released',
   RESERVATION_EXPIRED: 'reservation_expired',
   /** Kilit alindi ama taslak yazilamadi: kilit hemen geri verilir. */
   DRAFT_NOT_SAVED: 'draft_not_saved',
@@ -126,14 +128,16 @@ export function holdsNoStock(order: Order): boolean {
 
 /**
  * Sistemin taslak iptal notlari (T11.2): stok yetmedi, sure doldu, sepet
- * yenilendi. Kullanici davranisi DEGIL; risk gecmisinde "iptal" sayilmaz.
+ * yenilendi, sepet birakildi (T11.4). Siparis iptali DEGIL; risk gecmisinde
+ * "iptal" sayilmaz ve kullanici CancelOrder gerekcesi olarak gonderemez.
  * Saga'nin durduran adimlari gibi hata sozlugunun anahtarini yazar (sepet
- * yenileme bir hata olmadigi icin TIMELINE_NOTE).
+ * yenileme ve birakma bir hata olmadigi icin TIMELINE_NOTE).
  */
 export const SYSTEM_CANCELLATION_NOTES: readonly string[] = [
   ERROR_CODES.STOCK_INSUFFICIENT,
   ERROR_CODES.RESERVATION_EXPIRED,
   TIMELINE_NOTE.CART_REPLACED,
+  TIMELINE_NOTE.CART_RELEASED,
 ];
 
 /** Siparis sistem tarafindan mi iptal edildi (son kaydin notu)? */
