@@ -16,7 +16,8 @@ Müşteri arayüzü: React 18 + Vite + TypeScript. Tarayıcı yalnızca gateway 
 | Ortak durumlar          | ✅ `QueryStatus`: yükleniyor / hata / boş; \"Tekrar dene\" yalnızca geçici hatada                                                               |
 | Zustand (sepet, oturum) | ✅ Sepet (`useCartStore`, `getir.cart`); seçili adres (`useAddressStore`, `getir.address`); oturum (bellekte)                                   |
 | Kimlik (T8.5, T11.6)    | ✅ Karşılama kartında telefon → şifre / kayıt; `/hesabim` (korumalı); sessiz yenileme, sekmeler arası kilit (aşağıda)                           |
-| Teslimat adresi (T9.5)  | ✅ Ana sayfada aramanın üstünde; hesabın adresleri; marketler ve arama seçili adresin konumuyla (aşağıda)                                       |
+| Teslimat adresi (T9.5)  | ✅ Üst bardaki arama kutusunun sağ ucunda (T11.10); hesabın adresleri; marketler ve arama seçili adresin konumuyla (aşağıda)                    |
+| Üst bar (T11.10)        | ✅ Mor, yapışkan: logo \| arama (içinde adres) \| Profil; telefonda iki satır (aşağıda)                                                         |
 | Adres ekleme (T11.8)    | ✅ Adressiz hesap `/`'da karşılama ekranının üstünde iki adımlı pencere: harita (Leaflet + OSM) ve detay; kaydedince ana sayfa (aşağıda)        |
 
 ## Karşılama ve giriş ekranı (T11.6)
@@ -31,7 +32,7 @@ olarak açılır (getir.com gibi); adres `/giris` ve `/kayit` olur.
 | İçerik           | `features/content` (`GET /v1/content/welcome`)                       | Karşılama ekranı ve pencerelerin **bütün** metin ve görselleri; kodda sabit ekran metni yok                                                 |
 | Üst bar          | `pages/welcome/WelcomeHeader.tsx`                                    | Mor bar: logo (sarı "getir" + beyaz "market", rozetsiz), "Giriş yap" ve "Kayıt ol" pencere açar                                             |
 | Banner           | `pages/welcome/WelcomeHero.tsx`                                      | h1 görselin kendisi (slogan görselde, alt metin içerikten); `srcset` 960/1920/3200; karartma yok                                            |
-| Telefon kartı    | `features/auth/ui/PhoneEntryForm.tsx`                                | "Devam Et" giriş penceresini numarayla açar; altında "Kayıt ol →" ve (geliştirmede) demo hesaplar                                           |
+| Telefon kartı    | `features/auth/ui/PhoneEntryForm.tsx`                                | "Devam Et" giriş penceresini numarayla açar; altında tek satırda "Şifremi unuttum \| Kayıt ol →" ve (geliştirmede) demo hesaplar            |
 | Kategoriler      | `pages/welcome/WelcomeCategories.tsx`, `catalog/ui/CategoryGrid.tsx` | 13 kategori (CC0 görseller) ızgarada, mobil 3 sütun; tıklama giriş penceresini açar                                                         |
 | İndirme bandı    | `pages/welcome/WelcomeAppDownload.tsx`                               | Açık zeminde mor kutu: başlık, alt metin, App Store / Google Play rozetleri (yeni sekme, `noopener`); telefonlar sağa ve alta yaslı (T11.7) |
 | Tanıtım kutuları | `pages/welcome/WelcomeFeatures.tsx`                                  | Üç beyaz kutu: görsel (süs) + mor metin; telefonda alt alta, tablet ve üstünde yan yana (T11.7)                                             |
@@ -153,9 +154,28 @@ okunamazsa ana sayfa açılır.
   ana sayfaya geçer. Anahtar `createIntentKeys`: aynı gövdenin tekrarı aynı anahtar, düzeltilen gövde yeni
   anahtar (409 CONFLICT yaşanmaz). Aynı ad başlığın altında, dolu defter formun üstünde gösterilir.
 
+## Üst bar (T11.10)
+
+Oturumlu sayfaların (ana sayfa, `/markets`, market sayfası, `/hesabim`) mor, yapışkan barı; referans
+getirçarşı. Karşılama ekranının barıyla aynı renk; logo sarı "getir" + beyaz "market". Metinler içerik ucundan
+(`appHeader`).
+
+| Parça           | Dosya                                                                  | İş                                                                                                                                                                                                                         |
+| --------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| İskelet         | `shared/ui/page-layout/PageLayout.tsx`, `header-slot.ts`               | Tek satır: logo \| arama \| hesap. Telefonda iki satır: üstte logo + hesap, altta tam genişlik arama                                                                                                                       |
+| Birleştirme     | `app/AppHeader.tsx`, `app/AppShell.tsx`                                | Yuvaları doldurur: arama adresi tanımaz, adres giriş yolunu tanımaz                                                                                                                                                        |
+| Arama           | `features/search/ui/HeaderSearch.tsx`, `services/search-route`         | Ana sayfada yazdıkça `?ara=`; başka sayfada Enter ana sayfadaki sonuçlara götürür                                                                                                                                          |
+| Adres           | `features/address/ui/HeaderAddressPicker.tsx`, `AddressBookDialog.tsx` | Kutunun sağ ucunda "🏠 Ev ›" (teslimat süresi yok); tıklayınca "Adreslerim" penceresi (radyo + "Adresi Onayla"); alt banttaki "Adres Ekle" T11.8'in harita + detay penceresini açar (X yalnızca kapatır, detayda geri + X) |
+| Profil          | `features/auth/ui/HeaderAccount.tsx`                                   | Menü: "Hesabım", "Çıkış yap"; oturumsuzken "Giriş yap"                                                                                                                                                                     |
+| Açılır listeler | `shared/ui/disclosure/useDisclosure.ts`                                | Esc, dışarı tıklama ve seçim kapatır; odak düğmeye döner                                                                                                                                                                   |
+
+- **Neden başka sayfada Enter:** yazarken ana sayfaya geçilseydi bar yeniden kurulur, klavye odağı kaybolurdu.
+- **Odak halkası:** mor barda beyaz, açılır beyaz panellerde mor (halka kaldırılmaz, rengi değişir).
+
 ## Teslimat adresi (T9.5) — tasarımsız kabuk
 
-Ana sayfada arama kutusunun üstünde "Teslimat adresi" satırı. Yakındaki marketler (ana sayfada kategori
+T11.10'dan beri üst bardaki arama kutusunun sağ ucunda (yukarıda); önce ana sayfada arama kutusunun
+üstündeydi. Yakındaki marketler (ana sayfada kategori
 şeridinin altında ve `/markets`) ile genel arama **seçili adresin konumuyla** sorulur; adres değişince hemen
 yenilenir. Kural veri katmanında, arayüz yalnızca çizer.
 
@@ -166,10 +186,10 @@ yenilenir. Kural veri katmanında, arayüz yalnızca çizer.
 | Kalıcılık | `features/address/services/address-selection.ts`                 | `getir.address`: sürüm, okunan kaydın doğrulanması                                       |
 | Depo      | `features/address/stores/useAddressStore.ts`                     | Zustand; saf fonksiyonları bağlar, kural yazmaz                                          |
 | Hook'lar  | `useAddressBook`, `useDeliveryLocation`, `useAddressStorageSync` | Kaynaklar tek yerde (oturum, defter, seçim); sayfaların konumu; sekmeler arası eşitleme  |
-| Kabuk     | `features/address/ui/AddressSelector.tsx`                        | Düğme ve hemen altında açılan liste (ad + adres satırı)                                  |
+| Kabuk     | `features/address/ui/HeaderAddressPicker.tsx`                    | Üst bardaki düğme ve "Adreslerim" penceresi (radyo + onay, Adres Ekle)                   |
 
 - **Kimin adresi:** oturumdaki hesabın adres defteri (T9.5 PR 2; en fazla 10, kayıt sırasında). Oturumsuz
-  ziyaretçi varsayılan "Ev"i görür, altında "Adres seçmek için giriş yap" (dönüş bu sayfa, arama korunur).
+  ziyaretçi varsayılan "Ev"i görür; düğme giriş ekranına götürür (dönüş bu sayfa, arama korunur).
   Adresi olmayan hesap "Kayıtlı adresin yok.", defteri okunamayan oturum sunucunun mesajını ve "Tekrar
   dene"yi görür; ikisi de varsayılan "Ev"i kullanır. Varsayılanın seed'deki "Ev" ile aynı kaldığını
   `delivery-address.spec.ts` denetler.
@@ -179,8 +199,8 @@ yenilenir. Kural veri katmanında, arayüz yalnızca çizer.
 - **Önce doğru konum:** oturum ve defter çözülene kadar konuma bağlı sorgu **gitmez** (`skipToken`, konumu
   `null` olan ayrı sorgu anahtarı); bölümler "yükleniyor" gösterir. İstek önce varsayılan konuma gidip sonra
   değişmez (canlı testte 800 ms geciktirilen defterle ölçüldü).
-- **Liste:** düğmenin hemen altında açılır, içeriği aşağı iter; seçim ya da Esc kapatır ve odak düğmeye
-  döner. Kurye notu seçicide görünmez.
+- **Adreslerim:** pencere; seçim "Adresi Onayla"ya kadar uygulanmaz, X ve Esc değiştirmeden kapatır. Aynı adla
+  ikinci adres olmadığı için ekleme formu boşta olan adı önerir ("Ev 2"). Kurye notu seçicide görünmez.
 - **Sepet dokunulmaz:** adres değişince sepet aynı kalır; ürünün yeni adreste satılıp satılmadığına
   rezervasyon karar verir (T11.4).
 - **Sekmeler arası:** bir sekmede seçilen adres diğerlerine `storage` olayıyla gelir (sepetle aynı yol).

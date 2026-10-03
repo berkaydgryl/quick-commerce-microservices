@@ -1,18 +1,21 @@
 [
   {
     "title": "Ev",
+    "kind": "HOME",
     "line": "Caferağa Mah. Moda Cad. No:12, Kadıköy",
     "location": { "lat": 40.9885, "lng": 29.0262 },
     "note": "Zil çalışmıyor, gelince arayın."
   },
   {
     "title": "İş",
+    "kind": "WORK",
     "line": "Sinanpaşa Mah. Barbaros Blv. No:40, Beşiktaş",
     "location": { "lat": 41.0431, "lng": 29.0071 },
     "note": "Resepsiyona bırakabilirsiniz."
   },
   {
     "title": "Yazlık",
+    "kind": "OTHER",
     "line": "Ağva Mah. Sahil Yolu No:3, Şile",
     "location": { "lat": 41.1363, "lng": 29.8539 },
     "note": "Site girişinde güvenliğe haber verin."

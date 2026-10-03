@@ -62,7 +62,9 @@ type geoPoint struct {
 }
 
 type address struct {
-	Title    string   `json:"title"`
+	Title string `json:"title"`
+	// Kind, adres turu (T11.10: ust bardaki ikon; auth.AddressKind*).
+	Kind     string   `json:"kind"`
 	Line     string   `json:"line"`
 	Location geoPoint `json:"location"`
 	Note     string   `json:"note"`
@@ -102,7 +104,7 @@ func Load() (Set, error) {
 	set := Set{Password: people.Password, Accounts: people.Accounts}
 	for _, item := range addresses {
 		set.Addresses = append(set.Addresses, auth.SavedAddress{
-			Title: item.Title, Line: item.Line, Location: auth.GeoPoint(item.Location), Note: item.Note,
+			Title: item.Title, Kind: item.Kind, Line: item.Line, Location: auth.GeoPoint(item.Location), Note: item.Note,
 		})
 	}
 	if err := set.validate(); err != nil {
@@ -165,6 +167,15 @@ func (s Set) validate() error {
 	// defteri yazmaz, okuma kesmesi sessiz veri kaybina donusmesin.
 	if len(s.Addresses) > auth.MaxSavedAddresses {
 		problems = append(problems, fmt.Errorf("hazir adres en fazla %d olmali: %d", auth.MaxSavedAddresses, len(s.Addresses)))
+	}
+	// Hazir adresler kullanicinin ekledigi adresle ayni kurallara uyar (T11.8:
+	// tur, uzunluklar, konum); tur ust barda ikon olur (T11.10).
+	for _, address := range s.Addresses {
+		location := address.Location
+		input := auth.AddressInput{Title: address.Title, Kind: address.Kind, Line: address.Line, Location: &location, Note: address.Note}
+		if invalid := input.Check(); len(invalid) > 0 {
+			problems = append(problems, fmt.Errorf("hazir adres %q: %v", address.Title, invalid))
+		}
 	}
 	return errors.Join(problems...)
 }

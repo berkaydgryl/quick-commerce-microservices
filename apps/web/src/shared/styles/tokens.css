@@ -120,6 +120,14 @@
   --size-landing-phones: 39.625rem;
   --size-feature-image: clamp(7.5rem, 6rem + 4vw, 9.5rem);
 
+  /* Uygulamanin ust bari (T11.10): ortadaki arama kutusunun en fazla genisligi
+     (referans getircarsi: logo ile Profil arasinda, ortada), kutunun icindeki
+     adres adinin en fazla genisligi ve Profil menusunun en az genisligi. */
+  --container-max-header-search: 40rem;
+  --size-header-search: 2.75rem;
+  --size-header-address-title: 8rem;
+  --size-header-menu-min: 12rem;
+
   /* Adres ekleme penceresi (T11.8): harita icin giris penceresinden genis;
      1. adimin haritasi ekran yuksekligiyle olceklenir, 2. adimda kucuk
      onizleme. Pin haritanin ortasindadir (harita altinda kayar). */

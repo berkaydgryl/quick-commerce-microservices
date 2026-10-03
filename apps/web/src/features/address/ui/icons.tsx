@@ -19,6 +19,14 @@ export function ChevronDownIcon() {
   );
 }
 
+export function ChevronRightIcon() {
+  return (
+    <svg {...STROKE_PROPS}>
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+  );
+}
+
 export function CheckIcon() {
   return (
     <svg {...STROKE_PROPS}>

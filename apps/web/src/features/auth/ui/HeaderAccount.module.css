@@ -1,17 +1,24 @@
+/*
+ * Ust barin hesap alani (T11.10): mor zeminde beyaz yazi; Profil menusu
+ * dugmenin altinda saga yasli beyaz panel (panelde odak halkasi yine mor).
+ */
 .c-header-account {
   display: inline-flex;
   gap: var(--space-2);
   align-items: center;
   padding: var(--space-2);
   font-weight: var(--font-weight-bold);
-  color: var(--color-brand-primary);
+  color: var(--text-on-brand);
   text-decoration: none;
+  cursor: pointer;
+  background: none;
+  border: none;
   border-radius: var(--radius-pill);
   transition: background var(--duration-fast) var(--easing-standard);
 }
 
 .c-header-account:hover {
-  background: var(--color-brand-primary-subtle);
+  background: var(--color-brand-primary-strong);
 }
 
 .c-header-account__icon {
@@ -19,9 +26,14 @@
   width: var(--size-header-icon);
 }
 
-/* Dar ekranda yalnizca ikon: logo ortada kalir, metin sigmaz. */
-.c-header-account__text {
+/* Dar ekranda yalnizca ikon. */
+.c-header-account__text,
+.c-header-account__chevron {
   display: none;
+}
+
+.c-header-account__chevron {
+  width: var(--size-field-icon);
 }
 
 .c-header-account__placeholder {
@@ -30,12 +42,68 @@
   aspect-ratio: 1;
 }
 
+.c-header-account__menu {
+  position: relative;
+}
+
+.c-header-account__panel {
+  --focus-ring-color: var(--color-brand-primary);
+
+  position: absolute;
+  inset-block-start: calc(100% + var(--space-2));
+  inset-inline-end: 0;
+  z-index: var(--z-popover);
+  min-width: var(--size-header-menu-min);
+  overflow: hidden;
+  color: var(--text-default);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-raised);
+}
+
+.c-header-account__list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.c-header-account__item {
+  display: block;
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-default);
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.c-header-account__item:hover {
+  color: var(--color-brand-primary);
+  background: var(--color-brand-primary-subtle);
+}
+
+.c-header-account__item:disabled {
+  cursor: progress;
+  opacity: var(--opacity-disabled);
+}
+
+.c-header-account__error {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-sm);
+  color: var(--text-danger);
+}
+
 @media (--bp-md) {
   .c-header-account {
     padding-inline: var(--space-3);
   }
 
-  .c-header-account__text {
-    display: inline;
+  .c-header-account__text,
+  .c-header-account__chevron {
+    display: inline-flex;
   }
 }

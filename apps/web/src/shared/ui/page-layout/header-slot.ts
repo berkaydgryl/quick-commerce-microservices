@@ -2,11 +2,20 @@ import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 
 /**
- * Basligin sag ucundaki yuva (T8.5). Uygulama katmani doldurur (hesap
- * baglantisi, app/AppShell.tsx); paylasilan duzen ozellikleri tanimaz.
+ * Basligin yuvalari (T8.5; T11.10'dan beri iki yuva). Uygulama katmani
+ * doldurur (app/AppShell.tsx); paylasilan duzen ozellikleri tanimaz.
  */
-export const HeaderSlotContext = createContext<ReactNode>(null);
+export interface HeaderSlots {
+  /** Ortadaki arama kutusu (icinde teslimat adresi; T11.10). */
+  readonly search: ReactNode;
+  /** Sagdaki hesap alani (Profil ya da Giris yap). */
+  readonly account: ReactNode;
+}
 
-export function useHeaderSlot(): ReactNode {
+const EMPTY: HeaderSlots = { search: null, account: null };
+
+export const HeaderSlotContext = createContext<HeaderSlots>(EMPTY);
+
+export function useHeaderSlots(): HeaderSlots {
   return useContext(HeaderSlotContext);
 }

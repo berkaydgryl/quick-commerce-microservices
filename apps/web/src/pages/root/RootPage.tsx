@@ -12,14 +12,15 @@ import { WelcomePage } from '../welcome/WelcomePage';
  * adresi olmayan kullanici adres ekleme penceresini, adresi olan kullanici
  * ana sayfayi (market listesi) gorur. Karar address-gate.ts'te.
  *
- * Karsilama icerigi yalnizca gerekince istenir: oturum belli olmadan
- * (acilistaki sessiz yenilemeyle paralel) ve adres eklenecekken.
+ * Ekran icerigi (metinler) oturum belli olmadan istenir, acilistaki sessiz
+ * yenilemeyle paralel: karsilama, adres penceresi ve ust bar (T11.10) ondan
+ * okur.
  */
 export function RootPage() {
   const status = useSessionStore((state) => state.status);
   const userId = useSessionStore((state) => state.user?.id ?? null);
   const view = rootView(status, addressBookState(useSavedAddresses(userId)));
-  useWelcomeContent(status !== 'authenticated' || view === 'address-setup');
+  useWelcomeContent();
 
   switch (view) {
     case 'wait':

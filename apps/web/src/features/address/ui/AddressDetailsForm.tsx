@@ -10,6 +10,7 @@ import { AuthField } from '../../auth/ui/AuthField';
 import { focusFirstInvalid, showServerErrors } from '../../auth/ui/form-errors';
 import { useNearbyMarkets } from '../../markets/hooks/useNearbyMarkets';
 import { useAddAddress } from '../hooks/useAddAddress';
+import { useSavedAddresses } from '../hooks/useSavedAddresses';
 import {
   ADDRESS_BOOK_FIELD,
   ADDRESS_FORM_FIELDS,
@@ -33,6 +34,8 @@ interface AddressDetailsFormProps {
   readonly location: GeoPoint;
   /** Noktanin adres satiri; bulunamadiysa bos ve uyarili. */
   readonly resolved: ResolvedLine;
+  /** Kayittan sonra (ust bardan eklemede pencereyi kapatir). */
+  readonly onSaved?: (() => void) | undefined;
 }
 
 /**
@@ -48,9 +51,12 @@ export function AddressDetailsForm({
   userId,
   location,
   resolved,
+  onSaved,
 }: AddressDetailsFormProps) {
   const adding = useAddAddress(userId);
   const markets = useNearbyMarkets(location);
+  // Defterdeki adlar: onerilen baslik bunlardan biri olmasin ("Ev 2").
+  const taken = (useSavedAddresses(userId).data ?? []).map((address) => address.title);
   const [formMessage, setFormMessage] = useState<string | null>(null);
   const {
     control,
@@ -63,7 +69,7 @@ export function AddressDetailsForm({
     formState: { errors, isSubmitting },
   } = useForm<AddressFormValues, unknown, AddressFormOutput>({
     resolver: zodResolver(addressFormSchema),
-    defaultValues: initialAddressValues(content.kinds, resolved.line),
+    defaultValues: initialAddressValues(content.kinds, resolved.line, taken),
     // Odak sirasi form-errors.ts'te: react-hook-form kayit sirasiyla gezer.
     shouldFocusError: false,
   });
@@ -77,6 +83,7 @@ export function AddressDetailsForm({
     setFormMessage(null);
     try {
       await adding.mutateAsync(toCreateAddressRequest(values, location));
+      onSaved?.();
     } catch (error) {
       const feedback = formFeedback(error, [...ADDRESS_FORM_FIELDS, ADDRESS_BOOK_FIELD]);
       showServerErrors(ADDRESS_FORM_FIELDS, feedback.fields, setError);
@@ -126,7 +133,7 @@ export function AddressDetailsForm({
               kinds={content.kinds}
               value={field.value}
               onChange={(kind) => {
-                setValue('title', titleForKind(content.kinds, getValues('title'), kind));
+                setValue('title', titleForKind(content.kinds, getValues('title'), kind, taken));
                 field.onChange(kind);
               }}
             />

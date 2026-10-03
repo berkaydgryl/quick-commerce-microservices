@@ -4,10 +4,9 @@ import type { ReactNode } from 'react';
 import styles from './AddressDialog.module.css';
 import { BackIcon, CloseIcon } from './icons';
 
-/** Basliktaki tek dugme: 1. adimda kapat (X, sagda), 2. adimda geri (ok, solda). */
+/** Basliktaki bir dugme: geri (solda, ok) ya da kapat (sagda, X). */
 export interface AddressDialogAction {
-  readonly kind: 'close' | 'back';
-  /** Erisilebilir ad (icerikten: "Kapat", "Geri"). */
+  /** Erisilebilir ad (icerikten: "Geri", "Kapat"). */
   readonly label: string;
   readonly onAction: () => void;
   readonly disabled?: boolean;
@@ -15,21 +14,27 @@ export interface AddressDialogAction {
 
 interface AddressDialogProps {
   readonly title: string;
-  readonly action: AddressDialogAction;
+  /** Soldaki geri oku (detay adimi). */
+  readonly back?: AddressDialogAction | undefined;
+  /** Sagdaki X. */
+  readonly close?: AddressDialogAction | undefined;
+  /** Alttaki gri bant ("Baska bir adreste misin? Adres Ekle"). */
+  readonly footer?: ReactNode;
   readonly children: ReactNode;
 }
 
 /**
- * Adres ekleme penceresi (T11.8; referans: getir.com "Teslimat Adresi Ekle"):
- * karsilama ekraninin ustunde, tarayicinin <dialog> ogesiyle (showModal: odak
- * pencerede, arka plan etkisiz). Esc basliktaki dugmeyle ayni isi yapar.
+ * Adres pencereleri (T11.8, T11.10; referans: getir.com "Teslimat Adresi Ekle",
+ * "Adreslerim"): sayfanin ustunde, tarayicinin <dialog> ogesiyle (showModal:
+ * odak pencerede, arka plan etkisiz). Esc once geri gider (detay adimi), geri
+ * yoksa kapatir.
  *
  * Giris penceresinden (AuthDialog) farki: karartmaya tiklamak KAPATMAZ.
  * Haritayi surukleyen fare pencerenin disinda birakilirsa tarayici bunu
- * karartmaya tiklama sayar; kapatma burada cikis demek oldugu icin kaza ile
- * olmamali.
+ * karartmaya tiklama sayar; adres penceresi kaza ile kapanmamali (ilk adres
+ * penceresinde kapatmak cikis demektir).
  */
-export function AddressDialog({ title, action, children }: AddressDialogProps) {
+export function AddressDialog({ title, back, close, footer, children }: AddressDialogProps) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
 
@@ -41,44 +46,49 @@ export function AddressDialog({ title, action, children }: AddressDialogProps) {
     return () => element?.close();
   }, []);
 
-  const button = (
-    <button
-      type="button"
-      className={`${styles['c-address-dialog__action']} ${
-        styles[
-          action.kind === 'close'
-            ? 'c-address-dialog__action--close'
-            : 'c-address-dialog__action--back'
-        ]
-      }`}
-      aria-label={action.label}
-      disabled={action.disabled}
-      onClick={action.onAction}
-    >
-      {action.kind === 'close' ? <CloseIcon /> : <BackIcon />}
-    </button>
-  );
-
+  const escape = back ?? close;
   return (
     <dialog
       ref={dialog}
       className={styles['c-address-dialog']}
       aria-labelledby={titleId}
       onCancel={(event) => {
-        // Esc: tarayici kapatmasin; basliktaki dugmeyle ayni is.
+        // Esc: tarayici kapatmasin; geri ya da kapat dugmesiyle ayni is.
         event.preventDefault();
-        if (action.disabled !== true) {
-          action.onAction();
+        if (escape !== undefined && escape.disabled !== true) {
+          escape.onAction();
         }
       }}
     >
       <div className={styles['c-address-dialog__header']}>
+        {back !== undefined && (
+          <button
+            type="button"
+            className={`${styles['c-address-dialog__action']} ${styles['c-address-dialog__action--back']}`}
+            aria-label={back.label}
+            disabled={back.disabled}
+            onClick={back.onAction}
+          >
+            <BackIcon />
+          </button>
+        )}
         <h2 id={titleId} className={styles['c-address-dialog__title']}>
           {title}
         </h2>
-        {button}
+        {close !== undefined && (
+          <button
+            type="button"
+            className={`${styles['c-address-dialog__action']} ${styles['c-address-dialog__action--close']}`}
+            aria-label={close.label}
+            disabled={close.disabled}
+            onClick={close.onAction}
+          >
+            <CloseIcon />
+          </button>
+        )}
       </div>
       <div className={styles['c-address-dialog__body']}>{children}</div>
+      {footer !== undefined && <div className={styles['c-address-dialog__footer']}>{footer}</div>}
     </dialog>
   );
 }

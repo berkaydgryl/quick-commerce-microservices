@@ -1,0 +1,85 @@
+/*
+ * Adreslerim (T11.10; referans getircarsi): radyo satirlari (ikon, kalin ad,
+ * parantez icinde tek satira kisalan adres), mor "Adresi Onayla", alt bantta
+ * "Adres Ekle".
+ */
+.c-address-book__list {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: none;
+}
+
+/* Grubun adi ekran okuyucuya; ekranda pencere basligi yeter. */
+.c-address-book__legend {
+  position: absolute;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.c-address-book__option {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-width: 0;
+  padding: var(--space-3) var(--space-2);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast) var(--easing-standard);
+}
+
+.c-address-book__option:hover {
+  background: var(--color-brand-primary-subtle);
+}
+
+.c-address-book__radio {
+  flex: none;
+  width: var(--size-field-icon);
+  height: var(--size-field-icon);
+  margin: 0;
+  accent-color: var(--color-brand-primary);
+  cursor: pointer;
+}
+
+.c-address-book__icon {
+  flex: none;
+  font-size: var(--font-size-lg);
+  line-height: var(--line-height-tight);
+}
+
+/* Ad ve adres tek satir; uzun adres kisalir (referans). */
+.c-address-book__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.c-address-book__title {
+  font-weight: var(--font-weight-bold);
+}
+
+.c-address-book__line {
+  color: var(--text-muted);
+}
+
+.c-address-book__add {
+  margin: 0;
+}
+
+.c-address-book__add-link {
+  padding: 0;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.c-address-book__add-link:hover {
+  text-decoration: underline;
+}

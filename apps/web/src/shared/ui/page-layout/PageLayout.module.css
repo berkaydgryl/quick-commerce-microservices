@@ -1,31 +1,45 @@
+/*
+ * Sayfa iskeleti (T11.10). Mor ust bar karsilama ekranininkiyle ayni: sayfa
+ * kaydirilinca ustte sabit kalir. Barin icinde odak halkasi beyazdir: mor
+ * zeminde mor halka gorunmezdi (halka kalir, rengi degisir).
+ */
 .c-page-layout__header {
+  --focus-ring-color: var(--text-on-brand);
+
   position: sticky;
   top: 0;
   z-index: var(--z-header);
   padding-block: var(--space-3);
-  background: var(--bg-surface);
-  box-shadow: var(--shadow-surface);
+  color: var(--text-on-brand);
+  background: var(--color-brand-primary);
 }
 
-/* Mobil: logo ortada, yuva sagda (ortadaki sutun logonun kendi genisligi). */
+/* Telefon: ustte logo ve hesap, altta tam genislikte arama. */
 .c-page-layout__bar {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-areas:
+    'brand actions'
+    'search search';
+  grid-template-columns: 1fr auto;
   gap: var(--space-3);
   align-items: center;
 }
 
 .c-page-layout__brand {
   display: flex;
-  grid-column: 2;
-  justify-content: center;
+  grid-area: brand;
   font-size: var(--font-size-xl);
   text-decoration: none;
 }
 
+.c-page-layout__search {
+  grid-area: search;
+  min-width: 0;
+}
+
 .c-page-layout__actions {
   display: flex;
-  grid-column: 3;
+  grid-area: actions;
   justify-content: flex-end;
 }
 
@@ -33,18 +47,18 @@
   padding-block: var(--space-4);
 }
 
+/* Tablet ve genis: tek satir, arama ortada ve en fazla --container-max-header-search. */
 @media (--bp-md) {
   .c-page-layout__bar {
-    grid-template-columns: auto 1fr;
+    grid-template-areas: 'brand search actions';
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: var(--space-5);
   }
 
-  .c-page-layout__brand {
-    grid-column: 1;
-    justify-content: flex-start;
-  }
-
-  .c-page-layout__actions {
-    grid-column: 2;
+  .c-page-layout__search {
+    justify-self: center;
+    width: 100%;
+    max-width: var(--container-max-header-search);
   }
 
   .c-page-layout__main {

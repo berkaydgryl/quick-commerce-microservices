@@ -43,17 +43,34 @@ export type AddressFormField = (typeof ADDRESS_FORM_FIELDS)[number];
 export const ADDRESS_BOOK_FIELD = 'addresses';
 
 /**
- * Formun acilis degerleri: ilk tur secili, baslik onun etiketi ("Ev"); satir
- * haritadan cozulen adres (bulunamadiysa bos, kullanici yazar).
+ * Defterde olmayan ilk ad (T11.10): ayni adla ikinci adres kaydedilmez
+ * (secici adla secer, T11.8), bu yuzden ikinci "Ev" "Ev 2" olarak onerilir.
+ */
+export function uniqueTitle(label: string, taken: readonly string[]): string {
+  if (!taken.includes(label)) {
+    return label;
+  }
+  let number = 2;
+  while (taken.includes(`${label} ${number}`)) {
+    number += 1;
+  }
+  return `${label} ${number}`;
+}
+
+/**
+ * Formun acilis degerleri: ilk tur secili, baslik onun etiketi ("Ev"; defterde
+ * varsa "Ev 2"); satir haritadan cozulen adres (bulunamadiysa bos, kullanici
+ * yazar).
  */
 export function initialAddressValues(
   kinds: readonly AddressKindOption[],
   line: string,
+  taken: readonly string[] = [],
 ): AddressFormValues {
   const [first] = kinds;
   return {
     kind: first?.kind ?? 'HOME',
-    title: first?.label ?? '',
+    title: first === undefined ? '' : uniqueTitle(first.label, taken),
     line,
     building: '',
     floor: '',
@@ -64,17 +81,27 @@ export function initialAddressValues(
 
 /**
  * Tur degisince baslik: kullanici basligi elle degistirmediyse (bos ya da hala
- * bir turun etiketi) yeni turun etiketi; degistirdiyse yazdigi kalir.
+ * bir turun onerilen adi: "Ev", "Ev 2") yeni turun defterde olmayan adi;
+ * degistirdiyse yazdigi kalir.
  */
 export function titleForKind(
   kinds: readonly AddressKindOption[],
   currentTitle: string,
   nextKind: AddressKind,
+  taken: readonly string[] = [],
 ): string {
   const trimmed = currentTitle.trim();
-  const followsKind = trimmed === '' || kinds.some((option) => option.label === trimmed);
+  const followsKind =
+    trimmed === '' ||
+    kinds.some((option) => trimmed === option.label || isNumbered(trimmed, option.label));
   const label = kinds.find((option) => option.kind === nextKind)?.label;
-  return followsKind && label !== undefined ? label : currentTitle;
+  return followsKind && label !== undefined ? uniqueTitle(label, taken) : currentTitle;
+}
+
+/** "Ev 2" gibi onerilmis ad mi. */
+function isNumbered(title: string, label: string): boolean {
+  const suffix = title.slice(label.length + 1);
+  return title.startsWith(`${label} `) && /^[0-9]+$/.test(suffix);
 }
 
 /** Dogrulanmis form + haritadaki konum -> istek govdesi; bos istege bagli alan yazilmaz. */
