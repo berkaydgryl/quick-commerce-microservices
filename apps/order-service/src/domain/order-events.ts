@@ -13,7 +13,11 @@
  *   payment.refund_requested  telafi komutu: iade dogrudan yapilamadi (T7.1 borcu)
  */
 
-import type { PaymentCancelRequestedPayload, RefundRequestedPayload } from '@getir/contracts';
+import type {
+  OrderStatusChangedPayload,
+  PaymentCancelRequestedPayload,
+  RefundRequestedPayload,
+} from '@getir/contracts';
 import { EVENTS, ID_PREFIX, newId, ORDER_STATUS } from '@getir/core';
 import type { EventName, OrderStatus } from '@getir/core';
 
@@ -86,21 +90,24 @@ export function statusChangedEvents(before: Order, after: Order): readonly Order
   return added.flatMap((entry, index) => {
     const previous = after.timeline[before.timeline.length + index - 1];
     const version = before.version + index + 1;
+    // Govde sozlesme tipindedir (T12.3): realtime ayni semayla dogrular, alan
+    // adi burada degisirse derleme kirilir.
+    const payload: OrderStatusChangedPayload = {
+      orderId: after.id,
+      userId: after.userId,
+      marketId: after.marketId,
+      ...(previous === undefined ? {} : { from: previous.status }),
+      to: entry.status,
+      ...(entry.note === undefined ? {} : { note: entry.note }),
+      version,
+    };
     const changed: OrderEvent = {
       eventId: newId(ID_PREFIX.EVENT),
       topic: EVENTS.ORDER_STATUS_CHANGED,
       orderId: after.id,
       version,
       occurredAt: entry.at,
-      payload: {
-        orderId: after.id,
-        userId: after.userId,
-        marketId: after.marketId,
-        ...(previous === undefined ? {} : { from: previous.status }),
-        to: entry.status,
-        ...(entry.note === undefined ? {} : { note: entry.note }),
-        version,
-      },
+      payload,
     };
     const cancelsPayment =
       entry.status === ORDER_STATUS.CANCELLED &&

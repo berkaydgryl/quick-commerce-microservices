@@ -19,6 +19,7 @@
   "dependencies": {
     "@getir/contracts": "workspace:*",
     "@getir/core": "workspace:*",
+    "@getir/event-bus": "workspace:*",
     "@getir/observability": "workspace:*",
     "@getir/redis-kit": "workspace:*",
     "@getir/service-kit": "workspace:*",

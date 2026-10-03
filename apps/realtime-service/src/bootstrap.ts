@@ -6,7 +6,8 @@
  * dugmesi (shutdown) tek seferliktir; ikinci cagri ayni sozu doner.
  *
  * Testler ve main.ts ayni fonksiyonu cagirir: Redis adapter'i verilirse kopyalar
- * odalari paylasir, verilmezse bellek adapter'i (tek kopya).
+ * odalari paylasir, verilmezse bellek adapter'i (tek kopya). Olay dinleme (T12.3)
+ * yayin kapisi hazir olunca baslar ve kapanista ILK durur (D9).
  */
 
 import { createServer } from 'node:http';
@@ -34,6 +35,7 @@ import { createBroadcast } from './application/broadcast.js';
 import type { Broadcast } from './application/broadcast.js';
 import { createJoinRoom } from './application/join-room.js';
 import { SERVICE_NAME } from './config/constants.js';
+import type { EventConsuming } from './events.js';
 import type { RedisAdapterHandle } from './infrastructure/redis-adapter.js';
 import {
   createRoomTokenVerifier,
@@ -58,13 +60,18 @@ export interface RealtimeServerOptions {
   readonly clock?: Clock;
   /** Socket.io kapanisinin ust siniri (ms). */
   readonly shutdownTimeoutMs?: number;
+  /**
+   * Olay dinleme (T12.3): yayin kapisiyla baslatilir. Verilmezse dinleme yok
+   * (MOCK: Redis yok, D10; testlerin cogu).
+   */
+  readonly events?: (broadcast: Broadcast) => Promise<EventConsuming>;
 }
 
 export interface RealtimeServer {
   /** Gercekten dinlenen port. */
   readonly port: number;
   readonly metricsPort: number;
-  /** Odaya yayin kapisi (T12.3'teki tuketici kullanacak). */
+  /** Odaya yayin kapisi: olay tuketicisi (T12.3) ve testler kullanir. */
   readonly broadcast: Broadcast;
   /** Zarif kapanis; hata firlatmaz, ikinci cagri ayni sozu doner. */
   shutdown(reason: string): Promise<void>;
@@ -101,25 +108,38 @@ export async function startRealtimeServer(options: RealtimeServerOptions): Promi
   const metrics = await openMetrics(io, { host: options.host, port: options.port, logger });
   logger.info({ host: options.host, port, metricsPort: metrics.port }, 'realtime dinlemede');
 
+  const broadcast = createBroadcast({
+    emitter: {
+      emit: (room, event, payload) => {
+        io.to(room).emit(event, payload);
+      },
+    },
+    metrics: realtimeMetrics,
+    logger,
+  });
+  const events = await startEvents(options.events, broadcast, async () => {
+    // Dinleme acilamadiysa acilmis port ve metrik ucu askida kalmasin.
+    await io.close();
+    await metrics.close();
+  });
+
   let shutdownPromise: Promise<void> | undefined;
   return {
     port,
     metricsPort: metrics.port,
-    broadcast: createBroadcast({
-      emitter: {
-        emit: (room, event, payload) => {
-          io.to(room).emit(event, payload);
-        },
-      },
-      metrics: realtimeMetrics,
-      logger,
-    }),
+    broadcast,
     shutdown: (reason) => {
       shutdownPromise ??= (async () => {
         logger.info({ reason }, 'realtime kapaniyor');
         closing = true;
         await runShutdown(
           [
+            // Once olay dinleme (D9): yeni olay alinmaz, eldeki parti yayinlanip onaylanir.
+            {
+              name: 'olay dinleme',
+              run: () => events?.stop() ?? Promise.resolve(),
+              timeoutMs: DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS,
+            },
             {
               name: 'socket.io',
               run: () => io.close(),
@@ -144,6 +164,23 @@ export async function startRealtimeServer(options: RealtimeServerOptions): Promi
       return shutdownPromise;
     },
   };
+}
+
+/** Olay dinlemeyi baslatir; baslatilamazsa `undo` ile acilmis olani kapatip hatayi yeniden firlatir. */
+async function startEvents(
+  start: RealtimeServerOptions['events'],
+  broadcast: Broadcast,
+  undo: () => Promise<void>,
+): Promise<EventConsuming | undefined> {
+  if (start === undefined) {
+    return undefined;
+  }
+  try {
+    return await start(broadcast);
+  } catch (error: unknown) {
+    await undo();
+    throw error;
+  }
 }
 
 /** Metrik ucunu acar (port + 1000); acamazsa acilmis sunucu askida kalmasin diye kapatir. */

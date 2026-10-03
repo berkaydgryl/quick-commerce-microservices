@@ -8,11 +8,13 @@ Sunucu olayları iç olay veri yolundan (Redis Streams) alır ve yalnızca odaya
 yayınlar; istemci sunucuya **veri yazmaz**. Bu yüzden aşağıdaki tabloda tek bir
 istemci → sunucu olayı vardır (`room.join`), geri kalanı tek yönlüdür.
 
-> **Bugünkü durum (T12.1 + T12.2):** sunucu, odalar, oda yetkisi ve kopyalar
-> arası yayın (Redis adapter) hazır. İş olaylarının yayını henüz yok:
-> `order.status` T12.3'te; `reservation.expiring` / `reservation.released`
-> bekleyen iş #82; `stock.changed` bekleyen iş #83 (önce inventory'nin olayı
-> üretmesi gerekir). Tablolar hedef sözleşmedir.
+> **Bugünkü durum (T12.3):** sunucu, odalar, oda yetkisi, kopyalar arası yayın
+> (Redis adapter) ve **`order.status` canlı**: sipariş her durum değiştirdiğinde
+> olay ~1 sn içinde siparişin odasına gelir (bkz. "order.status teslimi").
+> Diğer olayların yayını henüz yok: `reservation.expiring` /
+> `reservation.released` bekleyen iş #82; `stock.changed` bekleyen iş #83 (önce
+> inventory'nin olayı üretmesi gerekir); kurye olayları T13/T14. Tablolar hedef
+> sözleşmedir.
 
 ## İstemci notu (web)
 
@@ -96,7 +98,7 @@ göre sadeleştirilir. `realtime-service` bu çeviriyi tek yerde yapar.
 
 | İç olay (Redis Streams)                                                                     | Soket olayı            | Not                                                                              |
 | ------------------------------------------------------------------------------------------- | ---------------------- | -------------------------------------------------------------------------------- |
-| `order.status_changed`                                                                      | `order.status`         | Aynı olay; soket tarafında kısa ad kullanılır                                    |
+| `order.status_changed`                                                                      | `order.status`         | Aynı olay (T12.3): `to` → `status`, `from` → `previousStatus`, `version` → `seq` |
 | `stock.released`                                                                            | `reservation.released` | Sipariş odasına, kullanıcının kendi rezervasyonu için                            |
 | `stock.changed`                                                                             | `stock.changed`        | Depo odasına yayın; birebir aynı ad                                              |
 | `courier.assigned`                                                                          | `courier.assigned`     | Birebir aynı                                                                     |
@@ -107,12 +109,14 @@ göre sadeleştirilir. `realtime-service` bu çeviriyi tek yerde yapar.
 
 ### Alan notları
 
-- **`seq`** — sipariş odasındaki her olay, o sipariş için 1'den başlayan ve
-  monoton artan bir sıra numarası taşır. Socket.io yeniden bağlanmada olay
-  sırasını garanti etmediği için istemci, gördüğü en büyük `seq` değerinden
-  küçük ya da eşit gelen olayı **yok sayar**. Özellikle `courier.location`
-  COURIER_TICK_MS (2000 ms) aralığıyla aktığından, gecikmeli gelen eski bir
-  konum haritada kuryeyi geri sıçratmamalıdır.
+- **`seq`** — sipariş odasındaki her olay, o sipariş için monoton artan bir
+  sıra numarası taşır. Socket.io yeniden bağlanmada olay sırasını garanti
+  etmediği için istemci, gördüğü en büyük `seq` değerinden küçük ya da eşit gelen
+  olayı **yok sayar**. Özellikle `courier.location` COURIER_TICK_MS (2000 ms)
+  aralığıyla aktığından, gecikmeli gelen eski bir konum haritada kuryeyi geri
+  sıçratmamalıdır. `order.status`'ta `seq` **siparişin sürümüdür** (T12.3): taslak
+  1. sürümdür, ilk geçiş 2'dir; artar ama aralıksız olmak zorunda değildir
+     (siparişin durum dışı güncellemeleri de sürümü artırır).
 - **`status`** — Tek doğruluk kaynağı `packages/core/src/constants.ts` içindeki
   `ORDER_STATUS` sabitidir; `openapi.yaml` içindeki `OrderStatus` enum'u da aynı
   listedir: `DRAFT`, `RISK_CHECK`, `REVIEW`, `RESERVED`, `AWAITING_PAYMENT`,
@@ -140,6 +144,27 @@ Her olay realtime'daki tek yayın kapısından geçer (`application/broadcast.ts
   odasına gider; olaydaki `orderId`/`marketId` odanınkiyle aynı olmalıdır.
 - Redis adapter sayesinde bir kopyadan yapılan yayın bütün kopyalardaki
   soketlere ulaşır.
+
+### `order.status` teslimi (T12.3)
+
+- **Kaynak:** order her durum geçişinde iç olay `order.status_changed` yazar
+  (outbox → `stream:events`). Realtime `realtime` tüketici grubunda dinler ve
+  siparişin odasına `{ orderId, status, previousStatus?, at, seq }` yayınlar.
+  Tek yazımda birden çok geçiş olabilir (risk adımı: `RISK_CHECK` → `RESERVED` →
+  `AWAITING_PAYMENT`); her biri ayrı olaydır ve `seq`'leri ardışıktır.
+- **`at`** geçişin zaman çizelgesindeki anıdır (yayın anı değil).
+- **En az bir kez teslim:** aynı olay istemciye birden fazla kez gelebilir
+  (realtime yayından sonra çökerse olay yeniden teslim edilir ve yeniden
+  yayınlanır). **İstemci `seq` ≤ gördüğü değerse olayı atar**; tekrar zararsızdır.
+- **Eski sürüm yayınlanmaz:** realtime siparişe yayınladığı son sürümü Redis'te
+  tutar (`realtime:{orderId}:seq`, 24 saat ömür, her yazımda yenilenir) ve daha
+  eski sürümü odaya göndermez. Eşit sürüm (aynı olayın tekrarı) yeniden yayınlanır.
+- **Yalnızca bağlantıdan sonrası:** grup ilk kez kurulurken yalnızca bundan sonraki
+  olayları okur; soket akışı geçmişi oynatmaz. İstemci odaya katılınca durumu
+  `GET /v1/orders/{id}` ile bir kez okur, sonra olayları uygular.
+- **Süre:** order'ın outbox yayıncısı en fazla ~500 ms'de bir basar, tüketici
+  yeni kaydı beklemeden alır; geçişten istemciye hedef **1 sn**.
+- İç alanlar (`userId`, iptal notu) sokete çıkmaz.
 
 ## Bağlantı akışı
 

@@ -219,6 +219,9 @@ importers:
       '@getir/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@getir/event-bus':
+        specifier: workspace:*
+        version: link:../../packages/event-bus
       '@getir/observability':
         specifier: workspace:*
         version: link:../../packages/observability

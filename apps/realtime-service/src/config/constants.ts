@@ -63,7 +63,27 @@ export const ADAPTER_CHANNEL_PREFIX = 'realtime';
 export const REDIS_CONNECTION_NAME = {
   PUB: 'realtime-pub',
   SUB: 'realtime-sub',
+  /** Olay tuketicisi (T12.3): XREADGROUP BLOCK beklerken baska komut calistiramaz. */
+  EVENTS: 'realtime-events',
 } as const;
+
+/**
+ * Olay hatti tuketici grubu (T12.3): grup = servis adi (event-bus README). Kopyalar
+ * ayni grupta isi paylasir; her olay tek kopyada islenir, Redis adapter yayini
+ * butun kopyalara dagitir.
+ */
+export const EVENT_CONSUMER_GROUP = SERVICE_NAME;
+
+/** Tuketici adindaki makine adi parcasinin en uzun hali (ad en fazla 128 karakter). */
+export const CONSUMER_HOST_MAX_LENGTH = 100;
+
+/**
+ * Siparis odasina yayinlanan son surumun Redis'teki omru (T12.3): her yazimda
+ * yenilenir. Yeniden teslim en fazla dakikalar icinde biter (event-bus:
+ * claimIdleMs x maxDeliveries); 24 saat bunu rahatca kapsar. Anahtar dolsa bile
+ * istemci seq <= gordugu degeri atar; kayip yalnizca gereksiz bir tekrar olur.
+ */
+export const SEQ_TTL_MS = 24 * 60 * 60 * 1_000;
 
 /** Konteyner saglik kontrolunun tek istegi icin ust sinir (ms). */
 export const HEALTHCHECK_TIMEOUT_MS = 2_000;

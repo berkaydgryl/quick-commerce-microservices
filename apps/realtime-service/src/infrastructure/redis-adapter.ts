@@ -42,6 +42,11 @@ export type AdapterFactory = ReturnType<typeof createAdapter>;
 
 export interface RedisAdapterHandle {
   readonly adapter: AdapterFactory;
+  /**
+   * Yayin (pub) baglantisinin kendisi (sarilmamis): abone moduna gecmez, bu yuzden
+   * siradan komutlar (surum kaydi, T12.3) bunu paylasir.
+   */
+  readonly commands: RedisConnection['redis'];
   /** Iki baglanti da hazir mi? Saglik ucu (D7) bunu sorar; I/O yapmaz. */
   isReady(): boolean;
   /** Iki baglantiyi kapatir; hata firlatmaz. */
@@ -79,6 +84,7 @@ export async function openRedisAdapter(options: RedisAdapterOptions): Promise<Re
       catchUnawaited(sub, REDIS_CONNECTION_NAME.SUB, options.logger),
       { key: ADAPTER_CHANNEL_PREFIX },
     ),
+    commands: pub.redis,
     isReady: () => pub.redis.status === 'ready' && sub.redis.status === 'ready',
     close: async () => {
       await Promise.all([pub.close(), sub.close()]);
