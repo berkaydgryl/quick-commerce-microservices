@@ -5,6 +5,13 @@
  * sifirlama (* { margin: 0 }) onu ezerdi.
  */
 .c-address-dialog {
+  /* Pencere ust barin icinde cizilir ve barin beyaz halka rengini kalitirdi;
+     beyaz zeminde halka gorunmezdi (QA B1). Halka kalir, rengi mor olur. */
+  --focus-ring-color: var(--color-brand-primary);
+
+  /* Pencere DOM'da arama kutusunun icinde: kutunun "icine cizen" mesafesi kalitilmasin. */
+  --focus-ring-offset: var(--focus-ring-offset-base);
+
   width: min(100% - var(--space-gutter) * 2, var(--container-max-address-dialog));
   max-width: none;
   margin: auto;

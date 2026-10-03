@@ -170,7 +170,16 @@ getirçarşı. Karşılama ekranının barıyla aynı renk; logo sarı "getir" +
 | Açılır listeler | `shared/ui/disclosure/useDisclosure.ts`                                | Esc, dışarı tıklama ve seçim kapatır; odak düğmeye döner                                                                                                                                                                   |
 
 - **Neden başka sayfada Enter:** yazarken ana sayfaya geçilseydi bar yeniden kurulur, klavye odağı kaybolurdu.
-- **Odak halkası:** mor barda beyaz, açılır beyaz panellerde mor (halka kaldırılmaz, rengi değişir).
+  Oturumsuz ziyaretçinin Enter'ı giriş ekranına gider, dönüş arama sonuçlarıdır (`app/header-search-href.ts`;
+  ana sayfası karşılama ekranı olduğu için arama orada kaybolurdu).
+- **Odak halkası:** mor barda beyaz; beyaz arama kutusunda mor ve kutunun içine çizilir; adres pencereleri ve
+  Profil menüsü gibi beyaz panellerde mor (halka kaldırılmaz, rengi değişir; değişken kalıtılır, başka bloğa seçici
+  yazılmaz).
+- **Metinler:** logo ve bütün bar metinleri içerikten (`header.brand/service`, `appHeader`); varsayılan adresin adı
+  "Ev" türünün etiketi (`services/delivery-label.ts`).
+- **İçerik gelmezse:** logo ve Profil menüsü içerik yedeğiyle (`@getir/contracts` `CONTENT_FALLBACK`; değerler
+  `welcome.json` ile aynı, test karşılaştırır), arama kutusunun yerinde hata mesajı ve "Tekrar dene". Oturumdaki
+  kullanıcı her durumda çıkış yapabilir ve Hesabım'a gidebilir.
 
 ## Teslimat adresi (T9.5) — tasarımsız kabuk
 
