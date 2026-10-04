@@ -16,6 +16,9 @@ var (
 	ErrAddressTitleTaken = errors.New("bu adla kayitli adres var")
 	// ErrAddressBookFull, adres defteri MaxSavedAddresses'a ulasti.
 	ErrAddressBookFull = errors.New("adres defteri dolu")
+	// ErrEmailTaken, e-posta adresi baska bir hesapta dogrulanmis (T11.14;
+	// users.email benzersiz).
+	ErrEmailTaken = errors.New("e-posta baska hesapta kayitli")
 )
 
 // UserStore, kullanici kayitlari. Arayuz KULLANAN tarafta (servis) tanimlidir;

@@ -253,6 +253,9 @@ func TestIndexesAreDeclaredAndIdempotent(t *testing.T) {
 	if index, found := users["registrationDeviceId"]; !found || index["sparse"] != true {
 		t.Errorf("users.registrationDeviceId seyrek indeksi olmali: %v", users)
 	}
+	if index, found := users["email_unique"]; !found || index["unique"] != true || index["partialFilterExpression"] == nil {
+		t.Errorf("users.email kismi benzersiz olmali (T11.14): %v", users)
+	}
 }
 
 func TestServiceFlowOnMongo(t *testing.T) {
@@ -762,5 +765,76 @@ func TestConcurrentFavoriteAddsStayUniqueAndBounded(t *testing.T) {
 	}
 	if entries, err := store.List(t.Context(), user.ID); err != nil || len(entries) != favorites.MaxMarkets {
 		t.Errorf("liste siniri asmamali: %d %v", len(entries), err)
+	}
+}
+
+func TestVerifiedEmailRoundTripAndUniqueness(t *testing.T) {
+	// T11.14: dogrulanmis adres kullanici belgesinde; e-postasiz hesaplar
+	// (alan yok) kismi indekse girmez, iki hesapta ayni adres olamaz.
+	db := testDatabase(t)
+	users := authstore.NewMongoUsers(db)
+	ayse, mehmet, cansu := newUser("+905321234567"), newUser("+905321234568"), newUser("+905321234569")
+	for _, u := range []auth.User{ayse, mehmet, cansu} {
+		if err := users.Create(t.Context(), u); err != nil {
+			t.Fatalf("kullanici yazilamadi: %v", err)
+		}
+	}
+	verifiedAt := time.Now().UTC().Truncate(time.Millisecond)
+
+	if err := users.SetVerifiedEmail(t.Context(), ayse.ID, "ayse@ornek.com", verifiedAt); err != nil {
+		t.Fatalf("adres yazilamadi: %v", err)
+	}
+	read, err := users.ByID(t.Context(), ayse.ID)
+	if err != nil || read.Email != "ayse@ornek.com" || !read.EmailVerifiedAt.Equal(verifiedAt) || read.Profile().Email != "ayse@ornek.com" {
+		t.Errorf("adres ve zamani okunmali: %+v (%v)", read, err)
+	}
+	if owner, err := users.EmailOwner(t.Context(), "ayse@ornek.com"); err != nil || owner != ayse.ID {
+		t.Errorf("adresin sahibi: %q (%v)", owner, err)
+	}
+	if owner, err := users.EmailOwner(t.Context(), "yok@ornek.com"); err != nil || owner != "" {
+		t.Errorf("kimsede olmayan adres bos donmeli: %q (%v)", owner, err)
+	}
+	if err := users.SetVerifiedEmail(t.Context(), mehmet.ID, "ayse@ornek.com", verifiedAt); !errors.Is(err, auth.ErrEmailTaken) {
+		t.Errorf("baska hesaptaki adres ErrEmailTaken donmeli: %v", err)
+	}
+	if err := users.SetVerifiedEmail(t.Context(), ids.New(ids.User), "yeni@ornek.com", verifiedAt); !errors.Is(err, auth.ErrUserNotFound) {
+		t.Errorf("olmayan kullanici ErrUserNotFound donmeli: %v", err)
+	}
+	// Adres degisince eskisi serbest kalir.
+	if err := users.SetVerifiedEmail(t.Context(), ayse.ID, "ayse.yeni@ornek.com", verifiedAt); err != nil {
+		t.Fatalf("adres degistirilemedi: %v", err)
+	}
+	if err := users.SetVerifiedEmail(t.Context(), mehmet.ID, "ayse@ornek.com", verifiedAt); err != nil {
+		t.Errorf("serbest kalan adres alinabilmeli: %v", err)
+	}
+	if read, err := users.ByID(t.Context(), cansu.ID); err != nil || read.Email != "" || !read.EmailVerifiedAt.IsZero() {
+		t.Errorf("e-postasiz hesap bos kalmali: %+v (%v)", read, err)
+	}
+}
+
+func TestConcurrentVerificationsOfOneEmailSucceedOnce(t *testing.T) {
+	// Iki hesap ayni adresi ayni anda dogrularsa karar benzersiz indekstedir.
+	db := testDatabase(t)
+	users := authstore.NewMongoUsers(db)
+	accounts := make([]auth.User, concurrency)
+	for i := range concurrency {
+		accounts[i] = newUser(fmt.Sprintf("+90532123%04d", i))
+		if err := users.Create(t.Context(), accounts[i]); err != nil {
+			t.Fatalf("kullanici yazilamadi: %v", err)
+		}
+	}
+	var next sync.Mutex
+	index := 0
+
+	errs := race(func() error {
+		next.Lock()
+		user := accounts[index]
+		index++
+		next.Unlock()
+		return users.SetVerifiedEmail(context.Background(), user.ID, "ortak@ornek.com", time.Now().UTC())
+	})
+
+	if verified, taken := countOutcomes(errs, auth.ErrEmailTaken); verified != 1 || taken != concurrency-1 {
+		t.Errorf("tek hesap dogrulamali: %d dogrulandi, %d reddedildi (%v)", verified, taken, errs)
 	}
 }

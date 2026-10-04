@@ -26,7 +26,7 @@ export const PHONE_PATTERN = /^\+905[0-9]{9}$/;
 /** Cep numarasinin ilk rakami (PHONE_PATTERN): form, yanlis ilk rakami yazilir yazilmaz uyarir. */
 export const PHONE_MOBILE_PREFIX = '5';
 
-/** 3DS tek kullanimlik kodu: tam 6 rakam. */
+/** Tek kullanimlik kod: tam 6 rakam (3DS; T11.14'ten beri e-posta dogrulama kodu da). */
 export const OTP_PATTERN = /^[0-9]{6}$/;
 
 /**
@@ -85,6 +85,26 @@ export const SAVED_ADDRESSES_MAX = 10;
  * catalog'un toplu okuma siniri MAX_BATCH_MARKET_IDS (iki esitlik testlerle).
  */
 export const FAVORITE_MARKETS_MAX = 50;
+
+/**
+ * E-posta adresi (T11.14): profilde DOGRULANARAK eklenen iletisim alani; kimlik
+ * degildir, giris yine telefon + sifredir (ADR-12 eki). 254, RFC 5321'in yol
+ * siniridir. Desen bilincli olarak sadedir (tek @, iki yanda bosluksuz metin,
+ * alan adinda nokta): adresin gercek oldugunu bicim degil, gonderilen kod
+ * kanitlar. Gateway ayni deseni uygular (emailverify; contract_test esitligini
+ * denetler); Zod'un .email() kurali Go'da birebir yazilamazdi.
+ */
+export const EMAIL_MAX_LENGTH = 254;
+export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * E-posta dogrulama kodu (T11.14, kullanicinin karari A2): 6 rakam (OTP_PATTERN),
+ * 10 dakika gecerli, 5 yanlis denemede iptal, yeni kod en erken 60 saniye
+ * sonra. Gateway'deki karsiliklari emailverify paketinde (contract_test).
+ */
+export const EMAIL_CODE_TTL_SECONDS = 600;
+export const EMAIL_CODE_MAX_ATTEMPTS = 5;
+export const EMAIL_CODE_RESEND_SECONDS = 60;
 
 /**
  * Kupon kodunun en uzun hali (ornek: ILK10). Bilinmeyen kod zaten

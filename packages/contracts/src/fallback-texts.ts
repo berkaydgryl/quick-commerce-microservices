@@ -1,4 +1,4 @@
-import type { FavoritesContent, MarketListContent } from './content.js';
+import type { FavoritesContent, MarketListContent, ProfileContent } from './content.js';
 
 /**
  * Market listesinin yedegi (T11.12): icerik gelmese de marketler, dukkan turu
@@ -69,6 +69,35 @@ const FAVORITES_FALLBACK: FavoritesContent = {
   favoritesMenuLabel: 'Favori İşletmeler',
 };
 
+/** Profil kartinin ve e-posta penceresinin yedegi (T11.14): icerik gelmese de e-posta dogrulanabilir. */
+const PROFILE_FALLBACK: ProfileContent = {
+  fullNameLabel: 'Ad soyad',
+  phoneLabel: 'Telefon',
+  emailLabel: 'E-posta',
+  addEmailLabel: 'E-posta ekle',
+  editEmailLabel: 'E-posta adresini düzenle',
+  verifiedLabel: 'Doğrulandı',
+  loadingLabel: 'Bilgilerin yükleniyor…',
+  emailDialog: {
+    title: 'E-posta adresi',
+    closeLabel: 'Kapat',
+    emailDescription: 'Bu adrese 6 haneli bir doğrulama kodu göndereceğiz.',
+    emailFieldLabel: 'E-posta adresi',
+    sendLabel: 'Kod gönder',
+    sendingLabel: 'Gönderiliyor…',
+    codeSentToLabel: 'Doğrulama kodunu şu adrese gönderdik:',
+    codeFieldLabel: 'Doğrulama kodu',
+    verifyLabel: 'Doğrula',
+    verifyingLabel: 'Doğrulanıyor…',
+    expiresInLabel: 'Kodun geçerlilik süresi',
+    expiredNotice: 'Kodun süresi doldu. Yeni kod isteyebilirsin.',
+    resendLabel: 'Kodu yeniden gönder',
+    resendWaitLabel: 'Yeni kodu isteyebilmen için',
+    changeEmailLabel: 'E-posta adresini değiştir',
+    verifiedToast: 'E-posta adresin doğrulandı.',
+  },
+};
+
 /**
  * Icerik yedegi (T11.10 duzeltmesi): GET /v1/content/welcome hata verirse
  * ust barin calismasi icin gereken en az metin. Oturumdaki kullanici icerik
@@ -99,6 +128,8 @@ export const CONTENT_FALLBACK = {
   marketList: MARKET_LIST_FALLBACK,
   /** favorites: bloğun tamami (T11.13). */
   favorites: FAVORITES_FALLBACK,
+  /** profile: bloğun tamami (T11.14). */
+  profile: PROFILE_FALLBACK,
 } as const;
 
 export type ContentFallback = typeof CONTENT_FALLBACK;

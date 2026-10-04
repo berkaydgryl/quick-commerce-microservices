@@ -1,7 +1,7 @@
 /*
  * Profil sayfasi duzeni (T11.13; referans getircarsi). Mobil oncelikli: alt
  * alta; genis ekranda (64rem) iki sutun, oranla 1:3. Sol sutun: profil karti
- * ve beyaz kart icinde menu.
+ * (kendi modulu, T11.14) ve beyaz kart icinde menu.
  */
 .c-account-layout {
   display: grid;
@@ -13,45 +13,6 @@
 .c-account-layout__side {
   display: grid;
   gap: var(--space-3);
-}
-
-.c-account-layout__profile {
-  display: flex;
-  gap: var(--space-3);
-  align-items: center;
-  padding: var(--space-4);
-  color: inherit;
-  text-decoration: none;
-  background: var(--bg-surface);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-surface);
-}
-
-.c-account-layout__avatar {
-  display: grid;
-  flex-shrink: 0;
-  place-items: center;
-  width: var(--size-profile-avatar);
-  height: var(--size-profile-avatar);
-  padding: var(--space-2);
-  color: var(--color-brand-primary);
-  background: var(--color-brand-primary-subtle);
-  border-radius: var(--radius-pill);
-}
-
-.c-account-layout__identity {
-  display: grid;
-  min-width: 0;
-}
-
-.c-account-layout__name {
-  font-weight: var(--font-weight-bold);
-  overflow-wrap: anywhere;
-}
-
-.c-account-layout__phone {
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
 }
 
 .c-account-layout__menu {

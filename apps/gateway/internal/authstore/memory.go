@@ -19,11 +19,14 @@ type MemoryUsers struct {
 	mu      sync.Mutex
 	byID    map[string]auth.User
 	byPhone map[string]string
+	// byEmail, dogrulanmis e-posta -> kullanici (T11.14; Mongo'daki kismi
+	// benzersiz indeksin karsiligi).
+	byEmail map[string]string
 }
 
 // NewMemoryUsers, bos depo kurar.
 func NewMemoryUsers() *MemoryUsers {
-	return &MemoryUsers{byID: map[string]auth.User{}, byPhone: map[string]string{}}
+	return &MemoryUsers{byID: map[string]auth.User{}, byPhone: map[string]string{}, byEmail: map[string]string{}}
 }
 
 // Create, kullaniciyi yazar; telefon kayitliysa auth.ErrPhoneTaken.
@@ -32,6 +35,12 @@ func (m *MemoryUsers) Create(_ context.Context, user auth.User) error {
 	defer m.mu.Unlock()
 	if _, taken := m.byPhone[user.Phone]; taken {
 		return auth.ErrPhoneTaken
+	}
+	if user.Email != "" {
+		if _, taken := m.byEmail[user.Email]; taken {
+			return auth.ErrEmailTaken
+		}
+		m.byEmail[user.Email] = user.ID
 	}
 	m.byID[user.ID] = user
 	m.byPhone[user.Phone] = user.ID
@@ -98,6 +107,33 @@ func (m *MemoryUsers) AddAddress(_ context.Context, userID string, address auth.
 	user.Addresses = append(slices.Clone(user.Addresses), address)
 	m.byID[userID] = user
 	return user, nil
+}
+
+// EmailOwner, adresi dogrulanmis kullanicinin kimligi; kimsede yoksa "" (T11.14).
+func (m *MemoryUsers) EmailOwner(_ context.Context, email string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.byEmail[email], nil
+}
+
+// SetVerifiedEmail, dogrulanmis adresi tek kilit altinda yazar; kurallar
+// Mongo'dakiyle ayni (adres baska hesaptaysa auth.ErrEmailTaken). Eski adres
+// serbest kalir.
+func (m *MemoryUsers) SetVerifiedEmail(_ context.Context, userID, email string, verifiedAt time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	user, found := m.byID[userID]
+	if !found {
+		return auth.ErrUserNotFound
+	}
+	if owner, taken := m.byEmail[email]; taken && owner != userID {
+		return auth.ErrEmailTaken
+	}
+	delete(m.byEmail, user.Email)
+	user.Email, user.EmailVerifiedAt = email, verifiedAt
+	m.byID[userID] = user
+	m.byEmail[email] = userID
+	return nil
 }
 
 // CountByRegistrationDevice, cihazdan acilmis hesap sayisi.

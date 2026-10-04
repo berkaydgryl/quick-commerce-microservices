@@ -202,5 +202,32 @@
     "profileMenuLabel": "Hesap menüsü",
     "addressesLabel": "Adreslerim",
     "favoritesMenuLabel": "Favori İşletmeler"
+  },
+  "profile": {
+    "fullNameLabel": "Ad soyad",
+    "phoneLabel": "Telefon",
+    "emailLabel": "E-posta",
+    "addEmailLabel": "E-posta ekle",
+    "editEmailLabel": "E-posta adresini düzenle",
+    "verifiedLabel": "Doğrulandı",
+    "loadingLabel": "Bilgilerin yükleniyor…",
+    "emailDialog": {
+      "title": "E-posta adresi",
+      "closeLabel": "Kapat",
+      "emailDescription": "Bu adrese 6 haneli bir doğrulama kodu göndereceğiz.",
+      "emailFieldLabel": "E-posta adresi",
+      "sendLabel": "Kod gönder",
+      "sendingLabel": "Gönderiliyor…",
+      "codeSentToLabel": "Doğrulama kodunu şu adrese gönderdik:",
+      "codeFieldLabel": "Doğrulama kodu",
+      "verifyLabel": "Doğrula",
+      "verifyingLabel": "Doğrulanıyor…",
+      "expiresInLabel": "Kodun geçerlilik süresi",
+      "expiredNotice": "Kodun süresi doldu. Yeni kod isteyebilirsin.",
+      "resendLabel": "Kodu yeniden gönder",
+      "resendWaitLabel": "Yeni kodu isteyebilmen için",
+      "changeEmailLabel": "E-posta adresini değiştir",
+      "verifiedToast": "E-posta adresin doğrulandı."
+    }
   }
 }

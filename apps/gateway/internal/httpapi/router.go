@@ -12,6 +12,8 @@ package httpapi
 //   auth.go       - /v1/auth, /v1/me ve /v1/me/addresses uclari (T8.1, T9.5)
 //   auth_body.go  - kimlik uclarinin istek govdeleri
 //   favorites.go  - /v1/me/favorites uclari (favori marketler, T11.13)
+//   email.go      - /v1/me/email uclari (e-posta dogrulama, T11.14)
+//   email_body.go - e-posta uclarinin istek govdeleri
 //   geo.go        - /v1/geo/reverse ve /v1/geo/search (harita adres, T11.8)
 //   identity.go   - kullanici kimligi (Bearer erisim jetonu, T8.1)
 //   device.go     - cihaz cerezi (risk sinyali, T8.1)
@@ -41,6 +43,7 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/catalog"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/content"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/emailverify"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/favorites"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/geo"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
@@ -167,6 +170,16 @@ type AddressAdder interface {
 	AddAddress(ctx context.Context, userID string, input auth.AddressInput) (auth.AddressBook, error)
 }
 
+// EmailCodeSender, POST /v1/me/email/code (e-posta dogrulama kodu, T11.14).
+type EmailCodeSender interface {
+	SendCode(ctx context.Context, userID string, input emailverify.SendInput) (emailverify.Sent, error)
+}
+
+// EmailVerifier, POST /v1/me/email/verify (T11.14): guncel profili doner.
+type EmailVerifier interface {
+	Verify(ctx context.Context, userID string, input emailverify.VerifyInput) (auth.Profile, error)
+}
+
 // FavoriteLister, GET /v1/me/favorites (favori marketler, T11.13).
 type FavoriteLister interface {
 	Favorites(ctx context.Context, userID string) (favorites.List, error)
@@ -238,6 +251,9 @@ type Deps struct {
 	ProfileGetter    ProfileGetter
 	AddressBook      AddressBookGetter
 	AddressAdder     AddressAdder
+	// E-posta dogrulama (T11.14): tek emailverify servisi iki ucu karsilar.
+	EmailCodeSender EmailCodeSender
+	EmailVerifier   EmailVerifier
 	// Favori marketler (T11.13): tek favori servisi uc ucu karsilar.
 	Favorites       FavoriteLister
 	FavoriteAdder   FavoriteAdder
@@ -309,6 +325,9 @@ func New(deps Deps) *fiber.App {
 	generalByIP := limits.limit(deps.RateLimit.General, byClientIP)
 	authByIP := limits.limit(deps.RateLimit.Auth, byClientIP)
 	generalByUser := limits.limit(deps.RateLimit.General, byUser)
+	// E-posta dogrulama (T11.14) kimlik uclari gibi siki: kod denemesi kaba
+	// kuvvete, kod istegi baskasinin kutusuna ileti yagdirmaya karsi.
+	authByUser := limits.limit(deps.RateLimit.Auth, byUser)
 	orderByUser := limits.limit(deps.RateLimit.Order, byUser)
 
 	v1 := app.Group("/v1")
@@ -349,6 +368,8 @@ func New(deps Deps) *fiber.App {
 	v1.Get("/me", user, generalByUser, meHandler(deps.ProfileGetter))
 	v1.Get("/me/addresses", user, generalByUser, addressesHandler(deps.AddressBook))
 	v1.Post("/me/addresses", user, generalByUser, mutation, addAddressHandler(deps.AddressAdder))
+	v1.Post("/me/email/code", user, authByUser, mutation, sendEmailCodeHandler(deps.EmailCodeSender))
+	v1.Post("/me/email/verify", user, authByUser, mutation, verifyEmailHandler(deps.EmailVerifier))
 	v1.Get("/me/favorites", user, generalByUser, favoritesHandler(deps.Favorites))
 	v1.Put("/me/favorites/:"+marketIDParam, user, generalByUser, mutation, addFavoriteHandler(deps.FavoriteAdder))
 	v1.Delete("/me/favorites/:"+marketIDParam, user, generalByUser, mutation, removeFavoriteHandler(deps.FavoriteRemover))

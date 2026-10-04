@@ -23,6 +23,7 @@ const WELCOME = JSON.parse(
   appHeader: Record<string, string>;
   marketList: unknown;
   favorites: unknown;
+  profile: unknown;
 };
 
 /** Yapidaki butun metinler (dizi ve ic nesneler dahil). */
@@ -58,6 +59,10 @@ describe('CONTENT_FALLBACK', () => {
 
   it('favori metinleri (T11.13) welcome.json favorites ile birebir', () => {
     expect(CONTENT_FALLBACK.favorites).toEqual(WELCOME.favorites);
+  });
+
+  it('profil metinleri (T11.14) welcome.json profile ile birebir', () => {
+    expect(CONTENT_FALLBACK.profile).toEqual(WELCOME.profile);
   });
 
   it('yedegin market listesi sozlesmeden gecer (gorseller mutlak adrese cevrilince)', () => {

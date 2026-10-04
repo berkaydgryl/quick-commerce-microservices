@@ -98,6 +98,18 @@ const validJSON = `{
     "removedNotice": "favorilerden çıkarıldı",
     "updateFailedToast": "Favori güncellenemedi.", "listFullToast": "Favori listen dolu.", "toastDismissLabel": "Kapat",
     "profileMenuLabel": "Hesap menüsü", "addressesLabel": "Adreslerim", "favoritesMenuLabel": "Favori İşletmeler"
+  },
+  "profile": {
+    "fullNameLabel": "Ad soyad", "phoneLabel": "Telefon", "emailLabel": "E-posta", "addEmailLabel": "E-posta ekle",
+    "editEmailLabel": "E-posta adresini düzenle", "verifiedLabel": "Doğrulandı", "loadingLabel": "Yükleniyor",
+    "emailDialog": {
+      "title": "E-posta adresi", "closeLabel": "Kapat", "emailDescription": "Kod göndereceğiz.",
+      "emailFieldLabel": "E-posta adresi", "sendLabel": "Kod gönder", "sendingLabel": "Gönderiliyor",
+      "codeSentToLabel": "Şu adrese gönderdik:", "codeFieldLabel": "Doğrulama kodu", "verifyLabel": "Doğrula",
+      "verifyingLabel": "Doğrulanıyor", "expiresInLabel": "Geçerlilik", "expiredNotice": "Süre doldu.",
+      "resendLabel": "Yeniden gönder", "resendWaitLabel": "Bekle", "changeEmailLabel": "Değiştir",
+      "verifiedToast": "Doğrulandı."
+    }
   }
 }`
 

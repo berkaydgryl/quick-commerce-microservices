@@ -71,3 +71,39 @@ jetonlari tarayicida saklayacagi icin karar oncesinde verildi.
 - Yenileme ve cikis genel hiz sinirindadir (IP basina dakikada 120, T8.2): web her acilista
   yeniler; jeton 256 bit rastgele oldugu icin kaba kuvvet siniri gerekmez. Kayit ve giris 10'da
   kalir.
+
+## Ek (T11.14, 2026-10-04): e-posta dogrulanmis iletisim alanidir, kimlik degil
+
+Ustteki karar degismez: giris telefon + sifredir, kayit formu e-posta almaz. Profil kartina
+e-posta eklenir (kullanicinin karari, getircarsi referansi); bu ek onun sinirlarini yazar.
+
+- **Kimlik degil.** E-postayla giris yapilmaz, sifre yenilenmez; yalnizca iletisim ve ileride
+  makbuz icindir. Hesaba yalnizca DOGRULANMIS adres yazilir (`users.email`, kucuk harfli;
+  `emailVerifiedAt`). Dogrulanmamis adres hesaba hic girmez: bekleyen kodun yaninda Redis'te durur.
+- **Dogrulama kodla.** `POST /v1/me/email/code` adrese 6 haneli kod gonderir;
+  `POST /v1/me/email/verify` kodu dogrular ve adresi yazar. Kod 10 dakika gecerlidir, 5 yanlista
+  iptal olur, yeni kod en erken 60 saniye sonra istenir (kullanicinin karari A2). Yeni kod
+  oncekini gecersiz kilar. Kurallar `@getir/contracts` sabitlerindedir; gateway ayni degerleri
+  uygular.
+- **Kod Redis'te, ozetiyle.** Anahtar `verify:email:{usr_...}` (redis-kit `emailVerificationKey`),
+  tek hash: adres, kodun HMAC ozeti (anahtar JWT sirrindan turetilir; 10^6 ihtimalli kodun duz
+  ozeti tersine cevrilirdi), deneme sayisi, gonderim ani. TTL koddur (10 dk). Bekleme, sayim ve
+  iptal tek Lua betiginde: es zamanli denemeler hakki asamaz, iki gonderimden biri yazar.
+- **Bir adres bir hesap** (A3). `users.email` uzerinde KISMI benzersiz indeks (yalnizca e-postasi
+  olan belgeler); kod istenirken baska hesaptaki adres reddedilir, dogrulama aninda yaris indeksle
+  cozulur. Bilincli odunlesim: cevap adresin baska hesapta oldugunu soyler (T11.7'deki numara
+  kontrolu gibi); iki uc kullanici basina kimlik siniri (dakikada 10) ve 60 saniye beklemeyle
+  yavaslatilir.
+- **Hata kodu eklenmez.** Kural ihlali alanin altinda gosterilen `VALIDATION_FAILED`'dir (`email`
+  ya da `code`; adres defterindeki "ayni ad" kalibi), erken yeniden gonderme `RATE_LIMITED` +
+  `retryAfterSeconds`, posta sunucusu yoksa `SERVICE_UNAVAILABLE` (kod silinir, beklemeden
+  yeniden istenir).
+- **Posta.** Gateway standart kutuphanenin SMTP istemcisiyle gonderir (yeni bagimlilik yok).
+  Gelistirmede sunucu compose'daki Mailpit'tir (ileti disari cikmaz, `localhost:8025`). Kod
+  gunluge yazilmaz; SMTP hatasinin metni (aliciyi yansitabilir) atilir, yalnizca kod kalir.
+  MOCK'ta `SMTP_URL` yoksa ileti bellekte kalir. Production SMTP'si (TLS, kimlik dogrulama)
+  bekleyen is #90; production'da `SMTP_URL` zorunludur.
+- Elenen: e-postayi kayitta toplamak (dogrulanmadan kimlik alanina donusurdu), kodu Mongo'da
+  tutmak (TTL indeksi dakikalik calisir, 10 dakikalik kodda sure kayardi; deneme sayimi icin
+  ikinci atomik yazim gerekirdi) ve ayri hata kodlari (`EMAIL_ALREADY_REGISTERED` vb.: web formu
+  zaten alan cumlesini gosteriyor; `@getir/core` servislerle ortaktir).

@@ -29,6 +29,12 @@ type User struct {
 	// Addresses, kayitli adresler (adres defteri), en fazla MaxSavedAddresses.
 	// Demo adresleri persona seed'iyle gelir; GET /v1/me/addresses okur (T9.5).
 	Addresses []SavedAddress
+	// Email, DOGRULANMIS e-posta adresi (T11.14, kucuk harfli); bossa
+	// kullanici adres eklememistir. Dogrulanmamis adres buraya yazilmaz
+	// (emailverify, Redis'te bekler). Iki hesapta ayni adres olamaz.
+	Email string
+	// EmailVerifiedAt, adresin dogrulandigi an; Email bossa sifir.
+	EmailVerifiedAt time.Time
 }
 
 // GeoPoint, enlem ve boylam (derece).
@@ -58,11 +64,13 @@ type Profile struct {
 	ID       string `json:"id"`
 	Phone    string `json:"phone"`
 	FullName string `json:"fullName"`
+	// Email, yalnizca dogrulanmis adres (T11.14); bossa alan hic yazilmaz.
+	Email string `json:"email,omitempty"`
 }
 
 // Profile, kaydin istemciye gidebilen kismi.
 func (u User) Profile() Profile {
-	return Profile{ID: u.ID, Phone: u.Phone, FullName: u.FullName}
+	return Profile{ID: u.ID, Phone: u.Phone, FullName: u.FullName, Email: u.Email}
 }
 
 // MaxSavedAddresses, adres defterinin ust siniri (@getir/contracts

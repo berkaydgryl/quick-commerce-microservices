@@ -5,13 +5,10 @@ import { NavLink } from 'react-router-dom';
 import { useAddressBook } from '../../features/address/hooks/useAddressBook';
 import { AddressDialogs } from '../../features/address/ui/AddressDialogs';
 import type { AddressDialog } from '../../features/address/ui/AddressDialogs';
-import { useProfile } from '../../features/auth/hooks/useProfile';
-import { AUTH_ROUTES } from '../../features/auth/routes';
-import { formatPhone } from '../../features/auth/services/phone';
-import { UserIcon } from '../../features/auth/ui/icons';
 import { useFavoritesContent } from '../../features/content/hooks/useFavoritesContent';
 import { useWelcomeContent } from '../../features/content/hooks/useWelcomeContent';
 import { FAVORITES_PATH } from '../../features/favorites/routes';
+import { ProfileCard } from '../../features/profile/ui/ProfileCard';
 
 import styles from './AccountLayout.module.css';
 
@@ -27,7 +24,8 @@ const menuItem = ({ isActive }: { readonly isActive: boolean }) =>
 
 /**
  * Profil sayfasinin duzeni (T11.13; referans getircarsi): solda profil karti
- * (ad, telefon; Hesabim'a gider) ve menu, sagda sayfanin icerigi. Menude
+ * (T11.14: ad, telefon, e-posta ve kalem; ad Hesabim'a gider) ve menu, sagda
+ * sayfanin icerigi. Menude
  * yalnizca calisanlar (karar D4): "Adreslerim" ust bardaki "Adreslerim"
  * penceresini acar, "Favori Isletmeler" favori sayfasina gider. Genis
  * ekranda iki sutun (1:3), telefonda alt alta.
@@ -56,28 +54,6 @@ export function AccountLayout({ userId, children }: AccountLayoutProps) {
       </aside>
       <div className={styles['c-account-layout__main']}>{children}</div>
     </div>
-  );
-}
-
-/** Profil karti: ad ve telefon (GET /v1/me); Hesabim sayfasina baglanti. */
-function ProfileCard({ userId }: { readonly userId: string }) {
-  const profile = useProfile(userId);
-  return (
-    <NavLink to={AUTH_ROUTES.account} end className={() => styles['c-account-layout__profile']}>
-      <span className={styles['c-account-layout__avatar']}>
-        <UserIcon />
-      </span>
-      <span className={styles['c-account-layout__identity']} aria-busy={profile.isPending}>
-        {profile.data !== undefined && (
-          <>
-            <span className={styles['c-account-layout__name']}>{profile.data.fullName}</span>
-            <span className={styles['c-account-layout__phone']}>
-              {formatPhone(profile.data.phone)}
-            </span>
-          </>
-        )}
-      </span>
-    </NavLink>
   );
 }
 

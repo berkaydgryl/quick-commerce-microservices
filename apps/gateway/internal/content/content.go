@@ -54,6 +54,8 @@ type Welcome struct {
 	MarketList MarketList `json:"marketList"`
 	// Favorites, favori marketler (T11.13): kalp, profil menusu, favori sayfasi.
 	Favorites Favorites `json:"favorites"`
+	// Profile, profil karti ve e-posta penceresi (T11.14).
+	Profile Profile `json:"profile"`
 }
 
 // Header, ust bar: logonun iki parcasi ve iki dugme.
@@ -271,6 +273,40 @@ type Favorites struct {
 	ProfileMenuLabel   string `json:"profileMenuLabel"`
 	AddressesLabel     string `json:"addressesLabel"`
 	FavoritesMenuLabel string `json:"favoritesMenuLabel"`
+}
+
+// Profile, profil kartinin ve Hesabim panelinin metinleri (T11.14): ad,
+// telefon, e-posta satirlari, kalem ve e-posta penceresi. Yalnizca metin; kod
+// kurallari (sure, deneme) emailverify'da.
+type Profile struct {
+	FullNameLabel  string      `json:"fullNameLabel"`
+	PhoneLabel     string      `json:"phoneLabel"`
+	EmailLabel     string      `json:"emailLabel"`
+	AddEmailLabel  string      `json:"addEmailLabel"`
+	EditEmailLabel string      `json:"editEmailLabel"`
+	VerifiedLabel  string      `json:"verifiedLabel"`
+	LoadingLabel   string      `json:"loadingLabel"`
+	EmailDialog    EmailDialog `json:"emailDialog"`
+}
+
+// EmailDialog, e-posta penceresi: adres adimi ve kod adimi.
+type EmailDialog struct {
+	Title            string `json:"title"`
+	CloseLabel       string `json:"closeLabel"`
+	EmailDescription string `json:"emailDescription"`
+	EmailFieldLabel  string `json:"emailFieldLabel"`
+	SendLabel        string `json:"sendLabel"`
+	SendingLabel     string `json:"sendingLabel"`
+	CodeSentToLabel  string `json:"codeSentToLabel"`
+	CodeFieldLabel   string `json:"codeFieldLabel"`
+	VerifyLabel      string `json:"verifyLabel"`
+	VerifyingLabel   string `json:"verifyingLabel"`
+	ExpiresInLabel   string `json:"expiresInLabel"`
+	ExpiredNotice    string `json:"expiredNotice"`
+	ResendLabel      string `json:"resendLabel"`
+	ResendWaitLabel  string `json:"resendWaitLabel"`
+	ChangeEmailLabel string `json:"changeEmailLabel"`
+	VerifiedToast    string `json:"verifiedToast"`
 }
 
 // StoreTypeLabel, dukkan turunun adi: sozlesmedeki tur ("KASAP") ve etiket.

@@ -11,7 +11,7 @@
 //	env.go      - genel okuyucular: metin, tam sayi, bool, sure, secenek
 //	policy.go   - kendi kurali olan okuyucular: gorsel kok adresi, log seviyesi,
 //	              Mongo adresi, JWT sirri (T8.1), Redis adresi (T8.2), harita
-//	              adres servisi (T11.8)
+//	              adres servisi (T11.8), SMTP adresi ve gonderen (T11.14)
 //	seed.go     - persona seed komutunun dar yapilandirmasi (T8.1)
 package config
 
@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/mail"
 	"net/url"
 	"time"
 )
@@ -93,6 +94,16 @@ type Config struct {
 	// GeoTimeout, tek adres sorusunun ust siniri: sirada bekleme (saniyede
 	// bir istek) + Nominatim cevabi.
 	GeoTimeout time.Duration
+
+	// SMTPAddress, e-posta dogrulama kodunun gidecegi SMTP sunucusu, host:port
+	// (T11.14; SMTP_URL). Bossa (yalnizca MOCK'ta, SMTP_URL verilmemisse)
+	// iletiler bellekte kalir. Sifreli baglanti ve kimlik dogrulama yok:
+	// bekleyen is #90.
+	SMTPAddress string
+	// MailFrom, iletinin gondereni (MAIL_FROM).
+	MailFrom mail.Address
+	// SMTPTimeout, tek iletinin ust siniri (SMTP_TIMEOUT_MS).
+	SMTPTimeout time.Duration
 }
 
 // Secret, gunluge ya da hata metnine yazilmamasi gereken deger. fmt (%v, %s,
@@ -270,6 +281,22 @@ func Load(getenv Getenv) (Config, error) {
 		problems = append(problems, err)
 	}
 
+	// E-posta dogrulama (T11.14): gelistirmede varsayilan Mailpit.
+	smtpAddress, err := readSMTPAddress(getenv, mock, nodeEnv)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
+	mailFrom, err := readMailFrom(getenv)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
+	smtpTimeout, err := readDuration(getenv, "SMTP_TIMEOUT_MS", defaultSMTPTimeout)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
 	// Servis listesi sabittir: gateway'in dogrudan konustugu uc servis (stok
 	// T8.4'ten beri). Yeni servis geldiginde buraya bir satir eklenir; adres yine
 	// ortamdan gelir. /healthz listedeki her servisi yoklar.
@@ -312,5 +339,8 @@ func Load(getenv Getenv) (Config, error) {
 		GeoBaseURL:                  geoBaseURL,
 		GeoUserAgent:                readString(getenv, "GEO_USER_AGENT", defaultGeoUserAgent),
 		GeoTimeout:                  geoTimeout,
+		SMTPAddress:                 smtpAddress,
+		MailFrom:                    mailFrom,
+		SMTPTimeout:                 smtpTimeout,
 	}, nil
 }

@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   courierLastKey,
   courierTrackKey,
+  emailVerificationKey,
   EVENTS_DEAD_LETTER_STREAM_KEY,
   EVENTS_STREAM_KEY,
   hashTag,
@@ -55,6 +56,7 @@ describe('anahtar bicimleri', () => {
     // Sayac kumesinin isareti (ADR-17): market basina degil, tek ve hash-tag'siz.
     expect(STOCK_SEEDED_MARKER_KEY).toBe('stock:seeded');
     expect(hashTagOf(STOCK_SEEDED_MARKER_KEY)).toBeUndefined();
+    expect(emailVerificationKey(USER_ID)).toBe(`verify:email:{${USER_ID}}`);
   });
 
   it('bir depoya ait tum anahtarlar ayni hash-tag altindadir', () => {
@@ -173,6 +175,20 @@ describe('dogrulama', () => {
     // Kapsam da anahtar parcasidir: ayirici tasiyamaz.
     expect(() => idempotencyKey('usr:7', 'anahtar-0001')).toThrow(AppError);
   });
+});
+
+describe('emailVerificationKey (T11.14)', () => {
+  it('kullanici kimligini hash-tag icinde tasir', () => {
+    expect(emailVerificationKey(USER_ID)).toBe(`verify:email:{${USER_ID}}`);
+    expect(hashTagOf(emailVerificationKey(USER_ID))).toBe(USER_ID);
+  });
+
+  it.each(['usr_7', 'ord_0123456789abcdef0123456789abcdef', 'usr_{x}', ''])(
+    'kullanici kimligi olmayan parcayi (%j) reddeder',
+    (value) => {
+      expect(() => emailVerificationKey(value)).toThrow(AppError);
+    },
+  );
 });
 
 describe('realtimeSeqKey (T12.3)', () => {

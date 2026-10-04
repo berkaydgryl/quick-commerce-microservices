@@ -137,6 +137,7 @@ const welcome = {
     })),
   },
   favorites: CONTENT_FALLBACK.favorites,
+  profile: CONTENT_FALLBACK.profile,
 };
 
 function clientReturning(body: unknown) {

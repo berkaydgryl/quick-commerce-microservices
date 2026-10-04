@@ -107,6 +107,23 @@ curl -s localhost:16686/api/v3/services
 curl -s localhost:16686/api/v3/traces/<traceId>
 ```
 
+### 2c. Sahte posta sunucusu (Mailpit, T11.14)
+
+Compose profildeki e-posta dogrulamasi icin Mailpit'i de kaldirir (`getir-mailpit`):
+
+| Port | Is                                                                    |
+| ---- | --------------------------------------------------------------------- |
+| 1025 | SMTP: gateway kodu buraya gonderir (`SMTP_URL=smtp://localhost:1025`) |
+| 8025 | Arayuz: http://localhost:8025 (gelen kodlari gor)                     |
+
+Ileti disari cikmaz; **bellekte** tutulur, konteyner yeniden baslayinca gider. Gateway
+`SMTP_URL` verilmezse gelistirmede bu adresi kullanir (production'da zorunlu). Gercek SMTP
+(TLS, kimlik dogrulama) bekleyen is #90. Son iletiyi komut satirindan okumak icin:
+
+```bash
+curl -s localhost:8025/api/v1/message/latest
+```
+
 ## 3. Saglik kontrolu
 
 Her iki konteyner de `healthy` olana kadar bekleyin:
@@ -200,6 +217,7 @@ docker exec getir-mongo bash -c 'mongosh --quiet -u "$MONGO_ROOT_USERNAME" -p "$
 docker compose -f infra/docker/docker-compose.dev.yml logs -f mongo
 docker compose -f infra/docker/docker-compose.dev.yml logs -f redis
 docker compose -f infra/docker/docker-compose.dev.yml logs -f jaeger
+docker compose -f infra/docker/docker-compose.dev.yml logs -f mailpit
 ```
 
 Son 100 satir:

@@ -73,6 +73,17 @@ const (
 	defaultGeoTimeout = 5 * time.Second
 )
 
+// E-posta gonderimi varsayilanlari (T11.14). Adlar ve degerler .env.example ile ayni.
+const (
+	// SMTP_URL: gelistirmede compose'daki Mailpit (arayuzu localhost:8025).
+	// Production'da varsayilan YOK: adres acikca verilir.
+	defaultSMTPURL = "smtp://localhost:1025"
+	// MAIL_FROM: dogrulama iletisinin gondereni.
+	defaultMailFrom = "getir <no-reply@getir.local>"
+	// SMTP_TIMEOUT_MS=5000: tek iletinin ust siniri (baglanti + teslim).
+	defaultSMTPTimeout = 5 * time.Second
+)
+
 // NODE_ENV degerleri (Node servisleriyle ayni sozluk). Production, gelistirme
 // kolayliklarinin KAPALI oldugu tek ortamdir (ornek sir reddedilir, T8.1).
 const (

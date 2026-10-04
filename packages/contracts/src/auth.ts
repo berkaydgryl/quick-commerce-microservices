@@ -3,9 +3,9 @@
  *   POST /v1/auth/register  POST /v1/auth/login  POST /v1/auth/refresh
  *   POST /v1/auth/logout    GET  /v1/me
  *
- * Kimlik TELEFON + SIFRE ile kurulur (ADR-12). E-posta toplanmaz: SMS/OTP
- * altyapisi kurulmadigi icin dogrulanamayan bir alan kimlik alani olarak
- * kullanilamaz.
+ * Kimlik TELEFON + SIFRE ile kurulur (ADR-12). Kayit e-posta almaz. E-posta
+ * T11.14'ten beri profilde DOGRULANARAK eklenen bir iletisim alanidir, kimlik
+ * degildir (ADR-12 eki; email.ts): profilde yalnizca dogrulanmis adres gorunur.
  *
  * Oturum iki jetondur: kisa omurlu ERISIM jetonu (JWT, JWT_TTL) her istekte
  * `Authorization: Bearer` basliginda gider; uzun omurlu YENILEME jetonu
@@ -30,6 +30,7 @@ import {
   PASSWORD_MIN_LENGTH,
   PHONE_PATTERN,
 } from './constants.js';
+import { emailSchema } from './email.js';
 
 /**
  * Telefon kuralinin cumlesi: sunucu (gateway) ve form ayni cumleyi gosterir.
@@ -114,10 +115,15 @@ export const phoneCheckResultSchema = z.object({
  */
 export const logoutResultSchema = z.object({ revoked: z.boolean() });
 
+/**
+ * Istemciye giden kullanici. `email` yalnizca DOGRULANMIS adrestir (T11.14);
+ * dogrulanmamis adres hesaba yazilmaz, alan yoksa kullanici e-posta eklememistir.
+ */
 export const userProfileSchema = z.object({
   id: idSchema,
   phone: phoneSchema,
   fullName: z.string(),
+  email: emailSchema.optional(),
 });
 
 export const authSessionSchema = z.object({

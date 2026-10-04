@@ -285,7 +285,7 @@ itibarıyla geçmelidir; geçmiyorsa kurulum tamamlanmamıştır, devam etme.
 ### Katalogu Mongo'ya yüklemek (T4.1)
 
 ```bash
-pnpm infra:up     # Mongo (replica set) + Redis + Jaeger (D15)
+pnpm infra:up     # Mongo (replica set) + Redis + Jaeger (D15) + Mailpit (T11.14)
 pnpm seed         # catalog, inventory ve courier'i derler; katalog (13 kategori, 49 urun, 21 market, 166 teklif), stok ve 63 kurye yazar; tekrar kosmak guvenli, atanmis kuryeler IDLE'a doner
 ```
 
@@ -321,7 +321,7 @@ Hepsi depo kökünden `pnpm <komut>` ile çalışır. `make` bu projede zorunlu 
 | `proto:gen:ts`  | `pnpm --filter @getir/proto generate:ts`                                                              | Yalnızca TypeScript çıktısı; Go gerektirmez                            | Çalışıyor (T2.3)                        |
 | `proto:check`   | `generate:ts && typecheck && check:go`                                                                | Üretilen kodun **iki dilde de** derlendiğini doğrular                  | Çalışıyor (T2.3)                        |
 | `verify`        | `proto:gen:ts && lint && lint:style && lint:proto && format:check && typecheck && build && test:unit` | CI'daki `quality` işinin birebir aynısı                                | Çalışıyor                               |
-| `infra:up`      | `docker compose -f infra/docker/… up -d --wait`                                                       | Mongo (replica set), Redis ve Jaeger'i başlatır, sağlıklı olunca döner | Çalışıyor                               |
+| `infra:up`      | `docker compose -f infra/docker/… up -d --wait`                                                       | Mongo, Redis, Jaeger ve Mailpit'i başlatır, tümü sağlıklı olunca döner | Çalışıyor                               |
 | `infra:ps`      | `docker compose … ps`                                                                                 | Konteyner ve sağlık durumu                                             | Çalışıyor                               |
 | `infra:logs`    | `docker compose … logs -f`                                                                            | Altyapı günlüklerini izler                                             | Çalışıyor                               |
 | `infra:down`    | `docker compose … down`                                                                               | Konteynerleri durdurur (veri kalır)                                    | Çalışıyor                               |
@@ -345,6 +345,7 @@ curl -s localhost:8080/v1/categories    # catalog uzerinden kategori listesi
 curl -s localhost:51051/metrics | grep grpc_server   # T10.5: RPC sayaclari (her servis gRPC portu + 1000)
 curl -s localhost:9080/metrics | grep http_server    # #29: gateway istek, tekrar ve 429 sayaclari (8080 + 1000)
 open http://localhost:16686                           # D15: izler (Jaeger; pnpm infra:up kaldirir)
+open http://localhost:8025                            # T11.14: e-posta dogrulama kodlari (Mailpit)
 
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/catalog.proto \
   localhost:50051 getir.catalog.v1.CatalogService/ListCategories
