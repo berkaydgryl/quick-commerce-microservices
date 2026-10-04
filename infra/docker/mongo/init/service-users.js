@@ -10,7 +10,7 @@
 // calistirir. Parola sonradan degisirse hacim sifirlanir (pnpm infra:reset) ya
 // da kullanici elle guncellenir (infra/docker/README.md).
 
-const SERVICES = ['CATALOG', 'INVENTORY', 'ORDER', 'PAYMENT', 'RISK', 'GATEWAY'];
+const SERVICES = ['CATALOG', 'INVENTORY', 'ORDER', 'PAYMENT', 'RISK', 'COURIER', 'GATEWAY'];
 
 /** Servisin kullanicisi; tanim eksik ya da yanlissa hicbir kullanici olusturulmaz. */
 function serviceUser(service) {

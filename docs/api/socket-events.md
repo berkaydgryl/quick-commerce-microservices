@@ -71,8 +71,9 @@ taşınır (bağlantı kurulurken değil; bir bağlantı birden çok odaya gireb
   alır.
 - **Tekrar kullanılabilir:** jetonda `jti` yoktur; aynı jeton ömrü içinde birden
   çok sokette (ör. iki sekme) kullanılabilir, ama yalnızca kendi odası için.
-- **Saat payı 5 sn:** `exp` en fazla 5 sn geç kabul edilir; `iat` ya da `nbf`
-  bu payın ötesinde gelecekteyse jeton reddedilir.
+- **Saat payı 5 sn:** `exp`'ten sonraki 5 sn'den az süre kabul edilir (`exp`+4 sn
+  kabul, `exp`+5 sn red); `iat` ya da `nbf` bu payın ötesinde gelecekteyse jeton
+  reddedilir.
 - Gateway'de uç: başkasının siparişi **`404 NOT_FOUND`** (var olduğu sızdırılmaz);
   iptal ya da teslim edilmiş siparişin sahibi de jeton alır (son durumu izler).
 
@@ -151,14 +152,23 @@ Her olay realtime'daki tek yayın kapısından geçer (`application/broadcast.ts
   (outbox → `stream:events`). Realtime `realtime` tüketici grubunda dinler ve
   siparişin odasına `{ orderId, status, previousStatus?, at, seq }` yayınlar.
   Tek yazımda birden çok geçiş olabilir (risk adımı: `RISK_CHECK` → `RESERVED` →
-  `AWAITING_PAYMENT`); her biri ayrı olaydır ve `seq`'leri ardışıktır.
+  `AWAITING_PAYMENT`); her biri ayrı olaydır ve kendi `seq`'ini (geçişin sürümü)
+  taşır. Sürümler order'da ardışıktır, ama istemciye hepsinin ulaşacağı garanti
+  edilmez (aşağıda "Ara sürüm atlanabilir").
 - **`at`** geçişin zaman çizelgesindeki anıdır (yayın anı değil).
 - **En az bir kez teslim:** aynı olay istemciye birden fazla kez gelebilir
   (realtime yayından sonra çökerse olay yeniden teslim edilir ve yeniden
   yayınlanır). **İstemci `seq` ≤ gördüğü değerse olayı atar**; tekrar zararsızdır.
+- **Kopya çökerse geç gelir:** realtime kopyası olayı işlerken çökerse olay ~30 sn
+  sonra (`claimIdleMs`) başka kopyaca yeniden teslim edilir; 1 sn hedefi normal
+  yol içindir.
 - **Eski sürüm yayınlanmaz:** realtime siparişe yayınladığı son sürümü Redis'te
   tutar (`realtime:{orderId}:seq`, 24 saat ömür, her yazımda yenilenir) ve daha
   eski sürümü odaya göndermez. Eşit sürüm (aynı olayın tekrarı) yeniden yayınlanır.
+- **Ara sürüm atlanabilir:** iki kopyada eşzamanlı geçişlerde ara sürüm
+  yayınlanmayabilir; `seq` boşluklu gelebilir ve `previousStatus` zinciri tam
+  olmayabilir. İstemci yalnızca `seq` ≤ gördüğü değerse olayı atar; boşluğu kayıp
+  saymaz, gerekirse `GET /v1/orders/{id}` ile durumu tazeler.
 - **Yalnızca bağlantıdan sonrası:** grup ilk kez kurulurken yalnızca bundan sonraki
   olayları okur; soket akışı geçmişi oynatmaz. İstemci odaya katılınca durumu
   `GET /v1/orders/{id}` ile bir kez okur, sonra olayları uygular.

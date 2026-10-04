@@ -79,9 +79,11 @@ export const CONSUMER_HOST_MAX_LENGTH = 100;
 
 /**
  * Siparis odasina yayinlanan son surumun Redis'teki omru (T12.3): her yazimda
- * yenilenir. Yeniden teslim en fazla dakikalar icinde biter (event-bus:
- * claimIdleMs x maxDeliveries); 24 saat bunu rahatca kapsar. Anahtar dolsa bile
- * istemci seq <= gordugu degeri atar; kayip yalnizca gereksiz bir tekrar olur.
+ * yenilenir. Onaylanmayan olay (kopya coktu, Redis hatasi) claimIdleMs (30 sn)
+ * sonra yeniden teslim edilir; en fazla maxDeliveries (5) teslimle en gec
+ * ~2,5 dk'da biter, sonra olu olaylara gider (event-bus varsayilanlari). 24 saat
+ * bunu rahatca kapsar. Anahtar dolsa bile istemci seq <= gordugu degeri atar;
+ * kayip yalnizca gereksiz bir tekrar olur.
  */
 export const SEQ_TTL_MS = 24 * 60 * 60 * 1_000;
 

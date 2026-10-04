@@ -487,6 +487,7 @@ jobs:
         service:
           [
             catalog-service,
+            courier-service,
             inventory-service,
             order-service,
             payment-service,
