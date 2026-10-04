@@ -95,6 +95,7 @@ export function toOrderDocument(order: Order): OrderDocument {
           courier: { courierId: order.courier.courierId, assignedAt: order.courier.assignedAt },
         }),
     ...(order.courierRetryAt === undefined ? {} : { courierRetryAt: order.courierRetryAt }),
+    ...(order.courierQueuedAt === undefined ? {} : { courierQueuedAt: order.courierQueuedAt }),
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
     version: order.version,
@@ -130,6 +131,9 @@ export function fromOrderDocument(document: OrderDocument): Order {
           },
         }),
     ...(document.courierRetryAt === undefined ? {} : { courierRetryAt: document.courierRetryAt }),
+    ...(document.courierQueuedAt === undefined
+      ? {}
+      : { courierQueuedAt: document.courierQueuedAt }),
     createdAt: document.createdAt,
     updatedAt: document.updatedAt,
     version: document.version,

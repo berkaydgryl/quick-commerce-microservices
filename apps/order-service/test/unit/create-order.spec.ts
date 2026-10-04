@@ -140,6 +140,11 @@ describe('CreateOrder - mutlu yol (LOW, kart)', () => {
 
     expect(order.status).toBe(ORDER_STATUS.PAID);
     expect(order.timeline.at(-1)?.note).toBe('CASH_ON_DELIVERY');
+    // Kapida odeme de kurye kuyruguna odeme (PAID) aniyla girer (#92).
+    expect(order.courierQueuedAt).toEqual(order.timeline.at(-1)?.at);
+    await expect(repository.findById(id)).resolves.toMatchObject({
+      courierQueuedAt: order.updatedAt,
+    });
     expect(payments.charges[0]).toMatchObject({ method: 'CASH_ON_DELIVERY' });
     expect(payments.charges[0]).not.toHaveProperty('cardToken');
   });

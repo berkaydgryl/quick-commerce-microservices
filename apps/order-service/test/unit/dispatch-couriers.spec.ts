@@ -139,17 +139,16 @@ describe('DispatchCouriers - kuryesiz PREPARING (30 sn sonra tekrar)', () => {
     expect(eventsOf(order.id)).toHaveLength(events);
   });
 
-  it('hala bos kurye yok: deneme ani 30 sn ileri alinir, olay YOK', async () => {
+  it('hala bos kurye yok: bekleyen YAZILMAZ (QA O2), surum ve deneme ani ayni, olay YOK; sonraki turda yine denenir', async () => {
     const order = await waiting(NOW_MS - 1);
     const events = eventsOf(order.id).length;
 
     await expect(dispatch()).resolves.toMatchObject({ noCourier: 1 });
 
-    expect(await stored(order.id)).toMatchObject({
-      courierRetryAt: new Date(NOW_MS + 30_000),
-      version: order.version + 1,
-    });
+    expect(await stored(order.id)).toEqual(order);
     expect(eventsOf(order.id)).toHaveLength(events);
+    await expect(dispatch()).resolves.toMatchObject({ noCourier: 1 });
+    expect(courier.assignments).toHaveLength(2);
   });
 
   it('deneme ani gelmemis siparis ve kuryeli siparis isciye girmez', async () => {
@@ -208,19 +207,17 @@ describe('DispatchCouriers - courier-svc hatalari', () => {
     expect(courier.requestIds).toEqual(['req_kurye_1', 'req_kurye_2']);
   });
 
-  it('turda en fazla batchSize siparis; once odenmisler, sonra deneme ani en eski', async () => {
-    const lateRetry = await waiting(NOW_MS - 1_000);
-    const earlyRetry = await waiting(NOW_MS - 5_000);
-    const fresh = await paid();
+  it('turda en fazla batchSize talep; deneme ani gelenler de talep (sira #92: dispatch-couriers-queue.spec)', async () => {
+    await waiting(NOW_MS - 1_000);
+    await waiting(NOW_MS - 5_000);
+    await paid();
     courier.addIdle(MARKET, 'crr_1', 'crr_2', 'crr_3');
 
+    // Ucu de ayni anda odedi: talep 2 ile sinirli, ondan once odeyen bekleyen yok.
     await expect(dispatch({ batchSize: 2 })).resolves.toMatchObject({ assigned: 2 });
 
-    expect(courier.assignments.map((request) => request.orderId)).toEqual([
-      fresh.id,
-      earlyRetry.id,
-    ]);
-    expect(await stored(lateRetry.id)).not.toHaveProperty('courier');
+    expect(courier.assignments).toHaveLength(2);
+    expect(courier.idleIn(MARKET)).toEqual(['crr_3']);
   });
 });
 

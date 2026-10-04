@@ -7,6 +7,12 @@
  *   PAID ------------- uygun kurye yok -> PREPARING, kuryesiz + courierRetryAt
  *   kuryesiz PREPARING  deneme ani geldi -> ayni durum; kurye ya da yeni deneme ani
  *
+ * Kuyruk sirasi (#92, T13.2): kurye bekleyenler ODEME ANINA gore (courierQueuedAt,
+ * esitlikte kimlik) denenir. Turda kurye istenecek en az bir siparis varsa
+ * (yeni odeme ya da deneme ani gelmis), ondan ONCE odemis kuryesiz bekleyenler
+ * de ayni turda ve ondan once denenir: bosalan kurye, ona ulasabilen en eski
+ * siparise gider. Yeni talep yoksa bekleyenler 30 sn kuralini surdurur.
+ *
  * Durum disi guncelleme (kuryesiz PREPARING'e kurye ya da yeni deneme ani) de
  * SURUMU bir artirir (rescheduleReservation ile ayni kural): iki order ornegi
  * ayni siparisi yazarken biri digerinin yazimini sessizce ezmesin. Zaman
@@ -55,6 +61,79 @@ export function isCourierDue(order: Order, now: Date): boolean {
 }
 
 /**
+ * Kuryesiz bekleyen mi: iscinin "kurye yok" yazdigi (deneme ani olan) kuryesiz
+ * PREPARING. Deneme ani gelmemis olsa da kuyruktadir; isCourierDue'nun disladigi
+ * eski kayitlar (deneme ani yok) burada da yok.
+ */
+export function isWaitingForCourier(order: Order): boolean {
+  return (
+    order.status === ORDER_STATUS.PREPARING &&
+    order.courier === undefined &&
+    order.courierRetryAt !== undefined
+  );
+}
+
+/**
+ * Siparisin kurye kuyrugundaki ani: courierQueuedAt; yoksa (alan oncesi kayit)
+ * zaman cizelgesindeki odeme ani, o da yoksa olusturma ani.
+ */
+export function courierQueueTime(order: Order): Date {
+  return (
+    order.courierQueuedAt ??
+    order.timeline.find((entry) => entry.status === ORDER_STATUS.PAID)?.at ??
+    order.createdAt
+  );
+}
+
+/** Kuyruk sirasi: once odeyen once, esitlikte kimlik (Mongo sorgusuyla ayni). */
+export function compareCourierQueue(left: Order, right: Order): number {
+  const byQueue = courierQueueTime(left).getTime() - courierQueueTime(right).getTime();
+  if (byQueue !== 0) {
+    return byQueue;
+  }
+  if (left.id === right.id) {
+    return 0;
+  }
+  return left.id < right.id ? -1 : 1;
+}
+
+/**
+ * Turun kuyrugu (#92): kurye istenecekler (`due`) ve onlardan once odemis
+ * kuryesiz bekleyenler (`waiting`), tekrarsiz, kuyruk sirasiyla. `due` bossa
+ * tur yoktur: bekleyenler kendi deneme anlarini bekler.
+ */
+export function courierQueue(due: readonly Order[], waiting: readonly Order[]): Order[] {
+  if (due.length === 0) {
+    return [];
+  }
+  const byId = new Map<string, Order>();
+  for (const order of [...due, ...waiting]) {
+    byId.set(order.id, order);
+  }
+  return [...byId.values()].sort(compareCourierQueue);
+}
+
+/** Bekleyenlerin sinir ani: `due` icindeki en gec odeme; ondan once odeyenler one gecer. */
+export function latestQueueTime(due: readonly Order[]): Date | undefined {
+  let latest: Date | undefined;
+  for (const order of due) {
+    const at = courierQueueTime(order);
+    if (latest === undefined || at.getTime() > latest.getTime()) {
+      latest = at;
+    }
+  }
+  return latest;
+}
+
+/**
+ * Odenen siparisi kurye kuyruguna yazar (#92): odeme ani, PAID gecisinin ani.
+ * Odeme adimi PAID'e gecirdigi kayda uygular.
+ */
+export function queuedForCourier(paid: Order): Order {
+  return { ...paid, courierQueuedAt: paid.updatedAt };
+}
+
+/**
  * Atamasi yazilamayan siparisin kuryesi geri verilmeli mi (QA T3)? Son durumdaki
  * siparis (iptal, ret, teslim) kurye tutmaz. Diger durumlarda siparis ya hala
  * kurye bekler (sonraki deneme ayni kuryeyi alir) ya da kuryesi yazilmistir.
@@ -65,21 +144,30 @@ export function releasesCourier(order: Order): boolean {
 
 /**
  * Kurye atandi: PAID ise PREPARING'e gecer (zaman cizelgesi + olay), kuryesiz
- * PREPARING ise yalnizca kurye yazilir. Deneme ani silinir.
+ * PREPARING ise yalnizca kurye yazilir. Deneme ani ve kuyruk ani silinir.
  * @throws AppError ORDER_STATE_INVALID - siparis kurye beklemiyor.
  */
 export function withAssignedCourier(order: Order, courierId: string, clock: Clock): Order {
-  const { courierRetryAt: _cleared, ...next } = advance(order, clock);
+  const {
+    courierRetryAt: _retryCleared,
+    courierQueuedAt: _queueCleared,
+    ...next
+  } = advance(order, clock);
   return { ...next, courier: { courierId, assignedAt: next.updatedAt } };
 }
 
 /**
  * Uygun kurye yok: PAID ise yine PREPARING'e gecer (market hazirlamaya baslar),
- * kurye `retryAt`'ten sonra yeniden istenir.
+ * kurye `retryAt`'ten sonra yeniden istenir. Kuyruk ani korunur; alan oncesi
+ * kayitta odeme anindan yazilir (bekleyenler kuyruga onunla girer).
  * @throws AppError ORDER_STATE_INVALID - siparis kurye beklemiyor.
  */
 export function withCourierRetry(order: Order, retryAt: Date, clock: Clock): Order {
-  return { ...advance(order, clock), courierRetryAt: retryAt };
+  return {
+    ...advance(order, clock),
+    courierRetryAt: retryAt,
+    courierQueuedAt: courierQueueTime(order),
+  };
 }
 
 /** PAID -> PREPARING gecisi ya da kuryesiz PREPARING'in durum disi guncellemesi. */

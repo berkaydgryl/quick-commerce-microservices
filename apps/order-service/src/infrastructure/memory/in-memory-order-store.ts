@@ -11,7 +11,11 @@ import { AppError, ORDER_STATUS } from '@getir/core';
 import { currentCorrelation } from '@getir/observability';
 
 import type { AwaitingCourierFinder } from '../../domain/awaiting-courier-finder.js';
-import { isCourierDue } from '../../domain/courier-dispatch.js';
+import {
+  compareCourierQueue,
+  isCourierDue,
+  isWaitingForCourier,
+} from '../../domain/courier-dispatch.js';
 import type { ExpiredOrderFinder } from '../../domain/expired-order-finder.js';
 import type { OrderEvent } from '../../domain/order-events.js';
 import { comesBefore, cursorOf } from '../../domain/order-history-cursor.js';
@@ -182,6 +186,19 @@ export class InMemoryOrderStore
       .filter((order) => isCourierDue(order, now))
       .sort(byCourierDue);
     return Promise.resolve(due.slice(0, limit));
+  }
+
+  findWaitingBefore(before: Date, limit: number): Promise<readonly Order[]> {
+    const waiting = [...this.orders.values()]
+      .filter(
+        (order) =>
+          isWaitingForCourier(order) &&
+          // Mongo gibi: alan yoksa kuyrukta yeri yok (sorgu eslesmez).
+          order.courierQueuedAt !== undefined &&
+          order.courierQueuedAt.getTime() < before.getTime(),
+      )
+      .sort(compareCourierQueue);
+    return Promise.resolve(waiting.slice(0, limit));
   }
 
   /** Yalnizca test icin: kayitli siparis sayisi. */

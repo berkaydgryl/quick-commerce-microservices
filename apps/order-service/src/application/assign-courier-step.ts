@@ -20,9 +20,13 @@
  *   - kuryesi yazilmis            -> dokunulmaz (baska ornek once davrandi).
  * Cakisma disi yazim hatasinda kurye birakilmaz: yazim olmus olabilir (Mongo
  * cevabi kayboldu); siparis hala kurye bekliyorsa sonraki tur ayni kuryeyi alir.
+ *
+ * HATANIN KAYNAGI (D1, T13.2): courier cagrisinin ve depo yaziminin hatasi
+ * CourierStepFailure ile kaynagina gore isaretlenir; isci "courier'e
+ * ulasilamiyor" ile "depoya ulasilamiyor"u ayirir (gunluk ve metrik etiketi).
  */
 
-import { ERROR_CODES, isAppError } from '@getir/core';
+import { ERROR_CODES, isAppError, ORDER_STATUS } from '@getir/core';
 import type { Clock } from '@getir/core';
 
 import {
@@ -60,15 +64,59 @@ export const COURIER_STEP_OUTCOME = {
 
 export type CourierStepOutcome = (typeof COURIER_STEP_OUTCOME)[keyof typeof COURIER_STEP_OUTCOME];
 
+/** Hatanin kaynagi (D1): metrik etiketi ve ulasilamama gunlugu bunu kullanir. */
+export const DISPATCH_SOURCE = {
+  /** courier-svc cagrisi (atama, birakma). */
+  COURIER: 'courier',
+  /** Siparis deposu (Mongo ya da bellek): okuma ve yazim. */
+  STORE: 'store',
+  /** Order'in kendisi: beklenmeyen hata (kural ya da kod). */
+  ORDER: 'order',
+} as const;
+
+export type DispatchSource = (typeof DISPATCH_SOURCE)[keyof typeof DISPATCH_SOURCE];
+
+/** Kaynagi belli hata (D1): asil hata `cause`'da. */
+export class CourierStepFailure extends Error {
+  constructor(
+    readonly source: DispatchSource,
+    override readonly cause: unknown,
+  ) {
+    super(`kurye adimi basarisiz (${source})`);
+    this.name = 'CourierStepFailure';
+  }
+}
+
+/** Hatanin kaynagi ve asil hatasi; isaretsiz hata order'in kendisinindir. */
+export function failureOf(error: unknown): {
+  readonly source: DispatchSource;
+  readonly error: unknown;
+} {
+  return error instanceof CourierStepFailure
+    ? { source: error.source, error: error.cause }
+    : { source: DISPATCH_SOURCE.ORDER, error };
+}
+
+/** Cagriyi calistirir; hatasini kaynagiyla isaretler. */
+async function fromSource<T>(source: DispatchSource, call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (error: unknown) {
+    throw new CourierStepFailure(source, error);
+  }
+}
+
 /** Kurye bekleyen siparise (courier-dispatch.ts isCourierDue) kurye ister ve yazar. */
 export async function assignCourierStep(
   deps: AssignCourierStepDeps,
   order: Order,
   scope: RequestScope,
 ): Promise<CourierStepOutcome> {
-  const assigned = await deps.courier.assign(
-    { orderId: order.id, marketId: order.marketId, deliveryLocation: order.deliveryLocation },
-    scope,
+  const assigned = await fromSource(DISPATCH_SOURCE.COURIER, () =>
+    deps.courier.assign(
+      { orderId: order.id, marketId: order.marketId, deliveryLocation: order.deliveryLocation },
+      scope,
+    ),
   );
   if (assigned === null) {
     return waitForCourier(deps, order, scope);
@@ -76,12 +124,28 @@ export async function assignCourierStep(
   return bindCourier(deps, order, assigned.courierId, scope);
 }
 
-/** Uygun kurye yok: siparis kuryesiz PREPARING, deneme ani ileri alinir. */
-async function waitForCourier(
+/**
+ * Uygun kurye yok (courier "yok" dedi ya da ayni turda ayni market icin demin
+ * dedi; dispatch-couriers.ts). Odenmis siparis kuryesiz PREPARING'e gecer,
+ * deneme ani yazilir; INFO yalnizca bu geciste (D2).
+ *
+ * Zaten bekleyen siparis YAZILMAZ (QA O2): durumu ayni, surumu artmaz; isci
+ * onu sirasi geldikce (talep olunca ya da deneme ani gecmisse her turda) yine
+ * dener. Her yeni odemede butun bekleyenler yeniden yazilmaz. Yalnizca metrik
+ * ve DEBUG.
+ */
+export async function waitForCourier(
   deps: AssignCourierStepDeps,
   order: Order,
   scope: RequestScope,
 ): Promise<CourierStepOutcome> {
+  if (order.status !== ORDER_STATUS.PAID) {
+    scope.logger.debug(
+      { orderId: order.id, marketId: order.marketId },
+      'bekleyen siparise yine bos kurye yok',
+    );
+    return COURIER_STEP_OUTCOME.NO_COURIER;
+  }
   const retryAt = new Date(deps.clock.now() + deps.retryDelayMs);
   if (!(await writeOrder(deps, order, withCourierRetry(order, retryAt, deps.clock)))) {
     // Kurye alinmadi; siparisin yeni hali sonraki turda yeniden degerlendirilir.
@@ -110,9 +174,13 @@ async function bindCourier(
       );
       return COURIER_STEP_OUTCOME.ASSIGNED;
     }
-    const latest = await deps.repository.findById(order.id);
+    const latest = await fromSource(DISPATCH_SOURCE.STORE, () =>
+      deps.repository.findById(order.id),
+    );
     if (latest === null || releasesCourier(latest)) {
-      const released = await deps.courier.release(order.id, scope);
+      const released = await fromSource(DISPATCH_SOURCE.COURIER, () =>
+        deps.courier.release(order.id, scope),
+      );
       scope.logger.warn(
         { orderId: order.id, courierId, status: latest?.status ?? null, released },
         'siparis kurye atanirken kapandi; kurye geri verildi',
@@ -142,6 +210,6 @@ async function writeOrder(
     if (isAppError(error) && error.code === ERROR_CODES.CONFLICT) {
       return false;
     }
-    throw error;
+    throw new CourierStepFailure(DISPATCH_SOURCE.STORE, error);
   }
 }

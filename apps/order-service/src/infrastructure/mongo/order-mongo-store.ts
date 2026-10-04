@@ -145,4 +145,9 @@ export class OrderMongoStore
     const documents = await this.orders.findAwaitingCourier(now, limit);
     return documents.map(fromOrderDocument);
   }
+
+  async findWaitingBefore(before: Date, limit: number): Promise<readonly Order[]> {
+    const documents = await this.orders.findWaitingBefore(before, limit);
+    return documents.map(fromOrderDocument);
+  }
 }

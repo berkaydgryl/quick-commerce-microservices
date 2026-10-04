@@ -28,6 +28,7 @@ import {
 } from '../domain/checkout-payment.js';
 import type { PaymentMethod, PaymentResult } from '../domain/checkout-payment.js';
 import { assertPaymentMethodAllowed, paymentPolicyOf } from '../domain/checkout-risk.js';
+import { queuedForCourier } from '../domain/courier-dispatch.js';
 import { statusChangedEvents } from '../domain/order-events.js';
 import type { OrderOutbox } from '../domain/order-outbox.js';
 import type { OrderRepository } from '../domain/order-repository.js';
@@ -177,7 +178,8 @@ async function markPaid(
   note: string | undefined,
   scope: RequestScope,
 ): Promise<Order> {
-  const paid = transitionOrder(order, ORDER_STATUS.PAID, deps.clock, note);
+  // Kurye kuyruguna odeme aniyla girer (#92): once odeyen once kurye alir.
+  const paid = queuedForCourier(transitionOrder(order, ORDER_STATUS.PAID, deps.clock, note));
   try {
     return await writeTransition(deps.repository, order, paid);
   } catch (error) {

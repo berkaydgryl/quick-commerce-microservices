@@ -67,6 +67,8 @@ export interface OrderDocument extends BaseDocument {
   courier?: { courierId: string; assignedAt: Date };
   /** Kuryesiz PREPARING'in yeniden deneme ani; yalnizca o durumda var. */
   courierRetryAt?: Date;
+  /** Kurye kuyrugundaki yer: odeme ani (#92); kurye ataninca silinir. */
+  courierQueuedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
   /** Iyimser kilit surumu; guncelleme filtresi bunu kosul olarak kullanir. */

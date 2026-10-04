@@ -72,11 +72,21 @@ export const COURIER_CALL_TIMEOUT_MS = 1_000;
  * Kurye atayan isci (T13.1 PR 2): 1 sn'de bir tur, turda en fazla 100 siparis.
  * Odenen siparis en gec ~1 sn sonra kuryeyle PREPARING'e gecer. Markette bos
  * kurye yoksa siparis kuryesiz PREPARING'de bekler ve 30 sn sonra yeniden
- * denenir (roadmap saga tablosu, B7).
+ * denenir (roadmap saga tablosu, B7). Yeni talep geldiginde ondan once odemis
+ * bekleyenler de ayni turda denenir (#92): tur en fazla 100 talep + 100
+ * bekleyen.
  */
 export const COURIER_DISPATCH_INTERVAL_MS = 1_000;
 export const COURIER_DISPATCH_BATCH_SIZE = 100;
 export const COURIER_RETRY_DELAY_MS = 30_000;
+
+/**
+ * Atanamayan siparisin geri cekilmesi (D3): courier ya da depo bu siparise
+ * hata verdikce bekleme 1 sn'den baslayip ikiye katlanir, en cok 5 dk.
+ * Ulasilamama (tur kesilir) bu degildir; o butun siparisleri bekletir.
+ */
+export const COURIER_FAILURE_BACKOFF_INITIAL_MS = 1_000;
+export const COURIER_FAILURE_BACKOFF_MAX_MS = 5 * 60_000;
 
 /**
  * Atama yazilamazsa (surum cakismasi) siparis yeniden okunup karar yeniden

@@ -10,6 +10,8 @@
  *     surum kosulu atamanin yazimini reddeder ve kurye geri verilir.
  *  4. Iki order ornegi ayni siparisleri es zamanli isler: siparis basina tek
  *     kurye, tek PAID -> PREPARING olayi, geri verilen kurye yok.
+ *  5. #92 (T13.2): bekleyen siparis, ondan sonra odeyen siparise kuryeyi
+ *     kaptirmaz (QA'nin W/N senaryosu); kuyruk ani belgede, ataninca silinir.
  */
 
 import { fixedClock, ORDER_STATUS, silentLogger } from '@getir/core';
@@ -89,6 +91,8 @@ function dispatch(nowMs: number) {
 }
 
 const paid = () => insertPaid(store.repository, fixedClock(PAID_MS), { marketId: market });
+const paidAt = (atMs: number) =>
+  insertPaid(store.repository, fixedClock(atMs), { marketId: market });
 
 async function documentOf(orderId: string): Promise<Document | null> {
   return raw
@@ -175,6 +179,32 @@ describe('kurye iscisi gercek Mongo da (T13.1 PR 2)', () => {
     expect(
       (await statusEventsOf(order.id)).filter((event) => event['to'] === 'PREPARING'),
     ).toHaveLength(1);
+  });
+
+  it('#92 QA W/N: W bekliyor, kurye t+10 da bosalir, N t+11 de oder -> kurye W ye, N bekler; kuyruk ani belgede', async () => {
+    const w = await paidAt(PAID_MS);
+    await expect(dispatch(PAID_MS + 1_000)).resolves.toMatchObject({ noCourier: 1 });
+    expect(await documentOf(w.id)).toMatchObject({
+      status: 'PREPARING',
+      courierQueuedAt: new Date(PAID_MS),
+    });
+
+    courier.addIdle(market, 'crr_1');
+    const n = await paidAt(PAID_MS + 11_000);
+    await expect(dispatch(PAID_MS + 11_000)).resolves.toMatchObject({
+      assigned: 1,
+      noCourier: 1,
+    });
+
+    expect(courier.assignments.map((request) => request.orderId)).toEqual([w.id, w.id, n.id]);
+    const served = await documentOf(w.id);
+    expect(served).toMatchObject({ courier: { courierId: 'crr_1' } });
+    expect(served).not.toHaveProperty('courierQueuedAt');
+    expect(await documentOf(n.id)).toMatchObject({
+      status: 'PREPARING',
+      courierQueuedAt: new Date(PAID_MS + 11_000),
+      courierRetryAt: new Date(PAID_MS + 11_000 + COURIER_RETRY_DELAY_MS),
+    });
   });
 
   it('QA T3: birakma ucustaki atamadan once gelir, siparis iptal; surum kosulu yazimi reddeder, kurye GERI VERILIR', async () => {
