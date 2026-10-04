@@ -12,6 +12,7 @@ import type { Db, Filter, IndexDescription } from 'mongodb';
 import { ORDER_STATUS } from '@getir/core';
 import type { OrderStatus } from '@getir/core';
 
+import { COURIER_DISPATCH_STATUSES } from '../../domain/courier-dispatch.js';
 import type { OrderHistoryCursor } from '../../domain/order-history-cursor.js';
 import type { OrderDocument } from './documents.js';
 import { COLLECTIONS } from './documents.js';
@@ -21,6 +22,13 @@ const HISTORY_SORT = { createdAt: -1, _id: -1 } as const;
 
 /** Supurucu sirasi (T11.2 PR 2): kilidi once dolan once, esitlikte kimlik. */
 const EXPIRY_SORT = { 'reservation.expiresAt': 1, _id: 1 } as const;
+
+/**
+ * Kurye iscisinin sirasi (T13.1 PR 2): deneme ani olmayan (odenmis) once -
+ * Mongo eksik alani tarihlerden ONCE siralar -, sonra deneme ani en eski;
+ * esitlikte kimlik.
+ */
+const COURIER_DUE_SORT = { courierRetryAt: 1, _id: 1 } as const;
 
 export class OrdersCollection extends MongoRepository<OrderDocument> {
   constructor(db: Db) {
@@ -33,11 +41,20 @@ export class OrdersCollection extends MongoRepository<OrderDocument> {
     // Supurucu (T11.2 PR 2): durum ($in, iki deger) + kilidin bitisi araligi ve
     // ayni siraya gore okuma; durum basina indeks araliklari birlestirilir
     // (SORT_MERGE), bellekte siralama olmaz.
+    // Kurye iscisi (T13.1 PR 2): KISMI, yalnizca kurye bekleyebilen iki durum
+    // (PAID, PREPARING) indekse girer; teslim edilen ve iptal edilen gecmis
+    // girmez. Sorgunun iki kolu ($or) ayni indeksten okunur ve ayni siraya
+    // gore birlestirilir (SORT_MERGE).
     return [
       { key: { userId: 1, createdAt: -1, _id: -1 }, name: 'userId_createdAt_id' },
       {
         key: { status: 1, 'reservation.expiresAt': 1, _id: 1 },
         name: 'status_reservationExpiresAt_id',
+      },
+      {
+        key: { status: 1, courierRetryAt: 1, _id: 1 },
+        name: 'status_courierRetryAt_id',
+        partialFilterExpression: { status: { $in: [...COURIER_DISPATCH_STATUSES] } },
       },
     ];
   }
@@ -90,6 +107,31 @@ export class OrdersCollection extends MongoRepository<OrderDocument> {
       this.collection
         .find({ status: { $in: [...statuses] }, 'reservation.expiresAt': { $lte: now } })
         .sort(EXPIRY_SORT)
+        .limit(limit)
+        .toArray(),
+    );
+  }
+
+  /**
+   * Kurye istenecek belgeler (domain courier-dispatch.ts isCourierDue ile ayni
+   * kural): butun PAID'ler ve deneme ani `now`'dan once ya da `now`'da olan
+   * kuryesiz PREPARING'ler; en fazla `limit` tane (status_courierRetryAt_id).
+   * Deneme ani olmayan PREPARING `$lte` ile eslesmez.
+   */
+  async findAwaitingCourier(now: Date, limit: number): Promise<OrderDocument[]> {
+    return this.run('findAwaitingCourier', () =>
+      this.collection
+        .find({
+          $or: [
+            { status: ORDER_STATUS.PAID },
+            {
+              status: ORDER_STATUS.PREPARING,
+              courier: { $exists: false },
+              courierRetryAt: { $lte: now },
+            },
+          ],
+        })
+        .sort(COURIER_DUE_SORT)
         .limit(limit)
         .toArray(),
     );

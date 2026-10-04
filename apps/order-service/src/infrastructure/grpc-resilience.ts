@@ -7,7 +7,8 @@
  * Idempotent (yeniden denenebilir) cagrilar istemcide `IDEMPOTENT` ile isaretlenir:
  *   catalog GetMarket, BatchGetOffers (okuma); payment Charge, Refund (anahtarli),
  *   GetPayment (okuma); inventory Reserve, Commit, Release (siparise gore tekrar
- *   guvenli). Denenmeyenler: risk Evaluate (her cagri yeni bir degerlendirme
+ *   guvenli); courier AssignCourier, ReleaseCourier (siparise gore tekrar guvenli,
+ *   T13.1). Denenmeyenler: risk Evaluate (her cagri yeni bir degerlendirme
  *   kaydi yazar) ve payment Confirm3Ds (tekrar, 3DS hakkini bosa yakabilir).
  */
 
@@ -29,6 +30,7 @@ export const DEPENDENCY = {
   RISK: 'risk',
   PAYMENT: 'payment',
   INVENTORY: 'inventory',
+  COURIER: 'courier',
 } as const;
 
 export type Dependency = (typeof DEPENDENCY)[keyof typeof DEPENDENCY];

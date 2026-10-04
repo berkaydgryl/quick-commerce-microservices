@@ -4,7 +4,7 @@
  * NASIL hesaplandigi price-draft testlerinin konusudur, burada sabit ornektir.
  */
 
-import { RISK_BANDS } from '@getir/core';
+import { ORDER_STATUS, RISK_BANDS } from '@getir/core';
 import type { Clock, RiskBand } from '@getir/core';
 
 import { applyRiskDecision, decideRisk } from '../../src/domain/checkout-risk.js';
@@ -14,7 +14,7 @@ import { ITEM_UNIT } from '../../src/domain/order-item.js';
 import type { OrderItem, OrderPricing } from '../../src/domain/order-item.js';
 import type { OrderRepository } from '../../src/domain/order-repository.js';
 import type { DraftOrderInput, Order } from '../../src/domain/order.js';
-import { createDraftOrder } from '../../src/domain/order.js';
+import { createDraftOrder, transitionOrder } from '../../src/domain/order.js';
 
 /** 2 x Sut 1 L (32,50 TL). */
 export const SAMPLE_ITEM: OrderItem = {
@@ -94,4 +94,20 @@ export async function insertAwaitingPayment(
   const awaiting = applyRiskDecision(draft, band, decideRisk(band), clock);
   await repository.update(awaiting, draft.version, statusChangedEvents(draft, awaiting));
   return awaiting;
+}
+
+/**
+ * ODENMIS siparis yazar (T13.1 PR 2): kurye atamasini test eden senaryolarin on
+ * kosulu. Odeme adimi burada kosmaz; durum dogrudan gecirilir.
+ */
+export async function insertPaid(
+  repository: Pick<OrderRepository, 'insert' | 'update'>,
+  clock: Clock,
+  overrides: Partial<DraftOrderInput> = {},
+): Promise<Order> {
+  const draft = await insertDraft(repository, clock, overrides);
+  const awaiting = applyRiskDecision(draft, RISK_BANDS.LOW, decideRisk(RISK_BANDS.LOW), clock);
+  const paid = transitionOrder(awaiting, ORDER_STATUS.PAID, clock);
+  await repository.update(paid, draft.version, statusChangedEvents(draft, paid));
+  return paid;
 }

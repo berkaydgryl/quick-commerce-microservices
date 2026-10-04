@@ -7,6 +7,7 @@
 
 import { fixedClock } from '@getir/core';
 
+import type { AwaitingCourierFinder } from '../../src/domain/awaiting-courier-finder.js';
 import type { ExpiredOrderFinder } from '../../src/domain/expired-order-finder.js';
 import type { OrderHistoryReader } from '../../src/domain/order-history-reader.js';
 import type { OrderRepository } from '../../src/domain/order-repository.js';
@@ -14,7 +15,10 @@ import type { Order } from '../../src/domain/order.js';
 import { createDraftOrder } from '../../src/domain/order.js';
 import { sampleDraftInput } from './order-builders.js';
 
-export type OrderStoreUnderTest = OrderRepository & OrderHistoryReader & ExpiredOrderFinder;
+export type OrderStoreUnderTest = OrderRepository &
+  OrderHistoryReader &
+  ExpiredOrderFinder &
+  AwaitingCourierFinder;
 
 export const START_MS = 1_760_000_000_000;
 export const MINUTE_MS = 60_000;

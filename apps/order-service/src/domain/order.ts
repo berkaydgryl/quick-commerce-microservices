@@ -73,6 +73,17 @@ export interface DeliveryLocation {
 }
 
 /**
+ * Siparisi tasiyan kurye (T13.1): kurye kaydinin sahibi courier-service'tir
+ * (ADR-05); burada yalnizca hangi kuryenin ne zaman atandigi tutulur. Adi ve
+ * konumu siparise yazilmaz.
+ */
+export interface OrderCourier {
+  /** courier-service'in kimligi (crr_ onekli). */
+  readonly courierId: string;
+  readonly assignedAt: Date;
+}
+
+/**
  * Siparis kaydi.
  *
  * Kalemler ve tutar taslak acilirken catalog fiyatlarindan hesaplanip
@@ -102,6 +113,16 @@ export interface Order {
    * T11.2 oncesi taslakta YOK. Siparis iptal edilse de silinmez (iz).
    */
   readonly reservation?: OrderReservation;
+  /**
+   * Atanan kurye (T13.1, courier-dispatch.ts). Odenen siparis kuryeyle
+   * PREPARING'e gecer; kurye atanmadan YOK.
+   */
+  readonly courier?: OrderCourier;
+  /**
+   * Uygun kurye yoktu (roadmap saga tablosu): isci bu andan sonra yeniden
+   * ister. Yalnizca kuryesiz PREPARING sipariste var; kurye ataninca silinir.
+   */
+  readonly courierRetryAt?: Date;
   readonly createdAt: Date;
   readonly updatedAt: Date;
   /**

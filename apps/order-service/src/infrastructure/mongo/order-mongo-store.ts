@@ -11,6 +11,7 @@ import type { MongoConnection } from '@getir/mongo-kit';
 import { currentCorrelation } from '@getir/observability';
 import type { ClientSession } from 'mongodb';
 
+import type { AwaitingCourierFinder } from '../../domain/awaiting-courier-finder.js';
 import type { ExpiredOrderFinder } from '../../domain/expired-order-finder.js';
 import type { OrderEvent } from '../../domain/order-events.js';
 import { cursorOf } from '../../domain/order-history-cursor.js';
@@ -42,7 +43,9 @@ import { toOutboxDocument } from './outbox-mappers.js';
  * olarak calisir - transaction'in on kosulu.) Outbox satiri yazan istegin izini
  * (requestId, traceparent; D16) tasir.
  */
-export class OrderMongoStore implements OrderRepository, OrderHistoryReader, ExpiredOrderFinder {
+export class OrderMongoStore
+  implements OrderRepository, OrderHistoryReader, ExpiredOrderFinder, AwaitingCourierFinder
+{
   constructor(
     private readonly orders: OrdersCollection,
     private readonly outbox: OutboxCollection,
@@ -135,6 +138,11 @@ export class OrderMongoStore implements OrderRepository, OrderHistoryReader, Exp
 
   async findExpiredReservations(now: Date, limit: number): Promise<readonly Order[]> {
     const documents = await this.orders.findExpiredReservations(EXPIRY_SWEPT_STATUSES, now, limit);
+    return documents.map(fromOrderDocument);
+  }
+
+  async findAwaitingCourier(now: Date, limit: number): Promise<readonly Order[]> {
+    const documents = await this.orders.findAwaitingCourier(now, limit);
     return documents.map(fromOrderDocument);
   }
 }

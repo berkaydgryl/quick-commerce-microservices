@@ -27,10 +27,16 @@ import {
   startOrExit,
 } from '@getir/service-kit';
 
-import { buildOrderService, startEventPublishing, startReservationSweeping } from './bootstrap.js';
+import {
+  buildOrderService,
+  startCourierDispatching,
+  startEventPublishing,
+  startReservationSweeping,
+} from './bootstrap.js';
 import type { OrderOutbox } from './domain/order-outbox.js';
 import {
   CATALOG_CALL_TIMEOUT_MS,
+  COURIER_CALL_TIMEOUT_MS,
   INVENTORY_CALL_TIMEOUT_MS,
   PAYMENT_CALL_TIMEOUT_MS,
   RISK_CALL_TIMEOUT_MS,
@@ -38,6 +44,7 @@ import {
 } from './config/constants.js';
 import { loadServiceEnv } from './config/env.js';
 import { GrpcCatalogPricing } from './infrastructure/catalog/grpc-catalog-pricing.js';
+import { GrpcCourierAssignment } from './infrastructure/courier/grpc-courier-assignment.js';
 import { DEPENDENCY, dependencyResilience } from './infrastructure/grpc-resilience.js';
 import { GrpcStockReservations } from './infrastructure/inventory/grpc-stock-reservations.js';
 import { openOrderStore } from './infrastructure/order-store.js';
@@ -125,6 +132,19 @@ const { handle, store, events } = await startOrExit(
       INVENTORY_CALL_TIMEOUT_MS,
       dependencyResilience(DEPENDENCY.INVENTORY, logger),
     );
+    // Kurye atama (T13.1 PR 2): tembel baglanir; courier kapaliysa odenen
+    // siparisler PAID'de bekler, isci her turda yeniden dener, acilis durmaz.
+    const courier = new GrpcCourierAssignment(
+      env.COURIER_GRPC_ADDR,
+      COURIER_CALL_TIMEOUT_MS,
+      dependencyResilience(DEPENDENCY.COURIER, logger),
+    );
+    const dispatcher = startCourierDispatching({
+      awaiting: opened.awaitingCourier,
+      repository: opened.repository,
+      courier,
+      logger,
+    });
     // Kilidi dolan siparisleri kapatan supurucu (T11.2 PR 2): her depoda calisir.
     const sweeper = startReservationSweeping({
       expired: opened.expired,
@@ -161,15 +181,17 @@ const { handle, store, events } = await startOrExit(
       // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti
       // kesilmesin. Once giden istemci, veritabani EN SON (proje kurali).
       onShutdown: async () => {
-        // Once supurucu (suren tur biter; istemcileri ve Mongo'yu kullanir), sonra
+        // Once isciler (suren tur biter; istemcileri ve Mongo'yu kullanir), sonra
         // olay yayini (suren tur biter, Redis kapanir), sonra istemciler,
         // veritabani EN SON: yayinci outbox'i Mongo'dan okur.
+        await dispatcher.stop();
         await sweeper.stop();
         await publishing.stop();
         catalog.close();
         risk.close();
         payments.close();
         stock.close();
+        courier.close();
         await opened.close();
       },
     });
@@ -192,6 +214,7 @@ logger.info(
     risk: env.RISK_GRPC_ADDR,
     payment: env.PAYMENT_GRPC_ADDR,
     inventory: env.INVENTORY_GRPC_ADDR,
+    courier: env.COURIER_GRPC_ADDR,
     sweeperIntervalMs: env.ORDER_SWEEPER_INTERVAL_MS,
   },
   'siparis servisi hazir',

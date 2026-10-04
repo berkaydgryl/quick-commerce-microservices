@@ -11,8 +11,10 @@ import type { GrpcServiceRegistration } from '@getir/service-kit';
 import { createCancelOrder } from './application/cancel-order.js';
 import type { CatalogPricing } from './application/catalog-pricing.js';
 import { createConfirmPayment } from './application/confirm-payment.js';
+import type { CourierAssignment } from './application/courier-assignment.js';
 import { createCreateDraftOrder } from './application/create-draft-order.js';
 import { createCreateOrder } from './application/create-order.js';
+import { createDispatchCouriers } from './application/dispatch-couriers.js';
 import { createGetOrder } from './application/get-order.js';
 import { createListMyOrders } from './application/list-my-orders.js';
 import { createRelayOutbox } from './application/relay-outbox.js';
@@ -22,6 +24,10 @@ import type { RiskAssessment } from './application/risk-assessment.js';
 import type { LockPolicy } from './application/lock-timing.js';
 import type { StockReservations } from './application/stock-reservations.js';
 import {
+  COURIER_ASSIGNMENT_WRITE_ATTEMPTS,
+  COURIER_DISPATCH_BATCH_SIZE,
+  COURIER_DISPATCH_INTERVAL_MS,
+  COURIER_RETRY_DELAY_MS,
   DEFAULT_MEDIUM_RISK_RESERVATION_SECONDS,
   DEFAULT_RESERVATION_EXTEND_SECONDS,
   DEFAULT_RESERVATION_TTL_SECONDS,
@@ -31,12 +37,15 @@ import {
   OUTBOX_BATCH_SIZE,
   OUTBOX_POLL_INTERVAL_MS,
 } from './config/constants.js';
+import type { AwaitingCourierFinder } from './domain/awaiting-courier-finder.js';
 import type { ExpiredOrderFinder } from './domain/expired-order-finder.js';
 import type { OrderHistoryReader } from './domain/order-history-reader.js';
 import type { OrderOutbox } from './domain/order-outbox.js';
 import type { OrderRepository } from './domain/order-repository.js';
 import { InMemoryOrderStore } from './infrastructure/memory/in-memory-order-store.js';
 import { createOrderImplementation } from './interfaces/grpc/order-handlers.js';
+import { startCourierDispatcher } from './interfaces/workers/courier-dispatcher.js';
+import type { CourierDispatcher } from './interfaces/workers/courier-dispatcher.js';
 import { startOutboxPublisher } from './interfaces/workers/outbox-publisher.js';
 import type { OutboxPublisherWorker } from './interfaces/workers/outbox-publisher.js';
 import { startReservationSweeper } from './interfaces/workers/reservation-sweeper.js';
@@ -187,6 +196,37 @@ export function startReservationSweeping(options: ReservationSweepingOptions): R
   return startReservationSweeper({
     sweep,
     intervalMs: options.intervalMs ?? DEFAULT_ORDER_SWEEPER_INTERVAL_MS,
+    logger: options.logger,
+  });
+}
+
+export interface CourierDispatchingOptions {
+  readonly awaiting: AwaitingCourierFinder;
+  readonly repository: OrderRepository;
+  /** courier-svc: uretimde gRPC istemcisi, testte sahtesi. */
+  readonly courier: CourierAssignment;
+  readonly logger: Logger;
+  readonly clock?: Clock;
+  readonly intervalMs?: number;
+}
+
+/**
+ * Odenen siparise kurye atayan isciyi kurar ve baslatir (T13.1 PR 2). Depo
+ * hangisi olursa olsun calisir (MOCK'ta bellek); courier adresine gider.
+ */
+export function startCourierDispatching(options: CourierDispatchingOptions): CourierDispatcher {
+  const dispatch = createDispatchCouriers({
+    awaiting: options.awaiting,
+    repository: options.repository,
+    courier: options.courier,
+    clock: options.clock ?? systemClock,
+    batchSize: COURIER_DISPATCH_BATCH_SIZE,
+    retryDelayMs: COURIER_RETRY_DELAY_MS,
+    writeAttempts: COURIER_ASSIGNMENT_WRITE_ATTEMPTS,
+  });
+  return startCourierDispatcher({
+    dispatch,
+    intervalMs: options.intervalMs ?? COURIER_DISPATCH_INTERVAL_MS,
     logger: options.logger,
   });
 }

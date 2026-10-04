@@ -2,6 +2,7 @@
  * Ortamin Mongo parcasi (#51): servis islem suresiyle (MONGO_OPERATION_TIMEOUT_MS)
  * baglanir; seed ve goc komutu suresiz (toplu yazim sureye takilip yarim kalmasin).
  * Stok kilidi (T11.2): inventory adresi ve kilit omru, inventory'nin sinirlariyla.
+ * Kurye atama (T13.1 PR 2): courier adresi.
  */
 
 import { NO_OPERATION_TIMEOUT } from '@getir/mongo-kit';
@@ -128,5 +129,15 @@ describe('order ortami: supurucu (T11.2 PR 2)', () => {
     expect(() => loadServiceEnv()).toThrow();
     expect(exit).toHaveBeenCalledWith(1);
     expect(written.join('')).toContain('ORDER_SWEEPER_INTERVAL_MS');
+  });
+});
+
+describe('order ortami: kurye atama (T13.1 PR 2)', () => {
+  it('verilmezse yerel courier (50056, .env.example); verilen adres okunur', () => {
+    vi.stubEnv('MOCK', 'true');
+    expect(loadServiceEnv().COURIER_GRPC_ADDR).toBe('localhost:50056');
+
+    vi.stubEnv('COURIER_GRPC_ADDR', 'courier-service:50056');
+    expect(loadServiceEnv().COURIER_GRPC_ADDR).toBe('courier-service:50056');
   });
 });

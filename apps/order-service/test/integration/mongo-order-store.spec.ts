@@ -101,6 +101,41 @@ describe('indeks', () => {
     expect(winning).not.toContain('"stage":"SORT"');
     expect(winning).not.toContain('COLLSCAN');
   });
+
+  it('kurye iscisinin indeksi (T13.1 PR 2) KISMI: yalnizca PAID ve PREPARING girer', async () => {
+    const indexes = await connection.db.collection(COLLECTIONS.ORDERS).indexes();
+
+    expect(indexes.find((index) => index.name === 'status_courierRetryAt_id')).toMatchObject({
+      key: { status: 1, courierRetryAt: 1, _id: 1 },
+      partialFilterExpression: { status: { $in: ['PAID', 'PREPARING'] } },
+    });
+  });
+
+  it('kurye iscisinin sorgusu iki kolu da kismi indeksten okur, SORT_MERGE ile birlestirir; bellekte SORT yok', async () => {
+    // orders-collection.ts findAwaitingCourier ile ayni sorgu ve sira.
+    const plan: Document = await connection.db
+      .collection(COLLECTIONS.ORDERS)
+      .find({
+        $or: [
+          { status: 'PAID' },
+          {
+            status: 'PREPARING',
+            courier: { $exists: false },
+            courierRetryAt: { $lte: new Date() },
+          },
+        ],
+      })
+      .sort({ courierRetryAt: 1, _id: 1 })
+      .limit(100)
+      .explain('queryPlanner');
+
+    const { queryPlanner } = explainSchema.parse(plan);
+    const winning = JSON.stringify(queryPlanner.winningPlan);
+    expect(winning).toContain('SORT_MERGE');
+    expect(winning.match(/status_courierRetryAt_id/g)).toHaveLength(2);
+    expect(winning).not.toContain('"stage":"SORT"');
+    expect(winning).not.toContain('COLLSCAN');
+  });
 });
 
 describe('gRPC -> Mongo (T4.5 bitti sayilir: siparis Mongo da gorulur)', () => {
