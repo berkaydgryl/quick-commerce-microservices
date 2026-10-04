@@ -32,4 +32,5 @@ export * from './cart.js';
 export * from './order.js';
 export * from './socket.js';
 export * from './events.js';
+export * from './favorites.js';
 export * from './fallback-texts.js';

@@ -1,21 +1,46 @@
 /*
  * Market karti (T11.12; referans getircarsi). Telefonda kapak ustte; tablet ve
- * genis ekranda yatay: solda kapak, sagda bilgiler. Kartin tamami baglantidir.
+ * genis ekranda yatay: solda kapak, sagda bilgiler. Kartin tamami tiklanir:
+ * market adindaki baglantinin katmani (::after) yuzeyi kaplar (T11.13); kalp
+ * katmanin ustundedir.
  */
-.c-market-card__link {
+.c-market-card__surface {
+  position: relative;
   display: grid;
   gap: var(--space-3);
   padding: var(--space-3);
-  color: inherit;
-  text-decoration: none;
   background: var(--bg-surface);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-surface);
   transition: box-shadow var(--duration-fast) var(--easing-standard);
 }
 
-.c-market-card__link:hover {
+.c-market-card__surface:hover {
   box-shadow: var(--shadow-raised);
+}
+
+.c-market-card__link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.c-market-card__link::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  border-radius: var(--radius-md);
+}
+
+/*
+ * Kalp (T11.13): kapagin sag ust kosesi, baglanti katmaninin ustunde. Kenara
+ * uzaklik odak halkasindan (beyaz kenar + mor halka) genis: kapak tasani
+ * kirptigi icin halka kesilmesin (QA W5).
+ */
+.c-market-card__action {
+  position: absolute;
+  inset-block-start: var(--space-2);
+  inset-inline-end: var(--space-2);
+  z-index: 1;
 }
 
 .c-market-card__media {
@@ -132,7 +157,7 @@
 }
 
 @media (--bp-md) {
-  .c-market-card__link {
+  .c-market-card__surface {
     grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
     gap: var(--space-4);
   }

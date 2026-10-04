@@ -20,6 +20,7 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/clients"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/config"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/content"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/favorites"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/geo"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/httpapi"
@@ -150,6 +151,10 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 		roomtoken.NewSigner(cfg.RealtimeTokenSecret.Bytes(), time.Now),
 	)
 
+	// Favori marketler (T11.13): kayit kullanici deposunda, market bilgisi
+	// katalogdan tek cagriyla (BatchGetMarkets).
+	favoriteService := favorites.NewService(identity.favorites, catalogService, time.Now)
+
 	// Harita adres servisi (T11.8): Nominatim'e tek sira ve onbellekle gider.
 	places := geo.New(geo.Options{BaseURL: cfg.GeoBaseURL, UserAgent: cfg.GeoUserAgent, Timeout: cfg.GeoTimeout})
 
@@ -184,6 +189,9 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 		ProfileGetter:     identity.service,
 		AddressBook:       identity.service,
 		AddressAdder:      identity.service,
+		Favorites:         favoriteService,
+		FavoriteAdder:     favoriteService,
+		FavoriteRemover:   favoriteService,
 		CheckoutSignals:   identity.service,
 		AccessTokens:      identity.tokens,
 		GeoReverser:       places,

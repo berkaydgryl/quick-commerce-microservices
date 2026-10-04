@@ -67,6 +67,13 @@ service CatalogService {
   // urun sessizce atlanmaz, missing listesinde doner.
   rpc BatchGetOffers(BatchGetOffersRequest) returns (BatchGetOffersResponse);
 
+  // Verilen marketleri TOPLU okur (T11.13).
+  //
+  // NEDEN VAR: favori isletmeler sayfasi her favorinin kartini (ad, kapak,
+  // puan, acik/kapali) ister; market basina GetMarket N+1 olurdu. Katalogda
+  // olmayan kimlik sessizce atlanmaz, missing listesinde doner.
+  rpc BatchGetMarkets(BatchGetMarketsRequest) returns (BatchGetMarketsResponse);
+
   // Genel arama (T9.6): markete girmeden, konuma hizmet veren marketlerde
   // urun ya da market adi. Eslesme T9.4 kurallariyla (harf ve Turkce karakter
   // duyarsiz, bosluklu sorguda her kelime gecmeli). Sonuc market market:
@@ -433,6 +440,21 @@ message BatchGetOffersResponse {
   repeated Offer offers = 1;
 
   // Bu marketin satmadigi (ya da hic olmayan) urun kimlikleri.
+  repeated string missing = 2;
+}
+
+message BatchGetMarketsRequest {
+  // En fazla 50 kimlik; daha fazlasi VALIDATION_FAILED. Bos kimlik
+  // reddedilir; bicimi bozuk kimlik BILEREK reddedilmez, missing'de doner
+  // (tek hatali kayit butun listeyi dusurmemeli).
+  repeated string market_ids = 1;
+}
+
+message BatchGetMarketsResponse {
+  // Bulunan marketler, istek sirasinda; tekrarlanan kimlik tek sayilir.
+  repeated Market markets = 1;
+
+  // Katalogda olmayan kimlikler, istek sirasinda.
   repeated string missing = 2;
 }
 

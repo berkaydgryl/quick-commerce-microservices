@@ -1,4 +1,4 @@
-import type { GeoPoint, MarketListContent, StoreType } from '@getir/contracts';
+import type { GeoPoint, Market, MarketListContent, StoreType } from '@getir/contracts';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
@@ -16,6 +16,8 @@ interface MarketListingProps {
   readonly content: MarketListContent | undefined;
   readonly headingLevel: 1 | 2;
   readonly aside: ReactNode;
+  /** Kartin kapagindaki eylem (T11.13: favori kalbi). */
+  readonly renderCardAction?: (market: Market) => ReactNode;
 }
 
 /**
@@ -23,7 +25,13 @@ interface MarketListingProps {
  * TanStack Query) ve adresteki dukkan turu suzgeci (?tur=kasap). Secim
  * gecmise yazilir: geri tusu bir onceki suzgece doner.
  */
-export function MarketListing({ location, content, headingLevel, aside }: MarketListingProps) {
+export function MarketListing({
+  location,
+  content,
+  headingLevel,
+  aside,
+  renderCardAction,
+}: MarketListingProps) {
   const { data, error, refetch } = useNearbyMarkets(location);
   const [searchParams, setSearchParams] = useSearchParams();
   const selected = storeTypeFromParam(searchParams.get(MARKET_LIST_PARAMS.storeType));
@@ -47,6 +55,7 @@ export function MarketListing({ location, content, headingLevel, aside }: Market
       onSelect={select}
       headingLevel={headingLevel}
       aside={aside}
+      {...(renderCardAction === undefined ? {} : { renderCardAction })}
     />
   );
 }

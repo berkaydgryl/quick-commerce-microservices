@@ -1,0 +1,57 @@
+/*
+ * Bildirim alani (T11.13): ekranin altinda, ortada, icerigin ve sepet
+ * cubugunun ustunde. Telefonda sepet cubugunun yuksekligi kadar yukarida
+ * durur (cubuk doluyken bildirimi ortmesin); genis ekranda cubuk yok.
+ */
+.c-toaster {
+  position: fixed;
+  inset-inline: 0;
+  inset-block-end: calc(var(--size-cart-bar) + var(--space-5) + env(safe-area-inset-bottom));
+  z-index: var(--z-toast);
+  display: grid;
+  gap: var(--space-2);
+  justify-items: center;
+  padding-inline: var(--space-gutter);
+  pointer-events: none;
+}
+
+.c-toaster__toast {
+  --focus-ring-color: var(--text-on-brand);
+
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  width: min(100%, var(--container-max-toast));
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  color: var(--text-on-brand);
+  pointer-events: auto;
+  background: var(--bg-toast);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-raised);
+}
+
+.c-toaster__message {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.c-toaster__dismiss {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: var(--size-toast-dismiss);
+  height: var(--size-toast-dismiss);
+  padding: var(--space-1);
+  color: inherit;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--radius-pill);
+}
+
+@media (--bp-lg) {
+  .c-toaster {
+    inset-block-end: var(--space-5);
+  }
+}

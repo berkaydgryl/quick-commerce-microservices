@@ -3,13 +3,12 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { useSessionStore } from '../../../shared/session/session-store';
-import { QueryError, QueryLoading } from '../../../shared/ui/query-status/QueryStatus';
 import { useAddressBook } from '../hooks/useAddressBook';
 import { selectedAddressIndex } from '../services/delivery-address';
 import { deliveryLabel } from '../services/delivery-label';
 
-import { AddressBookDialog } from './AddressBookDialog';
-import { AddressSetupDialog } from './AddressSetupDialog';
+import { AddressDialogs } from './AddressDialogs';
+import type { AddressDialog } from './AddressDialogs';
 import styles from './HeaderAddressPicker.module.css';
 import { ChevronRightIcon, PinIcon } from './icons';
 import { kindIcon } from './kind-icon';
@@ -24,7 +23,7 @@ interface HeaderAddressPickerProps {
   readonly loginHref: string;
 }
 
-type OpenDialog = 'none' | 'book' | 'add';
+type OpenDialog = 'none' | AddressDialog;
 
 /**
  * Ust bar aramasinin sag ucundaki teslimat adresi (T11.10; referans
@@ -49,7 +48,8 @@ export function HeaderAddressPicker({
   // Defter BURADA, secici durdukca bagli kalan tek gozlemciyle okunur (T9.5
   // dersi: hata notu kendi gozlemcisini baglasaydi okunamayan sorgu dongude
   // yeniden baslardi).
-  const { delivery, addresses, error, retry, choose } = useAddressBook();
+  const book = useAddressBook();
+  const { delivery, addresses } = book;
   const userId = useSessionStore((state) => state.user?.id ?? null);
   const [open, setOpen] = useState<OpenDialog>('none');
 
@@ -92,18 +92,6 @@ export function HeaderAddressPicker({
     );
   }
 
-  const close = (): void => setOpen('none');
-  const notice =
-    delivery.source === 'account' ? undefined : delivery.reason === 'unavailable' ? (
-      error === null ? (
-        <QueryLoading>{content.addressLoadingLabel}</QueryLoading>
-      ) : (
-        <QueryError error={error} onRetry={retry} />
-      )
-    ) : (
-      <p className={styles['c-header-address__notice']}>{content.noAddressNotice}</p>
-    );
-
   return (
     <>
       <button
@@ -115,30 +103,16 @@ export function HeaderAddressPicker({
       >
         {face}
       </button>
-      {open === 'book' && (
-        <AddressBookDialog
+      {open !== 'none' && (
+        <AddressDialogs
+          book={book}
           content={content}
-          kinds={setup.kinds}
-          closeLabel={closeLabel}
-          addresses={addresses}
-          current={current}
-          notice={notice}
-          onConfirm={(address) => {
-            choose(address.title);
-            close();
-          }}
-          onAdd={() => setOpen('add')}
-          onClose={close}
-        />
-      )}
-      {open === 'add' && (
-        <AddressSetupDialog
-          content={setup}
+          setup={setup}
           closeLabel={closeLabel}
           userId={userId}
-          onClose={close}
-          closableOnDetails
-          onSaved={close}
+          open={open}
+          onOpen={setOpen}
+          onClose={() => setOpen('none')}
         />
       )}
     </>

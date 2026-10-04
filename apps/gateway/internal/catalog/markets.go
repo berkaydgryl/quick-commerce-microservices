@@ -47,6 +47,25 @@ func (s *Service) Market(ctx context.Context, marketID string) (Market, error) {
 	return toMarket(response.GetMarket(), s.images), nil
 }
 
+// MarketsByIDs, verilen marketleri TEK cagrida okur (T11.13: favori
+// isletmeler; market basina GetMarket N+1 olurdu). Sira istek sirasidir;
+// katalogda olmayan kimlik atlanir (catalog missing'de bildirir).
+func (s *Service) MarketsByIDs(ctx context.Context, marketIDs []string) ([]Market, error) {
+	if len(marketIDs) == 0 {
+		return []Market{}, nil
+	}
+	request := &catalogv1.BatchGetMarketsRequest{MarketIds: marketIDs}
+	response, err := rpc.Invoke(ctx, s.timeout, service, "BatchGetMarkets", s.rpc.BatchGetMarkets, request)
+	if err != nil {
+		return nil, err
+	}
+	markets := make([]Market, 0, len(response.GetMarkets()))
+	for _, market := range response.GetMarkets() {
+		markets = append(markets, toMarket(market, s.images))
+	}
+	return markets, nil
+}
+
 // MarketCategories, marketin teklifi olan kategoriler (manav yalnizca meyve-sebze).
 func (s *Service) MarketCategories(ctx context.Context, marketID string) (CategoryList, error) {
 	request := &catalogv1.ListMarketCategoriesRequest{MarketId: marketID}

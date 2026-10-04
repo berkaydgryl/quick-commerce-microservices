@@ -30,6 +30,8 @@ type marketStub struct {
 	gotNearby     *catalogv1.ListNearbyMarketsRequest
 	gotProducts   *catalogv1.ListProductsRequest
 	gotCategories *catalogv1.ListMarketCategoriesRequest
+	batch         []*catalogv1.Market
+	gotBatch      *catalogv1.BatchGetMarketsRequest
 }
 
 func (s *marketStub) fail(ctx context.Context) error {
@@ -54,6 +56,14 @@ func (s *marketStub) GetMarket(ctx context.Context, _ *catalogv1.GetMarketReques
 		return nil, s.fail(ctx)
 	}
 	return &catalogv1.GetMarketResponse{Market: s.market}, nil
+}
+
+func (s *marketStub) BatchGetMarkets(ctx context.Context, in *catalogv1.BatchGetMarketsRequest) (*catalogv1.BatchGetMarketsResponse, error) {
+	s.gotBatch = in
+	if s.err != nil {
+		return nil, s.fail(ctx)
+	}
+	return &catalogv1.BatchGetMarketsResponse{Markets: s.batch, Missing: []string{"mkt_yok"}}, nil
 }
 
 func (s *marketStub) ListMarketCategories(ctx context.Context, in *catalogv1.ListMarketCategoriesRequest) (*catalogv1.ListMarketCategoriesResponse, error) {
@@ -195,5 +205,35 @@ func TestMarketWithoutStoreTypeOrCoverOmitsFields(t *testing.T) {
 				t.Errorf("tur %d: %s yazilmamali: %s", storeType, field, encoded)
 			}
 		}
+	}
+}
+
+func TestMarketsByIDsIsOneCallAndMapsTheContractShape(t *testing.T) {
+	// T11.13: favori sayfasi butun marketleri TEK cagriyla ister; kapak mutlak URL.
+	stub := &marketStub{batch: []*catalogv1.Market{migrosJet()}}
+	service := startStub(t, stub)
+
+	markets, err := service.MarketsByIDs(context.Background(), []string{"mkt_migros-jet-moda", "mkt_yok"})
+	if err != nil {
+		t.Fatalf("hata beklenmiyordu: %v", err)
+	}
+	if got := stub.gotBatch.GetMarketIds(); len(got) != 2 || got[1] != "mkt_yok" {
+		t.Errorf("kimlikler servise tasinmali: %v", got)
+	}
+	if encoded := testkit.JSON(t, markets); encoded != "["+migrosJetJSON+"]" {
+		t.Errorf("JSON:\n got %s\nwant [%s]", encoded, migrosJetJSON)
+	}
+}
+
+func TestMarketsByIDsWithoutIDsSkipsTheCall(t *testing.T) {
+	stub := &marketStub{}
+	service := startStub(t, stub)
+
+	markets, err := service.MarketsByIDs(context.Background(), nil)
+	if err != nil || len(markets) != 0 || stub.gotBatch != nil {
+		t.Errorf("bos liste cagri yapmadan [] donmeli: %v %v %v", markets, err, stub.gotBatch)
+	}
+	if encoded := testkit.JSON(t, markets); encoded != "[]" {
+		t.Errorf("bos liste [] olmali: %s", encoded)
 	}
 }

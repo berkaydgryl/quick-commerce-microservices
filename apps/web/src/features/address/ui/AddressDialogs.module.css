@@ -1,0 +1,6 @@
+/* Adres defteri bos: pencerede listenin yerine not (T11.10). */
+.c-address-dialogs__notice {
+  font-size: var(--font-size-sm);
+  color: var(--text-default);
+  text-align: center;
+}

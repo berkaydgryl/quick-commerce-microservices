@@ -138,6 +138,7 @@
     "addressLoadingLabel": "Adreslerin yükleniyor…",
     "profileLabel": "Profil",
     "accountLabel": "Hesabım",
+    "favoritesLabel": "Favori marketlerim",
     "logoutLabel": "Çıkış yap",
     "logoutPendingLabel": "Çıkış yapılıyor…"
   },
@@ -186,5 +187,20 @@
       "goToCartLabel": "Sepete git",
       "clearLabel": "Sepeti boşalt"
     }
+  },
+  "favorites": {
+    "title": "Favori İşletmelerim",
+    "addLabel": "Favorilere ekle",
+    "removeLabel": "Favorilerden çıkar",
+    "loadingLabel": "Favorilerin yükleniyor…",
+    "emptyTitle": "Henüz favori işletmen yok",
+    "emptyHint": "İşletme kartındaki kalbe dokunarak favorilerine ekleyebilirsin.",
+    "removedNotice": "favorilerden çıkarıldı",
+    "updateFailedToast": "Favori güncellenemedi, tekrar dene.",
+    "listFullToast": "Favori listen dolu; yenisini eklemek için birini çıkar.",
+    "toastDismissLabel": "Bildirimi kapat",
+    "profileMenuLabel": "Hesap menüsü",
+    "addressesLabel": "Adreslerim",
+    "favoritesMenuLabel": "Favori İşletmeler"
   }
 }

@@ -19,6 +19,8 @@ export interface HeaderAccountTexts {
   readonly loginLabel: string;
   readonly profileLabel: string;
   readonly accountLabel: string;
+  /** Favori sayfasi baglantisi (T11.13). */
+  readonly favoritesLabel: string;
   readonly logoutLabel: string;
   readonly logoutPendingLabel: string;
 }
@@ -26,6 +28,8 @@ export interface HeaderAccountTexts {
 interface HeaderAccountProps {
   /** Metinler; icerik gelene kadar undefined (yer tutucu). */
   readonly texts: HeaderAccountTexts | undefined;
+  /** Favori sayfasinin adresi (T11.13); uygulama verir: kimlik ozelligi favorileri tanimaz. */
+  readonly favoritesHref: string;
 }
 
 /**
@@ -35,7 +39,7 @@ interface HeaderAccountProps {
  * sessiz yenileme ve icerik bitene kadar ayni boyda bos yer: bar kaymaz. Dar
  * ekranda yalnizca ikon gorunur; adi aria-label tasir.
  */
-export function HeaderAccount({ texts }: HeaderAccountProps) {
+export function HeaderAccount({ texts, favoritesHref }: HeaderAccountProps) {
   const status = useSessionStore((state) => state.status);
   const location = useLocation();
 
@@ -56,14 +60,21 @@ export function HeaderAccount({ texts }: HeaderAccountProps) {
       </Link>
     );
   }
-  return <ProfileMenu texts={texts} />;
+  return <ProfileMenu texts={texts} favoritesHref={favoritesHref} />;
 }
 
 /**
- * Profil menusu: dugme ve altinda saga yasli liste. Cikis basarisizsa (ag,
+ * Profil menusu: dugme ve altinda saga yasli liste ("Hesabim", "Favori
+ * marketlerim" (T11.13), "Cikis yap"). Cikis basarisizsa (ag,
  * 503) oturum yerinde kalir ve mesaj listede gorunur (useLogout).
  */
-function ProfileMenu({ texts }: { readonly texts: HeaderAccountTexts }) {
+function ProfileMenu({
+  texts,
+  favoritesHref,
+}: {
+  readonly texts: HeaderAccountTexts;
+  readonly favoritesHref: string;
+}) {
   const disclosure = useDisclosure();
   const logout = useLogout();
   const panelId = useId();
@@ -96,6 +107,15 @@ function ProfileMenu({ texts }: { readonly texts: HeaderAccountTexts }) {
               onClick={disclosure.close}
             >
               {texts.accountLabel}
+            </Link>
+          </li>
+          <li>
+            <Link
+              to={favoritesHref}
+              className={styles['c-header-account__item']}
+              onClick={disclosure.close}
+            >
+              {texts.favoritesLabel}
             </Link>
           </li>
           <li>

@@ -10,6 +10,8 @@ export interface MarketReader {
   /** Yoksa null. */
   getMarket(marketId: string): Promise<Market | null>;
   marketExists(marketId: string): Promise<boolean>;
+  /** Verilen kimliklerdeki marketler (T11.13). SIRA GARANTISI YOKTUR; olmayan kimlik atlanir. */
+  findMarketsByIds(marketIds: readonly string[]): Promise<readonly Market[]>;
   /**
    * Konuma en yakin marketler, YAKINDAN UZAGA, en fazla `limit` tane.
    * Kapsama ve acik/kapali ayrimi YAPMAZ: o karar domain'dedir.

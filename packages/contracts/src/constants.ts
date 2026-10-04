@@ -80,6 +80,13 @@ export const ADDRESS_NOTE_MAX_LENGTH = 240;
 export const SAVED_ADDRESSES_MAX = 10;
 
 /**
+ * Kullanici basina en fazla favori market (T11.13). Favori listesi sinirlidir,
+ * sayfalanmaz (adres defteri gibi). Gateway'deki karsiligi favorites.MaxMarkets,
+ * catalog'un toplu okuma siniri MAX_BATCH_MARKET_IDS (iki esitlik testlerle).
+ */
+export const FAVORITE_MARKETS_MAX = 50;
+
+/**
  * Kupon kodunun en uzun hali (ornek: ILK10). Bilinmeyen kod zaten
  * COUPON_INVALID alir; sinir, sinirsiz metnin kapidan gecmemesi icindir.
  * REST rezervasyon govdesi ve order-service'in gRPC semasi ayni degeri

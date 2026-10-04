@@ -65,3 +65,13 @@ func StringEnum(t *testing.T, source, name string) []string {
 	}
 	return names
 }
+
+// StringConstant, `export const AD = 'deger';` satirindaki metin.
+func StringConstant(t *testing.T, source, name string) string {
+	t.Helper()
+	match := regexp.MustCompile(`export const ` + name + ` = '([^']*)';`).FindStringSubmatch(source)
+	if match == nil {
+		t.Fatalf("%s sozlesmede bulunamadi", name)
+	}
+	return match[1]
+}
