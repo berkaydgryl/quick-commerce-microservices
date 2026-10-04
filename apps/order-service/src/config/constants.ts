@@ -58,6 +58,34 @@ export const DEFAULT_INVENTORY_GRPC_ADDR = 'localhost:50052';
  */
 export const INVENTORY_CALL_TIMEOUT_MS = 1_000;
 
+/** Kurye servisinin varsayilan adresi (roadmap port haritasi: courier 50056). */
+export const DEFAULT_COURIER_GRPC_ADDR = 'localhost:50056';
+
+/**
+ * order -> courier cagrisinin sure siniri (ms), T13.1 PR 2. Atama ve birakma
+ * tek findOneAndUpdate; cagri kullanicinin bekledigi yolda degil (isci), yine
+ * de takilan courier turu uzatmasin diye inventory ile ayni 1 sn.
+ */
+export const COURIER_CALL_TIMEOUT_MS = 1_000;
+
+/**
+ * Kurye atayan isci (T13.1 PR 2): 1 sn'de bir tur, turda en fazla 100 siparis.
+ * Odenen siparis en gec ~1 sn sonra kuryeyle PREPARING'e gecer. Markette bos
+ * kurye yoksa siparis kuryesiz PREPARING'de bekler ve 30 sn sonra yeniden
+ * denenir (roadmap saga tablosu, B7).
+ */
+export const COURIER_DISPATCH_INTERVAL_MS = 1_000;
+export const COURIER_DISPATCH_BATCH_SIZE = 100;
+export const COURIER_RETRY_DELAY_MS = 30_000;
+
+/**
+ * Atama yazilamazsa (surum cakismasi) siparis yeniden okunup karar yeniden
+ * verilir; en fazla bu kadar yazim denemesi. Cakisma yalnizca eszamanli
+ * yazimda olur (ikinci order ornegi, iptal); ucuncude de surerse siparis
+ * sonraki turda ele alinir.
+ */
+export const COURIER_ASSIGNMENT_WRITE_ATTEMPTS = 3;
+
 /**
  * Stok kilidinin omru (sn), RESERVATION_TTL_SECONDS. Sinirlar inventory'nin
  * kabul ettigiyle ayni (30-900); banda gore kisaltma (orta risk 120 sn) T11.3.

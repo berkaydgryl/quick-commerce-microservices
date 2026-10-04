@@ -19,6 +19,7 @@ import { z } from 'zod';
 
 import {
   DEFAULT_CATALOG_GRPC_ADDR,
+  DEFAULT_COURIER_GRPC_ADDR,
   DEFAULT_INVENTORY_GRPC_ADDR,
   DEFAULT_MONGO_DB,
   DEFAULT_ORDER_GRPC_PORT,
@@ -46,6 +47,8 @@ const serviceSchema = serviceEnvSchema.extend({
   PAYMENT_GRPC_ADDR: envString(DEFAULT_PAYMENT_GRPC_ADDR),
   // Stok kilidi (T11.2). Ad gateway'le ayni: iki servis ayni inventory'ye baglanir.
   INVENTORY_GRPC_ADDR: envString(DEFAULT_INVENTORY_GRPC_ADDR),
+  // Kurye atama (T13.1 PR 2): odenen siparise kurye isteyen isci courier'i cagirir.
+  COURIER_GRPC_ADDR: envString(DEFAULT_COURIER_GRPC_ADDR),
   RESERVATION_TTL_SECONDS: envInt({
     min: MIN_RESERVATION_TTL_SECONDS,
     max: MAX_RESERVATION_TTL_SECONDS,

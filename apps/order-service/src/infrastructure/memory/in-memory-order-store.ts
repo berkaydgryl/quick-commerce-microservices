@@ -10,6 +10,8 @@
 import { AppError, ORDER_STATUS } from '@getir/core';
 import { currentCorrelation } from '@getir/observability';
 
+import type { AwaitingCourierFinder } from '../../domain/awaiting-courier-finder.js';
+import { isCourierDue } from '../../domain/courier-dispatch.js';
 import type { ExpiredOrderFinder } from '../../domain/expired-order-finder.js';
 import type { OrderEvent } from '../../domain/order-events.js';
 import { comesBefore, cursorOf } from '../../domain/order-history-cursor.js';
@@ -39,7 +41,12 @@ interface StoredEvent {
 }
 
 export class InMemoryOrderStore
-  implements OrderRepository, OrderHistoryReader, OrderOutbox, ExpiredOrderFinder
+  implements
+    OrderRepository,
+    OrderHistoryReader,
+    OrderOutbox,
+    ExpiredOrderFinder,
+    AwaitingCourierFinder
 {
   private readonly orders = new Map<string, Order>();
   private readonly events: StoredEvent[] = [];
@@ -170,6 +177,13 @@ export class InMemoryOrderStore
     return Promise.resolve(expired.slice(0, limit));
   }
 
+  findAwaitingCourier(now: Date, limit: number): Promise<readonly Order[]> {
+    const due = [...this.orders.values()]
+      .filter((order) => isCourierDue(order, now))
+      .sort(byCourierDue);
+    return Promise.resolve(due.slice(0, limit));
+  }
+
   /** Yalnizca test icin: kayitli siparis sayisi. */
   get size(): number {
     return this.orders.size;
@@ -184,6 +198,20 @@ function byReservationExpiry(left: Order, right: Order): number {
     return byExpiry;
   }
   return left.id < right.id ? -1 : 1;
+}
+
+/** Mongo sirasiyla ayni: deneme ani olmayan (odenmis) once, sonra deneme ani, esitlikte kimlik. */
+function byCourierDue(left: Order, right: Order): number {
+  const byRetry = retryRank(left) - retryRank(right);
+  if (byRetry !== 0) {
+    return byRetry;
+  }
+  return left.id < right.id ? -1 : 1;
+}
+
+/** Eksik deneme ani her tarihten once siralanir (Mongo'da eksik alan gibi). */
+function retryRank(order: Order): number {
+  return order.courierRetryAt?.getTime() ?? Number.MIN_SAFE_INTEGER;
 }
 
 /** Mongo okumasiyla ayni bicim: iz yoksa `correlation` alani hic yoktur. */

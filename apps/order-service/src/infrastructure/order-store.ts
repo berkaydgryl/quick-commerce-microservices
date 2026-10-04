@@ -15,6 +15,7 @@ import type { MongoEnv } from '@getir/mongo-kit';
 
 import { SERVICE_NAME } from '../config/constants.js';
 import type { OrderServiceEnv } from '../config/env.js';
+import type { AwaitingCourierFinder } from '../domain/awaiting-courier-finder.js';
 import type { ExpiredOrderFinder } from '../domain/expired-order-finder.js';
 import type { OrderHistoryReader } from '../domain/order-history-reader.js';
 import type { OrderOutbox } from '../domain/order-outbox.js';
@@ -34,6 +35,8 @@ export interface OrderStore {
   readonly outbox: OrderOutbox;
   /** Supurucunun is kuyrugu (T11.2 PR 2): kilidi dolmus siparisler. */
   readonly expired: ExpiredOrderFinder;
+  /** Kurye iscisinin is kuyrugu (T13.1 PR 2): kurye bekleyen siparisler. */
+  readonly awaitingCourier: AwaitingCourierFinder;
   /** Gunlukte gorunen ad: hangi modda calisiyoruz? */
   readonly name: 'bellek (MOCK)' | 'mongo';
   /** Kapanista EN SON cagrilir (proje kurali: once cagrilar, sonra veritabani). */
@@ -59,6 +62,7 @@ export async function openOrderStore(
       history: memory,
       outbox: memory,
       expired: memory,
+      awaitingCourier: memory,
       name: 'bellek (MOCK)',
       close: () => Promise.resolve(),
     };
@@ -87,6 +91,7 @@ export async function openOrderStore(
     history: store,
     outbox: new MongoOrderOutbox(outbox),
     expired: store,
+    awaitingCourier: store,
     name: 'mongo',
     close: () => connection.close(),
   };

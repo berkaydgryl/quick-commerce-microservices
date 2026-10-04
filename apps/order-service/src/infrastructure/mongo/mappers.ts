@@ -89,6 +89,12 @@ export function toOrderDocument(order: Order): OrderDocument {
             expiresAt: order.reservation.expiresAt,
           },
         }),
+    ...(order.courier === undefined
+      ? {}
+      : {
+          courier: { courierId: order.courier.courierId, assignedAt: order.courier.assignedAt },
+        }),
+    ...(order.courierRetryAt === undefined ? {} : { courierRetryAt: order.courierRetryAt }),
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
     version: order.version,
@@ -115,6 +121,15 @@ export function fromOrderDocument(document: OrderDocument): Order {
             expiresAt: document.reservation.expiresAt,
           },
         }),
+    ...(document.courier === undefined
+      ? {}
+      : {
+          courier: {
+            courierId: document.courier.courierId,
+            assignedAt: document.courier.assignedAt,
+          },
+        }),
+    ...(document.courierRetryAt === undefined ? {} : { courierRetryAt: document.courierRetryAt }),
     createdAt: document.createdAt,
     updatedAt: document.updatedAt,
     version: document.version,

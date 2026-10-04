@@ -354,7 +354,7 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/cat
 | ---------------------------------------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------- |
 | [`catalog-service`](apps/catalog-service/README.md) (T4.8) | 50051 | Pazaryeri: yakındaki marketler, market sayfası, teklifler — Mongo ya da `MOCK`                                        |
 | [`inventory-service`](apps/inventory-service/README.md)    | 50052 | (T9.1) `CheckAvailability`: toplu stok; Mongo `stock` + Redis sayacı ya da `MOCK`; rezervasyon T10                    |
-| [`order-service`](apps/order-service/README.md) (T7.5)     | 50053 | Taslak (catalog fiyatıyla), saga (risk → ödeme → 3DS), iptal, geçmiş, outbox → olay                                   |
+| [`order-service`](apps/order-service/README.md) (T7.5)     | 50053 | Taslak (catalog fiyatıyla), saga (risk → ödeme → 3DS), iptal, geçmiş, outbox → olay; ödenen siparişe kurye (T13.1)    |
 | [`payment-service`](apps/payment-service/README.md) (T5.3) | 50054 | `Charge`, `Confirm3Ds` — mock kart + 3DS, idempotent; Mongo `payments` ya da `MOCK`                                   |
 | [`risk-service`](apps/risk-service/README.md) (T6.3)       | 50055 | `Evaluate`, `GetLastEvaluation` — 6 kural, veto, `risk_events` (Mongo ya da `MOCK`)                                   |
 | [`courier-service`](apps/courier-service/README.md)        | 50056 | (T13.1) `AssignCourier` (atomik, tekrar güvenli), `GetCourier`, `ReleaseCourier`; `couriers` (Mongo ya da `MOCK`)     |

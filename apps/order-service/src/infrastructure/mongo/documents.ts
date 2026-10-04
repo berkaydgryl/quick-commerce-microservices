@@ -63,6 +63,10 @@ export interface OrderDocument extends BaseDocument {
   riskBand?: RiskBand;
   /** Stok kilidi (T11.2); kilitlenemeyen ve T11.2 oncesi taslakta HIC yok. */
   reservation?: { reservedAt: Date; expiresAt: Date };
+  /** Atanan kurye (T13.1 PR 2); atanmadan HIC yazilmaz. */
+  courier?: { courierId: string; assignedAt: Date };
+  /** Kuryesiz PREPARING'in yeniden deneme ani; yalnizca o durumda var. */
+  courierRetryAt?: Date;
   createdAt: Date;
   updatedAt: Date;
   /** Iyimser kilit surumu; guncelleme filtresi bunu kosul olarak kullanir. */

@@ -6,13 +6,13 @@ geçer (T13.1 PR 2). Canlı konum bu servisin RPC'lerinden geçmez (`courier.pro
 
 ## Bugünkü durum (T13.1 — kurye ataması)
 
-| Parça                        | Durum                                                                              |
-| ---------------------------- | ---------------------------------------------------------------------------------- |
-| `couriers` şeması            | ✅ `infrastructure/mongo/documents.ts`, indeksler `couriers-collection.ts`         |
-| Atama (B7)                   | ✅ `application/assign-courier.ts` + `AssignmentStrategy` (en uzun süre boş kalan) |
-| Okuma, bırakma               | ✅ `GetCourier`, `ReleaseCourier`                                                  |
-| Demo kuryeleri               | ✅ `pnpm seed`: katalogdaki her markete 3 kurye (`infrastructure/fixtures`)        |
-| Rota, ETA, GPS, `StartRoute` | ⏳ T13.2–T13.3; `StartRoute` bugün `NOT_IMPLEMENTED`                               |
+| Parça                        | Durum                                                                                                            |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `couriers` şeması            | ✅ `infrastructure/mongo/documents.ts`, indeksler `couriers-collection.ts`                                       |
+| Atama (B7)                   | ✅ `application/assign-courier.ts` + `AssignmentStrategy`: en uzun süredir iş almamış kurye önce (son atama anı) |
+| Okuma, bırakma               | ✅ `GetCourier`, `ReleaseCourier`                                                                                |
+| Demo kuryeleri               | ✅ `pnpm seed`: katalogdaki her markete 3 kurye (`infrastructure/fixtures`)                                      |
+| Rota, ETA, GPS, `StartRoute` | ⏳ T13.2–T13.3; `StartRoute` bugün `NOT_IMPLEMENTED`                                                             |
 
 ## RPC'ler
 
@@ -31,13 +31,17 @@ teslimat konumu zorunlu. Kullanımdan kalkan `dark_store_id` okunmaz (ADR-15).
 - **Atomik:** tek `findOneAndUpdate` marketin `IDLE` kuryesini aynı anda `BUSY` yapar, siparişe bağlar
   (`currentOrderId`) ve atama anını (`lastAssignedAt`) yazar. İki sipariş aynı kuryeyi alamaz
   (entegrasyon testi: tek kurye, 20 eşzamanlı sipariş → 1 atama, 19 `NOT_FOUND`).
-- **Sıra:** en uzun süredir iş almamış kurye önce; hiç atanmamış en önde, eşitlikte kimlik. `OFFLINE`
-  havuza girmez. Akıllı atama (mesafe, yük) `domain/assignment-strategy.ts` arayüzünün arkasına gelir.
+- **Sıra:** en uzun süredir iş almamış kurye önce (son atama anı); hiç atanmamış en önde, eşitlikte
+  kimlik. `OFFLINE` havuza girmez. Akıllı atama (mesafe, yük) `domain/assignment-strategy.ts`
+  arayüzünün arkasına gelir.
 - **Tekrar güvenli:** sipariş zaten bir kuryedeyse aynısı döner. `currentOrderId` üzerindeki kısmi
   benzersiz indeks, aynı sipariş için eşzamanlı ikinci isteği durdurur; kaybeden kazananın kuryesini
   okur (test: aynı sipariş 10 kez eşzamanlı → tek kurye).
 - **ETA:** atama cevabında `eta_seconds = 0` (hesaplanmadı); rota ve ETA T13.2'de.
-- **Bırakma:** `lastAssignedAt` silinmez; yeni boşalan kurye sıranın sonuna geçer.
+- **Bırakma:** `lastAssignedAt` silinmez; sıra son atama anına göredir, boşta bekleme süresine
+  değil. Uzun bir teslimattan yeni dönen kurye, ondan sonra atanıp çoktan boşalmış kuryenin önüne
+  geçebilir. Boşta bekleme süresine ya da mesafeye göre adil atama `AssignmentStrategy`'nin
+  arkasına gelir (bekleyen iş #88).
 
 ## `couriers` belgesi
 

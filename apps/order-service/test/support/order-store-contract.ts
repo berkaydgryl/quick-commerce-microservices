@@ -7,6 +7,7 @@
  * ve ayni (benzersiz kullanici ureten) veri yardimcisiyla kosturur.
  */
 
+import { describeAwaitingCourierFinderContract } from './awaiting-courier-finder-contract.js';
 import { describeExpiredOrderFinderContract } from './expired-order-finder-contract.js';
 import { describeOrderHistoryReaderContract } from './order-history-reader-contract.js';
 import { describeOrderRepositoryContract } from './order-repository-contract.js';
@@ -23,4 +24,5 @@ export function describeOrderStoreContract(
   describeOrderRepositoryContract(name, getStore, fixtures);
   describeOrderHistoryReaderContract(name, getStore, fixtures);
   describeExpiredOrderFinderContract(name, getStore, fixtures);
+  describeAwaitingCourierFinderContract(name, getStore, fixtures);
 }
