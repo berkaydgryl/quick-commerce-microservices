@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,6 +15,35 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/ids"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/mail"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/testkit"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/verification"
+)
+
+// fakeClock, elle ilerleyen saat; es zamanli okumaya karsi kilitli.
+type fakeClock struct {
+	mu  sync.Mutex
+	now time.Time
+}
+
+func newFakeClock() *fakeClock {
+	return &fakeClock{now: time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)}
+}
+
+func (c *fakeClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+func (c *fakeClock) Advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = c.now.Add(d)
+}
+
+// Kod cumleleri verification'dadir; burada metinleriyle denetlenir.
+const (
+	codeExpiredReason = "Kodun süresi doldu. Yeni kod isteyebilirsin."
+	codeLockedReason  = "Kod 5 kez hatalı girildi. Yeni kod isteyebilirsin."
 )
 
 const (
@@ -26,7 +56,7 @@ const (
 type fixture struct {
 	service *Service
 	users   *authstore.MemoryUsers
-	store   *Memory
+	store   *verification.Memory
 	mailer  *recordingMailer
 	clock   *fakeClock
 	userID  string
@@ -53,7 +83,7 @@ func newFixture(t *testing.T) *fixture {
 	if err := users.Create(t.Context(), auth.User{ID: userID, Phone: "+905321234567", FullName: "Ayşe Yılmaz"}); err != nil {
 		t.Fatalf("kullanici yazilamadi: %v", err)
 	}
-	f := &fixture{users: users, store: NewMemory(clock.Now), mailer: &recordingMailer{box: mail.NewMemory()}, clock: clock, userID: userID}
+	f := &fixture{users: users, store: verification.NewMemory(clock.Now), mailer: &recordingMailer{box: mail.NewMemory()}, clock: clock, userID: userID}
 	f.service = NewService(Deps{
 		Accounts: users, Store: f.store, Mailer: f.mailer, CodeKey: []byte("test-anahtari"),
 		Now: clock.Now, NewCode: func() string { return testCode },
@@ -201,7 +231,7 @@ func TestVerifyWritesTheAddressAndReturnsProfile(t *testing.T) {
 	}
 	// Kod tek kullanimliktir.
 	_, err = f.verify(t, testEmail, testCode)
-	expectField(t, err, FieldCode, codeExpiredReason)
+	expectField(t, err, verification.FieldCode, codeExpiredReason)
 }
 
 func TestVerifyCountsWrongCodesThenLocks(t *testing.T) {
@@ -210,14 +240,14 @@ func TestVerifyCountsWrongCodesThenLocks(t *testing.T) {
 		t.Fatalf("gonderim: %v", err)
 	}
 
-	for left := MaxAttempts - 1; left > 0; left-- {
+	for left := verification.MaxAttempts - 1; left > 0; left-- {
 		_, err := f.verify(t, testEmail, "999999")
-		expectField(t, err, FieldCode, "Kod hatalı. "+string(rune('0'+left))+" deneme hakkın kaldı.")
+		expectField(t, err, verification.FieldCode, "Kod hatalı. "+string(rune('0'+left))+" deneme hakkın kaldı.")
 	}
 	_, err := f.verify(t, testEmail, "999999")
-	expectField(t, err, FieldCode, codeLockedReason)
+	expectField(t, err, verification.FieldCode, codeLockedReason)
 	_, err = f.verify(t, testEmail, testCode)
-	expectField(t, err, FieldCode, codeLockedReason)
+	expectField(t, err, verification.FieldCode, codeLockedReason)
 
 	user, err := f.users.ByID(t.Context(), f.userID)
 	if err != nil || user.Email != "" {
@@ -230,11 +260,11 @@ func TestVerifyAfterTenMinutesIsExpired(t *testing.T) {
 	if _, err := f.send(t, testEmail); err != nil {
 		t.Fatalf("gonderim: %v", err)
 	}
-	f.clock.Advance(CodeTTL)
+	f.clock.Advance(verification.CodeTTL)
 
 	_, err := f.verify(t, testEmail, testCode)
 
-	expectField(t, err, FieldCode, codeExpiredReason)
+	expectField(t, err, verification.FieldCode, codeExpiredReason)
 }
 
 func TestVerifyForAnotherAddressIsExpired(t *testing.T) {
@@ -247,7 +277,7 @@ func TestVerifyForAnotherAddressIsExpired(t *testing.T) {
 
 	_, err := f.verify(t, "baska@ornek.com", testCode)
 
-	expectField(t, err, FieldCode, codeExpiredReason)
+	expectField(t, err, verification.FieldCode, codeExpiredReason)
 }
 
 func TestVerifyLosesRaceToAnotherAccount(t *testing.T) {
@@ -268,31 +298,4 @@ func TestVerifyLosesRaceToAnotherAccount(t *testing.T) {
 	_, err := f.verify(t, testEmail, testCode)
 
 	expectField(t, err, FieldEmail, emailTakenReason)
-}
-
-func TestCodeHashDependsOnUserAndAddress(t *testing.T) {
-	hasher := codeHasher{key: []byte("anahtar")}
-	base := hasher.hash("usr_a", testEmail, testCode)
-
-	for _, other := range []string{
-		hasher.hash("usr_b", testEmail, testCode),
-		hasher.hash("usr_a", "baska@ornek.com", testCode),
-		hasher.hash("usr_a", testEmail, "042138"),
-		codeHasher{key: []byte("baska")}.hash("usr_a", testEmail, testCode),
-	} {
-		if other == base {
-			t.Error("ozet kullanici, adres, kod ve anahtardan birinin degisiminde degismeli")
-		}
-	}
-	if strings.Contains(base, testCode) {
-		t.Error("ozet kodu acik tasimamali")
-	}
-}
-
-func TestNewCodeIsSixDigits(t *testing.T) {
-	for range 200 {
-		if code := newCode(); !codeRegexp.MatchString(code) {
-			t.Fatalf("6 rakam bekleniyordu: %q", code)
-		}
-	}
 }

@@ -72,3 +72,9 @@ func TestInvalidMailSettingsAreRejected(t *testing.T) {
 		}
 	}
 }
+
+func TestPhoneChangeIsDevelopmentOnly(t *testing.T) {
+	if !(Config{NodeEnv: EnvDevelopment}).PhoneChangeEnabled() || (Config{NodeEnv: EnvProduction}).PhoneChangeEnabled() {
+		t.Error("telefon degistirme yalnizca production disinda acik olmali (#95)")
+	}
+}

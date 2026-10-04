@@ -43,6 +43,8 @@ type userDocument struct {
 	// indekse girmez (kismi indeks).
 	Email           string     `bson:"email,omitempty"`
 	EmailVerifiedAt *time.Time `bson:"emailVerifiedAt,omitempty"`
+	// PhoneVerifiedAt, numaranin SMS koduyla dogrulandigi an (T11.14 PR 3).
+	PhoneVerifiedAt *time.Time `bson:"phoneVerifiedAt,omitempty"`
 }
 
 // favoriteDocument, favori market: kimlik ve eklenme zamani.
@@ -266,6 +268,39 @@ func (m *MongoUsers) SetVerifiedEmail(ctx context.Context, userID, email string,
 	return nil
 }
 
+// SetFullName, adi degistirir (T11.14 PR 3, #89).
+func (m *MongoUsers) SetFullName(ctx context.Context, userID, fullName string) error {
+	result, err := m.collection.UpdateOne(ctx, bson.D{{Key: "_id", Value: userID}},
+		bson.D{{Key: "$set", Value: bson.D{{Key: "fullName", Value: fullName}}}})
+	if err != nil {
+		return fmt.Errorf("ad yazilamadi: %w", err)
+	}
+	if result.MatchedCount == 0 {
+		return auth.ErrUserNotFound
+	}
+	return nil
+}
+
+// SetVerifiedPhone, SMS koduyla dogrulanan numarayi yazar (T11.14 PR 3):
+// numara degistiyse yenisi, degismediyse yalnizca dogrulama ani. Numara baska
+// hesaptaysa auth.ErrPhoneTaken: karar users.phone benzersiz indeksindedir, iki
+// hesabin ayni numaraya ayni anda gecmesi yarisamaz. Kullanici yoksa
+// auth.ErrUserNotFound.
+func (m *MongoUsers) SetVerifiedPhone(ctx context.Context, userID, phone string, verifiedAt time.Time) error {
+	result, err := m.collection.UpdateOne(ctx, bson.D{{Key: "_id", Value: userID}},
+		bson.D{{Key: "$set", Value: bson.D{{Key: "phone", Value: phone}, {Key: "phoneVerifiedAt", Value: verifiedAt}}}})
+	if mongo.IsDuplicateKeyError(err) {
+		return auth.ErrPhoneTaken
+	}
+	if err != nil {
+		return fmt.Errorf("numara yazilamadi: %w", err)
+	}
+	if result.MatchedCount == 0 {
+		return auth.ErrUserNotFound
+	}
+	return nil
+}
+
 // CountByRegistrationDevice, cihazdan acilmis hesap sayisi (seyrek indeksle).
 func (m *MongoUsers) CountByRegistrationDevice(ctx context.Context, deviceID string) (int, error) {
 	count, err := m.collection.CountDocuments(ctx, bson.D{{Key: "registrationDeviceId", Value: deviceID}})
@@ -336,6 +371,18 @@ func (m *MongoSessions) RevokeAllForUser(ctx context.Context, userID string) (in
 	return int(result.DeletedCount), nil
 }
 
+// RevokeOthers, keepSessionID disindaki oturumlari tek komutla siler (T11.14 PR 3).
+func (m *MongoSessions) RevokeOthers(ctx context.Context, userID, keepSessionID string) (int, error) {
+	result, err := m.collection.DeleteMany(ctx, bson.D{
+		{Key: "userId", Value: userID},
+		{Key: "_id", Value: bson.D{{Key: "$ne", Value: keepSessionID}}},
+	})
+	if err != nil {
+		return 0, fmt.Errorf("diger oturumlar silinemedi: %w", err)
+	}
+	return int(result.DeletedCount), nil
+}
+
 // ByID, kimlige gore oturum.
 func (m *MongoSessions) ByID(ctx context.Context, id string) (auth.Session, error) {
 	var doc sessionDocument
@@ -358,6 +405,10 @@ func toUserDocument(user auth.User) userDocument {
 	if !user.EmailVerifiedAt.IsZero() {
 		verifiedAt := user.EmailVerifiedAt
 		doc.EmailVerifiedAt = &verifiedAt
+	}
+	if !user.PhoneVerifiedAt.IsZero() {
+		verifiedAt := user.PhoneVerifiedAt
+		doc.PhoneVerifiedAt = &verifiedAt
 	}
 	for _, address := range user.Addresses {
 		doc.Addresses = append(doc.Addresses, toAddressDocument(address))
@@ -387,6 +438,9 @@ func fromUserDocument(doc userDocument) auth.User {
 	}
 	if doc.EmailVerifiedAt != nil {
 		user.EmailVerifiedAt = doc.EmailVerifiedAt.UTC()
+	}
+	if doc.PhoneVerifiedAt != nil {
+		user.PhoneVerifiedAt = doc.PhoneVerifiedAt.UTC()
 	}
 	for _, address := range doc.Addresses {
 		user.Addresses = append(user.Addresses, fromAddressDocument(address))

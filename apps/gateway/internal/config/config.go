@@ -133,6 +133,13 @@ func (c Config) DemoPasswordReset() bool {
 	return c.NodeEnv != EnvProduction
 }
 
+// PhoneChangeEnabled, telefon degistirme ve dogrulama uclari acik mi (T11.14
+// PR 3): yalnizca production DISINDA. Gercek SMS saglayicisi yok (bekleyen is
+// #95); gelistirmede SMS Mailpit'e duser, canlida uc hic baglanmaz.
+func (c Config) PhoneChangeEnabled() bool {
+	return c.NodeEnv != EnvProduction
+}
+
 // MetricsPort, /metrics ucunun portu: GATEWAY_PORT + 1000 (#29).
 func (c Config) MetricsPort() int {
 	return c.Port + MetricsPortOffset

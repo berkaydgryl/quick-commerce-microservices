@@ -8,6 +8,7 @@ import (
 	texttemplate "text/template"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/mail"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/verification"
 )
 
 // codeSubject, iletinin konusu. Kod konuya YAZILMAZ: bildirimde ve kilit
@@ -35,7 +36,7 @@ type codeMessageData struct {
 
 // codeMessage, kodu tasiyan ileti.
 func codeMessage(to, fullName, code string) (mail.Message, error) {
-	data := codeMessageData{FullName: fullName, Code: code, ValidMinutes: int(CodeTTL.Minutes())}
+	data := codeMessageData{FullName: fullName, Code: code, ValidMinutes: int(verification.CodeTTL.Minutes())}
 	var text, html bytes.Buffer
 	if err := textTemplate.Execute(&text, data); err != nil {
 		return mail.Message{}, fmt.Errorf("ileti metni kurulamadi: %w", err)

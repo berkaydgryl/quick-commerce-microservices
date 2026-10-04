@@ -107,3 +107,41 @@ e-posta eklenir (kullanicinin karari, getircarsi referansi); bu ek onun sinirlar
   tutmak (TTL indeksi dakikalik calisir, 10 dakikalik kodda sure kayardi; deneme sayimi icin
   ikinci atomik yazim gerekirdi) ve ayri hata kodlari (`EMAIL_ALREADY_REGISTERED` vb.: web formu
   zaten alan cumlesini gosteriyor; `@getir/core` servislerle ortaktir).
+
+## Ek 2 (T11.14 PR 3, 2026-10-04): numara değiştirme SMS koduyla; geliştirmede SMS Mailpit'e
+
+İlk karar ("SMS/OTP kurulmaz") giriş ve kayıt için geçerli kalır: kayıt numarayı doğrulamaz, giriş
+telefon + şifredir. Kullanıcı profilde numarasını değiştirmek ve doğrulamak istedi; bu ek, ADR'nin
+"ilerde OTP eklendiğinde eklenecek olan yalnızca ikinci bir doğrulama yöntemidir" cümlesinin ilk
+uygulamasıdır.
+
+- **Numara değiştirme kodla.** `POST /v1/me/phone/code {phone, password}` yeni numaraya 6 haneli kod
+  gönderir; `POST /v1/me/phone/verify {phone, code}` numarayı yazar ve `phoneVerifiedAt`'i doldurur.
+  Telefon giriş kimliği olduğu için başka numaraya geçmek ŞİMDİKİ ŞİFREYİ ister (çalınmış oturum
+  hesabı ele geçirmesin). Kurallar e-postayla aynı (`VERIFICATION_CODE_*`: 10 dk, 5 yanlış, 60 sn).
+  "Kodu yeniden gönder" şifre istemez: o numaraya bekleyen kayıt (ömrü dolmamış, kilitli olsa da)
+  şifrenin o pencerede sorulduğunun kanıtıdır; ömür dolunca şifre yeniden sorulur. Çalınmış oturum
+  bununla yeni numara başlatamaz, yalnızca kullanıcının seçtiği numaraya yeni kod gider.
+- **Şimdiki numarayı doğrulama** ("Doğrula") aynı akış, şifre istemez. Kartta yeşil onay YALNIZCA
+  `phoneVerifiedAt` doluysa görünür; kayıtla açılan ve seed hesaplarda yerinde "Doğrula" durur
+  (sahte onay yok).
+- **Başarıda diğer oturumlar kapanır.** Bu oturum dışındaki oturumlar silinir
+  (`RevokeOthers`). Numara değişince diğer cihazların yenilemesi hemen durur; ellerindeki erişim
+  jetonu en geç `JWT_TTL` (1 sa) içinde biter (JWT'de numara yok; `requireUser` oturumun varlığına
+  bakmaz, yalnızca sipariş uçları bakar ve hemen `401` döner). Kalıcı çözüm bekleyen iş #24: iptal
+  edilen oturum listesi (Redis `revoked:{sid}`, TTL = `JWT_TTL`; `requireUser`'da tek `GET`).
+  Aynı numara doğrulanınca oturumlara dokunulmaz.
+- **Bir numara bir hesap.** `users.phone` benzersiz indeksi kod isteğinde ve doğrulamadaki yarışta
+  karar verir; hata kayıttaki koddur (`PHONE_ALREADY_REGISTERED`, 409), cümle `details.phone`'da.
+  Yanlış şifre `VALIDATION_FAILED {password}` (`INVALID_CREDENTIALS` 401'dir ve yetkili istemcinin
+  "oturum bitti" yoluna karışırdı). Yeni hata kodu yok.
+- **Kod deposu ortak.** E-posta ve telefon aynı paketi kullanır (gateway `internal/verification`):
+  tek Lua betiği, kanal başına anahtar (`verify:email:{usr_…}`, `verify:phone:{usr_…}`), kodun HMAC
+  özeti (kanal başına ayrı anahtar). Kanallar birbirinin beklemesini ya da hakkını yemez.
+- **SMS.** Gerçek SMS sağlayıcısı YOK (bekleyen iş #95). Geliştirmede SMS e-posta olarak Mailpit'e
+  düşer: alıcı `905XXXXXXXXX@sms.getir.local`, konu numara, metin tek satır. Production'da numara
+  uçları HİÇ bağlanmaz (T11.9 şifre yenilemesi gibi); sağlayıcı gelince yalnızca gönderici değişir.
+- **Personalar** da numarasını değiştirebilir; persona seed'i kayıtları `_id` ya da telefonla eşler ve
+  numarayı geri alır.
+- Elenen: kodu gateway günlüğüne yazmak (kod ve numara günlüğe girmez kuralı), ayrı sahte SMS
+  konteyneri (yeni servis), değiştirirken şifre sormamak (oturumu ele geçiren kimliği de alırdı).

@@ -1,4 +1,4 @@
-package emailverify
+package verification
 
 import (
 	"sync"

@@ -77,17 +77,35 @@ func (in PhoneCheckInput) Check() map[string]string {
 // Check, kayit girdisini dogrular ve adi kirpar. Hatalar alan -> sebep
 // haritasidir; bossa girdi gecerlidir.
 func (in *RegisterInput) Check() map[string]string {
-	in.FullName = strings.TrimSpace(in.FullName)
 	problems := map[string]string{}
 	checkPhone(in.Phone, problems)
 	checkPassword(in.Password, problems)
-	switch length := utf8.RuneCountInString(in.FullName); {
+	in.FullName = checkFullName(in.FullName, problems)
+	return problems
+}
+
+// ProfileUpdateInput, ad degistirme girdisi (T11.14 PR 3, #89: PATCH /v1/me).
+type ProfileUpdateInput struct {
+	FullName string
+}
+
+// Check, adi kirpip kayittaki kuralla dogrular.
+func (in *ProfileUpdateInput) Check() map[string]string {
+	problems := map[string]string{}
+	in.FullName = checkFullName(in.FullName, problems)
+	return problems
+}
+
+// checkFullName, kirpilmis adi doner; kural ihlalini problems'e yazar.
+func checkFullName(raw string, problems map[string]string) string {
+	fullName := strings.TrimSpace(raw)
+	switch length := utf8.RuneCountInString(fullName); {
 	case length < fullNameMinLength:
 		problems[FieldFullName] = fullNameMinReason
 	case length > fullNameMaxLength:
 		problems[FieldFullName] = fullNameMaxReason
 	}
-	return problems
+	return fullName
 }
 
 // Check, sifre yenileme girdisini dogrular: kayittaki telefon ve sifre kurali.

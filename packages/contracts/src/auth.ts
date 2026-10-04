@@ -118,12 +118,23 @@ export const logoutResultSchema = z.object({ revoked: z.boolean() });
 /**
  * Istemciye giden kullanici. `email` yalnizca DOGRULANMIS adrestir (T11.14);
  * dogrulanmamis adres hesaba yazilmaz, alan yoksa kullanici e-posta eklememistir.
+ * `phoneVerified` yalnizca numara SMS koduyla dogrulanmissa true gelir (T11.14
+ * PR 3; kayit numarayi dogrulamaz, ADR-12); yoksa alan yazilmaz.
  */
 export const userProfileSchema = z.object({
   id: idSchema,
   phone: phoneSchema,
   fullName: z.string(),
   email: emailSchema.optional(),
+  phoneVerified: z.boolean().optional(),
+});
+
+/**
+ * PATCH /v1/me (T11.14 PR 3; bekleyen is #89): adi degistirir; cevap guncel
+ * profildir. Kural kayittakiyle ayni (fullNameSchema).
+ */
+export const updateProfileRequestSchema = z.object({
+  fullName: fullNameSchema,
 });
 
 export const authSessionSchema = z.object({
@@ -148,4 +159,5 @@ export type PhoneCheckRequest = z.infer<typeof phoneCheckRequestSchema>;
 export type PhoneCheckResult = z.infer<typeof phoneCheckResultSchema>;
 export type LogoutResult = z.infer<typeof logoutResultSchema>;
 export type UserProfile = z.infer<typeof userProfileSchema>;
+export type UpdateProfileRequest = z.infer<typeof updateProfileRequestSchema>;
 export type AuthSession = z.infer<typeof authSessionSchema>;

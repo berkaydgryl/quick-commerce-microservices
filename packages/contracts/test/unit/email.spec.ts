@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  EMAIL_CODE_MESSAGE,
+  VERIFICATION_CODE_MESSAGE,
   EMAIL_MAX_LENGTH,
   EMAIL_MESSAGE,
   emailCodeSentSchema,
@@ -54,7 +54,7 @@ describe('dogrulama govdeleri', () => {
   it.each(['12345', '1234567', '12a456', ' 123456'])('kod 6 rakam olmali (%j)', (code) => {
     const result = verifyEmailRequestSchema.safeParse({ email: 'ad@ornek.com', code });
     expect(result.success).toBe(false);
-    expect(firstMessage(result)).toBe(EMAIL_CODE_MESSAGE);
+    expect(firstMessage(result)).toBe(VERIFICATION_CODE_MESSAGE);
   });
 
   it('gecerli dogrulama govdesini kabul eder', () => {

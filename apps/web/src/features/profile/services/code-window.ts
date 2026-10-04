@@ -1,17 +1,22 @@
 /**
- * Dogrulama kodunun zaman penceresi (T11.14): sunucu sureleri SANIYE olarak
- * verir (emailCodeSentSchema); istemci onlari cevabi aldigi andan baslatir.
- * Saf hesap: bilesen yalnizca "simdi"yi verir.
+ * Dogrulama kodunun zaman penceresi (T11.14; PR 3'ten beri e-posta ve telefon
+ * ortak): sunucu sureleri SANIYE olarak verir (emailCodeSentSchema,
+ * phoneCodeSentSchema); istemci onlari cevabi aldigi andan baslatir. Saf
+ * hesap: bilesen yalnizca "simdi"yi verir.
  */
-
-import type { EmailCodeSent } from '@getir/contracts';
 
 const MS_PER_SECOND = 1000;
 const SECONDS_PER_MINUTE = 60;
 
-/** Kodun gonderildigi adres ve iki sinir an (ms). */
+/** Sunucunun gonderim cevabinin sure kismi (iki kanalda ayni). */
+export interface CodeDurations {
+  readonly expiresInSeconds: number;
+  readonly resendAfterSeconds: number;
+}
+
+/** Kodun gonderildigi adres (e-posta ya da numara) ve iki sinir an (ms). */
 export interface CodeWindow {
-  readonly email: string;
+  readonly address: string;
   /** Kodun gecersiz oldugu an. */
   readonly expiresAt: number;
   /** Yeni kodun istenebildigi an. */
@@ -19,9 +24,9 @@ export interface CodeWindow {
 }
 
 /** Sunucunun cevabindan pencere: sureler cevabin alindigi andan. */
-export function codeWindow(sent: EmailCodeSent, receivedAt: number): CodeWindow {
+export function codeWindow(address: string, sent: CodeDurations, receivedAt: number): CodeWindow {
   return {
-    email: sent.email,
+    address,
     expiresAt: receivedAt + sent.expiresInSeconds * MS_PER_SECOND,
     resendAt: receivedAt + sent.resendAfterSeconds * MS_PER_SECOND,
   };

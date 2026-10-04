@@ -136,6 +136,39 @@ func (m *MemoryUsers) SetVerifiedEmail(_ context.Context, userID, email string, 
 	return nil
 }
 
+// SetFullName, adi degistirir (T11.14 PR 3, #89).
+func (m *MemoryUsers) SetFullName(_ context.Context, userID, fullName string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	user, found := m.byID[userID]
+	if !found {
+		return auth.ErrUserNotFound
+	}
+	user.FullName = fullName
+	m.byID[userID] = user
+	return nil
+}
+
+// SetVerifiedPhone, dogrulanan numarayi tek kilit altinda yazar; kurallar
+// Mongo'dakiyle ayni (numara baska hesaptaysa auth.ErrPhoneTaken). Eski numara
+// serbest kalir.
+func (m *MemoryUsers) SetVerifiedPhone(_ context.Context, userID, phone string, verifiedAt time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	user, found := m.byID[userID]
+	if !found {
+		return auth.ErrUserNotFound
+	}
+	if owner, taken := m.byPhone[phone]; taken && owner != userID {
+		return auth.ErrPhoneTaken
+	}
+	delete(m.byPhone, user.Phone)
+	user.Phone, user.PhoneVerifiedAt = phone, verifiedAt
+	m.byID[userID] = user
+	m.byPhone[phone] = userID
+	return nil
+}
+
 // CountByRegistrationDevice, cihazdan acilmis hesap sayisi.
 func (m *MemoryUsers) CountByRegistrationDevice(_ context.Context, deviceID string) (int, error) {
 	m.mu.Lock()
@@ -211,6 +244,20 @@ func (m *MemorySessions) RevokeAllForUser(_ context.Context, userID string) (int
 	revoked := 0
 	for hash, session := range m.byHash {
 		if session.UserID == userID {
+			delete(m.byHash, hash)
+			revoked++
+		}
+	}
+	return revoked, nil
+}
+
+// RevokeOthers, keepSessionID disindaki oturumlari siler (T11.14 PR 3).
+func (m *MemorySessions) RevokeOthers(_ context.Context, userID, keepSessionID string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	revoked := 0
+	for hash, session := range m.byHash {
+		if session.UserID == userID && session.ID != keepSessionID {
 			delete(m.byHash, hash)
 			revoked++
 		}

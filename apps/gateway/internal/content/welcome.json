@@ -207,9 +207,25 @@
     "phoneLabel": "Telefon",
     "emailLabel": "E-posta",
     "addEmailLabel": "E-posta ekle",
-    "editEmailLabel": "E-posta adresini düzenle",
+    "editProfileLabel": "Profili düzenle",
     "verifiedLabel": "Doğrulandı",
+    "verifyPhoneLabel": "Doğrula",
     "loadingLabel": "Bilgilerin yükleniyor…",
+    "editDialog": {
+      "title": "Profili düzenle",
+      "closeLabel": "Kapat",
+      "backLabel": "Geri",
+      "nameLabel": "Ad soyad",
+      "saveNameLabel": "Kaydet",
+      "savingNameLabel": "Kaydediliyor…",
+      "nameSavedToast": "Adın güncellendi.",
+      "emailLabel": "E-posta",
+      "phoneLabel": "Telefon",
+      "emptyEmailLabel": "E-posta adresin yok",
+      "changeLabel": "Değiştir",
+      "addLabel": "Ekle",
+      "verifyLabel": "Doğrula"
+    },
     "emailDialog": {
       "title": "E-posta adresi",
       "closeLabel": "Kapat",
@@ -227,6 +243,27 @@
       "resendWaitLabel": "Yeni kodu isteyebilmen için",
       "changeEmailLabel": "E-posta adresini değiştir",
       "verifiedToast": "E-posta adresin doğrulandı."
+    },
+    "phoneDialog": {
+      "title": "Telefon numarası",
+      "changeDescription": "Yeni numarana 6 haneli bir doğrulama kodu göndereceğiz. Değişikliği onaylamak için şifreni gir.",
+      "verifyDescription": "Numarana 6 haneli bir doğrulama kodu göndereceğiz.",
+      "phoneFieldLabel": "Yeni telefon numarası",
+      "passwordLabel": "Şifren",
+      "showPasswordLabel": "Şifreyi göster",
+      "sendLabel": "Kod gönder",
+      "sendingLabel": "Gönderiliyor…",
+      "codeSentToLabel": "Doğrulama kodunu şu numaraya gönderdik:",
+      "codeFieldLabel": "Doğrulama kodu",
+      "verifyLabel": "Doğrula",
+      "verifyingLabel": "Doğrulanıyor…",
+      "expiresInLabel": "Kodun geçerlilik süresi",
+      "expiredNotice": "Kodun süresi doldu. Yeni kod isteyebilirsin.",
+      "resendLabel": "Kodu yeniden gönder",
+      "resendWaitLabel": "Yeni kodu isteyebilmen için",
+      "changePhoneLabel": "Başka bir numara gir",
+      "verifiedToast": "Telefon numaran doğrulandı.",
+      "changedToast": "Telefon numaran değişti. Diğer cihazlardaki oturumların kapatıldı."
     }
   }
 }

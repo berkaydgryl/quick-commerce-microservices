@@ -101,7 +101,19 @@ const validJSON = `{
   },
   "profile": {
     "phoneLabel": "Telefon", "emailLabel": "E-posta", "addEmailLabel": "E-posta ekle",
-    "editEmailLabel": "E-posta adresini düzenle", "verifiedLabel": "Doğrulandı", "loadingLabel": "Yükleniyor",
+    "editProfileLabel": "Profili düzenle", "verifiedLabel": "Doğrulandı", "verifyPhoneLabel": "Doğrula", "loadingLabel": "Yükleniyor",
+    "editDialog": {
+      "title": "Profili düzenle", "closeLabel": "Kapat", "backLabel": "Geri", "nameLabel": "Ad soyad", "saveNameLabel": "Kaydet",
+      "savingNameLabel": "Kaydediliyor", "nameSavedToast": "Güncellendi.", "emailLabel": "E-posta", "phoneLabel": "Telefon",
+      "emptyEmailLabel": "Yok", "changeLabel": "Değiştir", "addLabel": "Ekle", "verifyLabel": "Doğrula"
+    },
+    "phoneDialog": {
+      "title": "Telefon", "changeDescription": "Şifreni gir.", "verifyDescription": "Kod göndereceğiz.", "phoneFieldLabel": "Numara",
+      "passwordLabel": "Şifre", "showPasswordLabel": "Göster", "sendLabel": "Gönder", "sendingLabel": "Gönderiliyor",
+      "codeSentToLabel": "Şu numaraya:", "codeFieldLabel": "Kod", "verifyLabel": "Doğrula", "verifyingLabel": "Doğrulanıyor",
+      "expiresInLabel": "Geçerlilik", "expiredNotice": "Süre doldu.", "resendLabel": "Yeniden gönder", "resendWaitLabel": "Bekle",
+      "changePhoneLabel": "Başka numara", "verifiedToast": "Doğrulandı.", "changedToast": "Değişti."
+    },
     "emailDialog": {
       "title": "E-posta adresi", "closeLabel": "Kapat", "emailDescription": "Kod göndereceğiz.",
       "emailFieldLabel": "E-posta adresi", "sendLabel": "Kod gönder", "sendingLabel": "Gönderiliyor",

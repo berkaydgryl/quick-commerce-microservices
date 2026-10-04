@@ -35,6 +35,9 @@ type User struct {
 	Email string
 	// EmailVerifiedAt, adresin dogrulandigi an; Email bossa sifir.
 	EmailVerifiedAt time.Time
+	// PhoneVerifiedAt, numaranin SMS koduyla dogrulandigi an (T11.14 PR 3);
+	// kayit numarayi dogrulamaz (ADR-12), bu yuzden cogu hesapta sifir.
+	PhoneVerifiedAt time.Time
 }
 
 // GeoPoint, enlem ve boylam (derece).
@@ -66,11 +69,14 @@ type Profile struct {
 	FullName string `json:"fullName"`
 	// Email, yalnizca dogrulanmis adres (T11.14); bossa alan hic yazilmaz.
 	Email string `json:"email,omitempty"`
+	// PhoneVerified, numara SMS koduyla dogrulandiysa true (T11.14 PR 3);
+	// degilse alan hic yazilmaz.
+	PhoneVerified bool `json:"phoneVerified,omitempty"`
 }
 
 // Profile, kaydin istemciye gidebilen kismi.
 func (u User) Profile() Profile {
-	return Profile{ID: u.ID, Phone: u.Phone, FullName: u.FullName, Email: u.Email}
+	return Profile{ID: u.ID, Phone: u.Phone, FullName: u.FullName, Email: u.Email, PhoneVerified: !u.PhoneVerifiedAt.IsZero()}
 }
 
 // MaxSavedAddresses, adres defterinin ust siniri (@getir/contracts

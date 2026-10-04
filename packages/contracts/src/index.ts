@@ -34,4 +34,6 @@ export * from './socket.js';
 export * from './events.js';
 export * from './favorites.js';
 export * from './email.js';
+export * from './phone.js';
+export * from './verification.js';
 export * from './fallback-texts.js';

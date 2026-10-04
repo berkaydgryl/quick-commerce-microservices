@@ -189,8 +189,8 @@ export function realtimeSeqKey(orderId: string): string {
 /**
  * verify:email:{userId} -- bekleyen e-posta dogrulamasi (T11.14).
  *
- * Tek hash: adres, kodun ozeti (kodun kendisi saklanmaz), yanlis deneme sayisi
- * ve gonderim ani. TTL kodun gecerliligidir (EMAIL_CODE_TTL_SECONDS, 10 dk) ve
+ * Tek hash: adres (address), kodun ozeti (kodun kendisi saklanmaz), yanlis
+ * deneme sayisi ve gonderim ani. TTL kodun gecerliligidir (EMAIL_CODE_TTL_SECONDS, 10 dk) ve
  * her yeni kodda bastan kurulur; 5. yanlista ya da dogru kodda silinir. Yazan
  * tek taraf gateway'dir (Go, Lua); bicim burada tanimli, gateway'in testi bu
  * satiri okuyup karsilastirir. Kimlik yalnizca kullanici kimligi (usr_ + 32 hex).
@@ -202,6 +202,21 @@ export function emailVerificationKey(userId: string): string {
     });
   }
   return `verify:email:${hashTag(userId)}`;
+}
+
+/**
+ * verify:phone:{userId} -- bekleyen telefon dogrulamasi (T11.14 PR 3): numara
+ * degistirme ya da simdiki numarayi dogrulama. Bicim ve kurallar
+ * emailVerificationKey ile ayni (ayni Lua betigi, gateway internal/verification);
+ * kanallar ayri anahtardir, biri digerinin beklemesini ya da hakkini yemez.
+ */
+export function phoneVerificationKey(userId: string): string {
+  if (!isId(ID_PREFIX.USER, userId)) {
+    throw AppError.validation('Gecersiz Redis anahtar parcasi: userId', {
+      details: { field: 'userId', value: userId },
+    });
+  }
+  return `verify:phone:${hashTag(userId)}`;
 }
 
 /**

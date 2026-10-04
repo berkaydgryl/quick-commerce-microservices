@@ -243,7 +243,10 @@ bilmez), `internal/authstore` (Mongo ve bellek depoları), `internal/httpapi` (`
   benzersiz, `sessions.expiresAt` TTL, `sessions.userId`). Mongo işlemleri de
   `GATEWAY_REQUEST_TIMEOUT_MS` ile sınırlıdır.
 - **Bilinen sınırlar:** çıkıştan sonra erişim jetonu süresi (≤ `JWT_TTL`) dolana kadar geçerli
-  kalır (durumsuz jetonun bedeli); yalnızca sipariş kapanır (aşağıda). Cevabı kaybolan
+  kalır (durumsuz jetonun bedeli); yalnızca sipariş kapanır (aşağıda). Numara değişince (T11.14 PR 3)
+  diğer cihazların yenilemesi hemen durur; ellerindeki erişim jetonu en geç `JWT_TTL` (1 sa) içinde
+  biter: `requireUser` oturumun varlığına bakmaz, `RevokeOthers` yalnızca `sessions` belgelerini siler.
+  Kalıcı çözüm bekleyen iş #24 (iptal edilen oturum listesi, `revoked:{sid}`). Cevabı kaybolan
   yenilemede eski jeton harcanmış olur ve yeniden giriş gerekir. Giriş denemesi IP başına sınırlıdır
   (dakikada 10; "Hız sınırı"). Kayıt ucunun tekrar kuralı aşağıda ("Tekrar koruması").
 

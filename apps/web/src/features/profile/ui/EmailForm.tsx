@@ -12,7 +12,7 @@ import type { CodeWindow } from '../services/code-window';
 import { EMAIL_FORM_FIELDS, emailFormSchema } from '../services/email-forms';
 import type { EmailFormValues } from '../services/email-forms';
 
-import styles from './EmailDialog.module.css';
+import styles from './ProfileDialog.module.css';
 
 interface EmailFormProps {
   readonly texts: EmailDialogContent;
@@ -50,7 +50,7 @@ export function EmailForm({ texts, initialEmail, onSent }: EmailFormProps) {
     setFormMessage(null);
     try {
       const sent = await send.mutateAsync(request);
-      onSent(codeWindow(sent, Date.now()));
+      onSent(codeWindow(sent.email, sent, Date.now()));
     } catch (error) {
       const feedback = formFeedback(error, EMAIL_FORM_FIELDS);
       showServerErrors(EMAIL_FORM_FIELDS, feedback.fields, setError);
@@ -60,7 +60,7 @@ export function EmailForm({ texts, initialEmail, onSent }: EmailFormProps) {
 
   return (
     <form
-      className={styles['c-email-dialog']}
+      className={styles['c-profile-dialog']}
       noValidate
       onSubmit={(event) =>
         void handleSubmit(submit, (invalid) =>
@@ -68,9 +68,9 @@ export function EmailForm({ texts, initialEmail, onSent }: EmailFormProps) {
         )(event)
       }
     >
-      <p className={styles['c-email-dialog__description']}>{texts.emailDescription}</p>
+      <p className={styles['c-profile-dialog__description']}>{texts.emailDescription}</p>
       {formMessage !== null && (
-        <p className={styles['c-email-dialog__alert']} role="alert">
+        <p className={styles['c-profile-dialog__alert']} role="alert">
           {formMessage}
         </p>
       )}
@@ -83,7 +83,7 @@ export function EmailForm({ texts, initialEmail, onSent }: EmailFormProps) {
         error={errors.email?.message}
         {...register('email')}
       />
-      <button type="submit" className={styles['c-email-dialog__submit']} disabled={isSubmitting}>
+      <button type="submit" className={styles['c-profile-dialog__submit']} disabled={isSubmitting}>
         {isSubmitting ? texts.sendingLabel : texts.sendLabel}
       </button>
     </form>

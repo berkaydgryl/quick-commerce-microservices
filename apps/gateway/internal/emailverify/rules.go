@@ -1,13 +1,12 @@
 // Package emailverify, profilde e-posta dogrulamasidir (T11.14; ADR-12 eki):
 // adrese 6 haneli kod gonderilir, kod dogrulaninca adres hesaba yazilir.
 //
-//	rules.go   - kurallar, alan adlari ve cumleler (sozlesmeyle ayni)
-//	code.go    - kod uretimi ve kodun ozeti (HMAC)
-//	store.go   - bekleyen dogrulamanin deposu (arayuz ve sonuclar)
-//	redis.go   - depo: Redis, tek hash + Lua (anahtar verify:email:{usr_...})
-//	memory.go  - depo: bellek (MOCK ve testler)
+//	rules.go   - e-posta kurallari, alan adi ve cumleler (sozlesmeyle ayni)
 //	message.go - iletinin icerigi (gomulu sablonlar)
 //	service.go - is kurali: gonder ve dogrula
+//
+// Kod kurallari, kodun ozeti ve bekleyen kodun deposu (verify:email:{usr_...})
+// kanaldan bagimsizdir: internal/verification (T11.14 PR 3'te ayrildi).
 //
 // E-posta KIMLIK DEGILDIR: giris telefon + sifredir. Hesaba yalnizca
 // dogrulanmis adres yazilir (users.email, kismi benzersiz indeks).
@@ -16,55 +15,36 @@ package emailverify
 import (
 	"regexp"
 	"strings"
-	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/verification"
 )
 
 // Kurallar: @getir/contracts ile AYNI (constants.ts: EMAIL_MAX_LENGTH,
-// EMAIL_PATTERN, OTP_PATTERN, EMAIL_CODE_TTL_SECONDS, EMAIL_CODE_MAX_ATTEMPTS,
-// EMAIL_CODE_RESEND_SECONDS). contract_test.go iki tarafi karsilastirir.
+// EMAIL_PATTERN). contract_test.go iki tarafi karsilastirir. Kodun kurallari
+// verification'da.
 const (
-	// CodeTTL, kodun gecerliligi (kullanicinin karari A2: 10 dakika).
-	CodeTTL = 600 * time.Second
-	// MaxAttempts, kodun iptal edildigi yanlis deneme sayisi (A2: 5).
-	MaxAttempts = 5
-	// ResendAfter, yeni kod icin en kisa bekleme (A2: 60 saniye).
-	ResendAfter = 60 * time.Second
-
 	emailMaxLength = 254
 	emailPattern   = `^[^\s@]+@[^\s@]+\.[^\s@]+$`
-	codePattern    = `^[0-9]{6}$`
-	// codeDigits, kodun rakam sayisi (codePattern ile ayni).
-	codeDigits = 6
 )
 
-var (
-	emailRegexp = regexp.MustCompile(emailPattern)
-	codeRegexp  = regexp.MustCompile(codePattern)
-)
+var emailRegexp = regexp.MustCompile(emailPattern)
 
-// Alan adlari: istek govdesindekiyle ayni.
-const (
-	FieldEmail = "email"
-	FieldCode  = "code"
-)
+// FieldEmail, adres alaninin adi: istek govdesindekiyle ayni. Kod alani
+// verification.FieldCode.
+const FieldEmail = "email"
 
 // Sebepler: istemcinin gordugu alan mesajlari; web formu alanin altinda
-// gosterir. Ilk ucu sozlesmedeki cumlelerle birebir aynidir (contract_test);
-// gerisi yalnizca sunucunun bildigi kurallardir (adres baska hesapta, kod
-// yanlis, sure doldu), sozlesmede cumlesi yoktur.
+// gosterir. Ilk ikisi sozlesmedeki cumlelerle birebir aynidir (contract_test);
+// gerisi yalnizca sunucunun bildigi kurallardir (adres baska hesapta, zaten bu
+// hesapta), sozlesmede cumlesi yoktur.
 const (
 	emailReason    = "Geçerli bir e-posta adresi gir (örnek ad@ornek.com)"
 	emailMaxReason = "en fazla 254 karakter olmalı"
-	codeReason     = "Kod 6 rakam olmalı"
 
 	emailTakenReason   = "Bu e-posta adresi başka bir hesapta kayıtlı"
 	emailCurrentReason = "Bu e-posta adresi zaten hesabında doğrulanmış"
-	codeExpiredReason  = "Kodun süresi doldu. Yeni kod isteyebilirsin."
-	codeLockedReason   = "Kod 5 kez hatalı girildi. Yeni kod isteyebilirsin."
-	// codeWrongFormat, kalan hakla: "Kod hatalı. 3 deneme hakkın kaldı."
-	codeWrongFormat = "Kod hatalı. %d deneme hakkın kaldı."
 )
 
 // SendInput, kod gonderme girdisi (POST /v1/me/email/code).
@@ -90,8 +70,8 @@ type VerifyInput struct {
 func (in *VerifyInput) Check() map[string]string {
 	problems := map[string]string{}
 	in.Email = checkEmail(in.Email, problems)
-	if !codeRegexp.MatchString(in.Code) {
-		problems[FieldCode] = codeReason
+	if !verification.ValidCode(in.Code) {
+		problems[verification.FieldCode] = verification.CodeReason
 	}
 	return problems
 }

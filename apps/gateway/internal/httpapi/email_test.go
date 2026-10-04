@@ -15,6 +15,7 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/emailverify"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/mail"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/ratelimit"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/verification"
 )
 
 // E-posta dogrulama (T11.14) gercek servislerle sinanir: kayit -> kod ->
@@ -37,7 +38,7 @@ func emailApp(t *testing.T, limits RateLimit) *fiber.App {
 		Tokens: testTokens(), RefreshTTL: testRefresh, Now: time.Now,
 	})
 	verification := emailverify.NewService(emailverify.Deps{
-		Accounts: users, Store: emailverify.NewMemory(time.Now), Mailer: mail.NewMemory(),
+		Accounts: users, Store: verification.NewMemory(time.Now), Mailer: mail.NewMemory(),
 		CodeKey: []byte("test-anahtari"), Now: time.Now, NewCode: func() string { return emailTestCode },
 	})
 	return New(Deps{
@@ -123,7 +124,7 @@ func TestEmailEndpointsCollectFormatErrors(t *testing.T) {
 	}
 
 	status, envelope = send(t, app, emailRequest(t, "/v1/me/email/verify", authorization, "eposta-0003", `{"email":"ayse@ornek.com","code":"12ab"}`))
-	if status != http.StatusBadRequest || detailsOf(t, envelope)[emailverify.FieldCode] == nil {
+	if status != http.StatusBadRequest || detailsOf(t, envelope)[verification.FieldCode] == nil {
 		t.Errorf("bicimsiz kod 400 ve code ayrintisi donmeli: %d %+v", status, envelope)
 	}
 
@@ -142,7 +143,7 @@ func TestEmailVerifyWithWrongCodeNamesTheField(t *testing.T) {
 
 	status, envelope := send(t, app, emailRequest(t, "/v1/me/email/verify", authorization, "eposta-0002", `{"email":"ayse@ornek.com","code":"999999"}`))
 
-	if reason, _ := detailsOf(t, envelope)[emailverify.FieldCode].(string); status != http.StatusBadRequest || !strings.HasPrefix(reason, "Kod hatalı.") {
+	if reason, _ := detailsOf(t, envelope)[verification.FieldCode].(string); status != http.StatusBadRequest || !strings.HasPrefix(reason, "Kod hatalı.") {
 		t.Errorf("yanlis kod alanin altinda soylenmeli: %d %+v", status, envelope)
 	}
 }

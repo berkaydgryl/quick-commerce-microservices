@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/mail"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/verification"
 )
 
 // Accounts, kullanici kayitlarinin e-posta tarafi; gercegi authstore
@@ -32,8 +32,9 @@ type Mailer interface {
 // Deps, servisin disaridan aldigi her sey.
 type Deps struct {
 	Accounts Accounts
-	Store    Store
-	Mailer   Mailer
+	// Store, bekleyen e-posta kodlarinin deposu (verification, kanal e-posta).
+	Store  verification.Store
+	Mailer Mailer
 	// CodeKey, kod ozetinin HMAC anahtari (cmd/gateway sirdan turetir).
 	CodeKey []byte
 	Now     func() time.Time
@@ -52,9 +53,9 @@ type Sent struct {
 // Service, e-posta dogrulamasinin is kurali.
 type Service struct {
 	accounts Accounts
-	store    Store
+	store    verification.Store
 	mailer   Mailer
-	hasher   codeHasher
+	hasher   verification.Hasher
 	now      func() time.Time
 	newCode  func() string
 }
@@ -63,11 +64,11 @@ type Service struct {
 func NewService(deps Deps) *Service {
 	generate := deps.NewCode
 	if generate == nil {
-		generate = newCode
+		generate = verification.NewCode
 	}
 	return &Service{
 		accounts: deps.Accounts, store: deps.Store, mailer: deps.Mailer,
-		hasher: codeHasher{key: deps.CodeKey}, now: deps.Now, newCode: generate,
+		hasher: verification.NewHasher(deps.CodeKey), now: deps.Now, newCode: generate,
 	}
 }
 
@@ -93,22 +94,27 @@ func (s *Service) SendCode(ctx context.Context, userID string, input SendInput) 
 	}
 
 	code := s.newCode()
-	codeHash := s.hasher.hash(userID, input.Email, code)
-	wait, err := s.store.Start(ctx, userID, Pending{Email: input.Email, CodeHash: codeHash}, CodeTTL, ResendAfter)
+	codeHash := s.hasher.Hash(userID, input.Email, code)
+	pending := verification.Pending{Address: input.Email, CodeHash: codeHash}
+	wait, err := s.store.Start(ctx, userID, pending, verification.CodeTTL, verification.ResendAfter)
 	if err != nil {
-		return Sent{}, unavailable(err)
+		return Sent{}, verification.Unavailable(err)
 	}
 	if wait > 0 {
-		return Sent{}, tooSoon(wait)
+		return Sent{}, verification.TooSoon(wait)
 	}
 
 	if err := s.deliver(ctx, input.Email, user.FullName, code); err != nil {
 		if discardErr := s.store.Discard(ctx, userID, codeHash); discardErr != nil {
 			err = errors.Join(err, discardErr)
 		}
-		return Sent{}, unavailable(err)
+		return Sent{}, verification.Unavailable(err)
 	}
-	return Sent{Email: input.Email, ExpiresInSeconds: int(CodeTTL.Seconds()), ResendAfterSeconds: int(ResendAfter.Seconds())}, nil
+	return Sent{
+		Email:              input.Email,
+		ExpiresInSeconds:   int(verification.CodeTTL.Seconds()),
+		ResendAfterSeconds: int(verification.ResendAfter.Seconds()),
+	}, nil
 }
 
 // Verify, kodu dogrular ve adresi hesaba yazar; guncel profili doner. Girdi
@@ -116,19 +122,13 @@ func (s *Service) SendCode(ctx context.Context, userID string, input SendInput) 
 // baska hesapta dogrulanmissa VALIDATION_FAILED (email): karar benzersiz
 // indekstedir.
 func (s *Service) Verify(ctx context.Context, userID string, input VerifyInput) (auth.Profile, error) {
-	pending := Pending{Email: input.Email, CodeHash: s.hasher.hash(userID, input.Email, input.Code)}
-	outcome, err := s.store.Check(ctx, userID, pending, MaxAttempts)
+	pending := verification.Pending{Address: input.Email, CodeHash: s.hasher.Hash(userID, input.Email, input.Code)}
+	outcome, err := s.store.Check(ctx, userID, pending, verification.MaxAttempts)
 	if err != nil {
-		return auth.Profile{}, unavailable(err)
+		return auth.Profile{}, verification.Unavailable(err)
 	}
-	switch outcome.Result {
-	case ResultVerified:
-	case ResultWrong:
-		return auth.Profile{}, rejectCode(fmt.Sprintf(codeWrongFormat, outcome.AttemptsLeft))
-	case ResultLocked:
-		return auth.Profile{}, rejectCode(codeLockedReason)
-	default:
-		return auth.Profile{}, rejectCode(codeExpiredReason)
+	if err := verification.Rejection(outcome); err != nil {
+		return auth.Profile{}, err
 	}
 
 	err = s.accounts.SetVerifiedEmail(ctx, userID, input.Email, s.now().UTC())
@@ -172,24 +172,7 @@ func (s *Service) deliver(ctx context.Context, to, fullName, code string) error 
 	return nil
 }
 
-// rejectEmail ve rejectCode, alanin altinda gosterilen kural ihlalleri.
+// rejectEmail, adres alaninin altinda gosterilen kural ihlali.
 func rejectEmail(reason string) error {
 	return apperror.New(apperror.CodeValidationFailed, map[string]string{FieldEmail: reason})
-}
-
-func rejectCode(reason string) error {
-	return apperror.New(apperror.CodeValidationFailed, map[string]string{FieldCode: reason})
-}
-
-// tooSoon, yeni kod icin bekleme bitmedi: 429 RATE_LIMITED ve tam saniyeye
-// YUKARI yuvarlanmis bekleme (hiz siniriyla ayni bicim; httpapi Retry-After
-// basligini buradan yazar).
-func tooSoon(wait time.Duration) error {
-	seconds := int(math.Ceil(wait.Seconds()))
-	return &apperror.Error{Code: apperror.CodeRateLimited, Details: map[string]any{apperror.RetryAfterDetail: max(seconds, 1)}}
-}
-
-// unavailable, depo ya da posta sunucusu cevap vermedi: istemci tekrar dener.
-func unavailable(err error) error {
-	return &apperror.Error{Code: apperror.CodeServiceUnavailable, Cause: err}
 }
