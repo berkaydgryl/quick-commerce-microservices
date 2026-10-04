@@ -697,6 +697,158 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /v1/me/favorites:
+    get:
+      tags: [auth]
+      operationId: listFavorites
+      summary: Oturumdaki kullanıcının favori marketleri (T11.13)
+      description: |
+        En yeni favori önce. Market bilgisi katalogdan TEK çağrıyla gelir
+        (BatchGetMarkets; favori başına GetMarket N+1 olurdu). Katalogdan
+        kaldırılmış market listede görünmez. Favorisi olmayan hesapta BOŞ
+        liste döner — hata değil.
+
+        Sayfasız SINIRLI liste: en fazla 50 favori (`FAVORITE_MARKETS_MAX`).
+        Kişisel veridir: önbelleğe alınmaz.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Favori marketler
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [items]
+                        properties:
+                          items:
+                            type: array
+                            maxItems: 50
+                            items:
+                              $ref: "#/components/schemas/FavoriteMarket"
+        "400":
+          description: Bilinmeyen sorgu parametresi (VALIDATION_FAILED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+  /v1/me/favorites/{marketId}:
+    parameters:
+      - $ref: "#/components/parameters/MarketIdPath"
+    put:
+      tags: [auth]
+      operationId: addFavorite
+      summary: Marketi favorilere ekle (T11.13)
+      description: |
+        İdempotent: zaten favori olan market değişmez (eklenme zamanı korunur).
+        Market katalogda yoksa 404. Liste en fazla 50 favori tutar
+        (`FAVORITE_MARKETS_MAX`); kural tek atomik yazımda uygulanır, eş zamanlı
+        iki istek sınırı aşamaz. `Idempotency-Key` zorunludur.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Market favori
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            Idempotent-Replayed:
+              $ref: "#/components/headers/IdempotentReplayed"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/FavoriteStatus"
+        "400":
+          description: |
+            Biçimsiz market kimliği (`marketId`), eksik `Idempotency-Key` ya da
+            dolu liste (`favoriteMarkets`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          description: Market katalogda yok (NOT_FOUND).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    delete:
+      tags: [auth]
+      operationId: removeFavorite
+      summary: Marketi favorilerden çıkar (T11.13)
+      description: |
+        İdempotent: favori olmayan market de başarılıdır. Katalog sorulmaz:
+        katalogdan kalkmış market de çıkarılabilir. `Idempotency-Key` zorunludur.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Market favori değil
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            Idempotent-Replayed:
+              $ref: "#/components/headers/IdempotentReplayed"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/FavoriteStatus"
+        "400":
+          description: Biçimsiz market kimliği (`marketId`) ya da eksik `Idempotency-Key`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /v1/geo/reverse:
     get:
       tags: [geo]
@@ -2475,6 +2627,7 @@ components:
           addressSetup,
           appHeader,
           marketList,
+          favorites,
         ]
       properties:
         header:
@@ -2516,6 +2669,47 @@ components:
           $ref: "#/components/schemas/AppHeaderContent"
         marketList:
           $ref: "#/components/schemas/MarketListContent"
+        favorites:
+          $ref: "#/components/schemas/FavoritesContent"
+
+    FavoritesContent:
+      type: object
+      description: |
+        Favori marketler (T11.13; referans getirçarşı "Favori İşletmelerim"):
+        kartlardaki kalbin erişilebilir adları, favori sayfası, hata
+        bildirimleri ve profil sayfasının menüsü. Yalnızca metin.
+      required:
+        [
+          title,
+          addLabel,
+          removeLabel,
+          loadingLabel,
+          emptyTitle,
+          emptyHint,
+          removedNotice,
+          updateFailedToast,
+          listFullToast,
+          toastDismissLabel,
+          profileMenuLabel,
+          addressesLabel,
+          favoritesMenuLabel,
+        ]
+      properties:
+        title: { $ref: "#/components/schemas/ContentText" }
+        addLabel: { $ref: "#/components/schemas/ContentText" }
+        removeLabel: { $ref: "#/components/schemas/ContentText" }
+        loadingLabel: { $ref: "#/components/schemas/ContentText" }
+        emptyTitle: { $ref: "#/components/schemas/ContentText" }
+        emptyHint: { $ref: "#/components/schemas/ContentText" }
+        removedNotice:
+          $ref: "#/components/schemas/ContentText"
+          description: 'Kart kaldırılınca ekran okuyucu duyurusu, adın arkası: "Moda Kasabı favorilerden çıkarıldı".'
+        updateFailedToast: { $ref: "#/components/schemas/ContentText" }
+        listFullToast: { $ref: "#/components/schemas/ContentText" }
+        toastDismissLabel: { $ref: "#/components/schemas/ContentText" }
+        profileMenuLabel: { $ref: "#/components/schemas/ContentText" }
+        addressesLabel: { $ref: "#/components/schemas/ContentText" }
+        favoritesMenuLabel: { $ref: "#/components/schemas/ContentText" }
 
     MarketListContent:
       type: object
@@ -2756,6 +2950,7 @@ components:
         - addressLoadingLabel
         - profileLabel
         - accountLabel
+        - favoritesLabel
         - logoutLabel
         - logoutPendingLabel
       properties:
@@ -2773,6 +2968,9 @@ components:
         addressLoadingLabel: { $ref: "#/components/schemas/ContentText" }
         profileLabel: { $ref: "#/components/schemas/ContentText" }
         accountLabel: { $ref: "#/components/schemas/ContentText" }
+        favoritesLabel:
+          $ref: "#/components/schemas/ContentText"
+          description: Profil menüsünün favori sayfası bağlantısı (T11.13).
         logoutLabel: { $ref: "#/components/schemas/ContentText" }
         logoutPendingLabel: { $ref: "#/components/schemas/ContentText" }
 
@@ -3302,6 +3500,27 @@ components:
           description: Serbest metin adres; yalnızca gösterim içindir.
         location:
           $ref: "#/components/schemas/GeoPoint"
+
+    FavoriteMarket:
+      type: object
+      description: Favori listesinin satırı (T11.13).
+      required: [market, addedAt]
+      properties:
+        market:
+          $ref: "#/components/schemas/Market"
+        addedAt:
+          type: string
+          format: date-time
+
+    FavoriteStatus:
+      type: object
+      description: Ekleme ve çıkarma cevabı; marketin son durumu (T11.13).
+      required: [marketId, isFavorite]
+      properties:
+        marketId:
+          $ref: "#/components/schemas/MarketId"
+        isFavorite:
+          type: boolean
 
     SavedAddress:
       type: object

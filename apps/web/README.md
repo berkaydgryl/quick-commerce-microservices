@@ -2,7 +2,7 @@
 
 Müşteri arayüzü: React 18 + Vite + TypeScript. Tarayıcı yalnızca gateway ile konuşur (`/v1/*`).
 
-## Bugünkü durum (T11.12 — market listesi; T11.7 — karşılama tanıtım bölümleri; T11.6 — karşılama ve giriş ekranı; T9.5 — teslimat adresi; T9.6 — genel arama; T8.5 — kimlik akışı; T7.6 — kalıcı sepet, stok sınırı, satışta olmayan teklif; T6.4 — sepet kabuğu)
+## Bugünkü durum (T11.13 — favori marketler; T11.12 — market listesi; T11.7 — karşılama tanıtım bölümleri; T11.6 — karşılama ve giriş ekranı; T9.5 — teslimat adresi; T9.6 — genel arama; T8.5 — kimlik akışı; T7.6 — kalıcı sepet, stok sınırı, satışta olmayan teklif; T6.4 — sepet kabuğu)
 
 | Parça                   | Durum                                                                                                                                           |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -219,6 +219,25 @@ Ana sayfanın ürün kategorileri şeridi kalktı (karşılama ekranının kateg
   süzgeç yok sayılır. Türü bilinmeyen market (eski catalog-service) yalnızca süzgeçsiz listede görünür.
 - **Sepetim:** hesap `@getir/pricing`'te (`useCartTotals`); "Sepete git" sepetin marketinin sayfasına gider.
 - Favori, görünüm düğmeleri ve indirim rozeti yok (veri yok; T11.11 kararı 4).
+
+## Favori marketler (T11.13)
+
+Referans getirçarşı "Favori İşletmelerim". Kayıt sunucuda (gateway, kullanıcı belgesi; en fazla 50): başka
+cihazda da aynı favoriler.
+
+| Parça            | Dosya                                                     | İş                                                                                                   |
+| ---------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Kalp             | `features/favorites/ui/FavoriteButton.tsx`                | Kapağın sağ üstünde; boşken beyaz çizgi, favoriyken içi marka moru; `aria-pressed`, adı duruma göre  |
+| Veri             | `features/favorites/api`, `hooks/useFavorites.ts`         | `GET /v1/me/favorites` (TanStack Query, kullanıcı kimliğiyle anahtarlı); kalpler ve sayfa aynı sorgu |
+| Tıklama          | `hooks/useToggleFavorite.ts`, `services/favorite-list.ts` | İyimser: liste hemen değişir; sunucu reddederse eski hali geri yazılır ve bildirim çıkar             |
+| Bildirim (toast) | `shared/toast/`, `shared/ui/toast/Toaster.tsx`            | Zustand kuyruğu (en fazla 3, 5 sn), `aria-live`; roadmap T15.4'ten öne alındı                        |
+| Profil sayfası   | `pages/account/AccountLayout.tsx`, `FavoritesPage.tsx`    | Solda profil kartı ve menü (Adreslerim penceresi, Favori İşletmeler); `/hesabim/favoriler`           |
+| Kart             | `features/markets/ui/MarketCard.tsx`                      | Bağlantı market adında, katmanı kartı kaplar; kalp bağlantının dışında (iç içe etkileşim geçersizdi) |
+
+- **Metinler içerikten** (`favorites` bloğu, `appHeader.favoritesLabel`); içerik gelmezse yedekle.
+- **"Adreslerim"** profil menüsünde üst bardaki pencerenin aynısını açar (`features/address/ui/AddressDialogs.tsx`,
+  iki yer ortak kullanır).
+- Açılış saati verisi yok: kapalı market yalnızca "Kapalı" etiketiyle görünür.
 
 ## Teslimat adresi (T9.5) — tasarımsız kabuk
 

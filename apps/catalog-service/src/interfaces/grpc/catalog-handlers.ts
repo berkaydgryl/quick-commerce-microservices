@@ -12,6 +12,7 @@ import type { catalogV1 } from '@getir/proto';
 import { unaryHandler, unimplemented } from '@getir/service-kit';
 import type { UntypedServiceImplementation } from '@grpc/grpc-js';
 
+import type { BatchGetMarkets } from '../../application/batch-get-markets.js';
 import type { BatchGetOffers } from '../../application/batch-get-offers.js';
 import type { GetMarket } from '../../application/get-market.js';
 import type { ListCategories } from '../../application/list-categories.js';
@@ -28,6 +29,7 @@ import {
   toProtoOffer,
 } from './mappers.js';
 import {
+  batchGetMarketsRequestSchema,
   batchGetOffersRequestSchema,
   getMarketRequestSchema,
   listCategoriesRequestSchema,
@@ -44,6 +46,7 @@ export interface CatalogHandlerDeps {
   readonly listMarketCategories: ListMarketCategories;
   readonly listProducts: ListProducts;
   readonly batchGetOffers: BatchGetOffers;
+  readonly batchGetMarkets: BatchGetMarkets;
   readonly searchNearby: SearchNearby;
   readonly logger?: Logger;
 }
@@ -133,6 +136,16 @@ export function createCatalogImplementation(
       handle: async (input): Promise<catalogV1.BatchGetOffersResponse> => {
         const result = await deps.batchGetOffers(input);
         return { offers: result.offers.map(toProtoOffer), missing: [...result.missing] };
+      },
+    }),
+
+    batchGetMarkets: unaryHandler({
+      name: 'BatchGetMarkets',
+      schema: batchGetMarketsRequestSchema,
+      ...logger,
+      handle: async (input): Promise<catalogV1.BatchGetMarketsResponse> => {
+        const result = await deps.batchGetMarkets(input.marketIds);
+        return { markets: result.markets.map(toProtoMarket), missing: [...result.missing] };
       },
     }),
   };

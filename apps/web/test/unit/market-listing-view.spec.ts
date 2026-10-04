@@ -125,6 +125,17 @@ describe('MarketListingView (T11.12)', () => {
     const markup = render({ headingLevel: 1 });
 
     expect(markup).toMatch(/<h1[^>]*><span[^>]*>4<\/span> işletme listeleniyor<\/h1>/);
-    expect(markup).toMatch(/<h2[^>]*>A101 – Caferağa<\/h2>/);
+    expect(markup).toMatch(/<h2[^>]*><a[^>]*>A101 – Caferağa<\/a><\/h2>/);
+  });
+
+  it('kart eylemi (T11.13 kalp) kapakta ve baglantinin DISINDA: her kartta bir tane', () => {
+    const markup = render({
+      renderCardAction: (market) =>
+        createElement('button', { type: 'button' }, `KALP-${market.id}`),
+    });
+
+    expect(markup.match(/<button type="button">KALP-/g)).toHaveLength(4);
+    // Baglanti yalnizca market adini sarar; icinde dugme yok.
+    expect(markup).not.toMatch(/<a [^>]*>(?:(?!<\/a>).)*<button/);
   });
 });

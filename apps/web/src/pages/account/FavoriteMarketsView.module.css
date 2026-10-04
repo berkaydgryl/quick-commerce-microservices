@@ -1,0 +1,44 @@
+/* Favori isletmeler (T11.13): baslik, kartlar (market listesiyle ayni), bos durum. */
+.c-favorite-markets {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.c-favorite-markets__title {
+  font-size: var(--font-size-lg);
+}
+
+/* Ekranda gorunmez; kart cikinca ekran okuyucu duyurur (QA W2). */
+.c-favorite-markets__announcer {
+  position: absolute;
+  width: var(--size-visually-hidden);
+  height: var(--size-visually-hidden);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.c-favorite-markets__list {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.c-favorite-markets__empty {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-5);
+  text-align: center;
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-favorite-markets__empty-title {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+}
+
+.c-favorite-markets__empty-hint {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}

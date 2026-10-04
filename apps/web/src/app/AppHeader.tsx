@@ -6,6 +6,7 @@ import { loginPathFor } from '../features/auth/services/next-path';
 import { HeaderAccount } from '../features/auth/ui/HeaderAccount';
 import type { HeaderAccountTexts } from '../features/auth/ui/HeaderAccount';
 import { useWelcomeContent } from '../features/content/hooks/useWelcomeContent';
+import { FAVORITES_PATH } from '../features/favorites/routes';
 import {
   HeaderSearch,
   HeaderSearchFallback,
@@ -74,7 +75,7 @@ export function AppHeaderSearch() {
 
 export function AppHeaderAccount() {
   const { data: content, error } = useWelcomeContent();
-  return <HeaderAccount texts={accountTexts(content, error)} />;
+  return <HeaderAccount texts={accountTexts(content, error)} favoritesHref={FAVORITES_PATH} />;
 }
 
 function accountTexts(

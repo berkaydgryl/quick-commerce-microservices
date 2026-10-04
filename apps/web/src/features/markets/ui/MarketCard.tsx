@@ -1,4 +1,5 @@
-import type { MarketListContent, NearbyMarket } from '@getir/contracts';
+import type { Market, MarketListContent } from '@getir/contracts';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
 import { formatDeliveryTime, formatMoney, formatRating } from '../../../shared/services/format';
@@ -9,28 +10,35 @@ import { StarIcon } from './icons';
 import styles from './MarketCard.module.css';
 
 interface MarketCardProps {
-  readonly nearby: NearbyMarket;
+  readonly market: Market;
   readonly content: MarketListContent;
   /** Market adinin baslik duzeyi: liste basligi h1 ise h2, h2 ise h3. */
   readonly nameLevel: 'h2' | 'h3';
+  /**
+   * Kapagin sag ust kosesindeki eylem (T11.13: favori kalbi). Sayfa verir:
+   * markets ozelligi favorileri tanimaz.
+   */
+  readonly action?: ReactNode;
 }
 
 /**
  * Market karti (T11.12; referans getircarsi): solda kapak ve uzerinde bas
  * harf rozeti (logo yok, T11.11 karari), sagda ad, puan, sure, minimum sepet
  * ve ucretsiz teslimat esigi. Kapali market soluk ve "Kapali" etiketli, yine
- * tiklanabilir (market sayfasi kapali oldugunu soyler). Kartin tamami market
- * sayfasina baglantidir. Favori, gorunum dugmeleri ve indirim yok (karar 4).
+ * tiklanabilir (market sayfasi kapali oldugunu soyler).
+ *
+ * Kartin tamami market sayfasina gider ama baglanti market adidir; uzerine
+ * serilen katman (::after) karti tiklanabilir yapar. Eylem (kalp) baglantinin
+ * DISINDA ve katmanin ustundedir: baglanti icinde dugme gecersiz HTML olurdu.
  */
-export function MarketCard({ nearby, content, nameLevel: Name }: MarketCardProps) {
-  const { market } = nearby;
+export function MarketCard({ market, content, nameLevel: Name, action }: MarketCardProps) {
   const className = market.isOpen
     ? styles['c-market-card']
     : `${styles['c-market-card']} ${styles['is-closed']}`;
 
   return (
     <li className={className}>
-      <Link to={marketPath(market.id)} className={styles['c-market-card__link']}>
+      <div className={styles['c-market-card__surface']}>
         <div className={styles['c-market-card__media']}>
           {market.coverUrl !== undefined && (
             <img
@@ -45,10 +53,15 @@ export function MarketCard({ nearby, content, nameLevel: Name }: MarketCardProps
           <span className={styles['c-market-card__badge']} aria-hidden="true">
             {marketInitials(market.brand)}
           </span>
+          {action !== undefined && <div className={styles['c-market-card__action']}>{action}</div>}
         </div>
         <div className={styles['c-market-card__body']}>
           <div className={styles['c-market-card__top']}>
-            <Name className={styles['c-market-card__name']}>{market.name}</Name>
+            <Name className={styles['c-market-card__name']}>
+              <Link to={marketPath(market.id)} className={styles['c-market-card__link']}>
+                {market.name}
+              </Link>
+            </Name>
             <span className={styles['c-market-card__rating']}>
               <span className={styles['c-market-card__star']}>
                 <StarIcon />
@@ -79,7 +92,7 @@ export function MarketCard({ nearby, content, nameLevel: Name }: MarketCardProps
             </li>
           </ul>
         </div>
-      </Link>
+      </div>
     </li>
   );
 }

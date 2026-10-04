@@ -11,6 +11,7 @@ package httpapi
 //   order_body.go - siparis uclarinin istek govdeleri ve bicim dogrulamasi
 //   auth.go       - /v1/auth, /v1/me ve /v1/me/addresses uclari (T8.1, T9.5)
 //   auth_body.go  - kimlik uclarinin istek govdeleri
+//   favorites.go  - /v1/me/favorites uclari (favori marketler, T11.13)
 //   geo.go        - /v1/geo/reverse ve /v1/geo/search (harita adres, T11.8)
 //   identity.go   - kullanici kimligi (Bearer erisim jetonu, T8.1)
 //   device.go     - cihaz cerezi (risk sinyali, T8.1)
@@ -40,6 +41,7 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/catalog"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/content"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/favorites"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/geo"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
@@ -165,6 +167,21 @@ type AddressAdder interface {
 	AddAddress(ctx context.Context, userID string, input auth.AddressInput) (auth.AddressBook, error)
 }
 
+// FavoriteLister, GET /v1/me/favorites (favori marketler, T11.13).
+type FavoriteLister interface {
+	Favorites(ctx context.Context, userID string) (favorites.List, error)
+}
+
+// FavoriteAdder, PUT /v1/me/favorites/{marketId} (T11.13).
+type FavoriteAdder interface {
+	AddFavorite(ctx context.Context, userID, marketID string) (favorites.Status, error)
+}
+
+// FavoriteRemover, DELETE /v1/me/favorites/{marketId} (T11.13).
+type FavoriteRemover interface {
+	RemoveFavorite(ctx context.Context, userID, marketID string) (favorites.Status, error)
+}
+
 // GeoReverser, GET /v1/geo/reverse (noktanin adres satiri, T11.8).
 type GeoReverser interface {
 	Reverse(ctx context.Context, lat, lng float64) (geo.ReverseResult, error)
@@ -221,7 +238,11 @@ type Deps struct {
 	ProfileGetter    ProfileGetter
 	AddressBook      AddressBookGetter
 	AddressAdder     AddressAdder
-	CheckoutSignals  CheckoutSignalReader
+	// Favori marketler (T11.13): tek favori servisi uc ucu karsilar.
+	Favorites       FavoriteLister
+	FavoriteAdder   FavoriteAdder
+	FavoriteRemover FavoriteRemover
+	CheckoutSignals CheckoutSignalReader
 	// Harita adres uclari (T11.8); bugun ikisini geo.Service karsilar.
 	GeoReverser GeoReverser
 	GeoSearcher GeoSearcher
@@ -328,6 +349,9 @@ func New(deps Deps) *fiber.App {
 	v1.Get("/me", user, generalByUser, meHandler(deps.ProfileGetter))
 	v1.Get("/me/addresses", user, generalByUser, addressesHandler(deps.AddressBook))
 	v1.Post("/me/addresses", user, generalByUser, mutation, addAddressHandler(deps.AddressAdder))
+	v1.Get("/me/favorites", user, generalByUser, favoritesHandler(deps.Favorites))
+	v1.Put("/me/favorites/:"+marketIDParam, user, generalByUser, mutation, addFavoriteHandler(deps.FavoriteAdder))
+	v1.Delete("/me/favorites/:"+marketIDParam, user, generalByUser, mutation, removeFavoriteHandler(deps.FavoriteRemover))
 	v1.Get("/geo/reverse", user, generalByUser, reverseGeocodeHandler(deps.GeoReverser))
 	v1.Get("/geo/search", user, generalByUser, searchPlacesHandler(deps.GeoSearcher))
 	v1.Post("/cart/reserve", user, orderByUser, mutation, reserveCartHandler(deps.CartReserver))

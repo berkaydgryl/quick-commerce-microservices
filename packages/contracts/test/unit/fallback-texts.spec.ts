@@ -22,6 +22,7 @@ const WELCOME = JSON.parse(
   header: Record<string, string>;
   appHeader: Record<string, string>;
   marketList: unknown;
+  favorites: unknown;
 };
 
 /** Yapidaki butun metinler (dizi ve ic nesneler dahil). */
@@ -43,6 +44,7 @@ describe('CONTENT_FALLBACK', () => {
     for (const key of [
       'profileLabel',
       'accountLabel',
+      'favoritesLabel',
       'logoutLabel',
       'logoutPendingLabel',
     ] as const) {
@@ -52,6 +54,10 @@ describe('CONTENT_FALLBACK', () => {
 
   it('market listesi (T11.12) welcome.json marketList ile birebir: gruplar ve turler dahil', () => {
     expect(CONTENT_FALLBACK.marketList).toEqual(WELCOME.marketList);
+  });
+
+  it('favori metinleri (T11.13) welcome.json favorites ile birebir', () => {
+    expect(CONTENT_FALLBACK.favorites).toEqual(WELCOME.favorites);
   });
 
   it('yedegin market listesi sozlesmeden gecer (gorseller mutlak adrese cevrilince)', () => {

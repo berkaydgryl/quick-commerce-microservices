@@ -152,10 +152,12 @@ const WELCOME: WelcomeContent = {
     addressLoadingLabel: 'Adreslerin yükleniyor…',
     profileLabel: 'Profil',
     accountLabel: 'Hesabım',
+    favoritesLabel: 'Favori marketlerim',
     logoutLabel: 'Çıkış yap',
     logoutPendingLabel: 'Çıkış yapılıyor…',
   },
   marketList: MARKET_LIST,
+  favorites: CONTENT_FALLBACK.favorites,
 };
 
 const withMarketList = (marketList: Partial<WelcomeContent['marketList']>) => ({

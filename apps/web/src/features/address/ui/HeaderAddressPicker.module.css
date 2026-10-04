@@ -42,9 +42,3 @@
   width: var(--size-field-icon);
   color: var(--color-brand-primary);
 }
-
-.c-header-address__notice {
-  font-size: var(--font-size-sm);
-  color: var(--text-default);
-  text-align: center;
-}

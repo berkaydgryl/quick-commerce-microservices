@@ -67,7 +67,8 @@ const validJSON = `{
     "addressBookTitle": "Adreslerim", "addressConfirmLabel": "Adresi Onayla", "addressAddPrompt": "Başka bir adreste misin?",
     "addressAddLabel": "Adres Ekle", "addressLoginLabel": "Adres seçmek için giriş yap",
     "noAddressNotice": "Kayıtlı adresin yok.", "addressLoadingLabel": "Adreslerin yükleniyor…", "profileLabel": "Profil",
-    "accountLabel": "Hesabım", "logoutLabel": "Çıkış yap", "logoutPendingLabel": "Çıkış yapılıyor…"
+    "accountLabel": "Hesabım", "favoritesLabel": "Favori marketlerim", "logoutLabel": "Çıkış yap",
+    "logoutPendingLabel": "Çıkış yapılıyor…"
   },
   "marketList": {
     "categoriesTitle": "Kategoriler", "allLabel": "Tümü", "countLabel": "işletme listeleniyor",
@@ -90,6 +91,13 @@ const validJSON = `{
       "subtotalLabel": "Ara toplam", "deliveryLabel": "Teslimat", "freeDeliveryLabel": "Ücretsiz", "totalLabel": "Toplam",
       "minBasketRemainingLabel": "Minimum sepet tutarına kalan", "goToCartLabel": "Sepete git", "clearLabel": "Sepeti boşalt"
     }
+  },
+  "favorites": {
+    "title": "Favori İşletmelerim", "addLabel": "Favorilere ekle", "removeLabel": "Favorilerden çıkar",
+    "loadingLabel": "Favorilerin yükleniyor…", "emptyTitle": "Henüz favori işletmen yok", "emptyHint": "Kalbe dokun.",
+    "removedNotice": "favorilerden çıkarıldı",
+    "updateFailedToast": "Favori güncellenemedi.", "listFullToast": "Favori listen dolu.", "toastDismissLabel": "Kapat",
+    "profileMenuLabel": "Hesap menüsü", "addressesLabel": "Adreslerim", "favoritesMenuLabel": "Favori İşletmeler"
   }
 }`
 

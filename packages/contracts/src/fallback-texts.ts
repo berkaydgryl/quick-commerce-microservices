@@ -1,4 +1,4 @@
-import type { MarketListContent } from './content.js';
+import type { FavoritesContent, MarketListContent } from './content.js';
 
 /**
  * Market listesinin yedegi (T11.12): icerik gelmese de marketler, dukkan turu
@@ -52,6 +52,23 @@ const MARKET_LIST_FALLBACK: MarketListContent = {
   },
 };
 
+/** Favori marketlerin yedegi (T11.13): kalp ve favori sayfasi icerik gelmese de calisir. */
+const FAVORITES_FALLBACK: FavoritesContent = {
+  title: 'Favori İşletmelerim',
+  addLabel: 'Favorilere ekle',
+  removeLabel: 'Favorilerden çıkar',
+  loadingLabel: 'Favorilerin yükleniyor…',
+  emptyTitle: 'Henüz favori işletmen yok',
+  emptyHint: 'İşletme kartındaki kalbe dokunarak favorilerine ekleyebilirsin.',
+  removedNotice: 'favorilerden çıkarıldı',
+  updateFailedToast: 'Favori güncellenemedi, tekrar dene.',
+  listFullToast: 'Favori listen dolu; yenisini eklemek için birini çıkar.',
+  toastDismissLabel: 'Bildirimi kapat',
+  profileMenuLabel: 'Hesap menüsü',
+  addressesLabel: 'Adreslerim',
+  favoritesMenuLabel: 'Favori İşletmeler',
+};
+
 /**
  * Icerik yedegi (T11.10 duzeltmesi): GET /v1/content/welcome hata verirse
  * ust barin calismasi icin gereken en az metin. Oturumdaki kullanici icerik
@@ -72,12 +89,16 @@ export const CONTENT_FALLBACK = {
   /** appHeader.profileLabel, accountLabel, logoutLabel, logoutPendingLabel. */
   profileLabel: 'Profil',
   accountLabel: 'Hesabım',
+  /** appHeader.favoritesLabel (T11.13). */
+  favoritesLabel: 'Favori marketlerim',
   logoutLabel: 'Çıkış yap',
   logoutPendingLabel: 'Çıkış yapılıyor…',
   /** Icerigi yeniden isteyen dugme (icerikte karsiligi yok: icerik gelmeyince gorunur). */
   retryLabel: 'Tekrar dene',
   /** marketList: bloğun tamami (T11.12). */
   marketList: MARKET_LIST_FALLBACK,
+  /** favorites: bloğun tamami (T11.13). */
+  favorites: FAVORITES_FALLBACK,
 } as const;
 
 export type ContentFallback = typeof CONTENT_FALLBACK;

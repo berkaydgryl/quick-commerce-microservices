@@ -30,7 +30,7 @@ import {
 import { z } from 'zod';
 
 import type { ListProductsInput } from '../../application/list-products.js';
-import { MAX_BATCH_OFFER_IDS } from '../../config/constants.js';
+import { MAX_BATCH_MARKET_IDS, MAX_BATCH_OFFER_IDS } from '../../config/constants.js';
 
 /** Bos metni "yok" sayan istege bagli alan. */
 const optionalText = z
@@ -122,6 +122,18 @@ export const getMarketRequestSchema = z.object({ marketId: requiredCatalogId(mar
 
 export const listMarketCategoriesRequestSchema = z.object({
   marketId: requiredCatalogId(marketIdSchema),
+});
+
+/**
+ * BatchGetMarkets (T11.13). En fazla MAX_BATCH_MARKET_IDS kimlik; bos kimlik
+ * reddedilir. Bicimi bozuk ama dolu kimlik BILEREK reddedilmez: o kimlikle
+ * market yoktur ve `missing`'de doner (BatchGetOffers ile ayni gerekce). Bos
+ * liste gecerlidir.
+ */
+export const batchGetMarketsRequestSchema = z.object({
+  marketIds: z
+    .array(requiredText)
+    .max(MAX_BATCH_MARKET_IDS, `en fazla ${MAX_BATCH_MARKET_IDS} market kimligi`),
 });
 
 /**

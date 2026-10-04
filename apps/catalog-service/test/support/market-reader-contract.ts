@@ -58,5 +58,21 @@ export function describeMarketReaderContract(name: string, getReader: () => Mark
       expect(await reader.marketExists('mkt_a101-caferaga')).toBe(true);
       expect(await reader.marketExists('mkt_yok')).toBe(false);
     });
+
+    it('findMarketsByIds (T11.13): verilenler, kapali dahil; olmayan atlanir; bos liste bos', async () => {
+      const reader = getReader();
+      const found = await reader.findMarketsByIds([
+        'mkt_moda-kasabi',
+        'mkt_a101-abbasaga',
+        'mkt_yok',
+      ]);
+
+      expect(found.map((market) => market.id).sort()).toEqual([
+        'mkt_a101-abbasaga',
+        'mkt_moda-kasabi',
+      ]);
+      expect(found.find((market) => market.id === 'mkt_moda-kasabi')?.storeType).toBe('KASAP');
+      expect(await reader.findMarketsByIds([])).toEqual([]);
+    });
   });
 }

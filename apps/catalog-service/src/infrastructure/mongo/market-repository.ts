@@ -36,6 +36,17 @@ export class MarketRepository
     return this.exists({ _id: marketId });
   }
 
+  /** Tek sorgu, _id indeksiyle ($in): favori sayfasi market basina sorgu atmaz (T11.13). */
+  async findMarketsByIds(marketIds: readonly string[]): Promise<readonly Market[]> {
+    if (marketIds.length === 0) {
+      return [];
+    }
+    const documents = await this.run('findMarketsByIds', () =>
+      this.collection.find({ _id: { $in: [...marketIds] } }).toArray(),
+    );
+    return documents.map(fromMarketDocument);
+  }
+
   /**
    * Konuma en yakin marketler, yakindan uzaga (T4.2'nin sorgusu).
    *

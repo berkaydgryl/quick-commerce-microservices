@@ -28,6 +28,9 @@
   --bg-page: var(--palette-gray-100);
   --bg-surface: var(--palette-white);
 
+  /* Bildirimin (toast, T11.13) koyu zemini: acik sayfanin ustunde ayrisir. */
+  --bg-toast: var(--palette-gray-900);
+
   /* Pencerenin (giris/kayit, T11.6) arkasindaki karartma. */
   --bg-overlay: rgb(25 25 25 / 55%);
   --text-default: var(--palette-gray-900);
@@ -150,6 +153,17 @@
   --size-cart-empty-icon: 2.5rem;
   --size-cart-bar: 3.5rem;
 
+  /* Favori kalbi (T11.13): kapagin sag ust kosesindeki dugme ve ikonu. */
+  --size-favorite-button: 2.25rem;
+  --size-favorite-icon: 1.25rem;
+
+  /* Profil karti (T11.13): yuvarlak kisi ikonu. */
+  --size-profile-avatar: 2.5rem;
+
+  /* Bildirim (toast, T11.13): en genis hali ve kapatma dugmesi. */
+  --container-max-toast: 24rem;
+  --size-toast-dismiss: 1.75rem;
+
   /* Ekranda gorunmeyen, ekran okuyucunun okudugu metin (kartin puan adi). */
   --size-visually-hidden: 0.0625rem;
 
@@ -183,6 +197,9 @@
   /* Telefondaki sepet cubugu (T11.12): ekranin altinda sabit, icerigin
      ustunde; pencereler (dialog) tarayicinin ust katmanindadir, yarismaz. */
   --z-cart-bar: 10;
+
+  /* Bildirim alani (T11.13): sabit ust bar ve sepet cubugunun da ustunde. */
+  --z-toast: 20;
 
   /* Sayfanin ustune acilan liste (karsilama kartinin demo hesaplari, T11.6):
      alttaki icerigin ustunde, sabit ust barin (--z-header) ALTINDA kalir;

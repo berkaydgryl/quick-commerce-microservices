@@ -52,6 +52,8 @@ type Welcome struct {
 	AppHeader AppHeader `json:"appHeader"`
 	// MarketList, market listesi ekrani (T11.12).
 	MarketList MarketList `json:"marketList"`
+	// Favorites, favori marketler (T11.13): kalp, profil menusu, favori sayfasi.
+	Favorites Favorites `json:"favorites"`
 }
 
 // Header, ust bar: logonun iki parcasi ve iki dugme.
@@ -224,8 +226,10 @@ type AppHeader struct {
 	AddressLoadingLabel string `json:"addressLoadingLabel"`
 	ProfileLabel        string `json:"profileLabel"`
 	AccountLabel        string `json:"accountLabel"`
-	LogoutLabel         string `json:"logoutLabel"`
-	LogoutPendingLabel  string `json:"logoutPendingLabel"`
+	// FavoritesLabel, Profil menusunun favori sayfasi baglantisi (T11.13).
+	FavoritesLabel     string `json:"favoritesLabel"`
+	LogoutLabel        string `json:"logoutLabel"`
+	LogoutPendingLabel string `json:"logoutPendingLabel"`
 }
 
 // MarketList, market listesi ekrani (T11.12; referans getircarsi): solda
@@ -248,6 +252,25 @@ type MarketList struct {
 	StoreTypes                 []StoreTypeLabel `json:"storeTypes"`
 	Groups                     []StoreTypeGroup `json:"groups"`
 	Cart                       MarketListCart   `json:"cart"`
+}
+
+// Favorites, favori marketlerin metinleri (T11.13; referans getircarsi
+// "Favori Isletmelerim"): kalbin erisilebilir adlari, favori sayfasi, hata
+// bildirimleri ve profil sayfasinin menusu. Yalnizca metin; kural yok.
+type Favorites struct {
+	Title              string `json:"title"`
+	AddLabel           string `json:"addLabel"`
+	RemoveLabel        string `json:"removeLabel"`
+	LoadingLabel       string `json:"loadingLabel"`
+	EmptyTitle         string `json:"emptyTitle"`
+	EmptyHint          string `json:"emptyHint"`
+	RemovedNotice      string `json:"removedNotice"`
+	UpdateFailedToast  string `json:"updateFailedToast"`
+	ListFullToast      string `json:"listFullToast"`
+	ToastDismissLabel  string `json:"toastDismissLabel"`
+	ProfileMenuLabel   string `json:"profileMenuLabel"`
+	AddressesLabel     string `json:"addressesLabel"`
+	FavoritesMenuLabel string `json:"favoritesMenuLabel"`
 }
 
 // StoreTypeLabel, dukkan turunun adi: sozlesmedeki tur ("KASAP") ve etiket.

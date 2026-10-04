@@ -27,6 +27,7 @@ import (
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/authstore"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/favorites"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/ids"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/mongodb"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/persona"
@@ -649,5 +650,117 @@ func TestSetPasswordHashAndRevokeAllForUser(t *testing.T) {
 	}
 	if count, err := db.Collection(authstore.SessionsCollection).CountDocuments(t.Context(), bson.D{}); err != nil || count != 1 {
 		t.Errorf("baska kullanicinin oturumu kalmali: %d %v", count, err)
+	}
+}
+
+func favoriteEntry(marketID string, addedAt time.Time) favorites.Entry {
+	return favorites.Entry{MarketID: marketID, AddedAt: addedAt.UTC().Truncate(time.Millisecond)}
+}
+
+func TestFavoritesOnMongoRoundTripAndRules(t *testing.T) {
+	// T11.13: en yeni basta, idempotent ekleme ve cikarma, sinir, olmayan kullanici.
+	db := testDatabase(t)
+	users, store := authstore.NewMongoUsers(db), authstore.NewMongoFavorites(db)
+	user := newUser("+905321234567")
+	if err := users.Create(t.Context(), user); err != nil {
+		t.Fatalf("kullanici yazilamadi: %v", err)
+	}
+	start := time.Now()
+
+	// Favori alani hic yazilmamis hesap ($ifNull): bos liste, sonra ilk favori.
+	if entries, err := store.List(t.Context(), user.ID); err != nil || len(entries) != 0 {
+		t.Fatalf("bos liste bekleniyordu: %+v %v", entries, err)
+	}
+	for i, marketID := range []string{"mkt_a101-caferaga", "mkt_moda-kasabi"} {
+		if err := store.Add(t.Context(), user.ID, favoriteEntry(marketID, start.Add(time.Duration(i)*time.Second)), favorites.MaxMarkets); err != nil {
+			t.Fatalf("%s eklenmeli: %v", marketID, err)
+		}
+	}
+	// Ayni market tekrar: degismez (eklenme zamani da korunur).
+	if err := store.Add(t.Context(), user.ID, favoriteEntry("mkt_a101-caferaga", start.Add(time.Hour)), favorites.MaxMarkets); err != nil {
+		t.Fatalf("tekrar ekleme basarili olmali: %v", err)
+	}
+	entries, err := store.List(t.Context(), user.ID)
+	want := []favorites.Entry{favoriteEntry("mkt_moda-kasabi", start.Add(time.Second)), favoriteEntry("mkt_a101-caferaga", start)}
+	if err != nil || len(entries) != 2 || entries[0] != want[0] || entries[1] != want[1] {
+		t.Errorf("en yeni once ve tekrar yok:\n got %+v\nwant %+v (%v)", entries, want, err)
+	}
+
+	// Cikarma iki kez de basarili.
+	for range 2 {
+		if err := store.Remove(t.Context(), user.ID, "mkt_moda-kasabi"); err != nil {
+			t.Fatalf("cikarma basarili olmali: %v", err)
+		}
+	}
+	if entries, err := store.List(t.Context(), user.ID); err != nil || len(entries) != 1 || entries[0].MarketID != "mkt_a101-caferaga" {
+		t.Errorf("cikarilan favori listede olmamali: %+v %v", entries, err)
+	}
+
+	// Sinir: max'a kadar eklenir, fazlasi ErrListFull.
+	for i := 1; i < favorites.MaxMarkets; i++ {
+		if err := store.Add(t.Context(), user.ID, favoriteEntry(fmt.Sprintf("mkt_m%d", i), start), favorites.MaxMarkets); err != nil {
+			t.Fatalf("%d. favori eklenmeli: %v", i+1, err)
+		}
+	}
+	if err := store.Add(t.Context(), user.ID, favoriteEntry("mkt_fazla", start), favorites.MaxMarkets); !errors.Is(err, favorites.ErrListFull) {
+		t.Errorf("dolu liste ErrListFull donmeli: %v", err)
+	}
+	// Dolu listede zaten favori olan market: yine basarili (idempotent).
+	if err := store.Add(t.Context(), user.ID, favoriteEntry("mkt_a101-caferaga", start), favorites.MaxMarkets); err != nil {
+		t.Errorf("dolu listede mevcut favori basarili olmali: %v", err)
+	}
+
+	stranger := ids.New(ids.User)
+	if _, err := store.List(t.Context(), stranger); !errors.Is(err, favorites.ErrUserNotFound) {
+		t.Errorf("olmayan kullanici List ErrUserNotFound: %v", err)
+	}
+	if err := store.Add(t.Context(), stranger, favoriteEntry("mkt_a101-caferaga", start), favorites.MaxMarkets); !errors.Is(err, favorites.ErrUserNotFound) {
+		t.Errorf("olmayan kullanici Add ErrUserNotFound: %v", err)
+	}
+	if err := store.Remove(t.Context(), stranger, "mkt_a101-caferaga"); !errors.Is(err, favorites.ErrUserNotFound) {
+		t.Errorf("olmayan kullanici Remove ErrUserNotFound: %v", err)
+	}
+}
+
+func TestConcurrentFavoriteAddsStayUniqueAndBounded(t *testing.T) {
+	// "Once oku, sonra yaz" ayni marketi iki kez ya da siniri asan favoriyi
+	// yazardi; karar tek UpdateOne'in filtresinde.
+	db := testDatabase(t)
+	users, store := authstore.NewMongoUsers(db), authstore.NewMongoFavorites(db)
+	user := newUser("+905321234567")
+	if err := users.Create(t.Context(), user); err != nil {
+		t.Fatalf("kullanici yazilamadi: %v", err)
+	}
+	now := time.Now()
+
+	same := race(func() error {
+		return store.Add(t.Context(), user.ID, favoriteEntry("mkt_sok-moda", now), favorites.MaxMarkets)
+	})
+	if succeeded, _ := countOutcomes(same, nil); succeeded != concurrency {
+		t.Errorf("ayni market: hepsi basarili (idempotent) olmali: %v", same)
+	}
+	if entries, err := store.List(t.Context(), user.ID); err != nil || len(entries) != 1 {
+		t.Errorf("ayni market bir kez yazilmali: %+v %v", entries, err)
+	}
+
+	for i := 1; i < favorites.MaxMarkets-1; i++ {
+		if err := store.Add(t.Context(), user.ID, favoriteEntry(fmt.Sprintf("mkt_m%d", i), now), favorites.MaxMarkets); err != nil {
+			t.Fatalf("hazirlik: %v", err)
+		}
+	}
+	var mu sync.Mutex
+	next := 0
+	distinct := race(func() error {
+		mu.Lock()
+		next++
+		marketID := fmt.Sprintf("mkt_yeni-%d", next)
+		mu.Unlock()
+		return store.Add(t.Context(), user.ID, favoriteEntry(marketID, now), favorites.MaxMarkets)
+	})
+	if added, full := countOutcomes(distinct, favorites.ErrListFull); added != 1 || full != concurrency-1 {
+		t.Errorf("son bos yeri bir istek almali: eklenen %d, dolu %d (%v)", added, full, distinct)
+	}
+	if entries, err := store.List(t.Context(), user.ID); err != nil || len(entries) != favorites.MaxMarkets {
+		t.Errorf("liste siniri asmamali: %d %v", len(entries), err)
 	}
 }

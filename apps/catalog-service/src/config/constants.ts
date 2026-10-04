@@ -3,7 +3,7 @@
  * Koda ciplak sayi/metin yazilmaz; is sabitleri burada isimlendirilir.
  */
 
-import { SEARCH_RESULT_PRODUCTS_MAX } from '@getir/contracts';
+import { FAVORITE_MARKETS_MAX, SEARCH_RESULT_PRODUCTS_MAX } from '@getir/contracts';
 
 /** Gunlukte ve acilis kaydinda gorunen kisa ad. */
 export const SERVICE_NAME = 'catalog';
@@ -26,6 +26,13 @@ export const DEFAULT_MONGO_DB = 'getir_catalog';
  * daha fazlasi VALIDATION_FAILED.
  */
 export const MAX_BATCH_OFFER_IDS = 100;
+
+/**
+ * BatchGetMarkets tek cagrida en fazla bu kadar market kimligi kabul eder
+ * (T11.13). Favori isletmeler sayfasinin kaynagidir: kullanici en fazla
+ * FAVORITE_MARKETS_MAX market saklar; deger sozlesmeden gelir.
+ */
+export const MAX_BATCH_MARKET_IDS = FAVORITE_MARKETS_MAX;
 
 /**
  * ListNearbyMarkets'te degerlendirilen en yakin market sayisi (ADR-15).

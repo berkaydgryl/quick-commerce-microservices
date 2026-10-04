@@ -1,7 +1,9 @@
 import { createBrowserRouter } from 'react-router-dom';
 
 import { AUTH_ROUTES } from '../features/auth/routes';
+import { FAVORITES_PATH } from '../features/favorites/routes';
 import { AccountPage } from '../pages/account/AccountPage';
+import { FavoritesPage } from '../pages/account/FavoritesPage';
 import { ForgotPasswordPage } from '../pages/forgot-password/ForgotPasswordPage';
 import { LoginPage } from '../pages/login/LoginPage';
 import { MarketPage } from '../pages/market/MarketPage';
@@ -27,6 +29,7 @@ export const router = createBrowserRouter([
         ? [{ path: AUTH_ROUTES.forgotPassword, element: <ForgotPasswordPage /> }]
         : []),
       { path: AUTH_ROUTES.account, element: <AccountPage /> },
+      { path: FAVORITES_PATH, element: <FavoritesPage /> },
     ],
   },
 ]);

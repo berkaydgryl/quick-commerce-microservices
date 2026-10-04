@@ -1,4 +1,4 @@
-import type { MarketListContent, NearbyMarket, StoreType } from '@getir/contracts';
+import type { Market, MarketListContent, NearbyMarket, StoreType } from '@getir/contracts';
 import { useId } from 'react';
 import type { ReactNode } from 'react';
 
@@ -26,6 +26,8 @@ export interface MarketListingViewProps {
   readonly headingLevel: 1 | 2;
   /** Sag sutun: Sepetim (sayfa yerlestirir; bu ozellik sepeti tanimaz). */
   readonly aside: ReactNode;
+  /** Kartin kapagindaki eylem (T11.13: favori kalbi); sayfa verir. */
+  readonly renderCardAction?: (market: Market) => ReactNode;
 }
 
 /**
@@ -43,6 +45,7 @@ export function MarketListingView({
   onSelect,
   headingLevel,
   aside,
+  renderCardAction,
 }: MarketListingViewProps) {
   const menuTitleId = useId();
   const countId = useId();
@@ -106,9 +109,10 @@ export function MarketListingView({
             {visible.map((nearby) => (
               <MarketCard
                 key={nearby.market.id}
-                nearby={nearby}
+                market={nearby.market}
                 content={content}
                 nameLevel={headingLevel === 1 ? 'h2' : 'h3'}
+                action={renderCardAction?.(nearby.market)}
               />
             ))}
           </ul>

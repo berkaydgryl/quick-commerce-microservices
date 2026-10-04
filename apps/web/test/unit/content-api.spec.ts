@@ -125,6 +125,7 @@ const welcome = {
     addressLoadingLabel: 'Adreslerin yükleniyor…',
     profileLabel: 'Profil',
     accountLabel: 'Hesabım',
+    favoritesLabel: 'Favori marketlerim',
     logoutLabel: 'Çıkış yap',
     logoutPendingLabel: 'Çıkış yapılıyor…',
   },
@@ -135,6 +136,7 @@ const welcome = {
       imageUrl: `${ASSET}${group.imageUrl}`,
     })),
   },
+  favorites: CONTENT_FALLBACK.favorites,
 };
 
 function clientReturning(body: unknown) {

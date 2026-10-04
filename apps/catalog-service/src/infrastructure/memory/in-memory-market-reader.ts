@@ -21,6 +21,11 @@ export class InMemoryMarketReader implements MarketReader {
     return Promise.resolve(this.byId.has(marketId));
   }
 
+  findMarketsByIds(marketIds: readonly string[]): Promise<readonly Market[]> {
+    const wanted = new Set(marketIds);
+    return Promise.resolve(this.markets.filter((market) => wanted.has(market.id)));
+  }
+
   /** Mongo'daki $geoNear'in karsiligi: mesafe hesabi + siralama + sinir. */
   listMarketsByDistance(point: GeoPoint, limit: number): Promise<readonly MarketDistance[]> {
     const ranked = this.markets

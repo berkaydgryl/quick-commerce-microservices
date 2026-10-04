@@ -1,0 +1,44 @@
+/*
+ * Kalp (T11.13; referans getircarsi): fotografin uzerinde. Cizgi beyaz;
+ * favoriyken ici marka moru. Golge acik renkli kapakta da cizgiyi gosterir.
+ * Odak halkasi iki katman (QA W5): marka moru halka ve icinde beyaz kenar;
+ * koyu kapakta, acik kapakta ve kapaksiz (acik mor) zeminde gorunur.
+ */
+.c-favorite {
+  --focus-ring-color: var(--color-brand-primary);
+
+  display: grid;
+  place-items: center;
+  width: var(--size-favorite-button);
+  height: var(--size-favorite-button);
+  padding: 0;
+  color: var(--text-on-brand);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--radius-pill);
+  filter: drop-shadow(var(--shadow-surface));
+}
+
+.c-favorite:focus-visible {
+  box-shadow: 0 0 0 var(--focus-ring-offset) var(--text-on-brand);
+}
+
+.c-favorite:disabled {
+  cursor: progress;
+}
+
+.c-favorite__icon {
+  width: var(--size-favorite-icon);
+  height: var(--size-favorite-icon);
+  transition: transform var(--duration-fast) var(--easing-standard);
+}
+
+/* Dolgu svg'nin kendisine: ikonun fill="none" niteligi kapsayicidan gelen degeri ezerdi. */
+.c-favorite.is-active .c-favorite__icon svg {
+  fill: var(--color-brand-primary);
+}
+
+.c-favorite:hover:not(:disabled) .c-favorite__icon {
+  transform: scale(1.1);
+}
