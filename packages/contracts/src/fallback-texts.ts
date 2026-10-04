@@ -71,7 +71,6 @@ const FAVORITES_FALLBACK: FavoritesContent = {
 
 /** Profil kartinin ve e-posta penceresinin yedegi (T11.14): icerik gelmese de e-posta dogrulanabilir. */
 const PROFILE_FALLBACK: ProfileContent = {
-  fullNameLabel: 'Ad soyad',
   phoneLabel: 'Telefon',
   emailLabel: 'E-posta',
   addEmailLabel: 'E-posta ekle',

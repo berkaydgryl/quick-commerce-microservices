@@ -3,26 +3,29 @@ import { NavLink } from 'react-router-dom';
 
 import { formatPhone } from '../../auth/services/phone';
 
-import { MailIcon, PencilIcon, PhoneIcon, VerifiedIcon } from './icons';
+import { EditIcon, MailIcon, PhoneIcon, VerifiedIcon } from './icons';
 import styles from './ProfileCard.module.css';
 
 export interface ProfileCardViewProps {
   /** GET /v1/me; yuklenirken undefined. */
   readonly profile: UserProfile | undefined;
   readonly texts: ProfileContent;
-  /** Adin gittigi Hesabim sayfasi. */
-  readonly accountHref: string;
+  /**
+   * Adin gittigi Hesabim sayfasi. Alt sekmelerde verilir (kart menunun
+   * ustunde); Hesabim'in kendisinde verilmez: ad duz metindir.
+   */
+  readonly accountHref?: string | undefined;
   /** Kalem ve "E-posta ekle": e-posta penceresini acar. */
   readonly onEditEmail: () => void;
 }
 
 /**
- * Profil karti (T11.14; referans getircarsi; kullanicinin karari: ad, altinda
- * telefon, onun altinda e-posta). Sag ustte kalem e-posta penceresini acar
- * (ad degisikligi bekleyen is #89). Dogrulanmis e-postanin yaninda yesil onay;
- * telefonun yaninda YOK: numara dogrulanmaz (ADR-12), onay yaniltirdi.
- * E-postasi olmayan kartta e-posta satiri "E-posta ekle" der. Durumsuz:
- * pencere ve sorgu ProfileCard'da.
+ * Profil karti (T11.14; PR 2'de referansa gore: getircarsi profil sayfasi,
+ * 18.16). Ad, altinda e-posta, onun altinda telefon; kalem kartin ust
+ * kenarina tasar. Dogrulanmis e-postanin yaninda yesil onay; telefonda onay
+ * YOK: numara dogrulanmaz (ADR-12). Onay, numara kodla dogrulaninca gelir
+ * (phoneVerifiedAt, PR 3). E-postasiz kartta e-posta satiri "E-posta ekle"
+ * der. Durumsuz: pencere ve sorgu ProfileCard'da.
  */
 export function ProfileCardView({
   profile,
@@ -40,7 +43,7 @@ export function ProfileCardView({
         disabled={profile === undefined}
         onClick={onEditEmail}
       >
-        <PencilIcon />
+        <EditIcon />
       </button>
       {profile === undefined ? (
         <p className={styles['c-profile-card__loading']} role="status">
@@ -48,22 +51,16 @@ export function ProfileCardView({
         </p>
       ) : (
         <>
-          <NavLink to={accountHref} end className={() => styles['c-profile-card__name']}>
-            {profile.fullName}
-          </NavLink>
+          <p className={styles['c-profile-card__name']}>
+            {accountHref === undefined ? (
+              profile.fullName
+            ) : (
+              <NavLink to={accountHref} end className={() => styles['c-profile-card__link']}>
+                {profile.fullName}
+              </NavLink>
+            )}
+          </p>
           <dl className={styles['c-profile-card__details']}>
-            <div className={styles['c-profile-card__row']}>
-              <dt className={styles['c-profile-card__term']}>
-                <span
-                  className={styles['c-profile-card__icon']}
-                  role="img"
-                  aria-label={texts.phoneLabel}
-                >
-                  <PhoneIcon />
-                </span>
-              </dt>
-              <dd className={styles['c-profile-card__value']}>{formatPhone(profile.phone)}</dd>
-            </div>
             <div className={styles['c-profile-card__row']}>
               <dt className={styles['c-profile-card__term']}>
                 <span
@@ -86,7 +83,7 @@ export function ProfileCardView({
                   </button>
                 ) : (
                   <>
-                    <span className={styles['c-profile-card__email']}>{profile.email}</span>
+                    <span className={styles['c-profile-card__text']}>{profile.email}</span>
                     <span
                       className={styles['c-profile-card__verified']}
                       role="img"
@@ -96,6 +93,20 @@ export function ProfileCardView({
                     </span>
                   </>
                 )}
+              </dd>
+            </div>
+            <div className={styles['c-profile-card__row']}>
+              <dt className={styles['c-profile-card__term']}>
+                <span
+                  className={styles['c-profile-card__icon']}
+                  role="img"
+                  aria-label={texts.phoneLabel}
+                >
+                  <PhoneIcon />
+                </span>
+              </dt>
+              <dd className={styles['c-profile-card__value']}>
+                <span className={styles['c-profile-card__text']}>{formatPhone(profile.phone)}</span>
               </dd>
             </div>
           </dl>

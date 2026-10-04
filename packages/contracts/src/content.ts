@@ -424,13 +424,13 @@ export const emailDialogContentSchema = z.object({
 });
 
 /**
- * Profil karti ve Hesabim paneli (T11.14; referans getircarsi profil karti):
- * ad, altinda telefon, onun altinda e-posta; sag ustte kalem (e-posta
- * penceresini acar). Dogrulanmis e-postanin yaninda yesil onay; telefonun
- * yaninda YOK (ADR-12: numara dogrulanmaz, onay isareti yaniltirdi).
+ * Profil karti (T11.14; PR 2'de referansa gore: getircarsi profil sayfasi):
+ * ad, altinda e-posta, onun altinda telefon; kartin ust kenarinda kalem
+ * (e-posta penceresini acar). Dogrulanmis e-postanin yaninda yesil onay;
+ * telefonun yaninda YOK (ADR-12: numara dogrulanmaz, onay isareti yaniltirdi).
+ * Satir ikonlarinin ve onayin erisilebilir adlari buradadir.
  */
 export const profileContentSchema = z.object({
-  fullNameLabel: contentTextSchema,
   phoneLabel: contentTextSchema,
   emailLabel: contentTextSchema,
   /** E-postasi olmayan kartin e-posta satirindaki baglanti. */

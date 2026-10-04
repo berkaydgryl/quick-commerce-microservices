@@ -1,34 +1,37 @@
 /*
- * Profil karti (T11.14; referans getircarsi): beyaz kart; ustte ad, altinda
- * cizgiyle ayrilmis telefon ve e-posta satirlari; sag ustte kalem dugmesi.
- * Uzun ad ve adres kirilir, kart tasmaz.
+ * Profil karti (T11.14; PR 2'de referansa gore: getircarsi profil sayfasi,
+ * 18.16). Beyaz kart; ustte kalin ad, altinda ince cizgilerle ayrilmis
+ * e-posta ve telefon satirlari (ikon, deger, sagda onay). Kalem kartin ust
+ * kenarina yari tasar. Kart bulundugu kabin genisligini alir: Hesabim'da
+ * ortak icerik kabi, alt sekmelerde menu sutunu. Uzun ad ve adres kirilir.
  */
 .c-profile-card {
   position: relative;
   display: grid;
-  padding: var(--space-4) var(--space-4) var(--space-2);
+  margin-block-start: calc(var(--size-profile-edit) / 2);
+  padding: var(--space-6) var(--space-5) var(--space-2);
   background: var(--bg-surface);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-surface);
 }
 
-/* Kalem: sag ust kose; ad onun altina kaymasin diye adin sagi bos kalir. */
+/* Kalem: sag ust kosede, ust kenarin yarisi kadar disarida (referans). */
 .c-profile-card__edit {
   position: absolute;
-  inset-block-start: var(--space-3);
-  inset-inline-end: var(--space-3);
+  inset-block-start: calc(var(--size-profile-edit) / -2);
+  inset-inline-end: var(--space-5);
   display: grid;
   place-items: center;
   width: var(--size-profile-edit);
   aspect-ratio: 1;
   padding: var(--space-2);
-  color: var(--color-brand-primary);
+  color: var(--color-brand-primary-soft);
   cursor: pointer;
   background: var(--bg-surface);
-  border: var(--border-width-thin) solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-surface);
-  transition: background var(--duration-fast) var(--easing-standard);
+  border: none;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-floating);
+  transition: color var(--duration-fast) var(--easing-standard);
 }
 
 .c-profile-card__edit:disabled {
@@ -37,26 +40,27 @@
 }
 
 .c-profile-card__edit:hover:not(:disabled) {
-  background: var(--color-brand-primary-subtle);
+  color: var(--color-brand-primary);
 }
 
 .c-profile-card__loading {
   padding-block: var(--space-3);
-  padding-inline-end: var(--size-profile-edit);
   color: var(--text-muted);
 }
 
 .c-profile-card__name {
-  padding-block: var(--space-1) var(--space-3);
-  padding-inline-end: calc(var(--size-profile-edit) + var(--space-3));
-  font-size: var(--font-size-lg);
+  padding-block-end: var(--space-4);
+  font-size: var(--font-size-card-title);
   font-weight: var(--font-weight-bold);
-  color: inherit;
   overflow-wrap: anywhere;
+}
+
+.c-profile-card__link {
+  color: inherit;
   text-decoration: none;
 }
 
-.c-profile-card__name:hover {
+.c-profile-card__link:hover {
   color: var(--color-brand-primary);
 }
 
@@ -68,17 +72,20 @@
   display: flex;
   gap: var(--space-3);
   align-items: center;
-  padding-block: var(--space-3);
-  border-block-start: var(--border-width-thin) solid var(--border-subtle);
+  padding-block: var(--space-4);
+  border-block-start: var(--border-width-thin) solid var(--border-faint);
 }
 
-/* Satirin ikonu: dt yalnizca yer tutar, boyut ve renk ikon kutusunda. */
+/* Satirin ikonu: dt yalnizca yer tutar; boyut ve renkler ikon kutusunda.
+   Iki renkli ikonun ikinci rengi --icon-accent (icons.tsx). */
 .c-profile-card__term {
   display: grid;
   flex-shrink: 0;
 }
 
 .c-profile-card__icon {
+  --icon-accent: var(--color-brand-accent);
+
   display: grid;
   width: var(--size-profile-row-icon);
   aspect-ratio: 1;
@@ -91,11 +98,11 @@
   gap: var(--space-2);
   align-items: center;
   min-width: 0;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
   color: var(--text-muted);
 }
 
-.c-profile-card__email {
+.c-profile-card__text {
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
@@ -120,4 +127,12 @@
 
 .c-profile-card__add:hover {
   text-decoration: underline;
+}
+
+/* Telefonda kalemin tasan yarisina yer acilir (ust bara degmesin); genis
+   ekranda sayfanin ust boslugu yeter, kart menuyle ayni hizada baslar. */
+@media (--bp-lg) {
+  .c-profile-card {
+    margin-block-start: 0;
+  }
 }
