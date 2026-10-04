@@ -66,7 +66,11 @@ describe('ConfirmPayment', () => {
     const order = await confirm(input(id), scope);
 
     expect(order.status).toBe(ORDER_STATUS.PAID);
-    await expect(repository.findById(id)).resolves.toMatchObject({ status: ORDER_STATUS.PAID });
+    // Kurye kuyruguna odeme aniyla girer (#92).
+    await expect(repository.findById(id)).resolves.toMatchObject({
+      status: ORDER_STATUS.PAID,
+      courierQueuedAt: clock.date(),
+    });
     expect(payments.confirmations).toEqual([
       { orderId: id, challengeId: FAKE_CHALLENGE_ID, code: MOCK_THREEDS_CODE },
     ]);

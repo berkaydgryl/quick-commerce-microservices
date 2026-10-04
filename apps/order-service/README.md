@@ -9,7 +9,7 @@ Bu serviste **olmayanlar**, bilinçli: stok sayacı `inventory-service`'in, kart
 (kapıda ödeme kapalı, rezervasyon süresi, reddet) burada verilir — risk servisi yalnızca
 skor önerir.
 
-## Bugünkü durum (T13.1 — ödenen siparişe kurye)
+## Bugünkü durum (T13.2 PR 2 — kurye kuyruğu ödeme sırasıyla)
 
 | RPC                | Durum                                                                                                                                                  |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -21,7 +21,8 @@ skor önerir.
 | `CancelOrder`      | ✅ Kullanıcı iptali: yalnızca `DRAFT`, `RESERVED`, `AWAITING_PAYMENT` (B29); Idempotency-Key zorunlu (D4); kilit bırakılır; parası alınmışsa iptal yok |
 
 RPC'lerin yanında iki işçi çalışır: kilidi dolan siparişleri kapatan süpürücü (T11.2 PR 2) ve
-ödenen siparişe courier-svc'den kurye isteyen kurye işçisi (T13.1 PR 2, aşağıda "Kurye ataması").
+ödenen siparişe courier-svc'den kurye isteyen kurye işçisi (T13.1 PR 2; sırası T13.2 PR 2'de ödeme
+anına göre, aşağıda "Kurye ataması").
 
 ## Veri kaynağı: Mongo ya da MOCK
 
@@ -56,6 +57,7 @@ gelir.
 | `orders`   | `{ userId: 1, createdAt: -1, _id: -1 }` (`userId_createdAt_id`)                        | `ListMyOrders`        |
 | `orders`   | `{ status: 1, 'reservation.expiresAt': 1, _id: 1 }` (`status_reservationExpiresAt_id`) | süpürücü (T11.2 PR 2) |
 | `orders`   | `{ status: 1, courierRetryAt: 1, _id: 1 }` (`status_courierRetryAt_id`), kısmi         | kurye işçisi (T13.1)  |
+| `orders`   | `{ status: 1, courierQueuedAt: 1, _id: 1 }` (`status_courierQueuedAt_id`), kısmi       | kurye kuyruğu (#92)   |
 
 Roadmap veri modelindeki `status` indeksi süpürücüyle (T11.2 PR 2) geldi: durum (`$in`, iki
 değer) + kilidin bitişi aralığı ve aynı sıraya göre okuma tek indeksten, bellekte sıralama yok
@@ -64,6 +66,11 @@ değer) + kilidin bitişi aralığı ve aynı sıraya göre okuma tek indeksten,
 Kurye işçisinin indeksi **kısmi**: yalnızca `PAID` ve `PREPARING` siparişler girer (teslim
 edilen ve iptal edilen geçmiş girmez). Sorgunun iki kolu (`$or`: bütün `PAID`'ler; deneme anı
 gelmiş kuryesiz `PREPARING`'ler) aynı indeksten okunur ve `SORT_MERGE` ile birleşir (explain testli).
+
+Kurye kuyruğunun indeksi (#92) de **kısmi**: yalnızca kuryesiz bekleyen `PREPARING` (deneme anı
+olan) girer; kurye atanınca alan silinir, sipariş indeksten çıkar. Yeni talepten önce ödemiş
+bekleyenler ödeme sırasıyla buradan okunur; bellekte sıralama yok, okunan anahtar dönen kadar
+(explain testli).
 
 **Kalemler ve tutarlar:** proto `Order`'daki fiyatlı kalemler (`items`) ve tutarlar (`subtotal`,
 `delivery_fee`, `discount`, `total`) taslakta dondurulan değerlerdir (T7.2); `GetOrder` onları
@@ -323,7 +330,7 @@ toparlar: kilidi dolmuş `DRAFT` ve `AWAITING_PAYMENT` siparişleri kapatır
   kullanıcı tam o anda 3DS'i onaylarken iptal ederse) sipariş kapanır ve para iade edilir ama
   kesinleşmiş stok geri dönmez: eksik satış yönü, fazla satış yok (bekleyen işler #70).
 
-## Kurye ataması (T13.1 PR 2)
+## Kurye ataması (T13.1 PR 2, sıra T13.2 PR 2)
 
 Sipariş `PAID` olunca kurye atanır (roadmap "Bitti sayılır"). Atamanın sahibi courier-svc'dir
 (`AssignCourier`, B7: tek atomik `findOneAndUpdate`); order kuryeyi **arka planda bir işçiyle**
@@ -331,16 +338,36 @@ ister, ödeme isteği beklemez (`application/dispatch-couriers.ts` tek tur,
 `application/assign-courier-step.ts` sipariş başına adım, işçi
 `interfaces/workers/courier-dispatcher.ts`, kurallar `domain/courier-dispatch.ts`).
 
-| courier-svc'nin cevabı               | Sipariş                                                                                       |
-| ------------------------------------ | --------------------------------------------------------------------------------------------- |
-| Kurye atandı                         | `PAID` → `PREPARING`, kurye (`courier.courierId`, `assignedAt`) aynı yazımda; tek olay        |
-| Boş kurye yok (`NOT_FOUND`)          | `PAID` → `PREPARING` kuryesiz, `courierRetryAt` = şimdi + 30 sn; o an gelince yeniden istenir |
-| Ulaşılamıyor (`SERVICE_UNAVAILABLE`) | Değişmez; tur kesilir, her tur (1 sn) yeniden denenir; D17 devresi açıksa ağa gidilmez        |
+| courier-svc'nin cevabı               | Sipariş                                                                                    |
+| ------------------------------------ | ------------------------------------------------------------------------------------------ |
+| Kurye atandı                         | `PAID` → `PREPARING`, kurye (`courier.courierId`, `assignedAt`) aynı yazımda; tek olay     |
+| Boş kurye yok (`NOT_FOUND`)          | `PAID` → `PREPARING` kuryesiz, `courierRetryAt` = şimdi + 30 sn; bekleyen yeniden yazılmaz |
+| Ulaşılamıyor (`SERVICE_UNAVAILABLE`) | Değişmez; tur kesilir, her tur (1 sn) yeniden denenir; D17 devresi açıksa ağa gidilmez     |
 
-- **Sıklık:** 1 sn'de bir tur, turda en fazla 100 sipariş; önce `PAID`'ler, sonra deneme anı en
-  eski kuryesiz `PREPARING` (`config/constants.ts`, ADR-11). Ödenen sipariş en geç ~1 sn sonra
-  `PREPARING` olur; `order.status_changed` aynı transaction'da outbox'a yazılır, realtime T12.3
-  hattıyla iter.
+- **Sıklık:** 1 sn'de bir tur, turda en fazla 100 talep (yeni `PAID` ya da deneme anı gelmiş
+  kuryesiz `PREPARING`) ve onlardan önce ödemiş en fazla 100 bekleyen (`config/constants.ts`,
+  ADR-11). Ödenen sipariş en geç ~1 sn sonra `PREPARING` olur; `order.status_changed` aynı
+  transaction'da outbox'a yazılır, realtime T12.3 hattıyla iter.
+- **Sıra: önce ödeyen önce (#92, T13.2 PR 2).** Sipariş kuyruğa ödeme anıyla girer
+  (`courierQueuedAt`, `PAID` geçişinde ödeme adımı yazar; kurye atanınca silinir). Turda talep
+  varsa, ondan **önce ödemiş** kuryesiz bekleyenler de aynı turda ve önce denenir; 30 sn'leri
+  beklenmez. Böylece boşalan kurye, ona ulaşabilen en eski siparişe gider: bekleyen sipariş, sonra
+  ödeyen siparişe kuryeyi kaptırmaz (QA'nın W/N senaryosu, birim ve gerçek Mongo testi). Eski
+  bekleyen başka semtteyse `NOT_FOUND` alır, yeni sipariş kendi kuryesini alır: semtler birbirini
+  bekletmez. Talep yoksa bekleyenler 30 sn kuralıyla sürer; courier çağrısı yalnızca talep varken
+  artar. Sıra kuralı `domain/courier-dispatch.ts` (`courierQueue`); iki okuma
+  (`findAwaitingCourier`, `findWaitingBefore`) yalnızca adayları getirir.
+- **Bekleyen yeniden yazılmaz, market başına tek soru (QA O2).** Zaten bekleyen sipariş yine kurye
+  bulamazsa yazılmaz: durumu ve sürümü aynı kalır. Aynı turda bir market için courier "kurye yok"
+  dediyse o marketin sıradaki siparişleri courier'e sorulmaz (aynı market aynı havuz); ödenmiş olan
+  kuryesiz `PREPARING`'e geçer. Turda courier çağrısı en çok kurye bulamayan market sayısı kadar
+  artar, bekleyen yazımı yoktur. Bedeli: deneme anı yalnızca ilk beklemeyi belirler; geçtikten sonra
+  bekleyen her turda (1 sn) denenir, ama market başına tek çağrıyla. Kurye boşalınca o marketin en
+  eski bekleyeni en geç ~1 sn içinde alır.
+- **Göç 0001 (`kurye-sirasi`):** alan öncesi kuryesiz `PAID` ve bekleyen `PREPARING`'e kuyruk anını
+  zaman çizelgesindeki ödeme anından yazar (yoksa oluşturma anı). Açılışta kendiliğinden uygulanır;
+  `down` alanı ve kuyruk indeksini kaldırır. Transaction'sız ve yeniden çalıştırılabilir (indeks
+  düşürmek transaction'da yapılamaz).
 - **Durum dışı güncelleme sürümü artırır:** kuryesiz `PREPARING`'e kurye ya da yeni deneme anı
   yazmak geçiş değildir (zaman çizelgesi ve olay yok) ama sürüm bir artar: iki örnek birbirinin
   yazımını ezmesin (soket `seq`'i boşluklu ilerleyebilir, `docs/api/socket-events.md`).
@@ -355,13 +382,26 @@ ister, ödeme isteği beklemez (`application/dispatch-couriers.ts` tek tur,
   (`test/integration/courier-dispatch.spec.ts`).
 - **Birden fazla örnek:** lider kilidi yok; courier'in tekrar güvenliği ve sürüm kontrolü sipariş
   başına tek kurye ve tek `PREPARING` olayı verir (entegrasyon testi: iki örnek, 10 sipariş).
-- **Günlük ve metrik:** courier'e ulaşılamazken her saniye satır yazılmaz; geçiş bir kez WARN,
-  geri geliş bir kez INFO. `order_courier_dispatch_total{outcome}` (`assigned`, `no_courier`,
-  `released`) ve `order_courier_dispatch_errors_total`; devre `courier` hedefiyle (D17).
+- **Hatanın kaynağı (D1):** courier çağrısının ve sipariş deposunun hataları ayrı işaretlenir
+  (`CourierStepFailure`). Ulaşılamazken her saniye satır yazılmaz: kaynak başına (courier, depo)
+  geçiş bir kez WARN, geri geliş bir kez INFO. Depo arızası "courier'e ulaşılamıyor" görünmez;
+  kuyruk okunamazsa da tur hata fırlatmaz, geçişte bir WARN. Courier için "geri geldi" ancak
+  courier bir siparişe cevap verince yazılır.
+- **Geri çekilme (D3):** ulaşılamama dışı bir hata veren sipariş (ör. courier'in reddi) her turda
+  denenmez: 1 sn'den başlayıp ikiye katlanan bekleme, en çok 5 dk; WARN yalnızca ilk hatada,
+  sonrakiler DEBUG ve metrik. Durum bellekte ve örnek başına: yeniden başlayınca sıfırlanır.
+- **Günlük gürültüsü (D2):** "markette boş kurye yok" INFO'su yalnızca `PAID` → kuryesiz
+  `PREPARING` geçişinde; bekleyenin sonraki denemeleri DEBUG. Tur özeti yalnızca atama, geri verme
+  ya da hata olunca.
+- **Metrik:** `order_courier_dispatch_total{outcome}` (`assigned`, `no_courier`, `released`) ve
+  `order_courier_dispatch_errors_total{source}` (`courier`, `store`, `order`: beklenmeyen); devre
+  `courier` hedefiyle (D17).
 - **MOCK:** işçi bellek deposunda da çalışır ve `COURIER_GRPC_ADDR`'e (varsayılan
   `localhost:50056`) gider; courier MOCK'ta kendi bellek kuryeleriyle cevap verir.
 - **Bu PR'da yok:** sipariş cevabında kurye (`order.proto`, gateway, contracts) ve `courier.assigned`
-  soket olayı T13.4'te; ETA T13.2'de. Deneme anı olmayan eski kuryesiz `PREPARING` işçiye girmez.
+  soket olayı T13.4'te; ETA T13.2 PR 3'te. Deneme anı olmayan eski kuryesiz `PREPARING` işçiye girmez.
+- **Bilinen sınır (talep sınırı):** bir turda 100'den fazla yeni ödeme gelirse turun hangi 100'ünü
+  aldığı kimlik sırasıdır (talep sorgusu T13.1'deki gibi); kalanı sonraki turda (1 sn).
 - **Bilinen sınır:** telafinin `ReleaseCourier`'ı da düşerse (courier tam o an kapandı) kurye `BUSY`
   kalır; sipariş son durumda olduğu için işçi onu bir daha görmez. Bugün ödenmiş siparişi iptal eden
   bir yol yok (`PREPARING` → `CANCELLED` geçişi yok); kalıcı telafi komutu iptal yolu gelince.
@@ -439,7 +479,7 @@ src/
 │   ├── stock-reservation.ts     # stok kilidi kuralları: bırakma gerekçeleri, sistem iptalleri (T11.2), banda göre kilit ve uzatma kararı (T11.3)
 │   ├── payment-standing.ts      # para alındı mı, çekim sürüyor mu (T11.2 PR 2)
 │   ├── expired-order-finder.ts  # port: kilidi dolmuş siparişler, süpürücünün kuyruğu (T11.2 PR 2)
-│   ├── courier-dispatch.ts      # kurye bekleyen sipariş, kuryeyle/kuryesiz PREPARING, telafi kararı (T13.1)
+│   ├── courier-dispatch.ts      # kurye bekleyen sipariş, kuryeyle/kuryesiz PREPARING, telafi kararı (T13.1), kuyruk sırası (#92)
 │   ├── awaiting-courier-finder.ts  # port: kurye bekleyen siparişler, kurye işçisinin kuyruğu (T13.1)
 │   └── order-history-cursor.ts  # geçmiş sırası ve imleç
 ├── application/       # bir dosya = bir use-case
@@ -451,7 +491,8 @@ src/
 │   ├── lock-timing.ts           # kilidin süresi: orta bantta kısaltma, ödeme öncesi uzatma, düşmüş kilit (T11.3)
 │   ├── refund-step.ts           # telafi iadesi: doğrudan, olmazsa outbox komutu (T7.1, T7.3)
 │   ├── sweep-expired-reservations.ts  # süpürücünün tek turu (T11.2 PR 2)
-│   ├── dispatch-couriers.ts     # kurye işçisinin tek turu (T13.1 PR 2)
+│   ├── dispatch-couriers.ts     # kurye işçisinin tek turu (T13.1 PR 2; kuyruk, kaynak, geri çekilme T13.2)
+│   ├── failure-backoff.ts       # atanamayan siparişin geri çekilmesi (D3, T13.2)
 │   ├── assign-courier-step.ts   # sipariş başına kurye adımı: ata, yaz, gerekirse geri ver (T13.1)
 │   ├── relay-outbox.ts          # tek yayın turu: bekleyenler → hat → işaret (T7.3)
 │   ├── own-order.ts             # "kendi siparişi değilse NOT_FOUND" tek yerde
@@ -481,7 +522,8 @@ src/
 ├── interfaces/workers/reservation-sweeper.ts  # süpürücü zamanlayıcısı (T11.2 PR 2)
 ├── interfaces/workers/sweeper-metrics.ts   # kapanan ve kapanamayan sipariş metrikleri
 ├── interfaces/workers/courier-dispatcher.ts  # kurye işçisi zamanlayıcısı (T13.1 PR 2)
-├── interfaces/workers/dispatcher-metrics.ts   # kurye işçisinin sonuç ve hata metrikleri
+├── interfaces/workers/dispatcher-metrics.ts   # kurye işçisinin sonuç ve hata metrikleri (kaynak etiketi T13.2)
+├── migrations/        # göçler (ADR-19): 0001-kurye-sirasi (kurye kuyruğu anı, T13.2)
 ├── config/            # env.ts (process.env yalnızca burada) + constants.ts
 ├── bootstrap.ts
 ├── main.ts

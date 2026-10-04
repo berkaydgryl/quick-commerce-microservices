@@ -30,6 +30,9 @@ const EXPIRY_SORT = { 'reservation.expiresAt': 1, _id: 1 } as const;
  */
 const COURIER_DUE_SORT = { courierRetryAt: 1, _id: 1 } as const;
 
+/** Kurye kuyrugu (#92): once odeyen once, esitlikte kimlik (domain compareCourierQueue). */
+const COURIER_QUEUE_SORT = { courierQueuedAt: 1, _id: 1 } as const;
+
 export class OrdersCollection extends MongoRepository<OrderDocument> {
   constructor(db: Db) {
     super(db, COLLECTIONS.ORDERS);
@@ -45,6 +48,10 @@ export class OrdersCollection extends MongoRepository<OrderDocument> {
     // (PAID, PREPARING) indekse girer; teslim edilen ve iptal edilen gecmis
     // girmez. Sorgunun iki kolu ($or) ayni indeksten okunur ve ayni siraya
     // gore birlestirilir (SORT_MERGE).
+    // Kurye kuyrugu (#92, T13.2): KISMI, yalnizca kuryesiz bekleyenler (deneme
+    // ani olan PREPARING; kurye ataninca alan silinir, indeksten cikar). Yeni
+    // talepten once odemis bekleyenler kuyruk sirasiyla buradan okunur; bellekte
+    // siralama olmaz. Talep sorgusu (ustteki) degismedi.
     return [
       { key: { userId: 1, createdAt: -1, _id: -1 }, name: 'userId_createdAt_id' },
       {
@@ -55,6 +62,14 @@ export class OrdersCollection extends MongoRepository<OrderDocument> {
         key: { status: 1, courierRetryAt: 1, _id: 1 },
         name: 'status_courierRetryAt_id',
         partialFilterExpression: { status: { $in: [...COURIER_DISPATCH_STATUSES] } },
+      },
+      {
+        key: { status: 1, courierQueuedAt: 1, _id: 1 },
+        name: 'status_courierQueuedAt_id',
+        partialFilterExpression: {
+          status: ORDER_STATUS.PREPARING,
+          courierRetryAt: { $exists: true },
+        },
       },
     ];
   }
@@ -132,6 +147,26 @@ export class OrdersCollection extends MongoRepository<OrderDocument> {
           ],
         })
         .sort(COURIER_DUE_SORT)
+        .limit(limit)
+        .toArray(),
+    );
+  }
+
+  /**
+   * Kuryesiz bekleyenler (domain isWaitingForCourier), kuyruga `before`'dan once
+   * girmisler, kuyruk sirasiyla; en fazla `limit` (status_courierQueuedAt_id).
+   * Kuyruk ani olmayan belge `$lt` ile eslesmez.
+   */
+  async findWaitingBefore(before: Date, limit: number): Promise<OrderDocument[]> {
+    return this.run('findWaitingBefore', () =>
+      this.collection
+        .find({
+          status: ORDER_STATUS.PREPARING,
+          courierRetryAt: { $exists: true },
+          courier: { $exists: false },
+          courierQueuedAt: { $lt: before },
+        })
+        .sort(COURIER_QUEUE_SORT)
         .limit(limit)
         .toArray(),
     );

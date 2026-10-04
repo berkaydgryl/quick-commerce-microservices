@@ -4,7 +4,8 @@
  * Sahte istemciyle dogrulanamayan seyler burada sinanir:
  *   1. Sozlesme testleri: bellek uygulamasiyla AYNI senaryolar gercek sorguda
  *      (surum kosullu replaceOne, _id tekil ihlali, imlec filtresi).
- *   2. Indeks: ListMyOrders sorgusu bellekte SIRALAMA yapmadan indeksten okur.
+ *   2. Indeks: ListMyOrders sorgusu bellekte SIRALAMA yapmadan indeksten okur;
+ *      kurye iscisinin talep ve bekleyen (#92) sorgulari kismi indekslerinden.
  *   3. T4.5 "bitti sayilir": gRPC ile acilan siparis `orders` koleksiyonunda gorulur.
  */
 
@@ -38,6 +39,9 @@ const MONGO_IMAGE = 'mongo:7';
 const DB_NAME = 'getir_order_test';
 
 const explainSchema = z.object({ queryPlanner: z.object({ winningPlan: z.unknown() }) });
+const statsSchema = explainSchema.extend({
+  executionStats: z.object({ nReturned: z.number(), totalKeysExamined: z.number() }),
+});
 
 let container: StartedMongoDBContainer;
 let connection: MongoConnection;
@@ -135,6 +139,39 @@ describe('indeks', () => {
     expect(winning.match(/status_courierRetryAt_id/g)).toHaveLength(2);
     expect(winning).not.toContain('"stage":"SORT"');
     expect(winning).not.toContain('COLLSCAN');
+  });
+
+  it('kurye kuyrugu indeksi (#92) KISMI: yalnizca kuryesiz bekleyen PREPARING (deneme ani olan) girer', async () => {
+    const indexes = await connection.db.collection(COLLECTIONS.ORDERS).indexes();
+
+    expect(indexes.find((index) => index.name === 'status_courierQueuedAt_id')).toMatchObject({
+      key: { status: 1, courierQueuedAt: 1, _id: 1 },
+      partialFilterExpression: { status: 'PREPARING', courierRetryAt: { $exists: true } },
+    });
+  });
+
+  it('bekleyen sorgusu (#92) kuyruk indeksinden SIRALI okunur: bellekte SORT yok, okunan anahtar donen kadar', async () => {
+    // orders-collection.ts findWaitingBefore ile ayni sorgu ve sira. Sozlesme
+    // testlerinin bekleyenleri koleksiyonda: okunan her anahtar donmeli.
+    const plan: Document = await connection.db
+      .collection(COLLECTIONS.ORDERS)
+      .find({
+        status: 'PREPARING',
+        courierRetryAt: { $exists: true },
+        courier: { $exists: false },
+        courierQueuedAt: { $lt: new Date('2100-01-01T00:00:00.000Z') },
+      })
+      .sort({ courierQueuedAt: 1, _id: 1 })
+      .limit(100)
+      .explain('executionStats');
+
+    const { queryPlanner, executionStats } = statsSchema.parse(plan);
+    const winning = JSON.stringify(queryPlanner.winningPlan);
+    expect(winning).toContain('status_courierQueuedAt_id');
+    expect(winning).not.toContain('"stage":"SORT"');
+    expect(winning).not.toContain('COLLSCAN');
+    expect(executionStats.nReturned).toBeGreaterThan(0);
+    expect(executionStats.totalKeysExamined).toBeLessThanOrEqual(executionStats.nReturned + 1);
   });
 });
 

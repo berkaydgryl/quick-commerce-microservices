@@ -9,13 +9,17 @@
  * - Kapanista (stop) yeni tur planlanmaz ve suren tur BEKLENIR: courier istemcisi
  *   ve Mongo yarim kalmis bir atamanin altindan cekilmez.
  *
- * courier-svc'ye ulasilamazken her saniye satir yazilmaz: ulasilamaz duruma
- * GECIS bir kez WARN, geri gelis bir kez INFO; aradaki turlar yalnizca metrik.
+ * Ulasilamazken her saniye satir yazilmaz (D1): kaynak basina (courier, siparis
+ * deposu) ulasilamaz duruma GECIS bir kez WARN, geri gelis bir kez INFO;
+ * aradaki turlar yalnizca metrik. Tur ozeti yalnizca atama, geri verme ya da
+ * hata olunca (D2): bekleyenin yine "kurye yok" almasi satir yazmaz.
  */
 
 import type { Logger } from '@getir/core';
 
-import type { DispatchCouriers } from '../../application/dispatch-couriers.js';
+import { DISPATCH_SOURCE } from '../../application/assign-courier-step.js';
+import type { DispatchSource } from '../../application/assign-courier-step.js';
+import type { DispatchCouriers, DispatchRound } from '../../application/dispatch-couriers.js';
 import { recordDispatchFailure, recordDispatchRound } from './dispatcher-metrics.js';
 
 export interface CourierDispatcherOptions {
@@ -33,7 +37,25 @@ export function startCourierDispatcher(options: CourierDispatcherOptions): Couri
   let stopped = false;
   let timer: NodeJS.Timeout | undefined;
   let running: Promise<void> = Promise.resolve();
-  let unreachable = false;
+  const unreachable = new Set<DispatchSource>();
+
+  /** Kaynak basina gecis gunlugu: ulasilamaz olunca bir WARN, donunce bir INFO. */
+  const noteReachability = (round: DispatchRound): void => {
+    for (const source of [DISPATCH_SOURCE.STORE, DISPATCH_SOURCE.COURIER]) {
+      if (round.unavailable === source) {
+        if (!unreachable.has(source)) {
+          unreachable.add(source);
+          logger.warn(
+            { err: round.cause, source, deferred: round.deferred },
+            UNREACHABLE_MESSAGE[source],
+          );
+        }
+      } else if (unreachable.has(source) && answered(round, source)) {
+        unreachable.delete(source);
+        logger.info({ source, ...counts(round) }, REACHABLE_MESSAGE[source]);
+      }
+    }
+  };
 
   const schedule = (): void => {
     if (!stopped) {
@@ -45,18 +67,9 @@ export function startCourierDispatcher(options: CourierDispatcherOptions): Couri
     running = options.dispatch(logger).then(
       (round) => {
         recordDispatchRound(round);
-        if (round.deferred > 0 && !unreachable) {
-          logger.warn(
-            { deferred: round.deferred },
-            'kurye servisine ulasilamiyor; siparisler bekliyor, her turda yeniden denenecek',
-          );
-        } else if (round.deferred === 0 && unreachable) {
-          logger.info({ ...round }, 'kurye servisine yeniden ulasildi');
-        }
-        unreachable = round.deferred > 0;
-        const { deferred: _metricOnly, ...counts } = round;
-        if (Object.values(counts).some((count) => count > 0)) {
-          logger.info({ ...round }, 'kurye atama turu tamamlandi');
+        noteReachability(round);
+        if (round.assigned + round.released + round.failed > 0) {
+          logger.info(counts(round), 'kurye atama turu tamamlandi');
         }
         schedule();
       },
@@ -78,5 +91,43 @@ export function startCourierDispatcher(options: CourierDispatcherOptions): Couri
       clearTimeout(timer);
       await running;
     },
+  };
+}
+
+const UNREACHABLE_MESSAGE: Readonly<Record<DispatchSource, string>> = {
+  courier: 'kurye servisine ulasilamiyor; siparisler bekliyor, her turda yeniden denenecek',
+  store: 'siparis deposuna ulasilamiyor; kurye atamasi bekliyor, her turda yeniden denenecek',
+  order: 'kurye atamasi yapilamiyor; her turda yeniden denenecek',
+};
+
+const REACHABLE_MESSAGE: Readonly<Record<DispatchSource, string>> = {
+  courier: 'kurye servisine yeniden ulasildi',
+  store: 'siparis deposuna yeniden ulasildi',
+  order: 'kurye atamasi yeniden yapilabiliyor',
+};
+
+/**
+ * Bu turda kaynak cevap verdi mi? Depo: tur kuyrugu okudu (depoyla kesilmedi).
+ * Courier: en az bir siparis courier'in cevabiyla sonuclandi (hata cevabi dahil).
+ */
+function answered(round: DispatchRound, source: DispatchSource): boolean {
+  if (source !== DISPATCH_SOURCE.COURIER) {
+    return true;
+  }
+  return (
+    round.assigned + round.noCourier + round.released + round.skipped + round.failedBy.courier > 0
+  );
+}
+
+/** Gunluk satirinin sayilari (hata nesnesi haric). */
+function counts(round: DispatchRound): Record<string, number> {
+  return {
+    assigned: round.assigned,
+    noCourier: round.noCourier,
+    released: round.released,
+    skipped: round.skipped,
+    failed: round.failed,
+    backedOff: round.backedOff,
+    deferred: round.deferred,
   };
 }

@@ -8,6 +8,7 @@ import { ORDER_STATUS, RISK_BANDS } from '@getir/core';
 import type { Clock, RiskBand } from '@getir/core';
 
 import { applyRiskDecision, decideRisk } from '../../src/domain/checkout-risk.js';
+import { queuedForCourier } from '../../src/domain/courier-dispatch.js';
 import { orderCreatedEvents, statusChangedEvents } from '../../src/domain/order-events.js';
 
 import { ITEM_UNIT } from '../../src/domain/order-item.js';
@@ -107,7 +108,8 @@ export async function insertPaid(
 ): Promise<Order> {
   const draft = await insertDraft(repository, clock, overrides);
   const awaiting = applyRiskDecision(draft, RISK_BANDS.LOW, decideRisk(RISK_BANDS.LOW), clock);
-  const paid = transitionOrder(awaiting, ORDER_STATUS.PAID, clock);
+  // Odeme adimi gibi: kurye kuyruguna odeme aniyla girer (#92).
+  const paid = queuedForCourier(transitionOrder(awaiting, ORDER_STATUS.PAID, clock));
   await repository.update(paid, draft.version, statusChangedEvents(draft, paid));
   return paid;
 }

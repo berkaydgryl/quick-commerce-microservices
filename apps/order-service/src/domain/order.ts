@@ -123,6 +123,12 @@ export interface Order {
    * ister. Yalnizca kuryesiz PREPARING sipariste var; kurye ataninca silinir.
    */
   readonly courierRetryAt?: Date;
+  /**
+   * Kurye kuyrugundaki yeri (#92): odeme ani, PAID'e geciste yazilir. Isci
+   * kurye bekleyenleri bu sirayla dener (once odeyen once). Kurye ataninca
+   * silinir.
+   */
+  readonly courierQueuedAt?: Date;
   readonly createdAt: Date;
   readonly updatedAt: Date;
   /**
