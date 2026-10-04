@@ -14,6 +14,8 @@ package httpapi
 //   favorites.go  - /v1/me/favorites uclari (favori marketler, T11.13)
 //   email.go      - /v1/me/email uclari (e-posta dogrulama, T11.14)
 //   email_body.go - e-posta uclarinin istek govdeleri
+//   profile.go    - PATCH /v1/me ve /v1/me/phone uclari (profil duzenleme, T11.14 PR 3)
+//   profile_body.go - profil duzenleme uclarinin istek govdeleri
 //   geo.go        - /v1/geo/reverse ve /v1/geo/search (harita adres, T11.8)
 //   identity.go   - kullanici kimligi (Bearer erisim jetonu, T8.1)
 //   device.go     - cihaz cerezi (risk sinyali, T8.1)
@@ -48,6 +50,7 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/geo"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/phoneverify"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/roomtoken"
 )
 
@@ -180,6 +183,22 @@ type EmailVerifier interface {
 	Verify(ctx context.Context, userID string, input emailverify.VerifyInput) (auth.Profile, error)
 }
 
+// ProfileUpdater, PATCH /v1/me (ad degistirme, T11.14 PR 3; #89).
+type ProfileUpdater interface {
+	UpdateProfile(ctx context.Context, userID string, input auth.ProfileUpdateInput) (auth.Profile, error)
+}
+
+// PhoneCodeSender, POST /v1/me/phone/code (telefon dogrulama kodu, T11.14 PR 3).
+type PhoneCodeSender interface {
+	SendCode(ctx context.Context, userID string, input phoneverify.SendInput) (phoneverify.Sent, error)
+}
+
+// PhoneVerifier, POST /v1/me/phone/verify: kimlik (oturum) gerekir, numara
+// degisince diger oturumlar kapanir.
+type PhoneVerifier interface {
+	Verify(ctx context.Context, identity auth.Identity, input phoneverify.VerifyInput) (auth.Profile, error)
+}
+
 // FavoriteLister, GET /v1/me/favorites (favori marketler, T11.13).
 type FavoriteLister interface {
 	Favorites(ctx context.Context, userID string) (favorites.List, error)
@@ -254,6 +273,12 @@ type Deps struct {
 	// E-posta dogrulama (T11.14): tek emailverify servisi iki ucu karsilar.
 	EmailCodeSender EmailCodeSender
 	EmailVerifier   EmailVerifier
+	// ProfileUpdater, ad degistirme (T11.14 PR 3); bugun auth.Service.
+	ProfileUpdater ProfileUpdater
+	// Telefon degistirme ve dogrulama (T11.14 PR 3). nil ise uclar HIC
+	// baglanmaz (production: gercek SMS saglayicisi yok, bekleyen is #95).
+	PhoneCodeSender PhoneCodeSender
+	PhoneVerifier   PhoneVerifier
 	// Favori marketler (T11.13): tek favori servisi uc ucu karsilar.
 	Favorites       FavoriteLister
 	FavoriteAdder   FavoriteAdder
@@ -366,10 +391,15 @@ func New(deps Deps) *fiber.App {
 	// /v1 grubuna Use ile verilseydi katalog ve giris uclari da kimlik isterdi.
 	user := requireUser(deps.AccessTokens)
 	v1.Get("/me", user, generalByUser, meHandler(deps.ProfileGetter))
+	v1.Patch("/me", user, generalByUser, mutation, updateProfileHandler(deps.ProfileUpdater))
 	v1.Get("/me/addresses", user, generalByUser, addressesHandler(deps.AddressBook))
 	v1.Post("/me/addresses", user, generalByUser, mutation, addAddressHandler(deps.AddressAdder))
 	v1.Post("/me/email/code", user, authByUser, mutation, sendEmailCodeHandler(deps.EmailCodeSender))
 	v1.Post("/me/email/verify", user, authByUser, mutation, verifyEmailHandler(deps.EmailVerifier))
+	if deps.PhoneCodeSender != nil && deps.PhoneVerifier != nil {
+		v1.Post("/me/phone/code", user, authByUser, mutation, sendPhoneCodeHandler(deps.PhoneCodeSender))
+		v1.Post("/me/phone/verify", user, authByUser, mutation, verifyPhoneHandler(deps.PhoneVerifier))
+	}
 	v1.Get("/me/favorites", user, generalByUser, favoritesHandler(deps.Favorites))
 	v1.Put("/me/favorites/:"+marketIDParam, user, generalByUser, mutation, addFavoriteHandler(deps.FavoriteAdder))
 	v1.Delete("/me/favorites/:"+marketIDParam, user, generalByUser, mutation, removeFavoriteHandler(deps.FavoriteRemover))

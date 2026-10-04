@@ -838,3 +838,68 @@ func TestConcurrentVerificationsOfOneEmailSucceedOnce(t *testing.T) {
 		t.Errorf("tek hesap dogrulamali: %d dogrulandi, %d reddedildi (%v)", verified, taken, errs)
 	}
 }
+
+func TestSetFullNameAndVerifiedPhoneOnMongo(t *testing.T) {
+	// T11.14 PR 3: ad degistirme ve SMS koduyla dogrulanan numara.
+	db := testDatabase(t)
+	users := authstore.NewMongoUsers(db)
+	ayse, mehmet := newUser("+905321234567"), newUser("+905321234568")
+	for _, u := range []auth.User{ayse, mehmet} {
+		if err := users.Create(t.Context(), u); err != nil {
+			t.Fatalf("kullanici yazilamadi: %v", err)
+		}
+	}
+	verifiedAt := time.Now().UTC().Truncate(time.Millisecond)
+
+	if err := users.SetFullName(t.Context(), ayse.ID, "Ayşe Kaya"); err != nil {
+		t.Fatalf("ad yazilamadi: %v", err)
+	}
+	if err := users.SetVerifiedPhone(t.Context(), ayse.ID, "+905559876543", verifiedAt); err != nil {
+		t.Fatalf("numara yazilamadi: %v", err)
+	}
+	read, err := users.ByID(t.Context(), ayse.ID)
+	if err != nil || read.FullName != "Ayşe Kaya" || read.Phone != "+905559876543" || !read.PhoneVerifiedAt.Equal(verifiedAt) || !read.Profile().PhoneVerified {
+		t.Errorf("ad, numara ve dogrulama ani okunmali: %+v (%v)", read, err)
+	}
+	if _, err := users.ByPhone(t.Context(), "+905321234567"); !errors.Is(err, auth.ErrUserNotFound) {
+		t.Errorf("eski numara serbest kalmali: %v", err)
+	}
+	if err := users.SetVerifiedPhone(t.Context(), mehmet.ID, "+905559876543", verifiedAt); !errors.Is(err, auth.ErrPhoneTaken) {
+		t.Errorf("baska hesaptaki numara ErrPhoneTaken donmeli: %v", err)
+	}
+	unknown := ids.New(ids.User)
+	if err := users.SetFullName(t.Context(), unknown, "Yok"); !errors.Is(err, auth.ErrUserNotFound) {
+		t.Errorf("olmayan kullanici (ad): %v", err)
+	}
+	if err := users.SetVerifiedPhone(t.Context(), unknown, "+905550001111", verifiedAt); !errors.Is(err, auth.ErrUserNotFound) {
+		t.Errorf("olmayan kullanici (numara): %v", err)
+	}
+	if read, err := users.ByID(t.Context(), mehmet.ID); err != nil || !read.PhoneVerifiedAt.IsZero() || read.Profile().PhoneVerified {
+		t.Errorf("dogrulanmamis numara: %+v", read)
+	}
+}
+
+func TestRevokeOthersKeepsOneSession(t *testing.T) {
+	db := testDatabase(t)
+	sessions := authstore.NewMongoSessions(db)
+	user, neighbour := ids.New(ids.User), ids.New(ids.User)
+	expires := time.Now().Add(time.Hour)
+	keep := newSession(user, "ozet-bu", expires)
+	for _, session := range []auth.Session{keep, newSession(user, "ozet-diger-1", expires), newSession(user, "ozet-diger-2", expires), newSession(neighbour, "ozet-komsu", expires)} {
+		if err := sessions.Create(t.Context(), session); err != nil {
+			t.Fatalf("oturum yazilamadi: %v", err)
+		}
+	}
+
+	revoked, err := sessions.RevokeOthers(t.Context(), user, keep.ID)
+
+	if err != nil || revoked != 2 {
+		t.Fatalf("iki oturum silinmeli: %d (%v)", revoked, err)
+	}
+	if _, err := sessions.ByID(t.Context(), keep.ID); err != nil {
+		t.Errorf("tutulan oturum kalmali: %v", err)
+	}
+	if revoked, err := sessions.RevokeAllForUser(t.Context(), neighbour); err != nil || revoked != 1 {
+		t.Errorf("baska kullanicinin oturumuna dokunulmamali: %d", revoked)
+	}
+}

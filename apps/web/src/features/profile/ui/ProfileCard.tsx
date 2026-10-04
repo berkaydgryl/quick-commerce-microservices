@@ -3,9 +3,9 @@ import { useState } from 'react';
 import { useProfile } from '../../auth/hooks/useProfile';
 import { AUTH_ROUTES } from '../../auth/routes';
 import { useProfileContent } from '../../content/hooks/useProfileContent';
-import type { CodeWindow } from '../services/code-window';
 
-import { EmailDialog } from './EmailDialog';
+import { EditProfileDialog } from './EditProfileDialog';
+import type { CodeWindows, EditProfileStep } from './EditProfileDialog';
 import { ProfileCardView } from './ProfileCardView';
 
 interface ProfileCardProps {
@@ -17,16 +17,19 @@ interface ProfileCardProps {
   readonly onAccountPage?: boolean;
 }
 
+/** Hic kod gonderilmemis. */
+const NO_WINDOWS: CodeWindows = { email: undefined, phone: undefined };
+
 /**
- * Profil karti ve e-posta penceresi (T11.14). Profil GET /v1/me'den; metinler
- * icerikten (gelmezse yedek). Son gonderilen kodun penceresi burada tutulur:
- * pencere kapatilip acilinca kod adimi kaldigi yerden surer.
+ * Profil karti ve "Profili düzenle" penceresi (T11.14; pencere PR 3). Profil
+ * GET /v1/me'den; metinler icerikten (gelmezse yedek). Son gonderilen kodlarin
+ * pencereleri burada tutulur: pencere kapatilip acilinca kod adimi surer.
  */
 export function ProfileCard({ userId, onAccountPage = false }: ProfileCardProps) {
   const profile = useProfile(userId);
   const texts = useProfileContent();
-  const [open, setOpen] = useState(false);
-  const [codeWindow, setCodeWindow] = useState<CodeWindow | undefined>();
+  const [open, setOpen] = useState<EditProfileStep | undefined>();
+  const [windows, setWindows] = useState<CodeWindows>(NO_WINDOWS);
 
   if (texts === undefined) {
     return null;
@@ -37,15 +40,19 @@ export function ProfileCard({ userId, onAccountPage = false }: ProfileCardProps)
         profile={profile.data}
         texts={texts}
         accountHref={onAccountPage ? undefined : AUTH_ROUTES.account}
-        onEditEmail={() => setOpen(true)}
+        onEdit={() => setOpen('overview')}
+        onAddEmail={() => setOpen('email')}
+        onVerifyPhone={() => setOpen('phone-verify')}
       />
-      {open && (
-        <EmailDialog
+      {open !== undefined && profile.data !== undefined && (
+        <EditProfileDialog
           userId={userId}
-          texts={texts.emailDialog}
-          window={codeWindow}
-          onWindow={setCodeWindow}
-          onClose={() => setOpen(false)}
+          profile={profile.data}
+          texts={texts}
+          initialStep={open}
+          windows={windows}
+          onWindows={setWindows}
+          onClose={() => setOpen(undefined)}
         />
       )}
     </>

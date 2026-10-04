@@ -287,6 +287,20 @@ func (s *Service) Profile(ctx context.Context, userID string) (Profile, error) {
 	return user.Profile(), nil
 }
 
+// UpdateProfile, adi degistirir ve guncel profili doner (T11.14 PR 3; bekleyen
+// is #89). Girdi dogrulanmis gelir (ProfileUpdateInput.Check). Kullanici
+// silinmisse UNAUTHORIZED (Profile gibi).
+func (s *Service) UpdateProfile(ctx context.Context, userID string, input ProfileUpdateInput) (Profile, error) {
+	err := s.deps.Users.SetFullName(ctx, userID, input.FullName)
+	if errors.Is(err, ErrUserNotFound) {
+		return Profile{}, apperror.New(apperror.CodeUnauthorized, nil)
+	}
+	if err != nil {
+		return Profile{}, fmt.Errorf("ad yazilamadi: %w", err)
+	}
+	return s.Profile(ctx, userID)
+}
+
 // AddAddress, adres defterine yeni adres ekler ve guncel defteri doner
 // (T11.8: adresi olmayan kullanicinin adres ekleme penceresi). Girdi
 // dogrulanmis gelir (AddressInput.Check). Ayni ad ve dolu defter alanin

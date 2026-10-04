@@ -721,3 +721,51 @@ func TestResetPasswordForUnknownPhoneIsFieldError(t *testing.T) {
 		t.Errorf("kayitsiz numara telefon alaninda hata olmali: %v", err)
 	}
 }
+
+func TestUpdateProfileChangesNameAndReturnsProfile(t *testing.T) {
+	// T11.14 PR 3 (#89): ad yerinde degisir, profil gunceldir.
+	f := newFixture(t)
+	grant := f.register(t)
+	input := auth.ProfileUpdateInput{FullName: "  Ayşe Kaya "}
+	if problems := input.Check(); len(problems) != 0 {
+		t.Fatalf("gecerli ad: %v", problems)
+	}
+
+	profile, err := f.service.UpdateProfile(context.Background(), grant.User.ID, input)
+
+	if err != nil || profile.FullName != "Ayşe Kaya" || profile.Phone != phone {
+		t.Fatalf("kirpilmis yeni ad bekleniyordu: %+v (%v)", profile, err)
+	}
+	if user, err := f.users.ByID(context.Background(), grant.User.ID); err != nil || user.FullName != "Ayşe Kaya" {
+		t.Errorf("kayit guncellenmeli: %+v", user)
+	}
+}
+
+func TestUpdateProfileForDeletedUserIsUnauthorized(t *testing.T) {
+	f := newFixture(t)
+
+	_, err := f.service.UpdateProfile(context.Background(), "usr_0123456789abcdef0123456789abcdef", auth.ProfileUpdateInput{FullName: "Ayşe"})
+
+	if codeOf(err) != apperror.CodeUnauthorized {
+		t.Errorf("401 bekleniyordu: %v", err)
+	}
+}
+
+func TestProfileUpdateInputUsesRegistrationNameRule(t *testing.T) {
+	for _, name := range []string{"A", " ", strings.Repeat("a", 81)} {
+		if problems := (&auth.ProfileUpdateInput{FullName: name}).Check(); problems[auth.FieldFullName] == "" {
+			t.Errorf("%q reddedilmeli: %v", name, problems)
+		}
+	}
+}
+
+func TestProfileShowsPhoneVerifiedOnlyWhenVerified(t *testing.T) {
+	user := auth.User{ID: "usr_x", Phone: phone, FullName: fullName}
+	if user.Profile().PhoneVerified {
+		t.Error("dogrulanmamis numara: false")
+	}
+	user.PhoneVerifiedAt = time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
+	if !user.Profile().PhoneVerified {
+		t.Error("dogrulanmis numara: true")
+	}
+}

@@ -40,6 +40,9 @@ type UserStore interface {
 	// SetPasswordHash, kullanicinin sifre ozetini degistirir (T11.9); kullanici
 	// yoksa ErrUserNotFound.
 	SetPasswordHash(ctx context.Context, userID, passwordHash string) error
+	// SetFullName, adi degistirir (T11.14 PR 3, #89); kullanici yoksa
+	// ErrUserNotFound.
+	SetFullName(ctx context.Context, userID, fullName string) error
 	// AddAddress, adresi adres defterinin sonuna ATOMIK ekler ve guncel
 	// kullaniciyi doner (T11.8). Ayni adla adres varsa ErrAddressTitleTaken,
 	// defterde max adres varsa ErrAddressBookFull, kullanici yoksa
@@ -63,4 +66,8 @@ type SessionStore interface {
 	// RevokeAllForUser, kullanicinin BUTUN oturumlarini siler ve silinen sayisini
 	// doner (T11.9: sifre degisince eski cihazlar disari cikar).
 	RevokeAllForUser(ctx context.Context, userID string) (int, error)
+	// RevokeOthers, kullanicinin keepSessionID DISINDAKI oturumlarini siler ve
+	// silinen sayisini doner (T11.14 PR 3: numara degisince diger cihazlar disari
+	// cikar, bu oturum surer).
+	RevokeOthers(ctx context.Context, userID, keepSessionID string) (int, error)
 }

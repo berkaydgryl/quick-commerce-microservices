@@ -444,15 +444,16 @@ jobs:
       # ayni anahtara es zamanli istekte tek kazanan (SET NX), yalnizca sahibin
       # bitirip birakabilmesi (Lua), kaydin omru (PX). T8.2 hiz siniri: kayan
       # pencere (Lua), es zamanli isteklerde tam sinir kadar kabul, ayni Redis'i
-      # paylasan iki gateway orneginin ortak siniri (roadmap P2). T11.14 e-posta
-      # dogrulama deposu (Lua): bekleme, deneme sayimi, kilit ve TTL; bellek
-      # deposuyla ayni sozlesme, es zamanli denemede hak asilmaz. Konteynerleri
+      # paylasan iki gateway orneginin ortak siniri (roadmap P2). T11.14 dogrulama
+      # kodu deposu (Lua): bekleme, deneme sayimi, kilit ve TTL; bellek deposuyla
+      # ayni sozlesme, es zamanli denemede hak asilmaz; PR 3'ten beri e-posta ve
+      # telefonun ortak paketi internal/verification (kanallar ayri anahtar). Konteynerleri
       # test kendisi Testcontainers ile kaldirir ("integration" isindeki
       # gerekceyle ayni: runner'da Docker hazir). Ayri adim: Docker'a bagli
       # olmayan birim testlerinin sonucu bundan bagimsiz okunsun. Entegrasyon
       # testi olan yeni bir paket buraya eklenir.
       - name: Entegrasyon testleri (Testcontainers, Mongo ve Redis)
-        run: go test -tags integration -race -count=1 ./internal/authstore/... ./internal/idempotency/... ./internal/ratelimit/... ./internal/emailverify/...
+        run: go test -tags integration -race -count=1 ./internal/authstore/... ./internal/idempotency/... ./internal/ratelimit/... ./internal/verification/...
 
       # Dockerfile ile ayni bayraklar: CI'da derlenen ikili imajdakiyle ayni olsun.
       - name: Derle (statik ikili)

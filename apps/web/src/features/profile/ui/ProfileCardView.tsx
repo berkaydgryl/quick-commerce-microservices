@@ -15,33 +15,40 @@ export interface ProfileCardViewProps {
    * ustunde); Hesabim'in kendisinde verilmez: ad duz metindir.
    */
   readonly accountHref?: string | undefined;
-  /** Kalem ve "E-posta ekle": e-posta penceresini acar. */
-  readonly onEditEmail: () => void;
+  /** Kalem: "Profili düzenle" penceresinin genel gorunumu (T11.14 PR 3). */
+  readonly onEdit: () => void;
+  /** "E-posta ekle": pencere e-posta adimiyla acilir. */
+  readonly onAddEmail: () => void;
+  /** Dogrulanmamis numaranin "Doğrula" baglantisi: pencere telefon adimiyla. */
+  readonly onVerifyPhone: () => void;
 }
 
 /**
  * Profil karti (T11.14; PR 2'de referansa gore: getircarsi profil sayfasi,
  * 18.16). Ad, altinda e-posta, onun altinda telefon; kalem kartin ust
- * kenarina tasar. Dogrulanmis e-postanin yaninda yesil onay; telefonda onay
- * YOK: numara dogrulanmaz (ADR-12). Onay, numara kodla dogrulaninca gelir
- * (phoneVerifiedAt, PR 3). E-postasiz kartta e-posta satiri "E-posta ekle"
- * der. Durumsuz: pencere ve sorgu ProfileCard'da.
+ * kenarina tasar ve "Profili düzenle" penceresini acar (PR 3). Dogrulanmis
+ * e-postanin yaninda yesil onay. Telefonda onay yalnizca numara SMS koduyla
+ * dogrulanmissa (phoneVerified); kayit numarayi dogrulamaz (ADR-12), bu
+ * yuzden cogu hesapta yerinde "Doğrula" baglantisi durur. E-postasiz kartta
+ * e-posta satiri "E-posta ekle" der. Durumsuz: pencere ve sorgu ProfileCard'da.
  */
 export function ProfileCardView({
   profile,
   texts,
   accountHref,
-  onEditEmail,
+  onEdit,
+  onAddEmail,
+  onVerifyPhone,
 }: ProfileCardViewProps) {
   return (
     <section className={styles['c-profile-card']} aria-busy={profile === undefined}>
       <button
         type="button"
         className={styles['c-profile-card__edit']}
-        aria-label={texts.editEmailLabel}
+        aria-label={texts.editProfileLabel}
         aria-haspopup="dialog"
         disabled={profile === undefined}
-        onClick={onEditEmail}
+        onClick={onEdit}
       >
         <EditIcon />
       </button>
@@ -77,7 +84,7 @@ export function ProfileCardView({
                     type="button"
                     className={styles['c-profile-card__add']}
                     aria-haspopup="dialog"
-                    onClick={onEditEmail}
+                    onClick={onAddEmail}
                   >
                     {texts.addEmailLabel}
                   </button>
@@ -107,6 +114,24 @@ export function ProfileCardView({
               </dt>
               <dd className={styles['c-profile-card__value']}>
                 <span className={styles['c-profile-card__text']}>{formatPhone(profile.phone)}</span>
+                {profile.phoneVerified === true ? (
+                  <span
+                    className={styles['c-profile-card__verified']}
+                    role="img"
+                    aria-label={texts.verifiedLabel}
+                  >
+                    <VerifiedIcon />
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className={styles['c-profile-card__add']}
+                    aria-haspopup="dialog"
+                    onClick={onVerifyPhone}
+                  >
+                    {texts.verifyPhoneLabel}
+                  </button>
+                )}
               </dd>
             </div>
           </dl>

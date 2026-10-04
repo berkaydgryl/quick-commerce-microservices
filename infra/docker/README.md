@@ -116,6 +116,9 @@ Compose profildeki e-posta dogrulamasi icin Mailpit'i de kaldirir (`getir-mailpi
 | 1025 | SMTP: gateway kodu buraya gonderir (`SMTP_URL=smtp://localhost:1025`) |
 | 8025 | Arayuz: http://localhost:8025 (gelen kodlari gor)                     |
 
+Telefon dogrulama SMS'i de (T11.14 PR 3; gercek SMS saglayicisi yok, bekleyen is #95) buraya e-posta
+olarak duser: alici `905XXXXXXXXX@sms.getir.local`, konu numara.
+
 Ileti disari cikmaz; **bellekte** tutulur, konteyner yeniden baslayinca gider. Gateway
 `SMTP_URL` verilmezse gelistirmede bu adresi kullanir (production'da zorunlu). Gercek SMTP
 (TLS, kimlik dogrulama) bekleyen is #90. Son iletiyi komut satirindan okumak icin:

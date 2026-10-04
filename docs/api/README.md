@@ -107,11 +107,14 @@ Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci 
   giriş IP'si ve oturum konumu oturumdan; hesap yaşı ve hesabın açıldığı cihazdan
   açılmış hesap sayısı kullanıcı kaydından gelir (T8.1). Cihaz kimliğini gateway kayıt
   ve girişte `getir_device` çereziyle (HttpOnly) verir. Oturumu kapatılmış jetonla
-  sipariş `401` alır.
+  sipariş `401` alır. Numara değişince (T11.14 PR 3) diğer cihazların yenilemesi
+  hemen durur; ellerindeki erişim jetonu en geç `JWT_TTL` (1 sa) içinde biter
+  (sipariş hemen `401`). Kalıcı çözüm bekleyen iş #24 (iptal edilen oturum listesi).
 - **Idempotency-Key**, kalıcı durum değiştiren uçlarda zorunludur:
-  `POST /v1/auth/register`, `POST /v1/me/addresses`, `PUT` ve
+  `POST /v1/auth/register`, `PATCH /v1/me`, `POST /v1/me/addresses`, `PUT` ve
   `DELETE /v1/me/favorites/{marketId}`, `POST /v1/me/email/code`,
-  `POST /v1/me/email/verify` (T11.14), `POST /v1/cart/reserve`,
+  `POST /v1/me/email/verify` (T11.14), `POST /v1/me/phone/code`,
+  `POST /v1/me/phone/verify` (T11.14 PR 3; yalnızca geliştirmede), `POST /v1/cart/reserve`,
   `DELETE /v1/cart/reserve/{orderId}`, `POST /v1/orders`,
   `POST /v1/orders/{id}/3ds`. `POST /v1/auth/login`, `/v1/auth/refresh` ve
   `/v1/auth/logout` istemez: giriş ve yenileme kalıcı bir kaynak yaratmaz,

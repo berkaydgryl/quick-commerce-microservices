@@ -1,4 +1,4 @@
-package emailverify
+package verification
 
 import (
 	"context"
@@ -9,14 +9,26 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Key, kullanicinin bekleyen dogrulamasinin anahtari: verify:email:{usr_...}.
-// Bicim @getir/redis-kit keys.ts'te tanimlidir (emailVerificationKey); yazan
-// tek taraf gateway'dir, keys_contract_test.go iki tarafi karsilastirir.
-func Key(userID string) string {
-	return "verify:email:{" + userID + "}"
+// Channel, dogrulamanin kanali: anahtarin ikinci parcasi.
+type Channel string
+
+// Kanallar (T11.14: e-posta PR 1, telefon PR 3).
+const (
+	ChannelEmail Channel = "email"
+	ChannelPhone Channel = "phone"
+)
+
+// Key, kullanicinin o kanaldaki bekleyen dogrulamasinin anahtari:
+// verify:email:{usr_...}, verify:phone:{usr_...}. Bicim @getir/redis-kit
+// keys.ts'te tanimlidir (emailVerificationKey, phoneVerificationKey); yazan tek
+// taraf gateway'dir, contract_test.go iki tarafi karsilastirir. Kanallar ayri
+// anahtardir: e-posta kodu telefon kodunun beklemesini ya da hakkini yemez.
+func Key(channel Channel, userID string) string {
+	return "verify:" + string(channel) + ":{" + userID + "}"
 }
 
-// Alanlar: email, codeHash (kilitlenince silinir), attempts, sentAt (ms).
+// Alanlar: address (e-posta ya da numara), codeHash (kilitlenince silinir),
+// attempts, sentAt (ms).
 //
 // SAAT REDIS'IN (TIME): butun gateway ornekleri ayni saate bakar (hiz
 // siniriyla ayni gerekce); Redis 7 betigi etkileriyle cogaltir.
@@ -34,7 +46,7 @@ if sentAt then
   end
 end
 redis.call('DEL', KEYS[1])
-redis.call('HSET', KEYS[1], 'email', ARGV[1], 'codeHash', ARGV[2], 'attempts', 0, 'sentAt', nowMs)
+redis.call('HSET', KEYS[1], 'address', ARGV[1], 'codeHash', ARGV[2], 'attempts', 0, 'sentAt', nowMs)
 redis.call('PEXPIRE', KEYS[1], ARGV[3])
 return 0
 `
@@ -43,7 +55,7 @@ return 0
 // Donus: {sonuc, kalan hak}; sonuc Result'in sayisidir (1 dogru, 2 yanlis,
 // 3 kilitli, 4 yok). HINCRBY ve HDEL anahtarin omrune dokunmaz.
 const checkScript = `
-local fields = redis.call('HMGET', KEYS[1], 'email', 'codeHash')
+local fields = redis.call('HMGET', KEYS[1], 'address', 'codeHash')
 if not fields[1] or fields[1] ~= ARGV[1] then
   return {4, 0}
 end
@@ -79,20 +91,21 @@ var (
 // ErrUnavailable, Redis'e ulasilamadi ya da beklenmeyen cevap verdi.
 var ErrUnavailable = errors.New("dogrulama deposu kullanilamiyor")
 
-// Redis, Redis deposu.
+// Redis, bir kanalin Redis deposu.
 type Redis struct {
-	client *redis.Client
+	client  *redis.Client
+	channel Channel
 }
 
-// NewRedis, istemciyle kurar.
-func NewRedis(client *redis.Client) *Redis {
-	return &Redis{client: client}
+// NewRedis, istemci ve kanalla kurar.
+func NewRedis(client *redis.Client, channel Channel) *Redis {
+	return &Redis{client: client, channel: channel}
 }
 
 // Start, startScript'i calistirir.
 func (r *Redis) Start(ctx context.Context, userID string, pending Pending, ttl, resendAfter time.Duration) (time.Duration, error) {
-	wait, err := start.Run(ctx, r.client, []string{Key(userID)},
-		pending.Email, pending.CodeHash, ttl.Milliseconds(), resendAfter.Milliseconds()).Int64()
+	wait, err := start.Run(ctx, r.client, []string{Key(r.channel, userID)},
+		pending.Address, pending.CodeHash, ttl.Milliseconds(), resendAfter.Milliseconds()).Int64()
 	if err != nil {
 		return 0, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
@@ -101,7 +114,7 @@ func (r *Redis) Start(ctx context.Context, userID string, pending Pending, ttl, 
 
 // Check, checkScript'i calistirir.
 func (r *Redis) Check(ctx context.Context, userID string, pending Pending, maxAttempts int) (Outcome, error) {
-	result, err := check.Run(ctx, r.client, []string{Key(userID)}, pending.Email, pending.CodeHash, maxAttempts).Int64Slice()
+	result, err := check.Run(ctx, r.client, []string{Key(r.channel, userID)}, pending.Address, pending.CodeHash, maxAttempts).Int64Slice()
 	if err != nil {
 		return Outcome{}, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
@@ -113,8 +126,20 @@ func (r *Redis) Check(ctx context.Context, userID string, pending Pending, maxAt
 
 // Discard, discardScript'i calistirir.
 func (r *Redis) Discard(ctx context.Context, userID, codeHash string) error {
-	if err := discard.Run(ctx, r.client, []string{Key(userID)}, codeHash).Err(); err != nil {
+	if err := discard.Run(ctx, r.client, []string{Key(r.channel, userID)}, codeHash).Err(); err != nil {
 		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	return nil
+}
+
+// PendingAddress, kaydin address alani (HGET; omru TTL'dir, anahtar yoksa "").
+func (r *Redis) PendingAddress(ctx context.Context, userID string) (string, error) {
+	address, err := r.client.HGet(ctx, Key(r.channel, userID), "address").Result()
+	if errors.Is(err, redis.Nil) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", ErrUnavailable, err)
+	}
+	return address, nil
 }

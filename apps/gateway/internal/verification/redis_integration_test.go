@@ -5,11 +5,12 @@
 // oldugu icin sureler kisadir. Ek olarak: anahtarin bicimi ve omru (TTL'siz
 // anahtar birakilmaz), kilitte omrun korunmasi ve beklenmeyen cevap.
 //
-// Calistirma (Docker gerekir): go test -tags integration ./internal/emailverify/
-package emailverify
+// Calistirma (Docker gerekir): go test -tags integration ./internal/verification/
+package verification
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -74,7 +75,7 @@ func runWithRedis(m *testing.M) (err error) {
 
 func TestRedisStoreContract(t *testing.T) {
 	runStoreContract(t, storeHarness{
-		newStore:    func(*testing.T) Store { return NewRedis(client) },
+		newStore:    func(*testing.T) Store { return NewRedis(client, ChannelEmail) },
 		pass:        func(_ *testing.T, d time.Duration) { time.Sleep(d + testMargin) },
 		ttl:         testTTL,
 		resendAfter: testResendAfter,
@@ -83,18 +84,18 @@ func TestRedisStoreContract(t *testing.T) {
 }
 
 func TestRedisRecordIsOneHashWithTTL(t *testing.T) {
-	store, user := NewRedis(client), ids.New(ids.User)
+	store, user := NewRedis(client, ChannelPhone), ids.New(ids.User)
 	if wait, err := store.Start(t.Context(), user, pendingA, CodeTTL, ResendAfter); err != nil || wait != 0 {
 		t.Fatalf("kod yazilmaliydi: %v (%v)", wait, err)
 	}
-	key := "verify:email:{" + user + "}"
+	key := "verify:phone:{" + user + "}"
 
 	ttl := client.PTTL(t.Context(), key).Val()
 	if ttl <= CodeTTL-5*time.Second || ttl > CodeTTL {
 		t.Errorf("omur 10 dk olmali: %v", ttl)
 	}
 	fields := client.HGetAll(t.Context(), key).Val()
-	if fields["email"] != pendingA.Email || fields["codeHash"] != pendingA.CodeHash || fields["attempts"] != "0" || fields["sentAt"] == "" {
+	if fields["address"] != pendingA.Address || fields["codeHash"] != pendingA.CodeHash || fields["attempts"] != "0" || fields["sentAt"] == "" {
 		t.Errorf("alanlar: %v", fields)
 	}
 }
@@ -102,7 +103,7 @@ func TestRedisRecordIsOneHashWithTTL(t *testing.T) {
 func TestRedisWrongAttemptsAndLockKeepTheTTL(t *testing.T) {
 	// Yanlis deneme ve kilit anahtarin omrune dokunmaz: kilitli kayit TTL'siz
 	// kalsaydi kullanici bir daha kod isteyemezdi (sentAt hep dururdu).
-	store, user := NewRedis(client), ids.New(ids.User)
+	store, user := NewRedis(client, ChannelEmail), ids.New(ids.User)
 	if wait, err := store.Start(t.Context(), user, pendingA, CodeTTL, ResendAfter); err != nil || wait != 0 {
 		t.Fatalf("kod yazilmaliydi: %v (%v)", wait, err)
 	}
@@ -132,9 +133,25 @@ func TestRedisCheckReportsUnreachableRedis(t *testing.T) {
 		t.Fatalf("kapatma: %v", err)
 	}
 
-	_, err = NewRedis(closed).Check(t.Context(), ids.New(ids.User), pendingA, MaxAttempts)
+	_, err = NewRedis(closed, ChannelEmail).Check(t.Context(), ids.New(ids.User), pendingA, MaxAttempts)
+	_, addressErr := NewRedis(closed, ChannelPhone).PendingAddress(t.Context(), ids.New(ids.User))
 
-	if err == nil {
-		t.Fatal("kapali istemci hata vermeli")
+	if !errors.Is(err, ErrUnavailable) || !errors.Is(addressErr, ErrUnavailable) {
+		t.Fatalf("kapali istemci ErrUnavailable vermeli: %v / %v", err, addressErr)
+	}
+}
+
+func TestRedisChannelsDoNotShareTheWait(t *testing.T) {
+	// Ayni kullanicinin e-posta kodu telefon kodunun beklemesini ya da hakkini
+	// yemez: kanallar ayri anahtardir.
+	email, phone, user := NewRedis(client, ChannelEmail), NewRedis(client, ChannelPhone), ids.New(ids.User)
+	if wait, err := email.Start(t.Context(), user, pendingA, CodeTTL, ResendAfter); err != nil || wait != 0 {
+		t.Fatalf("e-posta kodu: %v (%v)", wait, err)
+	}
+	if wait, err := phone.Start(t.Context(), user, pendingB, CodeTTL, ResendAfter); err != nil || wait != 0 {
+		t.Errorf("telefon kodu e-postanin beklemesine takilmamali: %v (%v)", wait, err)
+	}
+	if outcome, err := phone.Check(t.Context(), user, pendingA, MaxAttempts); err != nil || outcome.Result != ResultWrong {
+		t.Errorf("e-postanin kodu telefonda gecmemeli: %+v (%v)", outcome, err)
 	}
 }

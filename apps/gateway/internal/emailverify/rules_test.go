@@ -3,6 +3,8 @@ package emailverify
 import (
 	"strings"
 	"testing"
+
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/verification"
 )
 
 func TestSendInputNormalizesAddress(t *testing.T) {
@@ -43,7 +45,7 @@ func TestVerifyInputCollectsBothProblems(t *testing.T) {
 	for _, code := range []string{"12345", "1234567", "12a456", " 123456", ""} {
 		input := VerifyInput{Email: "ayse", Code: code}
 		problems := input.Check()
-		if problems[FieldEmail] != emailReason || problems[FieldCode] != codeReason {
+		if problems[FieldEmail] != emailReason || problems[verification.FieldCode] != verification.CodeReason {
 			t.Errorf("kod %q: iki alan birden bildirilmeli: %v", code, problems)
 		}
 	}

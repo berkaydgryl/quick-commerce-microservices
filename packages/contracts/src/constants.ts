@@ -98,13 +98,14 @@ export const EMAIL_MAX_LENGTH = 254;
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * E-posta dogrulama kodu (T11.14, kullanicinin karari A2): 6 rakam (OTP_PATTERN),
- * 10 dakika gecerli, 5 yanlis denemede iptal, yeni kod en erken 60 saniye
- * sonra. Gateway'deki karsiliklari emailverify paketinde (contract_test).
+ * Dogrulama kodu (T11.14, kullanicinin karari A2; e-posta PR 1, telefon PR 3
+ * ayni kurali uygular): 6 rakam (OTP_PATTERN), 10 dakika gecerli, 5 yanlis
+ * denemede iptal, yeni kod en erken 60 saniye sonra. Gateway'deki karsiliklari
+ * verification paketinde (contract_test).
  */
-export const EMAIL_CODE_TTL_SECONDS = 600;
-export const EMAIL_CODE_MAX_ATTEMPTS = 5;
-export const EMAIL_CODE_RESEND_SECONDS = 60;
+export const VERIFICATION_CODE_TTL_SECONDS = 600;
+export const VERIFICATION_CODE_MAX_ATTEMPTS = 5;
+export const VERIFICATION_CODE_RESEND_SECONDS = 60;
 
 /**
  * Kupon kodunun en uzun hali (ornek: ILK10). Bilinmeyen kod zaten

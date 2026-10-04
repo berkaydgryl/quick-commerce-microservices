@@ -1,4 +1,4 @@
-package emailverify
+package verification
 
 import (
 	"sync"
@@ -23,8 +23,8 @@ type storeHarness struct {
 }
 
 var (
-	pendingA = Pending{Email: "ayse@ornek.com", CodeHash: "ozet-a"}
-	pendingB = Pending{Email: "ayse@ornek.com", CodeHash: "ozet-b"}
+	pendingA = Pending{Address: "ayse@ornek.com", CodeHash: "ozet-a"}
+	pendingB = Pending{Address: "ayse@ornek.com", CodeHash: "ozet-b"}
 )
 
 func runStoreContract(t *testing.T, h storeHarness) {
@@ -64,7 +64,7 @@ func runStoreContract(t *testing.T, h storeHarness) {
 		store, user := h.newStore(t), h.newUserID()
 		mustStart(t, store, user, pendingA, h)
 
-		expectOutcome(t, store, user, Pending{Email: "baska@ornek.com", CodeHash: pendingA.CodeHash}, Outcome{Result: ResultExpired})
+		expectOutcome(t, store, user, Pending{Address: "baska@ornek.com", CodeHash: pendingA.CodeHash}, Outcome{Result: ResultExpired})
 		expectOutcome(t, store, user, pendingB, Outcome{Result: ResultWrong, AttemptsLeft: MaxAttempts - 1})
 	})
 
@@ -110,6 +110,30 @@ func runStoreContract(t *testing.T, h storeHarness) {
 		mustStart(t, store, other, pendingB, h)
 	})
 
+	t.Run("PendingAddress: kayit yasadikca adres (kilitte de), sonra bos", func(t *testing.T) {
+		store, user := h.newStore(t), h.newUserID()
+		expectAddress(t, store, user, "")
+		mustStart(t, store, user, pendingA, h)
+		expectAddress(t, store, user, pendingA.Address)
+		expectAddress(t, store, h.newUserID(), "")
+
+		for range MaxAttempts {
+			if _, err := store.Check(t.Context(), user, pendingB, MaxAttempts); err != nil {
+				t.Fatalf("Check: %v", err)
+			}
+		}
+		expectOutcome(t, store, user, pendingA, Outcome{Result: ResultLocked})
+		expectAddress(t, store, user, pendingA.Address)
+
+		h.pass(t, h.ttl)
+		expectAddress(t, store, user, "")
+
+		verified := h.newUserID()
+		mustStart(t, store, verified, pendingA, h)
+		expectOutcome(t, store, verified, pendingA, Outcome{Result: ResultVerified})
+		expectAddress(t, store, verified, "")
+	})
+
 	t.Run("es zamanli yanlis denemeler hakki asamaz", func(t *testing.T) {
 		store, user := h.newStore(t), h.newUserID()
 		mustStart(t, store, user, pendingA, h)
@@ -150,7 +174,7 @@ func runStoreContract(t *testing.T, h storeHarness) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				pending := Pending{Email: pendingA.Email, CodeHash: "ozet-" + string(rune('a'+index))}
+				pending := Pending{Address: pendingA.Address, CodeHash: "ozet-" + string(rune('a'+index))}
 				wait, err := store.Start(t.Context(), user, pending, h.ttl, h.resendAfter)
 				if err != nil {
 					t.Errorf("Start: %v", err)
@@ -177,6 +201,14 @@ func mustStart(t *testing.T, store Store, user string, pending Pending, h storeH
 	t.Helper()
 	if wait, err := store.Start(t.Context(), user, pending, h.ttl, h.resendAfter); err != nil || wait != 0 {
 		t.Fatalf("kod yazilmaliydi: bekleme %v (%v)", wait, err)
+	}
+}
+
+func expectAddress(t *testing.T, store Store, user, want string) {
+	t.Helper()
+	got, err := store.PendingAddress(t.Context(), user)
+	if err != nil || got != want {
+		t.Fatalf("bekleyen adres %q bekleniyordu: %q (%v)", want, got, err)
 	}
 }
 

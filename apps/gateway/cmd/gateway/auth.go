@@ -13,6 +13,7 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/mongodb"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/persona"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/phoneverify"
 )
 
 // mongoHealthName, /healthz raporunda Mongo'nun adi.
@@ -34,6 +35,11 @@ type authParts struct {
 	// accounts, e-posta dogrulamasinin kullanici tarafi (T11.14): kullanici
 	// deposunun kendisi (adres kullanici belgesinde).
 	accounts emailverify.Accounts
+	// phoneAccounts, sessions ve passwords: telefon degistirmenin kullanici,
+	// oturum ve sifre tarafi (T11.14 PR 3).
+	phoneAccounts phoneverify.Accounts
+	sessions      phoneverify.Sessions
+	passwords     *auth.PasswordHasher
 }
 
 // buildAuth, kimlik servisini kurar. passwordCost bcrypt maliyetidir: gercek
@@ -51,7 +57,7 @@ func buildAuth(ctx context.Context, cfg config.Config, passwordCost int) (authPa
 	// IP'den konum cozucu yok (GeoIP bekleyen is): oturum konumu kullanicinin
 	// son bilinen konumundan gelir (auth.Locator).
 	deps := auth.Deps{Passwords: passwords, Tokens: tokens, Locator: auth.NoLocator{}, RefreshTTL: cfg.RefreshTTL, Now: time.Now}
-	parts := authParts{tokens: tokens, close: func(context.Context) error { return nil }}
+	parts := authParts{tokens: tokens, passwords: passwords, close: func(context.Context) error { return nil }}
 
 	if cfg.Mock {
 		users := authstore.NewMemoryUsers()
@@ -59,10 +65,11 @@ func buildAuth(ctx context.Context, cfg config.Config, passwordCost int) (authPa
 		if err != nil {
 			return authParts{}, err
 		}
-		deps.Users, deps.Sessions = users, authstore.NewMemorySessions()
+		sessions := authstore.NewMemorySessions()
+		deps.Users, deps.Sessions = users, sessions
 		parts.service = auth.NewService(deps)
 		parts.favorites = authstore.NewMemoryFavorites()
-		parts.accounts = users
+		parts.accounts, parts.phoneAccounts, parts.sessions = users, users, sessions
 		parts.personas = loaded
 		return parts, nil
 	}
@@ -82,11 +89,11 @@ func buildAuth(ctx context.Context, cfg config.Config, passwordCost int) (authPa
 		}
 		return authParts{}, err
 	}
-	users := authstore.NewMongoUsers(db)
-	deps.Users, deps.Sessions = users, authstore.NewMongoSessions(db)
+	users, sessions := authstore.NewMongoUsers(db), authstore.NewMongoSessions(db)
+	deps.Users, deps.Sessions = users, sessions
 	parts.service = auth.NewService(deps)
 	parts.favorites = authstore.NewMongoFavorites(db)
-	parts.accounts = users
+	parts.accounts, parts.phoneAccounts, parts.sessions = users, users, sessions
 	parts.pingers = map[string]health.Pinger{mongoHealthName: mongodb.NewPinger(client)}
 	parts.close = client.Disconnect
 	return parts, nil

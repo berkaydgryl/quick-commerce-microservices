@@ -4,7 +4,7 @@
  * eslenmesi.
  */
 
-import { EMAIL_CODE_MESSAGE, EMAIL_MESSAGE } from '@getir/contracts';
+import { EMAIL_MESSAGE, VERIFICATION_CODE_MESSAGE } from '@getir/contracts';
 import { AppError, ERROR_CODES } from '@getir/core';
 import { describe, expect, it } from 'vitest';
 
@@ -27,12 +27,13 @@ const RECEIVED_AT = Date.UTC(2026, 9, 4, 12, 0, 0);
 describe('codeWindow', () => {
   it('sureler cevabin alindigi andan baslar', () => {
     const window = codeWindow(
-      { email: 'ayse@ornek.com', expiresInSeconds: 600, resendAfterSeconds: 60 },
+      'ayse@ornek.com',
+      { expiresInSeconds: 600, resendAfterSeconds: 60 },
       RECEIVED_AT,
     );
 
     expect(window).toEqual({
-      email: 'ayse@ornek.com',
+      address: 'ayse@ornek.com',
       expiresAt: RECEIVED_AT + 600_000,
       resendAt: RECEIVED_AT + 60_000,
     });
@@ -93,7 +94,7 @@ describe('form semalari', () => {
 
   it('kod 6 rakam olmali', () => {
     const invalid = codeFormSchema.safeParse({ code: '0421' });
-    expect(invalid.error?.issues[0]?.message).toBe(EMAIL_CODE_MESSAGE);
+    expect(invalid.error?.issues[0]?.message).toBe(VERIFICATION_CODE_MESSAGE);
     expect(codeFormSchema.parse({ code: '042137' })).toEqual({ code: '042137' });
   });
 });

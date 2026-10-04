@@ -8,9 +8,9 @@
  * adres yalnizca bekleyen kodun yaninda, Redis'te 10 dakika durur. Ayni adres
  * iki hesapta dogrulanamaz (users.email benzersiz).
  *
- * Kurallar (kullanicinin karari A2): kod 6 rakam, EMAIL_CODE_TTL_SECONDS gecerli,
- * EMAIL_CODE_MAX_ATTEMPTS yanlista iptal, yeni kod en erken
- * EMAIL_CODE_RESEND_SECONDS sonra. Yeni kod oncekini gecersiz kilar.
+ * Kurallar (kullanicinin karari A2): kod 6 rakam, VERIFICATION_CODE_TTL_SECONDS
+ * gecerli, VERIFICATION_CODE_MAX_ATTEMPTS yanlista iptal, yeni kod en erken
+ * VERIFICATION_CODE_RESEND_SECONDS sonra. Yeni kod oncekini gecersiz kilar.
  *
  * Hatalar yeni kod getirmez: kural ihlali alanin altinda gosterilen
  * VALIDATION_FAILED'dir (email ya da code; adres defterindeki "ayni ad" gibi),
@@ -21,16 +21,14 @@
 
 import { z } from 'zod';
 
-import { EMAIL_MAX_LENGTH, EMAIL_PATTERN, OTP_PATTERN } from './constants.js';
+import { EMAIL_MAX_LENGTH, EMAIL_PATTERN } from './constants.js';
+import { verificationCodeSchema } from './verification.js';
 
 /** Bicim kuralinin cumlesi: sunucu (gateway) ve form ayni cumleyi gosterir. */
 export const EMAIL_MESSAGE = 'Geçerli bir e-posta adresi gir (örnek ad@ornek.com)';
 
 /** Uzunluk kuralinin cumlesi. */
 export const EMAIL_MAX_MESSAGE = `en fazla ${EMAIL_MAX_LENGTH} karakter olmalı`;
-
-/** Kod bicimi kuralinin cumlesi. */
-export const EMAIL_CODE_MESSAGE = 'Kod 6 rakam olmalı';
 
 /**
  * E-posta: bosluklari kirpilir ve kucuk harfe cevrilir. Benzersizlik bu bicim
@@ -43,9 +41,6 @@ export const emailSchema = z
   .toLowerCase()
   .max(EMAIL_MAX_LENGTH, EMAIL_MAX_MESSAGE)
   .regex(EMAIL_PATTERN, EMAIL_MESSAGE);
-
-/** Dogrulama kodu: tam 6 rakam. */
-export const emailCodeSchema = z.string().regex(OTP_PATTERN, EMAIL_CODE_MESSAGE);
 
 /** POST /v1/me/email/code govdesi. */
 export const sendEmailCodeRequestSchema = z.object({
@@ -71,7 +66,7 @@ export const emailCodeSentSchema = z.object({
  */
 export const verifyEmailRequestSchema = z.object({
   email: emailSchema,
-  code: emailCodeSchema,
+  code: verificationCodeSchema,
 });
 
 export type Email = z.infer<typeof emailSchema>;

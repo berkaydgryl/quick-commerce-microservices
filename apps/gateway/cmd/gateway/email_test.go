@@ -35,3 +35,16 @@ func TestDerivedKeysDifferPerLabel(t *testing.T) {
 		t.Error("ayni sir ve etiket ayni anahtari uretmeli (ornekler arasi ortak)")
 	}
 }
+
+func TestPhoneVerificationIsOffInProduction(t *testing.T) {
+	secret := []byte("en-az-32-bayt-uzunlugunda-bir-test-sirri")
+	if buildPhoneVerification(config.Config{NodeEnv: config.EnvProduction, JWTSecret: secret}, nil, authParts{}, internalmail.NewMemory()) != nil {
+		t.Error("production'da telefon uclari kurulmamali (#95)")
+	}
+	if buildPhoneVerification(config.Config{NodeEnv: config.EnvDevelopment, JWTSecret: secret}, nil, authParts{}, internalmail.NewMemory()) == nil {
+		t.Error("gelistirmede telefon dogrulamasi kurulmali")
+	}
+	if bytes.Equal(derivedKey(secret, phoneCodeKeyLabel), derivedKey(secret, emailCodeKeyLabel)) {
+		t.Error("telefon ve e-posta kod anahtarlari ayri olmali")
+	}
+}

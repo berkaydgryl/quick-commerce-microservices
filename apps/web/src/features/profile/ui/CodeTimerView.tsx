@@ -1,11 +1,10 @@
-import type { EmailDialogContent } from '@getir/contracts';
-
 import { formatCountdown } from '../services/code-window';
+import type { CodeStepTexts } from '../services/code-step';
 
-import styles from './EmailDialog.module.css';
+import styles from './ProfileDialog.module.css';
 
 export interface CodeTimerViewProps {
-  readonly texts: EmailDialogContent;
+  readonly texts: CodeStepTexts;
   /** Kodun gecerliligine kalan saniye; 0 ise sure doldu. */
   readonly expiresIn: number;
   /** Yeni kod icin kalan saniye; 0 ise istenebilir. */
@@ -16,10 +15,11 @@ export interface CodeTimerViewProps {
 }
 
 /**
- * Kod adiminin zamanlari (T11.14): gecerlilik geri sayimi ("Kodun geçerlilik
- * süresi 9:41"; dolunca uyari) ve yeni kod dugmesi (bekleme bitene kadar
- * kapali, kalan sure yazili). Geri sayim saniyede bir degisir ama duyurulmaz;
- * yalnizca "suresi doldu" uyarisi duyurulur (role=status). Durumsuz.
+ * Kod adiminin zamanlari (T11.14; e-posta ve telefon ortak): gecerlilik geri
+ * sayimi ("Kodun geçerlilik süresi 9:41"; dolunca uyari) ve yeni kod dugmesi
+ * (bekleme bitene kadar kapali, kalan sure yazili). Geri sayim saniyede bir
+ * degisir ama duyurulmaz; yalnizca "suresi doldu" uyarisi duyurulur
+ * (role=status). Durumsuz.
  */
 export function CodeTimerView({
   texts,
@@ -29,20 +29,22 @@ export function CodeTimerView({
   onResend,
 }: CodeTimerViewProps) {
   return (
-    <div className={styles['c-email-dialog__timer']}>
+    <div className={styles['c-profile-dialog__timer']}>
       {expiresIn > 0 ? (
         <p>
           {texts.expiresInLabel}{' '}
-          <span className={styles['c-email-dialog__countdown']}>{formatCountdown(expiresIn)}</span>
+          <span className={styles['c-profile-dialog__countdown']}>
+            {formatCountdown(expiresIn)}
+          </span>
         </p>
       ) : (
-        <p className={styles['c-email-dialog__expired']} role="status">
+        <p className={styles['c-profile-dialog__expired']} role="status">
           {texts.expiredNotice}
         </p>
       )}
       <button
         type="button"
-        className={styles['c-email-dialog__link']}
+        className={styles['c-profile-dialog__link']}
         disabled={resendIn > 0 || resending}
         onClick={onResend}
       >

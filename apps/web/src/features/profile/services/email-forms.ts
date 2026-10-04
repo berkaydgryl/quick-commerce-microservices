@@ -4,7 +4,7 @@
  * uygular (emailverify contract_test).
  */
 
-import { emailCodeSchema, sendEmailCodeRequestSchema } from '@getir/contracts';
+import { sendEmailCodeRequestSchema, verificationCodeSchema } from '@getir/contracts';
 import { z } from 'zod';
 
 /** Adres adimi: govde dogrudan istektir (adres kirpilir, kucuk harfe iner). */
@@ -14,7 +14,7 @@ export type EmailFormValues = z.input<typeof emailFormSchema>;
 export const EMAIL_FORM_FIELDS = ['email'] as const;
 
 /** Kod adimi: adres pencereden gelir, formda yalnizca kod var. */
-export const codeFormSchema = z.object({ code: emailCodeSchema });
+export const codeFormSchema = z.object({ code: verificationCodeSchema });
 export type CodeFormValues = z.input<typeof codeFormSchema>;
 /**
  * Kod adiminda sunucu iki alani soyleyebilir: kod (yanlis, kilitli, suresi

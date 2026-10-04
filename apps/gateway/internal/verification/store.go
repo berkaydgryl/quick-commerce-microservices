@@ -1,13 +1,14 @@
-package emailverify
+package verification
 
 import (
 	"context"
 	"time"
 )
 
-// Pending, bekleyen dogrulama: adres ve kodun ozeti (kodun kendisi saklanmaz).
+// Pending, bekleyen dogrulama: adres (e-posta ya da numara) ve kodun ozeti
+// (kodun kendisi saklanmaz).
 type Pending struct {
-	Email    string
+	Address  string
 	CodeHash string
 }
 
@@ -51,4 +52,9 @@ type Store interface {
 	// Discard, ozeti verilen kodu siler (ileti gonderilemedi: kullanici
 	// beklemeden yeniden isteyebilsin). Daha yeni bir koda dokunmaz.
 	Discard(ctx context.Context, userID, codeHash string) error
+	// PendingAddress, bekleyen kaydin adresi (kod kilitli olsa da); kayit yoksa
+	// ya da omru dolduysa "". Telefonun yeniden gonderimi icin (T11.14 PR 3):
+	// sifre bu adrese ilk kod istenirken soruldu, kayit yasadikca yeniden
+	// sorulmaz.
+	PendingAddress(ctx context.Context, userID string) (string, error)
 }

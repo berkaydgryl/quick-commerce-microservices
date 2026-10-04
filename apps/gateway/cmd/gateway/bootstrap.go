@@ -155,12 +155,19 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 	// katalogdan tek cagriyla (BatchGetMarkets).
 	favoriteService := favorites.NewService(identity.favorites, catalogService, time.Now)
 
-	// E-posta dogrulama (T11.14): kod Redis'te (MOCK'ta bellek), ileti SMTP'yle
-	// (gelistirmede Mailpit), adres kullanici kaydinda.
-	emailVerification, err := buildEmailVerification(cfg, shared.client, identity.accounts)
+	// E-posta ve telefon dogrulama (T11.14; telefon PR 3): kod Redis'te (MOCK'ta
+	// bellek), ileti SMTP'yle (gelistirmede Mailpit; SMS de oraya duser), adres
+	// ve numara kullanici kaydinda. Telefon uclari production'da yok (#95).
+	mailer, err := buildMailer(cfg)
 	if err != nil {
 		cleanup()
-		return nil, nil, fmt.Errorf("e-posta dogrulama: %w", err)
+		return nil, nil, fmt.Errorf("posta: %w", err)
+	}
+	emailVerification := buildEmailVerification(cfg, shared.client, identity.accounts, mailer)
+	var phoneCodes httpapi.PhoneCodeSender
+	var phoneVerifier httpapi.PhoneVerifier
+	if phoneVerification := buildPhoneVerification(cfg, shared.client, identity, mailer); phoneVerification != nil {
+		phoneCodes, phoneVerifier = phoneVerification, phoneVerification
 	}
 
 	// Harita adres servisi (T11.8): Nominatim'e tek sira ve onbellekle gider.
@@ -199,6 +206,9 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 		AddressAdder:      identity.service,
 		EmailCodeSender:   emailVerification,
 		EmailVerifier:     emailVerification,
+		ProfileUpdater:    identity.service,
+		PhoneCodeSender:   phoneCodes,
+		PhoneVerifier:     phoneVerifier,
 		Favorites:         favoriteService,
 		FavoriteAdder:     favoriteService,
 		FavoriteRemover:   favoriteService,

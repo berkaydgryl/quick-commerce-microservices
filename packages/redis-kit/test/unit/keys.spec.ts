@@ -16,6 +16,7 @@ import {
   hashTagOf,
   IDEMPOTENCY_ANONYMOUS_SCOPE,
   idempotencyKey,
+  phoneVerificationKey,
   rateLimitKey,
   realtimeSeqKey,
   RECONCILE_LOCK_KEY,
@@ -57,6 +58,7 @@ describe('anahtar bicimleri', () => {
     expect(STOCK_SEEDED_MARKER_KEY).toBe('stock:seeded');
     expect(hashTagOf(STOCK_SEEDED_MARKER_KEY)).toBeUndefined();
     expect(emailVerificationKey(USER_ID)).toBe(`verify:email:{${USER_ID}}`);
+    expect(phoneVerificationKey(USER_ID)).toBe(`verify:phone:{${USER_ID}}`);
   });
 
   it('bir depoya ait tum anahtarlar ayni hash-tag altindadir', () => {
@@ -177,16 +179,19 @@ describe('dogrulama', () => {
   });
 });
 
-describe('emailVerificationKey (T11.14)', () => {
+describe.each([
+  ['emailVerificationKey (T11.14)', emailVerificationKey, 'email'],
+  ['phoneVerificationKey (T11.14 PR 3)', phoneVerificationKey, 'phone'],
+] as const)('%s', (_name, key, channel) => {
   it('kullanici kimligini hash-tag icinde tasir', () => {
-    expect(emailVerificationKey(USER_ID)).toBe(`verify:email:{${USER_ID}}`);
-    expect(hashTagOf(emailVerificationKey(USER_ID))).toBe(USER_ID);
+    expect(key(USER_ID)).toBe(`verify:${channel}:{${USER_ID}}`);
+    expect(hashTagOf(key(USER_ID))).toBe(USER_ID);
   });
 
   it.each(['usr_7', 'ord_0123456789abcdef0123456789abcdef', 'usr_{x}', ''])(
     'kullanici kimligi olmayan parcayi (%j) reddeder',
     (value) => {
-      expect(() => emailVerificationKey(value)).toThrow(AppError);
+      expect(() => key(value)).toThrow(AppError);
     },
   );
 });
