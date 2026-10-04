@@ -9,7 +9,7 @@ import { PageLayout } from '../../shared/ui/page-layout/PageLayout';
 import { AccountLayout } from './AccountLayout';
 import { FavoriteMarketsView } from './FavoriteMarketsView';
 
-/** /hesabim/favoriler (T11.13): korumali; profil duzeninin sag tarafinda favoriler. */
+/** /hesabim/favoriler (T11.13): korumali; favoriler hesap sayfalarinin ortak icerik kabinda (T11.14 PR 2). */
 export function FavoritesPage() {
   return (
     <PageLayout>
@@ -34,7 +34,7 @@ function SignedInFavorites() {
     return null;
   }
   return (
-    <AccountLayout userId={userId}>
+    <AccountLayout userId={userId} variant="section">
       {texts !== undefined && listTexts !== undefined && (
         <FavoriteMarketsView
           texts={texts}

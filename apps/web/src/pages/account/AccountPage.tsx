@@ -1,5 +1,5 @@
-import { AccountPanel } from '../../features/auth/ui/AccountPanel';
 import { RequireAuth } from '../../features/auth/ui/RequireAuth';
+import { ProfileCard } from '../../features/profile/ui/ProfileCard';
 import { useSessionStore } from '../../shared/session/session-store';
 import { PageLayout } from '../../shared/ui/page-layout/PageLayout';
 
@@ -18,13 +18,15 @@ export function AccountPage() {
 
 /**
  * RequireAuth yalnizca oturum acikken cizer: kullanici burada hep vardir.
- * T11.13'ten beri profil duzeninde (solda profil karti ve menu).
+ * T11.14 PR 2'den beri (referans getircarsi): solda menu, ortak icerik kabinda
+ * profil karti. Eski "Hesabım" paneli (ad, telefon, cikis) kalkti: bilgiler
+ * kartta, cikis ust barin Profil menusunde.
  */
 function SignedInAccount() {
   const userId = useSessionStore((state) => state.user?.id);
   return userId === undefined ? null : (
-    <AccountLayout userId={userId}>
-      <AccountPanel userId={userId} />
+    <AccountLayout userId={userId} variant="home">
+      <ProfileCard userId={userId} onAccountPage />
     </AccountLayout>
   );
 }

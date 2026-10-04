@@ -275,11 +275,10 @@ type Favorites struct {
 	FavoritesMenuLabel string `json:"favoritesMenuLabel"`
 }
 
-// Profile, profil kartinin ve Hesabim panelinin metinleri (T11.14): ad,
-// telefon, e-posta satirlari, kalem ve e-posta penceresi. Yalnizca metin; kod
-// kurallari (sure, deneme) emailverify'da.
+// Profile, profil kartinin metinleri (T11.14; PR 2'de Hesabim paneli kalkti):
+// e-posta ve telefon satirlari, kalem ve e-posta penceresi. Yalnizca metin;
+// kod kurallari (sure, deneme) emailverify'da.
 type Profile struct {
-	FullNameLabel  string      `json:"fullNameLabel"`
 	PhoneLabel     string      `json:"phoneLabel"`
 	EmailLabel     string      `json:"emailLabel"`
 	AddEmailLabel  string      `json:"addEmailLabel"`

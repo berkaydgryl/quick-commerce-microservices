@@ -10,6 +10,7 @@
   --palette-purple-600: #5d3ebc;
   --palette-purple-700: #4c339e;
   --palette-purple-50: #f3effc;
+  --palette-purple-300: #9b84e2;
   --palette-yellow-400: #ffd300;
   --palette-yellow-500: #f2c800;
   --palette-gray-100: #f5f5f5;
@@ -44,6 +45,13 @@
      onay, T11.14). Beyaz zeminde 5:1 karsitlik. */
   --text-success: var(--palette-green-700);
   --border-subtle: var(--palette-gray-300);
+
+  /* Kart icindeki satir ayiricisi (profil karti ve hesap menusu, T11.14 PR 2;
+     referans getircarsi): marka morunun en acik tonu, zeminden zor ayrilir. */
+  --border-faint: var(--palette-purple-50);
+
+  /* Ikincil, yumusak marka rengi: profil kartindaki duzenleme ikonu. */
+  --color-brand-primary-soft: var(--palette-purple-300);
   --border-danger: var(--palette-red-600);
   --focus-ring-color: var(--palette-purple-600);
 
@@ -66,6 +74,9 @@
   --font-size-md: clamp(0.9375rem, 0.9rem + 0.2vw, 1rem);
   --font-size-lg: clamp(1.125rem, 1.05rem + 0.4vw, 1.375rem);
   --font-size-xl: clamp(1.5rem, 1.35rem + 0.75vw, 2rem);
+
+  /* Kartin basligi (profil kartindaki ad, T11.14 PR 2; referansta ~19 px). */
+  --font-size-card-title: 1.1875rem;
 
   /* --- Bosluk (4'luk olcek, rem) --- */
   --space-1: 0.25rem;
@@ -162,11 +173,18 @@
   --size-favorite-button: 2.25rem;
   --size-favorite-icon: 1.25rem;
 
-  /* Profil karti (T11.14; referans getircarsi): satir ikonu (telefon,
-     e-posta), dogrulama onayi ve sag ustteki kalem dugmesi. */
-  --size-profile-row-icon: 1.25rem;
+  /* Profil karti (T11.14; referans getircarsi): satir ikonu (e-posta,
+     telefon), dogrulama onayi ve kartin ust kenarina tasan kalem dugmesi. */
+  --size-profile-row-icon: 1rem;
   --size-profile-verified-icon: 1.375rem;
   --size-profile-edit: 2.25rem;
+
+  /* Hesap sayfalari (T11.14 PR 2; referans getircarsi profil sayfasi): solda
+     menu sutunu, sagda BUTUN sekmelerin ortak icerik kabi (Profil, Favori
+     Isletmeler, Adreslerim, Gecmis Siparislerim, Odeme Yontemlerim). Sekme
+     kendi genisligini vermez; kap sola yaslidir, sagi bos kalir. */
+  --size-account-side: 18.5rem;
+  --size-account-content: 38rem;
 
   /* Bildirim (toast, T11.13): en genis hali ve kapatma dugmesi. */
   --container-max-toast: 24rem;
@@ -191,6 +209,9 @@
 
   /* Fotograf ustundeki kart (karsilama ekraninin giris karti, T11.6). */
   --shadow-raised: 0 0.5rem 1.5rem rgb(25 25 25 / 18%);
+
+  /* Kartin kenarina tasan kucuk dugme (profil kalemi): mora calan yumusak golge. */
+  --shadow-floating: 0 0.25rem 0.75rem rgb(93 62 188 / 16%);
 
   /* --- Durum --- */
   --opacity-disabled: 0.6;

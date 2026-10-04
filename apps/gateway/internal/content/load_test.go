@@ -100,7 +100,7 @@ const validJSON = `{
     "profileMenuLabel": "Hesap menüsü", "addressesLabel": "Adreslerim", "favoritesMenuLabel": "Favori İşletmeler"
   },
   "profile": {
-    "fullNameLabel": "Ad soyad", "phoneLabel": "Telefon", "emailLabel": "E-posta", "addEmailLabel": "E-posta ekle",
+    "phoneLabel": "Telefon", "emailLabel": "E-posta", "addEmailLabel": "E-posta ekle",
     "editEmailLabel": "E-posta adresini düzenle", "verifiedLabel": "Doğrulandı", "loadingLabel": "Yükleniyor",
     "emailDialog": {
       "title": "E-posta adresi", "closeLabel": "Kapat", "emailDescription": "Kod göndereceğiz.",

@@ -5,15 +5,20 @@ import { NavLink } from 'react-router-dom';
 import { useAddressBook } from '../../features/address/hooks/useAddressBook';
 import { AddressDialogs } from '../../features/address/ui/AddressDialogs';
 import type { AddressDialog } from '../../features/address/ui/AddressDialogs';
+import { AUTH_ROUTES } from '../../features/auth/routes';
+import { useAccountTitle } from '../../features/content/hooks/useAccountTitle';
 import { useFavoritesContent } from '../../features/content/hooks/useFavoritesContent';
 import { useWelcomeContent } from '../../features/content/hooks/useWelcomeContent';
 import { FAVORITES_PATH } from '../../features/favorites/routes';
 import { ProfileCard } from '../../features/profile/ui/ProfileCard';
 
 import styles from './AccountLayout.module.css';
+import { AccountLayoutView } from './AccountLayoutView';
+import type { AccountLayoutVariant } from './AccountLayoutView';
 
 interface AccountLayoutProps {
   readonly userId: string;
+  readonly variant: AccountLayoutVariant;
   readonly children: ReactNode;
 }
 
@@ -23,37 +28,40 @@ const menuItem = ({ isActive }: { readonly isActive: boolean }) =>
     : styles['c-account-layout__item'];
 
 /**
- * Profil sayfasinin duzeni (T11.13; referans getircarsi): solda profil karti
- * (T11.14: ad, telefon, e-posta ve kalem; ad Hesabim'a gider) ve menu, sagda
- * sayfanin icerigi. Menude
- * yalnizca calisanlar (karar D4): "Adreslerim" ust bardaki "Adreslerim"
- * penceresini acar, "Favori Isletmeler" favori sayfasina gider. Genis
- * ekranda iki sutun (1:3), telefonda alt alta.
+ * Profil sayfalarinin duzeni (T11.13; T11.14 PR 2): gorunum AccountLayoutView'da,
+ * burada metinler, kart ve menu baglanir. Menude yalnizca calisanlar (karar
+ * D4): "Adreslerim" ust bardaki "Adreslerim" penceresini acar (T11.15'te
+ * sekme olur), "Favori Isletmeler" favori sayfasina gider.
  */
-export function AccountLayout({ userId, children }: AccountLayoutProps) {
+export function AccountLayout({ userId, variant, children }: AccountLayoutProps) {
   const texts = useFavoritesContent();
+  const title = useAccountTitle();
 
   return (
-    <div className={styles['c-account-layout']}>
-      <aside className={styles['c-account-layout__side']}>
-        <ProfileCard userId={userId} />
-        {texts !== undefined && (
+    <AccountLayoutView
+      variant={variant}
+      title={title}
+      accountHref={AUTH_ROUTES.account}
+      card={<ProfileCard userId={userId} />}
+      menu={
+        texts !== undefined && (
           <nav className={styles['c-account-layout__menu']} aria-label={texts.profileMenuLabel}>
             <ul className={styles['c-account-layout__list']} role="list">
-              <li>
+              <li className={styles['c-account-layout__entry']}>
                 <AddressesMenuItem userId={userId} label={texts.addressesLabel} />
               </li>
-              <li>
+              <li className={styles['c-account-layout__entry']}>
                 <NavLink to={FAVORITES_PATH} className={menuItem}>
                   {texts.favoritesMenuLabel}
                 </NavLink>
               </li>
             </ul>
           </nav>
-        )}
-      </aside>
-      <div className={styles['c-account-layout__main']}>{children}</div>
-    </div>
+        )
+      }
+    >
+      {children}
+    </AccountLayoutView>
   );
 }
 

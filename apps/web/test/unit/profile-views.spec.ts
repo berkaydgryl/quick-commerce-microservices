@@ -1,6 +1,6 @@
 /**
- * Profil karti ve e-posta penceresinin zaman gorunumu (T11.14; referans
- * getircarsi; kullanicinin karari: ad, altinda telefon, onun altinda e-posta).
+ * Profil karti ve e-posta penceresinin zaman gorunumu (T11.14; PR 2'de
+ * referansa gore: getircarsi profil sayfasi, ad -> e-posta -> telefon).
  * Metinler icerik yedeginden.
  */
 
@@ -25,21 +25,22 @@ const PROFILE: UserProfile = {
   fullName: 'Ayşe Yılmaz',
 };
 
-const card = (profile: UserProfile | undefined) =>
+/** Alt sekmedeki kart (ad Hesabim'a gider); onAccountPage: Hesabim'in kendisi. */
+const card = (profile: UserProfile | undefined, onAccountPage = false) =>
   render(
     createElement(ProfileCardView, {
       profile,
       texts: TEXTS,
-      accountHref: '/hesabim',
+      accountHref: onAccountPage ? undefined : '/hesabim',
       onEditEmail: () => undefined,
     }),
   );
 
 describe('ProfileCardView', () => {
-  it("sira: ad, telefon, e-posta; ad Hesabim'a gider; kalem sag ustte", () => {
+  it("sira (referans): ad, e-posta, telefon; alt sekmede ad Hesabim'a gider", () => {
     const markup = card({ ...PROFILE, email: 'ayse@ornek.com' });
 
-    const order = ['Ayşe Yılmaz', 'aria-label="Telefon"', 'aria-label="E-posta"'].map((text) =>
+    const order = ['Ayşe Yılmaz', 'aria-label="E-posta"', 'aria-label="Telefon"'].map((text) =>
       markup.indexOf(text),
     );
     expect(order.every((index) => index >= 0)).toBe(true);
@@ -48,15 +49,23 @@ describe('ProfileCardView', () => {
     expect(markup).toContain('aria-label="E-posta adresini düzenle"');
   });
 
+  it('Hesabim sayfasinin kendisinde ad duz metin (kendine baglanti yok)', () => {
+    const markup = card(PROFILE, true);
+
+    expect(markup).toContain('Ayşe Yılmaz');
+    expect(markup).not.toContain('href=');
+  });
+
+  it('telefon bosluklu yazilir (+90 532 123 45 67)', () => {
+    expect(card(PROFILE)).toContain('+90 532 123 45 67');
+  });
+
   it('dogrulanmis e-posta: adres ve yesil onay; telefonda onay YOK (ADR-12)', () => {
     const markup = card({ ...PROFILE, email: 'ayse@ornek.com' });
 
     expect(markup).toContain('ayse@ornek.com');
     expect(markup.match(/aria-label="Doğrulandı"/g)).toHaveLength(1);
-    const phoneRow = markup.slice(
-      markup.indexOf('aria-label="Telefon"'),
-      markup.indexOf('aria-label="E-posta"'),
-    );
+    const phoneRow = markup.slice(markup.indexOf('aria-label="Telefon"'));
     expect(phoneRow).not.toContain('Doğrulandı');
     expect(markup).not.toContain('E-posta ekle');
   });
