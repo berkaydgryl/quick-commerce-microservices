@@ -1,0 +1,98 @@
+/*
+ * Sol menu (T11.12; referans getircarsi "Kategoriler"): beyaz kart icinde
+ * akordeon gruplar. Listelerin boslugu margin'dir: global sifirlama
+ * (ul[role='list'] { padding: 0 }) sinif secicisinden ustundur.
+ */
+.c-store-menu {
+  padding: var(--space-2);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-store-menu__groups {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.c-store-menu__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  width: 100%;
+  padding: var(--space-2);
+  font-weight: var(--font-weight-semibold);
+  text-align: start;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+}
+
+.c-store-menu__row:hover {
+  background: var(--bg-page);
+}
+
+.c-store-menu__image {
+  width: var(--size-store-menu-image);
+  height: var(--size-store-menu-image);
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+.c-store-menu__label {
+  overflow-wrap: anywhere;
+}
+
+.c-store-menu__chevron {
+  width: var(--size-store-menu-chevron);
+  height: var(--size-store-menu-chevron);
+  color: var(--text-muted);
+  transition: transform var(--duration-fast) var(--easing-standard);
+}
+
+.c-store-menu__chevron.is-expanded {
+  transform: rotate(180deg);
+}
+
+.c-store-menu__types {
+  display: grid;
+  gap: var(--space-1);
+  margin-block-end: var(--space-2);
+  margin-inline-start: calc(var(--size-store-menu-image) + var(--space-3));
+}
+
+.c-store-menu__types[hidden] {
+  display: none;
+}
+
+.c-store-menu__type {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-sm);
+  text-align: start;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+}
+
+.c-store-menu__type:hover {
+  background: var(--bg-page);
+}
+
+.c-store-menu__type.is-active {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+  background: var(--color-brand-primary-subtle);
+}
+
+.c-store-menu__count {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}

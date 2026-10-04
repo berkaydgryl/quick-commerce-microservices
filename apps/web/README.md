@@ -2,11 +2,11 @@
 
 Müşteri arayüzü: React 18 + Vite + TypeScript. Tarayıcı yalnızca gateway ile konuşur (`/v1/*`).
 
-## Bugünkü durum (T11.7 — karşılama tanıtım bölümleri; T11.6 — karşılama ve giriş ekranı; T9.5 — teslimat adresi; T9.6 — genel arama; T8.5 — kimlik akışı; T7.6 — kalıcı sepet, stok sınırı, satışta olmayan teklif; T6.4 — sepet kabuğu)
+## Bugünkü durum (T11.12 — market listesi; T11.7 — karşılama tanıtım bölümleri; T11.6 — karşılama ve giriş ekranı; T9.5 — teslimat adresi; T9.6 — genel arama; T8.5 — kimlik akışı; T7.6 — kalıcı sepet, stok sınırı, satışta olmayan teklif; T6.4 — sepet kabuğu)
 
 | Parça                   | Durum                                                                                                                                           |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Vite + React + router   | ✅ `/` oturumsuz: karşılama ekranı (T11.6); oturumda: teslimat adresi, genel arama (`?ara=`), yakındaki marketler · `/markets` · `/markets/:id` |
+| Vite + React + router   | ✅ `/` oturumsuz: karşılama ekranı (T11.6); oturumda: market listesi (T11.12), genel arama (`?ara=`) · `/markets` (aynı liste) · `/markets/:id` |
 | TanStack Query          | ✅ Yalnızca geçici hata (`SERVICE_UNAVAILABLE`) yeniden denenir; mutasyon denenmez                                                              |
 | HTTP istemcisi          | ✅ Zarf açıcı → `AppError`; mutasyon `Idempotency-Key`'siz derlenmez (ADR-08)                                                                   |
 | Idempotency key         | ✅ `crypto.randomUUID()`, sözleşmedeki uzunluk sınırıyla                                                                                        |
@@ -196,12 +196,35 @@ getirçarşı. Karşılama ekranının barıyla aynı renk; logo sarı "getir" +
   `welcome.json` ile aynı, test karşılaştırır), arama kutusunun yerinde hata mesajı ve "Tekrar dene". Oturumdaki
   kullanıcı her durumda çıkış yapabilir ve Hesabım'a gidebilir.
 
+## Market listesi (T11.12)
+
+Ana sayfa (oturumda, `?ara=` yokken) ve `/markets` aynı ekranı kullanır; referans getirçarşı işletme listesi.
+Ana sayfanın ürün kategorileri şeridi kalktı (karşılama ekranının kategori ızgarası yerinde).
+
+| Bölge           | Dosya                                                                  | İş                                                                                                       |
+| --------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Ekran           | `pages/markets/MarketListingScreen.tsx`                                | Birleştirir: liste (markets) sepeti, sepet (cart) market adreslerini tanımaz; Sepetim sağ sütun yuvasına |
+| Düzen           | `features/markets/ui/MarketListing.tsx`, `MarketListingView.tsx`       | ≥64rem üç sütun (1:2:1); altında tek sütun, menünün yerine çip satırı                                    |
+| Kategoriler     | `features/markets/ui/StoreTypeMenu.tsx`, `StoreTypeChips.tsx`          | Akordeon gruplar (küçük görsel, ok); açılınca adresteki sayılarıyla türler, tıklayınca süzer             |
+| Kart            | `features/markets/ui/MarketCard.tsx`                                   | Kapak + baş harf rozeti (logo yok), ad, puan, süre, min. tutar, ücretsiz teslimat eşiği, Kapalı          |
+| Sepetim         | `features/cart/ui/CartPanel.tsx`, `CartPanelView.tsx`, `CartBar.tsx`   | Genişte sağ panel (boş ya da dolu); telefon ve tablette altta sabit çubuk, yalnızca sepet doluyken       |
+| Süzgeç ve sayım | `features/markets/services/store-type-filter.ts`, `market-initials.ts` | `?tur=kasap` ↔ `KASAP`; adreste marketi olmayan tür ve grup gösterilmez; sıra yakından uzağa             |
+
+- **Gruplar ve tür adları içerikten:** `marketList.groups` (hangi tür hangi grupta) ve `storeTypes` gateway'in
+  `welcome.json`'ında; kodda sabit yok. Her tür tam bir gruptadır, adı tam bir kez yazılır (sözleşme ve gateway
+  denetler). Grup görselleri mevcut kapaklardır (`img/market/`, yukarıdaki lisans tablosu).
+- **İçerik gelmezse** liste içerik yedeğiyle (`CONTENT_FALLBACK.marketList`) çalışır; değerler `welcome.json`
+  ile aynıdır (contracts testi).
+- **Seçim adreste** (`?tur=`): geri tuşu bir önceki süzgece döner, adres paylaşılabilir. Bilinmeyen değer
+  süzgeç yok sayılır. Türü bilinmeyen market (eski catalog-service) yalnızca süzgeçsiz listede görünür.
+- **Sepetim:** hesap `@getir/pricing`'te (`useCartTotals`); "Sepete git" sepetin marketinin sayfasına gider.
+- Favori, görünüm düğmeleri ve indirim rozeti yok (veri yok; T11.11 kararı 4).
+
 ## Teslimat adresi (T9.5) — tasarımsız kabuk
 
 T11.10'dan beri üst bardaki arama kutusunun sağ ucunda (yukarıda); önce ana sayfada arama kutusunun
-üstündeydi. Yakındaki marketler (ana sayfada kategori
-şeridinin altında ve `/markets`) ile genel arama **seçili adresin konumuyla** sorulur; adres değişince hemen
-yenilenir. Kural veri katmanında, arayüz yalnızca çizer.
+üstündeydi. Market listesi (ana sayfa ve `/markets`, T11.12) ile genel arama **seçili adresin konumuyla**
+sorulur; adres değişince hemen yenilenir. Kural veri katmanında, arayüz yalnızca çizer.
 
 | Katman    | Dosya                                                            | İş                                                                                       |
 | --------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -282,10 +305,10 @@ katmanındadır.
   kelimede her kelime (T9.4).
 - **Genel arama (T9.6):** ana sayfada kategori şeridinin üstünde "Market ya da Ürün ara…" kutusu (aynı
   bileşen, `MarketSearchBox`; bekleme, 2 harf kuralı ve iptal market içi aramayla aynı). Arama varken
-  şeridin yerinde sonuçlar durur, temizlenince şerit döner; arama adreste (`/?ara=`). İstek
+  market listesinin yerinde sonuçlar durur, temizlenince liste döner; arama adreste (`/?ara=`). İstek
   `GET /v1/search` (`features/search`), konum seçili teslimat adresinden (T9.5).
-  - **Kart** (`SearchResultCard`): yakındaki market satırı (`NearbyMarketLine`, `/markets` listesiyle
-    aynı: ad, "Kapalı" rozeti, puan, mesafe, süre, min. sepet), en fazla 3 ürün satırı (market
+  - **Kart** (`SearchResultCard`): yakındaki market satırı (`NearbyMarketLine`: ad, "Kapalı" rozeti,
+    puan, mesafe, süre, min. sepet), en fazla 3 ürün satırı (market
     sayfasındaki satır ve düğme: "Ekle", adet, "Tükendi") ve fazlası için "+N ürün daha" (market sayfası
     aynı aramayla, `marketPath(id, arama)`). Yalnızca adı eşleşen markette ürün satırı yoktur.
   - **Sepet:** sonuçtan eklenir. Sepet tek markettir: başka marketin ürünü eklenince onay sorusu o
@@ -318,9 +341,9 @@ Ekranların **görsel tasarımı kullanıcının kararıdır** ve zamanı gelinc
 yalnızca veri katmanını ve okunur bir kabuğu kurar; yeni görsel karar yoktur, mevcut token'lar kullanılır.
 
 - **Konum:** seçili teslimat adresi (T9.5, `features/address`); oturumsuzken varsayılan "Ev".
-- **Ana sayfa:** logo, teslimat adresi (T9.5), genel arama kutusu (T9.6), kategori şeridi ve yakındaki
-  marketler (`/markets` ile aynı liste; ana sayfada başlığı h2). Market sayfası adresi ve parametreleri
-  (`?kategori=`, `?ara=`) `features/markets/routes.ts`'te tek yerde.
+- **Ana sayfa ve `/markets`:** market listesi (T11.12, yukarıda; ana sayfada liste başlığı h2, `/markets`'ta
+  h1). Market sayfası ve listenin adres parametreleri (`?kategori=`, `?ara=`, `?tur=`)
+  `features/markets/routes.ts`'te tek yerde.
 - **Seçili kategori adreste** (`?kategori=`): yenileme ve paylaşma seçimi korur.
 - **Stok gösterilmez:** `availableQuantity` bugün gelmiyor ("stok bilgisi yok"); sepet düğmeleri T6.4'te,
   "Satışta değil" durumu T7.6'da.

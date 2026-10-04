@@ -1,3 +1,4 @@
+import { CONTENT_FALLBACK } from '@getir/contracts';
 import { ERROR_CODES } from '@getir/core';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -126,6 +127,13 @@ const welcome = {
     accountLabel: 'Hesabım',
     logoutLabel: 'Çıkış yap',
     logoutPendingLabel: 'Çıkış yapılıyor…',
+  },
+  marketList: {
+    ...CONTENT_FALLBACK.marketList,
+    groups: CONTENT_FALLBACK.marketList.groups.map((group) => ({
+      ...group,
+      imageUrl: `${ASSET}${group.imageUrl}`,
+    })),
   },
 };
 

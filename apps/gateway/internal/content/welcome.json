@@ -140,5 +140,51 @@
     "accountLabel": "Hesabım",
     "logoutLabel": "Çıkış yap",
     "logoutPendingLabel": "Çıkış yapılıyor…"
+  },
+  "marketList": {
+    "categoriesTitle": "Kategoriler",
+    "allLabel": "Tümü",
+    "countLabel": "işletme listeleniyor",
+    "clearFilterLabel": "Filtreyi kaldır",
+    "loadingLabel": "İşletmeler yükleniyor…",
+    "emptyNotice": "Bölgende şu an hizmet veren işletme yok.",
+    "filterEmptyNotice": "Bu kategoride şu an işletme yok.",
+    "ratingLabel": "Puan",
+    "ratingCountLabel": "değerlendirme",
+    "minBasketLabel": "Min.",
+    "freeDeliveryThresholdLabel": "üzeri ücretsiz teslimat",
+    "closedLabel": "Kapalı",
+    "storeTypes": [
+      { "type": "MARKET", "label": "Market" },
+      { "type": "MANAV", "label": "Manav" },
+      { "type": "KASAP", "label": "Kasap" },
+      { "type": "SARKUTERI", "label": "Şarküteri" },
+      { "type": "KURUYEMIS", "label": "Kuruyemiş" },
+      { "type": "FIRIN", "label": "Fırın" },
+      { "type": "PETSHOP", "label": "Pet Shop" },
+      { "type": "CICEKCI", "label": "Çiçekçi" }
+    ],
+    "groups": [
+      {
+        "label": "Gıda & Market",
+        "imageUrl": "/img/market/market.jpg",
+        "types": ["MARKET", "MANAV", "KASAP", "SARKUTERI", "KURUYEMIS", "FIRIN"]
+      },
+      { "label": "Pet Shop", "imageUrl": "/img/market/petshop.jpg", "types": ["PETSHOP"] },
+      { "label": "Çiçek & Hediye", "imageUrl": "/img/market/cicekci.jpg", "types": ["CICEKCI"] }
+    ],
+    "cart": {
+      "title": "Sepetim",
+      "emptyTitle": "Sepetin şu an boş",
+      "emptyHint": "Sipariş vermek için sepetine ürün ekle",
+      "itemCountLabel": "ürün",
+      "subtotalLabel": "Ara toplam",
+      "deliveryLabel": "Teslimat",
+      "freeDeliveryLabel": "Ücretsiz",
+      "totalLabel": "Toplam",
+      "minBasketRemainingLabel": "Minimum sepet tutarına kalan",
+      "goToCartLabel": "Sepete git",
+      "clearLabel": "Sepeti boşalt"
+    }
   }
 }

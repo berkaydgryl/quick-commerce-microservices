@@ -202,3 +202,37 @@ func TestValidateMap(t *testing.T) {
 	welcome.AddressSetup.Map.Attribution = " "
 	expectProblem(t, welcome, "addressSetup.map.attribution bos")
 }
+
+func TestValidateMarketListStoreTypes(t *testing.T) {
+	// T11.12: her turun adi tam bir kez; eksik, tekrar ve bilinmeyen tur hata.
+	welcome := validWelcome(t)
+	welcome.MarketList.StoreTypes = welcome.MarketList.StoreTypes[1:]
+	expectProblem(t, welcome, "marketList.storeTypes: MARKET yok")
+
+	welcome = validWelcome(t)
+	welcome.MarketList.StoreTypes[1].Type = "MARKET"
+	expectProblem(t, welcome, "marketList.storeTypes: MARKET 2 kez yazilmis")
+
+	welcome = validWelcome(t)
+	welcome.MarketList.StoreTypes[0].Type = "BAKKAL"
+	expectProblem(t, welcome, `marketList.storeTypes: bilinmeyen tur "BAKKAL"`)
+}
+
+func TestValidateMarketListGroups(t *testing.T) {
+	// T11.12: her tur tam bir grupta; grupsuz tur menude gorunmezdi.
+	welcome := validWelcome(t)
+	welcome.MarketList.Groups[1].Types = []string{"PETSHOP"}
+	expectProblem(t, welcome, "marketList.groups: CICEKCI yok")
+
+	welcome = validWelcome(t)
+	welcome.MarketList.Groups[1].Types = append(welcome.MarketList.Groups[1].Types, "MARKET")
+	expectProblem(t, welcome, "marketList.groups: MARKET 2 kez yazilmis")
+
+	welcome = validWelcome(t)
+	welcome.MarketList.Groups[1].Types = nil
+	expectProblem(t, welcome, "marketList.groups[1].types bos")
+
+	welcome = validWelcome(t)
+	welcome.MarketList.Groups = nil
+	expectProblem(t, welcome, "marketList.groups bos")
+}

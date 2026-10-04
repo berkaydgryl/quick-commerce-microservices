@@ -68,6 +68,28 @@ const validJSON = `{
     "addressAddLabel": "Adres Ekle", "addressLoginLabel": "Adres seçmek için giriş yap",
     "noAddressNotice": "Kayıtlı adresin yok.", "addressLoadingLabel": "Adreslerin yükleniyor…", "profileLabel": "Profil",
     "accountLabel": "Hesabım", "logoutLabel": "Çıkış yap", "logoutPendingLabel": "Çıkış yapılıyor…"
+  },
+  "marketList": {
+    "categoriesTitle": "Kategoriler", "allLabel": "Tümü", "countLabel": "işletme listeleniyor",
+    "clearFilterLabel": "Filtreyi kaldır", "loadingLabel": "İşletmeler yükleniyor…",
+    "emptyNotice": "Bölgende işletme yok.", "filterEmptyNotice": "Bu kategoride işletme yok.",
+    "ratingLabel": "Puan", "ratingCountLabel": "değerlendirme", "minBasketLabel": "Min.",
+    "freeDeliveryThresholdLabel": "üzeri ücretsiz teslimat", "closedLabel": "Kapalı",
+    "storeTypes": [
+      {"type": "MARKET", "label": "Market"}, {"type": "MANAV", "label": "Manav"}, {"type": "KASAP", "label": "Kasap"},
+      {"type": "SARKUTERI", "label": "Şarküteri"}, {"type": "KURUYEMIS", "label": "Kuruyemiş"},
+      {"type": "FIRIN", "label": "Fırın"}, {"type": "PETSHOP", "label": "Pet Shop"}, {"type": "CICEKCI", "label": "Çiçekçi"}
+    ],
+    "groups": [
+      {"label": "Gıda & Market", "imageUrl": "/img/market/market.jpg",
+        "types": ["MARKET", "MANAV", "KASAP", "SARKUTERI", "KURUYEMIS", "FIRIN"]},
+      {"label": "Diğer", "imageUrl": "/img/market/petshop.jpg", "types": ["PETSHOP", "CICEKCI"]}
+    ],
+    "cart": {
+      "title": "Sepetim", "emptyTitle": "Sepetin şu an boş", "emptyHint": "Sepetine ürün ekle", "itemCountLabel": "ürün",
+      "subtotalLabel": "Ara toplam", "deliveryLabel": "Teslimat", "freeDeliveryLabel": "Ücretsiz", "totalLabel": "Toplam",
+      "minBasketRemainingLabel": "Minimum sepet tutarına kalan", "goToCartLabel": "Sepete git", "clearLabel": "Sepeti boşalt"
+    }
   }
 }`
 
@@ -98,6 +120,15 @@ func TestEmbeddedWelcomeLoads(t *testing.T) {
 	if len(welcome.Features) != 3 {
 		t.Errorf("uc tanitim kutusu bekleniyordu: %d", len(welcome.Features))
 	}
+	// Market listesi (T11.12): grup gorselleri kokun altinda; her tur tam bir grupta (validate).
+	for _, group := range welcome.MarketList.Groups {
+		if !strings.HasPrefix(group.ImageURL, testAssetBase+"/img/market/") {
+			t.Errorf("grup gorseli kokun altinda olmali: %+v", group)
+		}
+	}
+	if len(welcome.MarketList.StoreTypes) != len(storeTypes) {
+		t.Errorf("her dukkan turunun adi olmali: %d", len(welcome.MarketList.StoreTypes))
+	}
 	// Adres penceresi (T11.8): uc tur, karo adresi disari giden adres oldugu gibi.
 	if setup := welcome.AddressSetup; len(setup.Kinds) != 3 || setup.Map.TileURL != "https://tile.openstreetmap.org/{z}/{x}/{y}.png" {
 		t.Errorf("adres penceresi: %d tur, karo %q", len(setup.Kinds), setup.Map.TileURL)
@@ -125,6 +156,9 @@ func TestParseResolvesImagesWithoutTouchingTexts(t *testing.T) {
 	}
 	if got := welcome.Hero.Banner.Sources[0].URL; got != testAssetBase+"/img/banner/a-960.jpg" {
 		t.Errorf("banner adresi: %q", got)
+	}
+	if got := welcome.MarketList.Groups[1].ImageURL; got != testAssetBase+"/img/market/petshop.jpg" {
+		t.Errorf("grup gorseli: %q", got)
 	}
 	if welcome.Hero.Title != "Kapına gelen market" || welcome.LoginCard.Login.PendingLabel != "Giriş yapılıyor…" {
 		t.Errorf("metinler oldugu gibi kalmali: %+v", welcome)

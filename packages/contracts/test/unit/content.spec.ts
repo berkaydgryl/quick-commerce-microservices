@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CONTENT_FALLBACK,
   CONTENT_BANNER_SOURCES_MAX,
   CONTENT_FEATURES_MAX,
   CONTENT_PHONE_COUNTRIES_MAX,
@@ -27,6 +28,15 @@ const STORE = {
   label: "App Store'dan indir",
   url: 'https://apps.apple.com/app/id995280265',
   badge: { url: `${ASSET}/img/store/app-store.svg`, width: 160, height: 48 },
+};
+
+/** Market listesi (T11.12): yedekle ayni metinler, gorseller mutlak adres. */
+const MARKET_LIST = {
+  ...CONTENT_FALLBACK.marketList,
+  groups: CONTENT_FALLBACK.marketList.groups.map((group) => ({
+    ...group,
+    imageUrl: `${ASSET}${group.imageUrl}`,
+  })),
 };
 
 const FEATURE = {
@@ -145,7 +155,13 @@ const WELCOME: WelcomeContent = {
     logoutLabel: 'Çıkış yap',
     logoutPendingLabel: 'Çıkış yapılıyor…',
   },
+  marketList: MARKET_LIST,
 };
+
+const withMarketList = (marketList: Partial<WelcomeContent['marketList']>) => ({
+  ...WELCOME,
+  marketList: { ...MARKET_LIST, ...marketList },
+});
 
 const withAppDownload = (appDownload: Partial<WelcomeContent['appDownload']>) => ({
   ...WELCOME,
@@ -269,5 +285,53 @@ describe('welcomeContentSchema', () => {
       welcomeContentSchema.safeParse({ ...WELCOME, addressSetup: { ...ADDRESS_SETUP, kinds } })
         .success,
     ).toBe(false);
+  });
+});
+
+describe('marketList (T11.12)', () => {
+  const [food, pet, flower] = MARKET_LIST.groups;
+
+  it('gruplar ve tur adlari icerikten: her tur tam bir grupta, adi tam bir kez', () => {
+    expect(welcomeContentSchema.safeParse(WELCOME).success).toBe(true);
+  });
+
+  it('gruba alinmamis tur reddedilir (menude gorunmeyen market olurdu)', () => {
+    const groups = [food, pet].filter((group) => group !== undefined);
+    expect(welcomeContentSchema.safeParse(withMarketList({ groups })).success).toBe(false);
+  });
+
+  it('iki gruba yazilmis tur reddedilir', () => {
+    const groups = [
+      food,
+      pet,
+      flower,
+      { label: 'Tekrar', imageUrl: `${ASSET}/a.jpg`, types: ['KASAP' as const] },
+    ].filter((group) => group !== undefined);
+    expect(welcomeContentSchema.safeParse(withMarketList({ groups })).success).toBe(false);
+  });
+
+  it('adi eksik ya da iki kez yazilmis tur reddedilir', () => {
+    const [first, ...rest] = MARKET_LIST.storeTypes;
+    expect(welcomeContentSchema.safeParse(withMarketList({ storeTypes: rest })).success).toBe(
+      false,
+    );
+    const doubled = first === undefined ? rest : [first, first, ...rest.slice(1)];
+    expect(welcomeContentSchema.safeParse(withMarketList({ storeTypes: doubled })).success).toBe(
+      false,
+    );
+  });
+
+  it('grup gorseli mutlak adres olmali (gateway kurar)', () => {
+    const groups = MARKET_LIST.groups.map((group) => ({
+      ...group,
+      imageUrl: '/img/market/market.jpg',
+    }));
+    expect(welcomeContentSchema.safeParse(withMarketList({ groups })).success).toBe(false);
+  });
+
+  it('bilinmeyen tur reddedilir', () => {
+    const storeTypes = [{ type: 'BAKKAL', label: 'Bakkal' }, ...MARKET_LIST.storeTypes.slice(1)];
+    const content = { ...WELCOME, marketList: { ...MARKET_LIST, storeTypes } };
+    expect(welcomeContentSchema.safeParse(content).success).toBe(false);
   });
 });

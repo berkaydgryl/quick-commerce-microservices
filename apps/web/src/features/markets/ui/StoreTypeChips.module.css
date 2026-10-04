@@ -1,0 +1,34 @@
+/* Cip satiri (T11.12): yalnizca kendi icinde yatay kayar; sayfa yatay kaymaz. */
+.c-store-chips {
+  display: flex;
+  gap: var(--space-2);
+  padding-block: var(--space-1);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.c-store-chips__chip {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  background: var(--bg-surface);
+  border: var(--border-width-thin) solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+}
+
+.c-store-chips__chip.is-active {
+  color: var(--text-on-brand);
+  background: var(--color-brand-primary);
+  border-color: var(--color-brand-primary);
+}
+
+.c-store-chips__count {
+  font-size: var(--font-size-xs);
+  opacity: var(--opacity-disabled);
+}

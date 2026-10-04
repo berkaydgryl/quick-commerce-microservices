@@ -1,0 +1,119 @@
+/* Sepetim paneli (T11.12; referans getircarsi): baslik ustte, beyaz kart altta. */
+.c-cart-panel {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.c-cart-panel__title {
+  font-size: var(--font-size-md);
+}
+
+.c-cart-panel__card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-cart-panel__empty {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.c-cart-panel__empty-icon {
+  display: grid;
+  place-items: center;
+  width: var(--size-cart-empty-icon);
+  height: var(--size-cart-empty-icon);
+  padding: var(--space-2);
+  color: var(--color-brand-primary);
+  background: var(--color-brand-primary-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.c-cart-panel__empty-title {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+}
+
+.c-cart-panel__empty-hint {
+  font-size: var(--font-size-sm);
+}
+
+.c-cart-panel__market {
+  font-weight: var(--font-weight-bold);
+}
+
+.c-cart-panel__items {
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+}
+
+.c-cart-panel__item {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: space-between;
+}
+
+.c-cart-panel__lines {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-1) var(--space-3);
+  padding-block-start: var(--space-3);
+  font-size: var(--font-size-sm);
+  border-block-start: var(--border-width-thin) solid var(--border-subtle);
+}
+
+.c-cart-panel__lines dd {
+  text-align: end;
+}
+
+.c-cart-panel__total {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+}
+
+.c-cart-panel__notice {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-brand-primary);
+  background: var(--color-brand-primary-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.c-cart-panel__actions {
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* Ana eylem: sari zemin, mor yazi (giris kartindaki ana dugme gibi). */
+.c-cart-panel__go {
+  padding: var(--space-3) var(--space-4);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-on-accent);
+  text-align: center;
+  text-decoration: none;
+  background: var(--color-brand-accent);
+  border-radius: var(--radius-pill);
+  transition: background var(--duration-fast) var(--easing-standard);
+}
+
+.c-cart-panel__go:hover {
+  background: var(--color-brand-accent-strong);
+}
+
+.c-cart-panel__clear {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-muted);
+  cursor: pointer;
+  background: none;
+  border: var(--border-width-thin) solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+}

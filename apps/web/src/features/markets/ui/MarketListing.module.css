@@ -1,0 +1,80 @@
+/*
+ * Market listesi duzeni (T11.12; referans getircarsi). Mobil oncelikli: tek
+ * sutun, cip satiri ustte. Genis ekranda (64rem) uc sutun, oranla 1:2:1; sol
+ * menu ve Sepetim sayfa kayarken yapisik ust barin altinda kalir. Sutunlar
+ * minmax(0, ...): kayan cip satiri sutunu iceriginin genisligine itmesin.
+ */
+.c-market-listing {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+}
+
+.c-market-listing__placeholder {
+  min-height: var(--size-field-min-height);
+}
+
+.c-market-listing__menu,
+.c-market-listing__aside {
+  display: none;
+}
+
+.c-market-listing__main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  align-content: start;
+  min-width: 0;
+}
+
+.c-market-listing__header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.c-market-listing__title {
+  font-size: var(--font-size-md);
+}
+
+.c-market-listing__count {
+  color: var(--color-brand-primary);
+}
+
+.c-market-listing__clear {
+  padding: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-brand-primary);
+  text-decoration: underline;
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.c-market-listing__list {
+  display: grid;
+  gap: var(--space-4);
+}
+
+@media (--bp-lg) {
+  .c-market-listing {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  /* Ust barin yuksekligi (arama kutusu + barin dikey boslugu, PageLayout) kadar asagida yapisir. */
+  .c-market-listing__menu,
+  .c-market-listing__aside {
+    position: sticky;
+    top: calc(var(--size-header-search) + var(--space-3) * 2 + var(--space-4));
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  .c-market-listing__chips {
+    display: none;
+  }
+}

@@ -14,6 +14,7 @@ import {
   EMPTY_CART,
   isSoldOut,
   itemCount,
+  lineTotalMinor,
   quantityOf,
   removeItem,
   startNewCart,
@@ -122,6 +123,12 @@ describe('adet ve fiyat', () => {
     const one = decrementItem(two, SUT.offerId);
     expect(quantityOf(one, SUT.offerId)).toBe(1);
     expect(decrementItem(one, SUT.offerId)).toEqual(EMPTY_CART);
+  });
+
+  it('kalem tutari birim fiyat x adet, kurus (Sepetim paneli, T11.12)', () => {
+    const [line] = addMany(EMPTY_CART, SUT, 3).items;
+
+    expect(line === undefined ? undefined : lineTotalMinor(line)).toBe(3 * 3490);
   });
 
   it('sepette olmayan urunu azaltmak sepeti degistirmez', () => {

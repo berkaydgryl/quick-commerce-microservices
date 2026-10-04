@@ -1,0 +1,139 @@
+/*
+ * Market karti (T11.12; referans getircarsi). Telefonda kapak ustte; tablet ve
+ * genis ekranda yatay: solda kapak, sagda bilgiler. Kartin tamami baglantidir.
+ */
+.c-market-card__link {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  color: inherit;
+  text-decoration: none;
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-surface);
+  transition: box-shadow var(--duration-fast) var(--easing-standard);
+}
+
+.c-market-card__link:hover {
+  box-shadow: var(--shadow-raised);
+}
+
+.c-market-card__media {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: var(--ratio-market-cover);
+  background: var(--color-brand-primary-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.c-market-card__cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Logonun yerine bas harf rozeti (referanstaki beyaz logo kutusu). */
+.c-market-card__badge {
+  position: absolute;
+  inset-block-end: var(--space-2);
+  inset-inline-start: var(--space-2);
+  display: grid;
+  place-items: center;
+  width: var(--size-market-badge);
+  height: var(--size-market-badge);
+  font-weight: var(--font-weight-extrabold);
+  color: var(--color-brand-primary);
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-market-card__body {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  min-width: 0;
+}
+
+.c-market-card__top {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.c-market-card__name {
+  min-width: 0;
+  font-size: var(--font-size-md);
+  overflow-wrap: anywhere;
+}
+
+.c-market-card__rating {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: var(--space-1);
+  align-items: center;
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+  border: var(--border-width-thin) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.c-market-card__star {
+  width: var(--size-rating-icon);
+  height: var(--size-rating-icon);
+}
+
+.c-market-card__rating-count {
+  font-weight: var(--font-weight-regular);
+  color: var(--text-muted);
+}
+
+.c-market-card__meta {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.c-market-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.c-market-card__tag {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-brand-primary);
+  background: var(--color-brand-primary-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.c-market-card__tag--closed {
+  color: var(--text-on-brand);
+  background: var(--text-muted);
+}
+
+/* Ekranda gorunmez, ekran okuyucu okur ("Puan 4,7 (1200 değerlendirme)"). */
+.c-market-card__sr {
+  position: absolute;
+  width: var(--size-visually-hidden);
+  height: var(--size-visually-hidden);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Kapali market listede kalir, soluk gorunur. */
+.c-market-card.is-closed .c-market-card__media {
+  opacity: var(--opacity-disabled);
+}
+
+@media (--bp-md) {
+  .c-market-card__link {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    gap: var(--space-4);
+  }
+}

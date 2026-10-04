@@ -1,17 +1,15 @@
-import { useDeliveryLocation } from '../../features/address/hooks/useDeliveryLocation';
-import { NearbyMarketsSection } from '../../features/markets/ui/NearbyMarketsSection';
 import { PageLayout } from '../../shared/ui/page-layout/PageLayout';
 
+import { MarketListingScreen } from './MarketListingScreen';
+
 /**
- * /markets - teslimat adresine hizmet veren marketler. Adres ana sayfada
- * secilir (T9.5); bu sayfa secili adresi izler.
+ * /markets - teslimat adresine hizmet veren marketler: ana sayfadaki market
+ * listesinin aynisi (T11.12), sayfanin ana basligi listenin basligidir.
  */
 export function NearbyMarketsPage() {
-  const location = useDeliveryLocation();
-
   return (
     <PageLayout>
-      <NearbyMarketsSection location={location} />
+      <MarketListingScreen headingLevel={1} />
     </PageLayout>
   );
 }

@@ -10,6 +10,14 @@ export const MARKET_PARAMS = {
 } as const;
 
 /**
+ * Market listesinin adreste duran secimi (T11.12): dukkan turu, kucuk harf
+ * ("?tur=kasap"). Geri tusu bir onceki suzgece doner; adres paylasilabilir.
+ */
+export const MARKET_LIST_PARAMS = {
+  storeType: 'tur',
+} as const;
+
+/**
  * Market sayfasinin adresi. Arama verilirse sayfa o aramayla acilir: genel
  * aramadaki "+N urun daha" market sayfasini ayni aramayla acar (T9.6).
  */

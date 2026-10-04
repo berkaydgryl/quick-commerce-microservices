@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { CONTENT_FALLBACK } from '../../src/index.js';
+import { CONTENT_FALLBACK, marketListContentSchema } from '../../src/index.js';
 
 const WELCOME = JSON.parse(
   readFileSync(
@@ -21,7 +21,16 @@ const WELCOME = JSON.parse(
 ) as {
   header: Record<string, string>;
   appHeader: Record<string, string>;
+  marketList: unknown;
 };
+
+/** Yapidaki butun metinler (dizi ve ic nesneler dahil). */
+function texts(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(texts);
+  if (typeof value === 'object' && value !== null) return Object.values(value).flatMap(texts);
+  return [];
+}
 
 describe('CONTENT_FALLBACK', () => {
   it('logo ve giris metni welcome.json header ile ayni', () => {
@@ -41,9 +50,26 @@ describe('CONTENT_FALLBACK', () => {
     }
   });
 
+  it('market listesi (T11.12) welcome.json marketList ile birebir: gruplar ve turler dahil', () => {
+    expect(CONTENT_FALLBACK.marketList).toEqual(WELCOME.marketList);
+  });
+
+  it('yedegin market listesi sozlesmeden gecer (gorseller mutlak adrese cevrilince)', () => {
+    const { marketList } = CONTENT_FALLBACK;
+    const absolute = {
+      ...marketList,
+      groups: marketList.groups.map((group) => ({
+        ...group,
+        imageUrl: `https://cdn.example.com${group.imageUrl}`,
+      })),
+    };
+
+    expect(marketListContentSchema.safeParse(absolute).success).toBe(true);
+  });
+
   it('bos metin yok', () => {
-    for (const [key, value] of Object.entries(CONTENT_FALLBACK)) {
-      expect(value.trim(), key).not.toBe('');
+    for (const text of texts(CONTENT_FALLBACK)) {
+      expect(text.trim()).not.toBe('');
     }
   });
 });

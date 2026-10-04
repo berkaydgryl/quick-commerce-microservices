@@ -1,0 +1,50 @@
+/*
+ * Telefondaki sepet cubugu (T11.12): ekranin altinda sabit, mor. Cubugun
+ * icinde odak halkasi beyazdir (mor zeminde mor halka gorunmezdi). Genis
+ * ekranda (64rem) gizli: sag sutunda Sepetim paneli var.
+ */
+.c-cart-bar__spacer {
+  height: calc(var(--size-cart-bar) + var(--space-4));
+}
+
+.c-cart-bar {
+  --focus-ring-color: var(--text-on-brand);
+
+  position: fixed;
+  inset-inline: 0;
+  inset-block-end: 0;
+  z-index: var(--z-cart-bar);
+  padding: var(--space-2) var(--space-gutter) calc(var(--space-2) + env(safe-area-inset-bottom));
+  color: var(--text-on-brand);
+  background: var(--color-brand-primary);
+  box-shadow: var(--shadow-raised);
+}
+
+.c-cart-bar__link {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--size-cart-bar);
+  font-weight: var(--font-weight-bold);
+  color: inherit;
+  text-decoration: none;
+}
+
+.c-cart-bar__go {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.c-cart-bar__icon {
+  width: var(--size-header-icon);
+  height: var(--size-header-icon);
+}
+
+@media (--bp-lg) {
+  .c-cart-bar,
+  .c-cart-bar__spacer {
+    display: none;
+  }
+}
