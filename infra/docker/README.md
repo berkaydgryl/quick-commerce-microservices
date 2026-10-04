@@ -59,6 +59,7 @@ koleksiyonuna erisim Mongo tarafindan reddedilir (`not authorized`).
 | order     | `getir_order`     | `ORDER_MONGO_URI`     |
 | payment   | `getir_payment`   | `PAYMENT_MONGO_URI`   |
 | risk      | `getir_risk`      | `RISK_MONGO_URI`      |
+| courier   | `getir_courier`   | `COURIER_MONGO_URI`   |
 | gateway   | `getir_gateway`   | `GATEWAY_MONGO_URI`   |
 
 - Kullanicilar kok `.env`'den gelir (compose `env_file`): kok kullanici

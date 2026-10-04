@@ -286,7 +286,7 @@ itibarıyla geçmelidir; geçmiyorsa kurulum tamamlanmamıştır, devam etme.
 
 ```bash
 pnpm infra:up     # Mongo (replica set) + Redis + Jaeger (D15)
-pnpm seed         # catalog'u derler; 13 kategori, 49 urun, 21 market, 166 teklif yazar (tekrar kosmak guvenli)
+pnpm seed         # catalog, inventory ve courier'i derler; katalog (13 kategori, 49 urun, 21 market, 166 teklif), stok ve 63 kurye yazar; tekrar kosmak guvenli, atanmis kuryeler IDLE'a doner
 ```
 
 Seed kök `.env`'yi okur (yoksa ortam değişkenlerini). `NODE_ENV=production` iken reddeder.
@@ -315,7 +315,7 @@ Hepsi depo kökünden `pnpm <komut>` ile çalışır. `make` bu projede zorunlu 
 | `test:int`      | `vitest run --config vitest.integration.config.ts`                                                    | Testcontainers ile Mongo/Redis entegrasyon testleri                    | Çalışıyor (T2.5)                        |
 | `race`          | `vitest run` (`apps/inventory-service/test/integration/race.spec.ts`)                                 | 100 eş zamanlı rezervasyon, stok 1: tam 1 başarı (Docker)              | Çalışıyor (T11.1)                       |
 | `demo`          | `node -e "..."`                                                                                       | Uçtan uca demo: sipariş → ödeme → kurye akışı                          | **Placeholder — Gün 15 (T15.1)**        |
-| `seed`          | `turbo run build` (catalog + inventory) `&& … seed` (ikisi)                                           | Katalogu ve stoğu Mongo'ya baştan yazar; stok sayaçları Redis'te       | Çalışıyor (T4.1 katalog, T9.1 stok)     |
+| `seed`          | `turbo run build` (catalog + inventory + courier) `&& … seed` (üçü)                                   | Katalogu, stoğu ve kuryeleri Mongo'ya baştan yazar; sayaçlar Redis'te  | Çalışıyor (T4.1, T9.1, T13.1)           |
 | `migrate`       | `node scripts/migrate.mjs up\|status`                                                                 | Servislerin bekleyen göçleri (ADR-19); `down` servis bazında           | Çalışıyor (T10.4)                       |
 | `proto:gen`     | `pnpm --filter @getir/proto generate`                                                                 | `.proto` dosyalarından **TS ve Go** kodu üretir (Go kurulu olmalı)     | Çalışıyor (T2.3)                        |
 | `proto:gen:ts`  | `pnpm --filter @getir/proto generate:ts`                                                              | Yalnızca TypeScript çıktısı; Go gerektirmez                            | Çalışıyor (T2.3)                        |
@@ -357,12 +357,13 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/cat
 | [`order-service`](apps/order-service/README.md) (T7.5)     | 50053 | Taslak (catalog fiyatıyla), saga (risk → ödeme → 3DS), iptal, geçmiş, outbox → olay                                   |
 | [`payment-service`](apps/payment-service/README.md) (T5.3) | 50054 | `Charge`, `Confirm3Ds` — mock kart + 3DS, idempotent; Mongo `payments` ya da `MOCK`                                   |
 | [`risk-service`](apps/risk-service/README.md) (T6.3)       | 50055 | `Evaluate`, `GetLastEvaluation` — 6 kural, veto, `risk_events` (Mongo ya da `MOCK`)                                   |
+| [`courier-service`](apps/courier-service/README.md)        | 50056 | (T13.1) `AssignCourier` (atomik, tekrar güvenli), `GetCourier`, `ReleaseCourier`; `couriers` (Mongo ya da `MOCK`)     |
 | [`realtime-service`](apps/realtime-service/README.md)      | 3001  | Socket.io odaları: `room.join` + oda jetonu (T12.2), Redis adapter; `order.status` canlı (T12.3)                      |
 | [`gateway`](apps/gateway/README.md) (Go, T7.5)             | 8080  | Katalog uçları (stoksuz) ve sipariş uçları: `POST /v1/cart/reserve`, `POST /v1/orders`, `/3ds`, `GET /v1/orders/{id}` |
 
 Katalog T4.1'den beri Mongo'dan okur: `MOCK=true` ise aynı demo verisini bellekten döndürür
 ve Mongo istemez, değilse `CATALOG_MONGO_URI` zorunludur (yoksa açılışta ölür). Kök `.env` varsa okunur;
-`.env.example`'da `MOCK=true`'dur. Sipariş, ödeme ve risk servisleri de aynı kurala uyar (`MOCK=true` →
+`.env.example`'da `MOCK=true`'dur. Sipariş, ödeme, risk ve kurye servisleri de aynı kurala uyar (`MOCK=true` →
 bellek, değilse kendi `<SERVİS>_MONGO_URI`'si; order ve payment ayrıca Redis ister).
 
 ### Entegrasyon testleri ve Docker

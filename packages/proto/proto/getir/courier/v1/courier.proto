@@ -34,6 +34,9 @@ service CourierService {
 
   // Rotayi uretir ve GPS simulasyonunu baslatir.
   rpc StartRoute(StartRouteRequest) returns (StartRouteResponse);
+
+  // Siparisi tasiyan kuryeyi bosa cikarir (BUSY -> IDLE).
+  rpc ReleaseCourier(ReleaseCourierRequest) returns (ReleaseCourierResponse);
 }
 
 // Kuryenin musaitlik durumu.
@@ -143,4 +146,22 @@ message StartRouteResponse {
 
   // true ise rota bu cagridan ONCE de baslatilmisti.
   bool already_started = 3;
+}
+
+message ReleaseCourierRequest {
+  // Kurye siparisle bulunur: bir siparisi en fazla bir kurye tasir.
+  string order_id = 1;
+}
+
+// Bosa cikarma cevabi.
+//
+// Tekrar guvenlidir: siparisi tasiyan kurye yoksa (zaten birakilmis ya da hic
+// atanmamis) hata degil released = false doner. Order, atamadan sonra siparisi
+// yazamazsa (siparis bu arada iptal edildi) kuryeyi bununla geri verir.
+message ReleaseCourierResponse {
+  // true ise bu cagri bir kuryeyi IDLE'a dondurdu.
+  bool released = 1;
+
+  // Birakilan kurye; released = false ise bostur.
+  string courier_id = 2;
 }

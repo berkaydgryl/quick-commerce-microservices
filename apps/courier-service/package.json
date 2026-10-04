@@ -1,0 +1,34 @@
+{
+  "name": "@getir/courier-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Kurye servisi: couriers koleksiyonu, atomik kurye atamasi ve birakma (gRPC), demo kurye seed'i",
+  "main": "./dist/main.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "dev": "node --env-file-if-exists=../../.env --watch dist/main.js",
+    "start": "node --env-file-if-exists=../../.env dist/main.js",
+    "migrate": "node --env-file-if-exists=../../.env dist/migrate.js",
+    "seed": "node --env-file-if-exists=../../.env dist/seed.js",
+    "healthcheck": "node dist/healthcheck.js",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\""
+  },
+  "dependencies": {
+    "@getir/contracts": "workspace:*",
+    "@getir/core": "workspace:*",
+    "@getir/mongo-kit": "workspace:*",
+    "@getir/proto": "workspace:*",
+    "@getir/service-kit": "workspace:*",
+    "@grpc/grpc-js": "^1.14.5",
+    "mongodb": "^7.6.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@testcontainers/mongodb": "^12.1.0"
+  }
+}

@@ -12,7 +12,7 @@ henüz sahibi ayakta olmayan veri ve bu düzenin açıklaması var.
 | 5 persona hesabı + Ali'nin 3 ek hesabı      | gateway (users) | `apps/gateway/internal/persona/personas.json`                      | `pnpm seed:personas` (T8.1); MOCK'ta açılışta     |
 | Personaların sipariş geçmişi                | order           | `apps/order-service/src/infrastructure/fixtures/persona-orders.ts` | `pnpm seed:personas` (T8.1); MOCK'ta açılışta     |
 | Stok                                        | inventory       | —                                                                  | T9.1                                              |
-| 3 kurye                                     | courier         | —                                                                  | T13.1                                             |
+| 63 kurye (21 market × 3)                    | courier         | `apps/courier-service/src/infrastructure/fixtures/couriers.ts`     | `pnpm seed` (T13.1)                               |
 
 **Neden veri servisin içinde (roadmap `infra/seed/data/*.json` diyordu):**
 
