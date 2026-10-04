@@ -1,6 +1,6 @@
 /**
- * T13.1 atama use-case'i: atomik secim depoda (sozlesme testi), burada
- * tekrar ve eszamanlilik kurallari, NOT_FOUND ve gunluk.
+ * Atama use-case'i (T13.1; havuz T13.2): atomik secim depoda (sozlesme testi),
+ * burada market konumu, tekrar ve eszamanlilik kurallari, NOT_FOUND ve gunluk.
  */
 
 import { AppError, ERROR_CODES, fixedClock } from '@getir/core';
@@ -8,28 +8,36 @@ import { recordingLogger } from '@getir/core/testing';
 import type { LogLine } from '@getir/core/testing';
 import { describe, expect, it } from 'vitest';
 
-import { createAssignCourier } from '../../src/application/assign-courier.js';
-import { createLeastRecentlyAssignedStrategy } from '../../src/application/least-recently-assigned.js';
+import { createAssignCourier, MARKET_UNKNOWN } from '../../src/application/assign-courier.js';
+import { createNearestAvailableStrategy } from '../../src/application/nearest-available.js';
 import { ETA_NOT_COMPUTED_SECONDS } from '../../src/config/constants.js';
 import type { AssignmentStrategy } from '../../src/domain/assignment-strategy.js';
 import { COURIER_STATUS } from '../../src/domain/courier.js';
 import type { Courier } from '../../src/domain/courier.js';
 import { InMemoryCourierStore } from '../../src/infrastructure/memory/in-memory-courier-store.js';
-import { courier, courierId, DELIVERY, MARKET, NOW_MS, orderId } from '../support/couriers.js';
+import {
+  courier,
+  courierId,
+  DELIVERY,
+  FAR_MARKET,
+  MARKET,
+  NOW_MS,
+  orderId,
+  POOL_RULE,
+  TEST_MARKETS,
+} from '../support/couriers.js';
 
 function setup(couriers: readonly Courier[], strategy?: AssignmentStrategy) {
-  const repository = new InMemoryCourierStore(couriers);
+  const repository = new InMemoryCourierStore(couriers, TEST_MARKETS);
   const lines: LogLine[] = [];
   const assign = createAssignCourier({
     repository,
-    strategy: strategy ?? createLeastRecentlyAssignedStrategy(repository),
+    markets: repository,
+    strategy: strategy ?? createNearestAvailableStrategy(repository, POOL_RULE),
     clock: fixedClock(NOW_MS),
   });
-  const run = (order: string) =>
-    assign(
-      { orderId: order, marketId: MARKET, deliveryLocation: DELIVERY },
-      recordingLogger(lines),
-    );
+  const run = (order: string, marketId = MARKET) =>
+    assign({ orderId: order, marketId, deliveryLocation: DELIVERY }, recordingLogger(lines));
   return { repository, lines, run };
 }
 
@@ -69,7 +77,7 @@ describe('createAssignCourier', () => {
           orderId: order,
           courierId: courierId(1),
           marketId: MARKET,
-          strategy: 'least-recently-assigned',
+          strategy: 'nearest-available',
         },
       },
     ]);
@@ -87,8 +95,8 @@ describe('createAssignCourier', () => {
   });
 
   it('tekrar istek secim (yazim) denemez: siparisin kuryesi once okunur', async () => {
-    const repository = new InMemoryCourierStore([courier(1), courier(2)]);
-    const real = createLeastRecentlyAssignedStrategy(repository);
+    const repository = new InMemoryCourierStore([courier(1), courier(2)], TEST_MARKETS);
+    const real = createNearestAvailableStrategy(repository, POOL_RULE);
     let claims = 0;
     const counting: AssignmentStrategy = {
       name: real.name,
@@ -100,6 +108,7 @@ describe('createAssignCourier', () => {
     const lines: LogLine[] = [];
     const assign = createAssignCourier({
       repository,
+      markets: repository,
       strategy: counting,
       clock: fixedClock(NOW_MS),
     });
@@ -145,8 +154,45 @@ describe('createAssignCourier', () => {
 
     await expect(run(orderId())).rejects.toMatchObject({
       code: ERROR_CODES.NOT_FOUND,
+      message: 'Marketin cevresinde uygun kurye yok',
       details: { marketId: MARKET },
     });
+  });
+
+  it('baska semtin marketi (havuz disi kurye): NOT_FOUND, kurye degismez', async () => {
+    const { run, repository } = setup([courier(1)]);
+
+    await expect(run(orderId(), FAR_MARKET)).rejects.toMatchObject({
+      code: ERROR_CODES.NOT_FOUND,
+      details: { marketId: FAR_MARKET },
+    });
+    expect((await repository.findById(courierId(1)))?.status).toBe(COURIER_STATUS.IDLE);
+  });
+
+  it('market kopyada yok: NOT_FOUND (reason market_unknown) ve WARN; secim denenmez', async () => {
+    let claims = 0;
+    const counting: AssignmentStrategy = {
+      name: 'sayan',
+      claim: () => {
+        claims += 1;
+        return Promise.resolve(null);
+      },
+    };
+    const { run, lines } = setup([courier(1)], counting);
+    const order = orderId();
+
+    await expect(run(order, 'mkt_boyle-bir-market-yok')).rejects.toMatchObject({
+      code: ERROR_CODES.NOT_FOUND,
+      details: { marketId: 'mkt_boyle-bir-market-yok', reason: MARKET_UNKNOWN },
+    });
+    expect(claims).toBe(0);
+    expect(lines).toEqual([
+      {
+        level: 'warn',
+        message: 'market konumu bilinmiyor',
+        fields: { orderId: order, marketId: 'mkt_boyle-bir-market-yok' },
+      },
+    ]);
   });
 
   it('eszamanli istek kazandiysa (CONFLICT) kazananin kuryesi okunur ve doner', async () => {
@@ -156,12 +202,13 @@ describe('createAssignCourier', () => {
       currentOrderId: order,
       lastAssignedAt: new Date(NOW_MS),
     });
-    const repository = new InMemoryCourierStore([courier(1)]);
+    const repository = new InMemoryCourierStore([courier(1)], TEST_MARKETS);
     const assign = createAssignCourier({
       repository,
+      markets: repository,
       // Secim aninda baska istek ayni siparise kurye 7'yi baglamis olur.
       strategy: losingStrategy(() => {
-        void repository.replaceAll([courier(1), winner]);
+        void repository.replaceAll([courier(1), winner], TEST_MARKETS);
       }),
       clock: fixedClock(NOW_MS),
     });

@@ -3,11 +3,15 @@
  * testinden gecer (test/support/courier-store-contract.ts).
  */
 
-import type { Courier } from './courier.js';
+import type { Courier, GeoPoint } from './courier.js';
+import type { PoolRule } from './courier-pool.js';
+import type { MarketLocation } from './market-locator.js';
 
-export interface ClaimRequest {
-  readonly marketId: string;
+export interface NearestClaimRequest {
   readonly orderId: string;
+  /** Siparisin marketinin konumu: havuzun merkezi. */
+  readonly near: GeoPoint;
+  readonly rule: PoolRule;
   readonly at: Date;
 }
 
@@ -18,25 +22,28 @@ export interface CourierRepository {
   findByOrder(orderId: string): Promise<Courier | null>;
 
   /**
-   * Marketin IDLE kuryelerinden en uzun suredir atanmamis olani TEK ATOMIK
-   * adimda BUSY yapar, siparise baglar ve atama anini yazar (B7). Sira:
-   * lastAssignedAt artan (hic atanmamis once), esitlikte kimlik.
+   * Havuzdan (courier-pool.ts) sira kuralina gore ilk uygun kuryeyi siparise
+   * baglar: BUSY yapar, siparisi ve atama anini yazar, idleSince'i siler.
    *
-   * @returns Atanan kurye; marketin bos kuryesi yoksa null.
+   * ATOMIK (B7): kurye ancak HALA IDLE ise alinir (kosullu yazim); iki siparis
+   * ayni kuryeyi alamaz. Aday baskasina gittiyse siradakine gecilir.
+   *
+   * @returns Atanan kurye; havuzda bos kurye yoksa null.
    * @throws AppError CONFLICT: siparise baska bir kurye zaten bagli (eszamanli
    *         ikinci istek); kurye degismez.
    */
-  claimLeastRecentlyAssigned(request: ClaimRequest): Promise<Courier | null>;
+  claimNearest(request: NearestClaimRequest): Promise<Courier | null>;
 
   /**
-   * Siparisi tasiyan kuryeyi IDLE'a dondurur, siparis bagini siler.
-   * lastAssignedAt KALIR: yeni bosalan kurye siranin sonuna gecer.
+   * Siparisi tasiyan kuryeyi IDLE'a dondurur, siparis bagini siler ve bosta
+   * beklemeye `at`'te baslatir (idleSince). lastAssignedAt ve konum KALIR:
+   * kurye oldugu yerde bekler.
    * @returns Birakilan kurye; siparisi tasiyan kurye yoksa null.
    */
-  releaseByOrder(orderId: string): Promise<Courier | null>;
+  releaseByOrder(orderId: string, at: Date): Promise<Courier | null>;
 }
 
-/** Seed yazicisi: kuryeleri bastan yazar (eskiler silinir). */
+/** Seed yazicisi: kuryeleri ve market konumlarini bastan yazar (eskiler silinir). */
 export interface CourierSeedWriter {
-  replaceAll(couriers: readonly Courier[]): Promise<void>;
+  replaceAll(couriers: readonly Courier[], markets: readonly MarketLocation[]): Promise<void>;
 }

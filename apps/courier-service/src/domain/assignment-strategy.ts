@@ -1,19 +1,19 @@
 /**
- * Kurye secim kurali (roadmap "Kurye Simulatoru"): bugun bilincli olarak
- * basit, "marketin en uzun suredir bos kuryesi". Akilli atama (mesafe, yuk
- * dengesi) bu arayuzun arkasina yeni bir uygulama olarak gelir; use-case
- * degismez.
+ * Kurye secim kurali arayuzu (roadmap "Kurye Simulatoru"). Bugunku uygulama
+ * havuzdan en yakin dilimde en uzun suredir bos kurye (T13.2,
+ * application/nearest-available.ts). Baska kural (yuk dengesi, ETA) bu
+ * arayuzun arkasina yeni bir uygulama olarak gelir; use-case degismez.
  *
- * Her uygulama ATOMIK olmak zorundadir (B7): sec ve isaretle tek adimdir, iki
- * siparis ayni kuryeyi alamaz.
+ * Her uygulama ATOMIK olmak zorundadir (B7): iki siparis ayni kuryeyi alamaz.
  */
 
 import type { Courier, GeoPoint } from './courier.js';
 
 export interface AssignmentRequest {
   readonly orderId: string;
-  readonly marketId: string;
-  /** Bugunku kural kullanmaz; mesafeye bakan kural ve rota (T13.2) icin. */
+  /** Siparisin marketinin konumu (markets kopyasindan). */
+  readonly marketLocation: GeoPoint;
+  /** Bugunku kural kullanmaz; rota (T13.2 PR 3) icin. */
   readonly deliveryLocation: GeoPoint;
   readonly at: Date;
 }

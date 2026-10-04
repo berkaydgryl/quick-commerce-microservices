@@ -1,6 +1,6 @@
 /** GetCourier (NOT_FOUND) ve ReleaseCourier (tekrar guvenli) use-case'leri. */
 
-import { ERROR_CODES } from '@getir/core';
+import { ERROR_CODES, fixedClock } from '@getir/core';
 import { recordingLogger } from '@getir/core/testing';
 import type { LogLine } from '@getir/core/testing';
 import { describe, expect, it } from 'vitest';
@@ -9,7 +9,7 @@ import { createGetCourier } from '../../src/application/get-courier.js';
 import { createReleaseCourier } from '../../src/application/release-courier.js';
 import { COURIER_STATUS } from '../../src/domain/courier.js';
 import { InMemoryCourierStore } from '../../src/infrastructure/memory/in-memory-courier-store.js';
-import { courier, courierId, orderId } from '../support/couriers.js';
+import { courier, courierId, NOW_MS, orderId } from '../support/couriers.js';
 
 describe('createGetCourier', () => {
   it('kuryeyi doner; yoksa NOT_FOUND', async () => {
@@ -29,7 +29,7 @@ describe('createReleaseCourier', () => {
     const repository = new InMemoryCourierStore([
       courier(1, { status: COURIER_STATUS.BUSY, currentOrderId: order }),
     ]);
-    const release = createReleaseCourier(repository);
+    const release = createReleaseCourier(repository, fixedClock(NOW_MS));
     const lines: LogLine[] = [];
 
     const first = await release(order, recordingLogger(lines));
@@ -37,7 +37,10 @@ describe('createReleaseCourier', () => {
 
     expect(first).toEqual({ released: true, courierId: courierId(1) });
     expect(second).toEqual({ released: false });
-    expect((await repository.findById(courierId(1)))?.status).toBe(COURIER_STATUS.IDLE);
+    // Kurye oldugu yerde IDLE kalir; bosta beklemesi birakma aninda baslar (#88).
+    expect(await repository.findById(courierId(1))).toEqual(
+      courier(1, { idleSince: new Date(NOW_MS) }),
+    );
     expect(lines.map((line) => [line.message, line.fields])).toEqual([
       ['kurye birakildi', { orderId: order, courierId: courierId(1) }],
       ['birakilacak kurye yok (zaten birakilmis ya da atanmamis)', { orderId: order }],

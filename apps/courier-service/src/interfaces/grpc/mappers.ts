@@ -19,9 +19,10 @@ export function toProtoCourier(courier: Courier): courierV1.Courier {
   return {
     id: courier.id,
     name: courier.name,
-    // Kullanimdan kalkti (ADR-15): sunucu doldurmaz, market_id okunur.
+    // Kullanimdan kalkti (ADR-15): sunucu doldurmaz.
     darkStoreId: '',
-    marketId: courier.marketId,
+    // Kurye markete bagli degil (T13.2, ortak havuz): sunucu doldurmaz.
+    marketId: '',
     status: STATUS_TO_PROTO[courier.status],
     currentOrderId: courier.currentOrderId ?? '',
     lastLocation: { lat: courier.lastLocation.lat, lng: courier.lastLocation.lng },

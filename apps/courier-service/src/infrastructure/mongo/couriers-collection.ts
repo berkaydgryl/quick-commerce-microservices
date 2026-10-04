@@ -8,15 +8,17 @@ import type { SessionOption } from '@getir/mongo-kit';
 import type { Db, IndexDescription } from 'mongodb';
 
 import { COURIER_STATUS } from '../../domain/courier.js';
-import type { ClaimRequest } from '../../domain/courier-repository.js';
+import type { GeoPoint } from '../../domain/courier.js';
+import type { PoolRule } from '../../domain/courier-pool.js';
 import type { CourierDocument } from './documents.js';
 import { COLLECTIONS } from './documents.js';
+import { toGeoJson } from './mappers.js';
 
 /**
- * Atama sirasi: en uzun suredir is almamis once. Hic atanmamis kuryede alan
- * yoktur ve Mongo eksik alani tarihlerden ONCE siralar; esitlikte kimlik.
+ * Havuz sirasi (domain/courier-pool.ts ile ayni): yakinlik dilimi, sonra bosta
+ * bekleme baslangici (eksik alan tarihlerden ONCE), esitlikte kimlik.
  */
-const LEAST_RECENTLY_ASSIGNED_FIRST = { lastAssignedAt: 1, _id: 1 } as const;
+const POOL_ORDER = { band: 1, idleSince: 1, _id: 1 } as const;
 
 export class CouriersCollection extends MongoRepository<CourierDocument> {
   constructor(db: Db) {
@@ -25,11 +27,10 @@ export class CouriersCollection extends MongoRepository<CourierDocument> {
 
   protected override indexes(): readonly IndexDescription[] {
     return [
-      // Atama sorgusu (B7): market + IDLE esitligi, atama sirasina gore siralama.
-      // Roadmap'teki status+marketId indeksini kapsar.
+      // Havuz sorgusu (T13.2): konum ($geoNear) + durum esitligi.
       {
-        key: { marketId: 1, status: 1, lastAssignedAt: 1, _id: 1 },
-        name: 'marketId_status_lastAssignedAt',
+        key: { lastLocation: '2dsphere', status: 1 },
+        name: 'lastLocation_2dsphere_status',
       },
       // Bir siparisi en fazla bir kurye tasir (tekrar ve eszamanli atama).
       // Kismi: bos kuryelerde alan yoktur ve indekse girmez.
@@ -47,30 +48,70 @@ export class CouriersCollection extends MongoRepository<CourierDocument> {
   }
 
   /**
-   * TEK atomik adim (B7): secilen kurye ayni anda BUSY olur ve siparise baglanir.
-   * Siparise baska kurye bagliysa benzersiz indeks yazimi reddeder (CONFLICT);
-   * secilen kurye degismez.
+   * Havuzun ilk `limit` adayinin kimlikleri, sira kuralina gore: `near`'a
+   * `rule.radiusMeters` icindeki IDLE kuryeler ($geoNear, 2dsphere indeksi).
+   * `exclude`: bu talepte baska siparise gittigi gorulen adaylar; yeniden
+   * okunmaz. Okumadir; adayi almak claimIfIdle'in isidir.
    */
-  async claimLeastRecentlyAssigned({
-    marketId,
-    orderId,
-    at,
-  }: ClaimRequest): Promise<CourierDocument | null> {
-    return this.run('claimLeastRecentlyAssigned', () =>
+  async poolCandidates(
+    near: GeoPoint,
+    rule: PoolRule,
+    limit: number,
+    exclude: readonly string[],
+  ): Promise<string[]> {
+    const rows = await this.run('poolCandidates', () =>
+      this.collection
+        .aggregate<{ _id: string }>([
+          {
+            $geoNear: {
+              near: toGeoJson(near),
+              key: 'lastLocation',
+              distanceField: 'distanceMeters',
+              maxDistance: rule.radiusMeters,
+              query: {
+                status: COURIER_STATUS.IDLE,
+                ...(exclude.length === 0 ? {} : { _id: { $nin: [...exclude] } }),
+              },
+              spherical: true,
+            },
+          },
+          { $addFields: { band: { $floor: { $divide: ['$distanceMeters', rule.bandMeters] } } } },
+          { $sort: POOL_ORDER },
+          { $limit: limit },
+          { $project: { _id: 1 } },
+        ])
+        .toArray(),
+    );
+    return rows.map((row) => row._id);
+  }
+
+  /**
+   * TEK atomik adim (B7): kurye ANCAK HALA IDLE ise BUSY olur, siparise baglanir
+   * ve bosta beklemesi biter. Arada baska siparis aldiysa null (aday kaybedildi).
+   * Siparise baska kurye bagliysa benzersiz indeks yazimi reddeder (CONFLICT).
+   */
+  async claimIfIdle(courierId: string, orderId: string, at: Date): Promise<CourierDocument | null> {
+    return this.run('claimIfIdle', () =>
       this.collection.findOneAndUpdate(
-        { marketId, status: COURIER_STATUS.IDLE },
-        { $set: { status: COURIER_STATUS.BUSY, currentOrderId: orderId, lastAssignedAt: at } },
-        { sort: LEAST_RECENTLY_ASSIGNED_FIRST, returnDocument: 'after' },
+        { _id: courierId, status: COURIER_STATUS.IDLE },
+        {
+          $set: { status: COURIER_STATUS.BUSY, currentOrderId: orderId, lastAssignedAt: at },
+          $unset: { idleSince: '' },
+        },
+        { returnDocument: 'after' },
       ),
     );
   }
 
-  /** Siparisi tasiyan kuryeyi IDLE'a dondurur; lastAssignedAt kalir. */
-  async releaseByOrder(orderId: string): Promise<CourierDocument | null> {
+  /**
+   * Siparisi tasiyan kuryeyi IDLE'a dondurur; bosta beklemesi `at`'te baslar.
+   * lastAssignedAt ve konum kalir (kurye oldugu yerde bekler).
+   */
+  async releaseByOrder(orderId: string, at: Date): Promise<CourierDocument | null> {
     return this.run('releaseByOrder', () =>
       this.collection.findOneAndUpdate(
         { currentOrderId: orderId },
-        { $set: { status: COURIER_STATUS.IDLE }, $unset: { currentOrderId: '' } },
+        { $set: { status: COURIER_STATUS.IDLE, idleSince: at }, $unset: { currentOrderId: '' } },
         { returnDocument: 'after' },
       ),
     );

@@ -17,12 +17,19 @@ import {
   courier,
   courierId,
   DELIVERY,
+  FAR_MARKET,
+  FAR_MARKET_LOCATION,
   MARKET,
+  MARKET_LOCATION,
   NOW_MS,
   orderId,
-  OTHER_MARKET,
   SEEDED_AT,
+  TEST_MARKETS,
 } from '../support/couriers.js';
+
+/** Hic bos kuryesi olmayan bolge: yalnizca OFFLINE kurye 4 orada. */
+const EMPTY_MARKET = 'mkt_test-bos-bolge';
+const EMPTY_LOCATION = { lat: 39.92, lng: 32.85 };
 
 let server: TestGrpcServer | undefined;
 
@@ -51,9 +58,13 @@ beforeAll(async () => {
         couriers: new InMemoryCourierStore([
           courier(1),
           courier(2),
-          courier(3, { marketId: OTHER_MARKET }),
-          courier(4, { marketId: 'mkt_kardesler-manavi', status: COURIER_STATUS.OFFLINE }),
+          courier(3, { lastLocation: FAR_MARKET_LOCATION }),
+          courier(4, { lastLocation: EMPTY_LOCATION, status: COURIER_STATUS.OFFLINE }),
         ]),
+        markets: new InMemoryCourierStore(
+          [],
+          [...TEST_MARKETS, { marketId: EMPTY_MARKET, location: EMPTY_LOCATION }],
+        ),
         clock: fixedClock(NOW_MS),
       }),
     ],
@@ -65,7 +76,7 @@ afterAll(async () => {
 });
 
 describe('CourierService/AssignCourier', () => {
-  it('kuryeyi atar: BUSY, siparise bagli; dark_store_id bos, ETA 0 (T13.2)', async () => {
+  it('marketin cevresindeki kuryeyi atar: BUSY, siparise bagli; dark_store_id ve market_id bos (havuz), ETA 0', async () => {
     const request = assignRequest();
 
     const { error, response } = await call(service.assignCourier, request);
@@ -76,18 +87,18 @@ describe('CourierService/AssignCourier', () => {
         id: courierId(1),
         name: 'Kurye 1',
         darkStoreId: '',
-        marketId: MARKET,
+        marketId: '',
         status: courierV1.CourierStatus.COURIER_STATUS_BUSY,
         currentOrderId: request.orderId,
-        lastLocation: { lat: 40.985, lng: 29.0275 },
+        lastLocation: MARKET_LOCATION,
         lastLocationAt: SEEDED_AT,
       },
       etaSeconds: 0,
     });
   });
 
-  it('ayni siparisin tekrari ayni kuryeyi doner; kullanimdan kalkan dark_store_id okunmaz', async () => {
-    const request = assignRequest({ marketId: OTHER_MARKET, darkStoreId: 'ds_eski' });
+  it('ayni siparisin tekrari ayni kuryeyi doner; baska semtin marketi kendi cevresinden alir; dark_store_id okunmaz', async () => {
+    const request = assignRequest({ marketId: FAR_MARKET, darkStoreId: 'ds_eski' });
 
     const first = await call(service.assignCourier, request);
     const second = await call(service.assignCourier, request);
@@ -96,11 +107,8 @@ describe('CourierService/AssignCourier', () => {
     expect(second.response).toEqual(first.response);
   });
 
-  it('markette bos kurye kalmazsa NOT_FOUND', async () => {
-    const { error } = await call(
-      service.assignCourier,
-      assignRequest({ marketId: 'mkt_kardesler-manavi' }),
-    );
+  it('marketin cevresinde bos kurye yoksa (yalnizca OFFLINE) NOT_FOUND', async () => {
+    const { error } = await call(service.assignCourier, assignRequest({ marketId: EMPTY_MARKET }));
 
     expect(error?.code).toBe(GRPC_STATUS.NOT_FOUND);
     expect(errorCodeOf(error)).toBe(ERROR_CODES.NOT_FOUND);

@@ -11,8 +11,14 @@
  *     NOT_FOUND'dan once siparisin kuryesine bakilir; yoksa order "kurye yok"
  *     sanip 30 sn beklerdi (QA B1).
  *
+ * HAVUZ (T13.2): kurye markete bagli degildir; siparisin marketinin konumu
+ * kurye servisinin kopyasindan (markets) okunur ve cevresindeki bos kuryeler
+ * arasindan secilir (domain/courier-pool.ts).
+ *
  * Bos kurye yoksa NOT_FOUND: beklenen durumdur, order siparisi PREPARING'de
- * tutar ve 30 sn sonra yeniden dener (roadmap saga tablosu).
+ * tutar ve 30 sn sonra yeniden dener (roadmap saga tablosu). Market kopyada
+ * yoksa da NOT_FOUND (reason market_unknown) ve WARN: order dongude kalmaz,
+ * 30 sn'de bir dener; veri hatasi gunlukte gorunur.
  */
 
 import { AppError, ERROR_CODES, isAppError } from '@getir/core';
@@ -22,6 +28,7 @@ import { ETA_NOT_COMPUTED_SECONDS } from '../config/constants.js';
 import type { AssignmentStrategy } from '../domain/assignment-strategy.js';
 import type { Courier, GeoPoint } from '../domain/courier.js';
 import type { CourierRepository } from '../domain/courier-repository.js';
+import type { MarketLocator } from '../domain/market-locator.js';
 
 export interface AssignCourierCommand {
   readonly orderId: string;
@@ -44,9 +51,13 @@ export type AssignCourier = (
 
 export interface AssignCourierDeps {
   readonly repository: CourierRepository;
+  readonly markets: MarketLocator;
   readonly strategy: AssignmentStrategy;
   readonly clock: Clock;
 }
+
+/** Market kopyada yok: veri hatasi; order icin "kurye yok" gibi gorunur. */
+export const MARKET_UNKNOWN = 'market_unknown';
 
 export function createAssignCourier(deps: AssignCourierDeps): AssignCourier {
   const reuse = (courier: Courier): CourierAssignment => ({
@@ -74,9 +85,25 @@ export function createAssignCourier(deps: AssignCourierDeps): AssignCourier {
       return reuse(existing);
     }
 
+    const marketLocation = await deps.markets.locate(command.marketId);
+    if (marketLocation === null) {
+      logger.warn(
+        { orderId: command.orderId, marketId: command.marketId },
+        'market konumu bilinmiyor',
+      );
+      throw AppError.notFound('Market konumu bilinmiyor', {
+        details: { marketId: command.marketId, reason: MARKET_UNKNOWN },
+      });
+    }
+
     let claimed: Courier | null;
     try {
-      claimed = await deps.strategy.claim({ ...command, at: deps.clock.date() });
+      claimed = await deps.strategy.claim({
+        orderId: command.orderId,
+        marketLocation,
+        deliveryLocation: command.deliveryLocation,
+        at: deps.clock.date(),
+      });
     } catch (error: unknown) {
       if (!isAppError(error) || error.code !== ERROR_CODES.CONFLICT) {
         throw error;
@@ -96,7 +123,7 @@ export function createAssignCourier(deps: AssignCourierDeps): AssignCourier {
       if (winner !== null) {
         return reuse(winner);
       }
-      throw AppError.notFound('Markette uygun kurye yok', {
+      throw AppError.notFound('Marketin cevresinde uygun kurye yok', {
         details: { marketId: command.marketId },
       });
     }
@@ -105,7 +132,7 @@ export function createAssignCourier(deps: AssignCourierDeps): AssignCourier {
       {
         orderId: command.orderId,
         courierId: claimed.id,
-        marketId: claimed.marketId,
+        marketId: command.marketId,
         strategy: deps.strategy.name,
       },
       'kurye atandi',

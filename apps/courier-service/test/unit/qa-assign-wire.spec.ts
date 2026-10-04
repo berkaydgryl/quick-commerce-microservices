@@ -1,13 +1,14 @@
 /**
- * QA kara kutu (T13.1): AssignCourier, GetCourier ve ReleaseCourier GERCEK gRPC
- * istemcisiyle, MOCK'un acilista doldurdugu demo kuryeleriyle (openCourierStore,
- * MOCK=true yolu). Test yalnizca tel uzerindeki cevabi, gRPC kodunu ve
- * `x-app-error` yukunu okur.
+ * QA kara kutu (T13.1; havuz T13.2): AssignCourier, GetCourier ve ReleaseCourier
+ * GERCEK gRPC istemcisiyle, MOCK'un acilista doldurdugu demo kuryeleriyle
+ * (openCourierStore, MOCK=true yolu). Test yalnizca tel uzerindeki cevabi, gRPC
+ * kodunu ve `x-app-error` yukunu okur.
  *
  * Market listesi kurye servisinin kendi verisinden DEGIL, katalogun demo
- * verisinden gelir: "katalogdaki her markete 3 kurye" sozu disaridan denetlenir.
+ * verisinden gelir. T13.2'den beri kurye markete bagli degil: marketin 3 km
+ * cevresindeki bos kuryeler ortak havuzdur (Kadikoy ve Besiktas iki ayri havuz).
  *
- * Backend testlerinde olanlar (tek kurye atamasi, bos marketin NOT_FOUND'u, ord_1 /
+ * Backend testlerinde olanlar (tek kurye atamasi, bos bolgenin NOT_FOUND'u, ord_1 /
  * usr_ / eksik market / eksik konum / enlem 120, StartRoute) burada yinelenmez.
  */
 
@@ -21,11 +22,25 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { MARKETS } from '../../../catalog-service/src/infrastructure/fixtures/markets.js';
+import { MARKET_UNKNOWN } from '../../src/application/assign-courier.js';
+import {
+  COURIER_POOL_RADIUS_METERS,
+  COURIER_PROXIMITY_BAND_METERS,
+} from '../../src/config/constants.js';
 import { COURIER_STATUS } from '../../src/domain/courier.js';
 import type { CourierRepository } from '../../src/domain/courier-repository.js';
+import { distanceMeters } from '../../src/domain/geo.js';
 import { openCourierStore } from '../../src/infrastructure/courier-store.js';
+import { COURIER_SEEDS } from '../../src/infrastructure/fixtures/couriers.js';
 import { InMemoryCourierStore } from '../../src/infrastructure/memory/in-memory-courier-store.js';
-import { courier, courierId, MARKET, NOW_MS, orderId } from '../support/couriers.js';
+import {
+  courier,
+  courierId,
+  MARKET,
+  MARKET_LOCATION,
+  NOW_MS,
+  orderId,
+} from '../support/couriers.js';
 import {
   DEMO_COURIER_COUNT,
   DEMO_COURIERS_PER_MARKET,
@@ -51,14 +66,17 @@ afterEach(async () => {
   qa = undefined;
 });
 
-/** MOCK=true yolu: demo kuryeleri acilista bellege yuklenir. */
+/** Demo verisinde Kadikoy 41. enlemin guneyinde, Besiktas kuzeyinde. */
+const isKadikoy = (point: { readonly lat: number }): boolean => point.lat < 41;
+
+/** MOCK=true yolu: demo kuryeleri ve market kopyasi acilista bellege yuklenir. */
 async function startMock(clock: MutableClock = fixedClock(NOW_MS)) {
   const store = await openCourierStore(undefined, { logger: silentLogger, clock });
-  qa = await startQaCourierServer({ repository: store.repository, clock });
+  qa = await startQaCourierServer({ repository: store.repository, markets: store.markets, clock });
   return { qa, clock, repository: store.repository };
 }
 
-async function startWith(repository: CourierRepository, clock = fixedClock(NOW_MS)) {
+async function startWith(repository: CourierRepository, clock: MutableClock = fixedClock(NOW_MS)) {
   qa = await startQaCourierServer({ repository, clock });
   return qa;
 }
@@ -72,12 +90,11 @@ async function assignedCourier(server: QaCourierServer, order: string, market: s
   return outcome.courierId;
 }
 
-describe('QA T13.1 demo kuryeleri tel uzerinden (MOCK, 21 x 3 = 63)', () => {
-  it('katalogun her marketi tam 3 farkli kurye verir; 4. istek NOT_FOUND ve marketi soyler', async () => {
+describe('QA T13.2 havuz tel uzerinden (MOCK, 63 kurye, iki semt)', () => {
+  it('butun marketlere 4er istek ayni anda: her semt kendi kuryesi kadar atar (Kadikoy 30, Besiktas 33), fazlasi NOT_FOUND ve marketi soyler; kurye semtini asmaz', async () => {
     const { qa: server } = await startMock();
     expect(MARKETS).toHaveLength(DEMO_MARKET_COUNT);
 
-    // Butun marketlere ayni anda 4'er istek: market sinirlari karisirsa burada gorunur.
     const requests = MARKETS.flatMap((market) =>
       Array.from({ length: DEMO_COURIERS_PER_MARKET + 1 }, () => ({
         market,
@@ -89,46 +106,54 @@ describe('QA T13.1 demo kuryeleri tel uzerinden (MOCK, 21 x 3 = 63)', () => {
     );
 
     const assigned = new Set<string>();
-    for (const market of MARKETS) {
-      const mine = results.filter((_, index) => requests[index]?.market.id === market.id);
-      const won = mine.flatMap((result, index) =>
-        result.response === undefined ? [] : [{ result: result.response, at: index }],
-      );
-      const lost = mine.filter((result) => result.error !== undefined);
+    for (const kadikoy of [true, false]) {
+      const mine = requests
+        .map((request, index) => ({ request, result: results[index] }))
+        .filter(({ request }) => isKadikoy(request.market) === kadikoy);
+      const marketCount = MARKETS.filter((market) => isKadikoy(market) === kadikoy).length;
+      const won = mine.filter(({ result }) => result?.response !== undefined);
+      const lost = mine.filter(({ result }) => result?.error !== undefined);
 
-      expect(won, market.id).toHaveLength(DEMO_COURIERS_PER_MARKET);
-      for (const { result } of won) {
-        expect(result.courier, market.id).toMatchObject({
-          marketId: market.id,
-          status: courierV1.CourierStatus.COURIER_STATUS_BUSY,
-          lastLocation: { lat: market.lat, lng: market.lng },
-          darkStoreId: '',
-        });
-        assigned.add(result.courier?.id ?? '');
-      }
-      expect(new Set(won.map(({ result }) => result.courier?.id)).size).toBe(
-        DEMO_COURIERS_PER_MARKET,
+      expect(won, kadikoy ? 'Kadikoy' : 'Besiktas').toHaveLength(
+        marketCount * DEMO_COURIERS_PER_MARKET,
       );
-      expect(lost.map((result) => result.error?.code)).toEqual([GRPC_STATUS.NOT_FOUND]);
-      expect(appErrorOf(lost[0]?.error)).toEqual({
-        code: ERROR_CODES.NOT_FOUND,
-        details: { marketId: market.id },
-      });
+      expect(lost).toHaveLength(marketCount);
+      for (const { request, result } of won) {
+        const assignedCourier = result?.response?.courier;
+        expect(assignedCourier).toMatchObject({
+          marketId: '',
+          darkStoreId: '',
+          status: courierV1.CourierStatus.COURIER_STATUS_BUSY,
+          currentOrderId: request.order,
+        });
+        const location = assignedCourier?.lastLocation ?? { lat: 0, lng: 0 };
+        expect(isKadikoy(location), request.market.id).toBe(kadikoy);
+        expect(distanceMeters(request.market, location)).toBeLessThanOrEqual(
+          COURIER_POOL_RADIUS_METERS,
+        );
+        assigned.add(assignedCourier?.id ?? '');
+      }
+      for (const { request, result } of lost) {
+        expect(result?.error?.code).toBe(GRPC_STATUS.NOT_FOUND);
+        expect(appErrorOf(result?.error)).toEqual({
+          code: ERROR_CODES.NOT_FOUND,
+          details: { marketId: request.market.id },
+        });
+      }
     }
     expect(assigned.size).toBe(DEMO_COURIER_COUNT);
-    // Her basarili cevap kendi siparisine bagli kuryeyi doner.
-    results.forEach((result, index) => {
-      if (result.response !== undefined) {
-        expect(result.response.courier?.currentOrderId).toBe(requests[index]?.order);
-      }
-    });
   });
 });
 
-describe('QA T13.1 adil sira (tek market, saat ilerler)', () => {
-  it('ata-birak dongusu 30 kez: uc kurye sirayla doner, her biri 10 kez', async () => {
+describe('QA T13.2 adil sira (#88: yakinlik dilimi icinde en uzun suredir bosta)', () => {
+  it('ata-birak dongusu: marketin 300 m icindeki kuryeler sirayla doner (kimlik sirasi, sonra birakma sirasi)', async () => {
     const { qa: server, clock } = await startMock();
-    const cycles = 30;
+    const nearest = COURIER_SEEDS.filter(
+      (seed) => distanceMeters(MARKET_LOCATION, seed.location) < COURIER_PROXIMITY_BAND_METERS,
+    )
+      .map((seed) => seed.id)
+      .sort();
+    const cycles = nearest.length * 3;
 
     const picked: string[] = [];
     for (let index = 0; index < cycles; index += 1) {
@@ -139,28 +164,31 @@ describe('QA T13.1 adil sira (tek market, saat ilerler)', () => {
       expect((await server.release(order)).response?.released).toBe(true);
     }
 
-    const firstRound = picked.slice(0, DEMO_COURIERS_PER_MARKET);
-    expect(new Set(firstRound).size).toBe(DEMO_COURIERS_PER_MARKET);
+    expect(nearest.length).toBeGreaterThanOrEqual(DEMO_COURIERS_PER_MARKET);
+    // Seed'de hepsi ayni anda bosta: ilk tur kimlik sirasi; sonra en once birakilan once.
+    expect(picked.slice(0, nearest.length)).toEqual(nearest);
     expect(picked).toEqual(
-      Array.from({ length: cycles }, (_, index) => firstRound[index % DEMO_COURIERS_PER_MARKET]),
+      Array.from({ length: cycles }, (_, index) => nearest[index % nearest.length]),
     );
   });
 
-  it('sira son atama anindan: birakma sirasi onemsiz; hic atanmamis en onde, esitlikte kimlik', async () => {
-    // Kabul edilen kural (PM, 04.10, (a)): en uzun suredir IS ALMAMIS kurye once.
-    // Birakma sirasi atama sirasindan farkli: A once atanir ama EN SON bosalir;
-    // yine de A once secilir. Bos bekleme suresine gore adil atama bekleyen is #88.
-    const { qa: server, clock } = await startMock();
+  it('sira bosta bekleme suresinden: once bosalan once secilir, atama sirasi onemsiz (#88)', async () => {
+    // T13.1'deki kural (son atama ani) ters sonuc verirdi: A once atanip EN SON
+    // bosaldigi halde secilirdi. Artik B (uzun suredir bosta) once.
+    const clock = fixedClock(NOW_MS);
+    const server = await startWith(
+      new InMemoryCourierStore([courier(1), courier(2), courier(3)]),
+      clock,
+    );
     const orderA = orderId();
     const orderB = orderId();
 
-    // Uc kurye de hic atanmamis (esit): secim kimlik sirasiyla. Atama anlari A < B < C.
     clock.advance(TICK_MS);
     const a = await assignedCourier(server, orderA, MARKET);
     clock.advance(TICK_MS);
     const b = await assignedCourier(server, orderB, MARKET);
     clock.advance(TICK_MS);
-    const c = await assignedCourier(server, orderId(), MARKET);
+    await assignedCourier(server, orderId(), MARKET);
     clock.advance(TICK_MS);
     await server.release(orderB); // B uzun suredir bos
     clock.advance(TICK_MS * 10);
@@ -172,22 +200,25 @@ describe('QA T13.1 adil sira (tek market, saat ilerler)', () => {
     const second = await assignedCourier(server, orderId(), MARKET);
     const none = await server.assign(orderId(), MARKET);
 
-    expect([a, b, c]).toEqual([a, b, c].slice().sort());
-    expect(new Set([a, b, c]).size).toBe(DEMO_COURIERS_PER_MARKET);
-    expect([first, second]).toEqual([a, b]);
+    expect([a, b]).toEqual([courierId(1), courierId(2)]);
+    expect([first, second]).toEqual([b, a]);
     expect(isNotFound(outcomeOf(none))).toBe(true);
   });
 });
 
 describe('QA T13.1 ayni siparise tekrar istek', () => {
-  it('teslimat konumu ve saat degisse de ayni kurye; market dolsa da NOT_FOUND olmaz, baska kurye baglanmaz', async () => {
-    const { qa: server, clock } = await startMock();
+  it('teslimat konumu ve saat degisse de ayni kurye; havuz dolsa da NOT_FOUND olmaz, baska kurye baglanmaz', async () => {
+    const clock = fixedClock(NOW_MS);
+    const server = await startWith(
+      new InMemoryCourierStore([courier(1), courier(2), courier(3)]),
+      clock,
+    );
     const order = orderId();
 
     const first = await server.assign(order, MARKET);
     clock.advance(TICK_MS * 60);
     const moved = await server.assign(order, MARKET, { lat: 41.01, lng: 28.98 });
-    // Marketin kalan iki kuryesi baska siparislere gider: market doldu.
+    // Havuzun kalan iki kuryesi baska siparislere gider: havuz doldu.
     const others = [await server.assign(orderId(), MARKET), await server.assign(orderId(), MARKET)];
     const whenFull = await server.assign(order, MARKET);
     const stranger = await server.assign(orderId(), MARKET);
@@ -280,7 +311,7 @@ describe('QA T13.1 hata kodlari (tel uzerinden)', () => {
     },
   );
 
-  it('bicimi dogru ama katalogda olmayan market: dogrulama hatasi degil NOT_FOUND', async () => {
+  it('bicimi dogru ama katalogda olmayan market: dogrulama hatasi degil NOT_FOUND (reason market_unknown)', async () => {
     const { qa: server } = await startMock();
 
     const { error } = await server.assign(orderId(), 'mkt_boyle-bir-market-yok');
@@ -288,7 +319,7 @@ describe('QA T13.1 hata kodlari (tel uzerinden)', () => {
     expect(error?.code).toBe(GRPC_STATUS.NOT_FOUND);
     expect(appErrorOf(error)).toEqual({
       code: ERROR_CODES.NOT_FOUND,
-      details: { marketId: 'mkt_boyle-bir-market-yok' },
+      details: { marketId: 'mkt_boyle-bir-market-yok', reason: MARKET_UNKNOWN },
     });
   });
 
@@ -341,7 +372,7 @@ describe('QA T13.1 hata kodlari (tel uzerinden)', () => {
     const server = await startWith({
       findById: down,
       findByOrder: down,
-      claimLeastRecentlyAssigned: down,
+      claimNearest: down,
       releaseByOrder: down,
     });
 
@@ -363,7 +394,7 @@ describe('QA T13.1 hata kodlari (tel uzerinden)', () => {
     const server = await startWith({
       findById: boom,
       findByOrder: boom,
-      claimLeastRecentlyAssigned: boom,
+      claimNearest: boom,
       releaseByOrder: boom,
     });
 
@@ -384,15 +415,17 @@ describe('QA T13.1 kisisel veri: kurye adi gunluge yazilmaz', () => {
     const store = await openCourierStore(undefined, { logger: silentLogger, clock });
     qa = await startQaCourierServer({
       repository: store.repository,
+      markets: store.markets,
       clock,
       logger: recordingLogger(lines),
     });
-    const orders = [orderId(), orderId(), orderId(), orderId()];
+    const orders = [orderId(), orderId(), orderId()];
 
     const assigned = [];
     for (const order of orders) {
-      assigned.push(await qa.assign(order, MARKET)); // 4. NOT_FOUND
+      assigned.push(await qa.assign(order, MARKET));
     }
+    await qa.assign(orderId(), 'mkt_boyle-bir-market-yok'); // NOT_FOUND (market_unknown, WARN)
     await qa.assign(orders[0] ?? '', MARKET); // tekrar
     await qa.assign('ord_1', MARKET); // dogrulama
     const names: string[] = [];

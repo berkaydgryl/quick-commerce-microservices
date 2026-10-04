@@ -60,12 +60,13 @@ message Courier {
   // Istemcide gosterilecek ad (ornegin "Mehmet K.").
   string name = 2;
 
-  // Kuryenin bagli oldugu depo. Atama yalnizca ayni depo icinde yapilir.
-  // DEPRECATED (ADR-15): market_id kullanin. Alan silinmez; numara ve JSON adi
-  // korunur (buf breaking WIRE_JSON). Sunucu bu alani doldurmaz (bos gelir); market_id'yi okuyun.
+  // DEPRECATED (ADR-15): kuryenin bagli oldugu depoydu. Alan silinmez; numara ve
+  // JSON adi korunur (buf breaking WIRE_JSON). Sunucu bu alani doldurmaz (bos gelir).
   string dark_store_id = 3 [deprecated = true];
 
-  // Pazaryerinde siparisin/stogun ait oldugu market (ADR-15): mkt_ onekli kimlik.
+  // T13.1'de kuryenin bagli oldugu marketti. T13.2'den beri kurye bir markete
+  // BAGLI DEGIL (ortak havuz: siparisin marketinin cevresindeki bos kuryeler);
+  // sunucu bu alani doldurmaz (bos gelir). Alan silinmez (buf breaking WIRE_JSON).
   string market_id = 8;
 
   CourierStatus status = 4;
@@ -106,9 +107,11 @@ message AssignCourierRequest {
 
 // Atama cevabi.
 //
-// ATAMA ATOMIKTIR (B7): tek bir findOneAndUpdate ile deponun IDLE kuryesi
-// ayni anda BUSY isaretlenir ve siparise baglanir. Iki siparis ayni kuryeyi
-// kapamaz.
+// HAVUZ (T13.2): siparisin marketinin cevresindeki (3 km) IDLE kuryelerden,
+// en yakin dilimde en uzun suredir bosta olani atanir.
+//
+// ATAMA ATOMIKTIR (B7): kurye ancak HALA IDLE ise BUSY isaretlenir ve siparise
+// baglanir (kosullu findOneAndUpdate). Iki siparis ayni kuryeyi kapamaz.
 //
 // Uygun kurye yoksa NOT_FOUND doner. Bu bir hata degil BEKLENEN bir durumdur:
 // siparis PREPARING'de kalir ve 30 saniye sonra yeniden denenir.

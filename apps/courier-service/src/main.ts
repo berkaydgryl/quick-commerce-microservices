@@ -46,7 +46,9 @@ const { handle, store } = await startOrExit(
       // Izler (D15): adres yoksa olusur ve tasinir, disari gonderilmez.
       otlpEndpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
       logger,
-      services: [buildCourierService({ logger, couriers: opened.repository })],
+      services: [
+        buildCourierService({ logger, couriers: opened.repository, markets: opened.markets }),
+      ],
       // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti kesilmesin.
       onShutdown: () => opened.close(),
     });
