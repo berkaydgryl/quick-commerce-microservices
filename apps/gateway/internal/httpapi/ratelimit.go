@@ -114,7 +114,7 @@ func (r rateLimiter) limit(limit int, subject rateSubject) fiber.Handler {
 			r.recorder.CountRateLimited(metricRoute(c))
 			seconds := retryAfterSeconds(decision.RetryAfter)
 			c.Set(fiber.HeaderRetryAfter, strconv.Itoa(seconds))
-			return &apperror.Error{Code: apperror.CodeRateLimited, Details: map[string]any{"retryAfterSeconds": seconds}}
+			return &apperror.Error{Code: apperror.CodeRateLimited, Details: map[string]any{apperror.RetryAfterDetail: seconds}}
 		}
 		return c.Next()
 	}

@@ -395,6 +395,54 @@ export const favoritesContentSchema = z.object({
   favoritesMenuLabel: contentTextSchema,
 });
 
+/**
+ * E-posta penceresi (T11.14): iki adim. Once adres ve "Kod gönder", sonra
+ * gonderilen adres, 6 haneli kod, gecerlilik geri sayimi ve yeniden gonderme.
+ * Sureler (dakika:saniye) etiketin arkasina yazilir: "Kodun geçerlilik süresi 09:41".
+ */
+export const emailDialogContentSchema = z.object({
+  title: contentTextSchema,
+  closeLabel: contentTextSchema,
+  /** Adres adimi. */
+  emailDescription: contentTextSchema,
+  emailFieldLabel: contentTextSchema,
+  sendLabel: contentTextSchema,
+  sendingLabel: contentTextSchema,
+  /** Kod adimi: "Doğrulama kodunu şu adrese gönderdik:" ve altinda adres. */
+  codeSentToLabel: contentTextSchema,
+  codeFieldLabel: contentTextSchema,
+  verifyLabel: contentTextSchema,
+  verifyingLabel: contentTextSchema,
+  expiresInLabel: contentTextSchema,
+  expiredNotice: contentTextSchema,
+  resendLabel: contentTextSchema,
+  /** Yeniden gonderme kapaliyken: "Yeni kodu isteyebilmen için 0:42". */
+  resendWaitLabel: contentTextSchema,
+  changeEmailLabel: contentTextSchema,
+  /** Basarida cikan bildirim (toast). */
+  verifiedToast: contentTextSchema,
+});
+
+/**
+ * Profil karti ve Hesabim paneli (T11.14; referans getircarsi profil karti):
+ * ad, altinda telefon, onun altinda e-posta; sag ustte kalem (e-posta
+ * penceresini acar). Dogrulanmis e-postanin yaninda yesil onay; telefonun
+ * yaninda YOK (ADR-12: numara dogrulanmaz, onay isareti yaniltirdi).
+ */
+export const profileContentSchema = z.object({
+  fullNameLabel: contentTextSchema,
+  phoneLabel: contentTextSchema,
+  emailLabel: contentTextSchema,
+  /** E-postasi olmayan kartin e-posta satirindaki baglanti. */
+  addEmailLabel: contentTextSchema,
+  /** Kalemin erisilebilir adi. */
+  editEmailLabel: contentTextSchema,
+  /** Yesil onayin erisilebilir adi. */
+  verifiedLabel: contentTextSchema,
+  loadingLabel: contentTextSchema,
+  emailDialog: emailDialogContentSchema,
+});
+
 /** GET /v1/content/welcome - oturumsuz ziyaretcinin karsilama ekrani. */
 export const welcomeContentSchema = z.object({
   header: z.object({
@@ -419,6 +467,7 @@ export const welcomeContentSchema = z.object({
   appHeader: appHeaderContentSchema,
   marketList: marketListContentSchema,
   favorites: favoritesContentSchema,
+  profile: profileContentSchema,
 });
 
 export type BannerSource = z.infer<typeof bannerSourceSchema>;
@@ -441,4 +490,6 @@ export type StoreTypeGroup = z.infer<typeof storeTypeGroupSchema>;
 export type MarketListCartContent = z.infer<typeof marketListCartContentSchema>;
 export type MarketListContent = z.infer<typeof marketListContentSchema>;
 export type FavoritesContent = z.infer<typeof favoritesContentSchema>;
+export type EmailDialogContent = z.infer<typeof emailDialogContentSchema>;
+export type ProfileContent = z.infer<typeof profileContentSchema>;
 export type WelcomeContent = z.infer<typeof welcomeContentSchema>;

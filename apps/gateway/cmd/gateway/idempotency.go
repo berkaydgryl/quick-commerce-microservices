@@ -1,8 +1,6 @@
 package main
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -35,7 +33,5 @@ func buildIdempotency(cfg config.Config, client *redis.Client) httpapi.Idempoten
 
 // fingerprintKey, JWT sirrindan parmak izi anahtarini turetir (HMAC).
 func fingerprintKey(secret []byte) []byte {
-	mac := hmac.New(sha256.New, secret)
-	mac.Write([]byte(fingerprintKeyLabel))
-	return mac.Sum(nil)
+	return derivedKey(secret, fingerprintKeyLabel)
 }

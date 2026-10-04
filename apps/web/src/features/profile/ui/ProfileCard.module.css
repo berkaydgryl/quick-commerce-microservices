@@ -1,0 +1,123 @@
+/*
+ * Profil karti (T11.14; referans getircarsi): beyaz kart; ustte ad, altinda
+ * cizgiyle ayrilmis telefon ve e-posta satirlari; sag ustte kalem dugmesi.
+ * Uzun ad ve adres kirilir, kart tasmaz.
+ */
+.c-profile-card {
+  position: relative;
+  display: grid;
+  padding: var(--space-4) var(--space-4) var(--space-2);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-surface);
+}
+
+/* Kalem: sag ust kose; ad onun altina kaymasin diye adin sagi bos kalir. */
+.c-profile-card__edit {
+  position: absolute;
+  inset-block-start: var(--space-3);
+  inset-inline-end: var(--space-3);
+  display: grid;
+  place-items: center;
+  width: var(--size-profile-edit);
+  aspect-ratio: 1;
+  padding: var(--space-2);
+  color: var(--color-brand-primary);
+  cursor: pointer;
+  background: var(--bg-surface);
+  border: var(--border-width-thin) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-surface);
+  transition: background var(--duration-fast) var(--easing-standard);
+}
+
+.c-profile-card__edit:disabled {
+  cursor: progress;
+  opacity: var(--opacity-disabled);
+}
+
+.c-profile-card__edit:hover:not(:disabled) {
+  background: var(--color-brand-primary-subtle);
+}
+
+.c-profile-card__loading {
+  padding-block: var(--space-3);
+  padding-inline-end: var(--size-profile-edit);
+  color: var(--text-muted);
+}
+
+.c-profile-card__name {
+  padding-block: var(--space-1) var(--space-3);
+  padding-inline-end: calc(var(--size-profile-edit) + var(--space-3));
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: inherit;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.c-profile-card__name:hover {
+  color: var(--color-brand-primary);
+}
+
+.c-profile-card__details {
+  display: grid;
+}
+
+.c-profile-card__row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  padding-block: var(--space-3);
+  border-block-start: var(--border-width-thin) solid var(--border-subtle);
+}
+
+/* Satirin ikonu: dt yalnizca yer tutar, boyut ve renk ikon kutusunda. */
+.c-profile-card__term {
+  display: grid;
+  flex-shrink: 0;
+}
+
+.c-profile-card__icon {
+  display: grid;
+  width: var(--size-profile-row-icon);
+  aspect-ratio: 1;
+  color: var(--color-brand-primary);
+}
+
+.c-profile-card__value {
+  display: flex;
+  flex: 1;
+  gap: var(--space-2);
+  align-items: center;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.c-profile-card__email {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.c-profile-card__verified {
+  display: grid;
+  flex-shrink: 0;
+  width: var(--size-profile-verified-icon);
+  color: var(--text-success);
+}
+
+.c-profile-card__add {
+  padding: 0;
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-brand-primary);
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.c-profile-card__add:hover {
+  text-decoration: underline;
+}

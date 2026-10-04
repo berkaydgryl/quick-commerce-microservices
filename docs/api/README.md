@@ -85,8 +85,9 @@ Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci 
   (`unavailableProductIds`), doğrulama hataları alan → sebep metnidir ve alan adı
   istemcinin gönderdiği addır (`items.0.quantity`, `address.location.lat`,
   `Idempotency-Key`).
-- **Kimlik** (T8.1): `GET /v1/me` ve sipariş uçları (`/v1/cart/reserve`,
-  `/v1/orders...`) `Authorization: Bearer <erişim jetonu>` ister. Jeton kayıt,
+- **Kimlik** (T8.1): `GET /v1/me`, `/v1/me/...` uçları (adres defteri, favoriler,
+  e-posta doğrulama) ve sipariş uçları (`/v1/cart/reserve`, `/v1/orders...`)
+  `Authorization: Bearer <erişim jetonu>` ister. Jeton kayıt,
   giriş ya da yenilemeyle alınır (HS256 JWT, ömrü JWT_TTL); yoksa ya da
   geçersizse `401 UNAUTHORIZED` + `WWW-Authenticate` döner. Yenileme jetonu
   opaktır, her kullanımda yenisiyle değişir ve sunucuda yalnızca özetiyle
@@ -108,7 +109,9 @@ Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci 
   ve girişte `getir_device` çereziyle (HttpOnly) verir. Oturumu kapatılmış jetonla
   sipariş `401` alır.
 - **Idempotency-Key**, kalıcı durum değiştiren uçlarda zorunludur:
-  `POST /v1/auth/register`, `POST /v1/cart/reserve`,
+  `POST /v1/auth/register`, `POST /v1/me/addresses`, `PUT` ve
+  `DELETE /v1/me/favorites/{marketId}`, `POST /v1/me/email/code`,
+  `POST /v1/me/email/verify` (T11.14), `POST /v1/cart/reserve`,
   `DELETE /v1/cart/reserve/{orderId}`, `POST /v1/orders`,
   `POST /v1/orders/{id}/3ds`. `POST /v1/auth/login`, `/v1/auth/refresh` ve
   `/v1/auth/logout` istemez: giriş ve yenileme kalıcı bir kaynak yaratmaz,

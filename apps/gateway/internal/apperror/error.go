@@ -2,6 +2,11 @@ package apperror
 
 import "fmt"
 
+// RetryAfterDetail, RATE_LIMITED hatasinin bekleme ayrintisi (tam saniye):
+// hiz siniri (T8.2) ve yeni dogrulama kodu beklemesi (T11.14) ayni adla doner;
+// web formu ayni alani okur. HTTP cevabinda Retry-After basligi da yazilir.
+const RetryAfterDetail = "retryAfterSeconds"
+
 // Error, gateway icinde tasinan tek hata tipi. HTTP katmani onu zarfa cevirir.
 type Error struct {
 	Code Code

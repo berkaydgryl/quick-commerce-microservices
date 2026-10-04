@@ -33,6 +33,7 @@
 
 .c-account-panel__value {
   font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
 }
 
 .c-account-panel__error {

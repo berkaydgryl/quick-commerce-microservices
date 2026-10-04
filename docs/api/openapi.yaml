@@ -697,6 +697,211 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /v1/me/email/code:
+    post:
+      tags: [auth]
+      operationId: sendEmailVerificationCode
+      summary: E-posta adresine doğrulama kodu gönder (T11.14)
+      description: |
+        Adrese 6 haneli kod gönderir (ADR-12 eki: e-posta kimlik değil,
+        doğrulanmış iletişim alanıdır). Adres kırpılır ve küçük harfe çevrilir.
+        Kod 10 dakika geçerlidir (`EMAIL_CODE_TTL_SECONDS`), 5 yanlışta iptal
+        olur (`EMAIL_CODE_MAX_ATTEMPTS`); yeni kod en erken 60 saniye sonra
+        istenir (`EMAIL_CODE_RESEND_SECONDS`) ve öncekini geçersiz kılar.
+        Adres başka bir hesapta doğrulanmışsa ya da zaten bu hesaptaysa
+        reddedilir. Hız sınırı kimlik uçlarınınkidir (kullanıcı başına).
+        `Idempotency-Key` zorunludur: ağ tekrarı ikinci ileti göndermez.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendEmailCodeRequest"
+      responses:
+        "202":
+          description: Kod yola çıktı; süreler saniye
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            Idempotent-Replayed:
+              $ref: "#/components/headers/IdempotentReplayed"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/EmailCodeSent"
+        "400":
+          description: |
+            Biçimsiz adres, eksik `Idempotency-Key` ya da kural: adres başka
+            hesapta ya da zaten bu hesapta (`email`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                emailTaken:
+                  summary: VALIDATION_FAILED (adres başka hesapta)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        email: "Bu e-posta adresi başka bir hesapta kayıtlı"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "409":
+          description: |
+            Aynı `Idempotency-Key` ile ilk istek hâlâ işleniyor
+            (`REQUEST_IN_PROGRESS`) ya da anahtar farklı bir gövdeyle geldi
+            (`CONFLICT`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                inProgress:
+                  $ref: "#/components/examples/IdempotencyRequestInProgress"
+                keyReused:
+                  $ref: "#/components/examples/IdempotencyKeyReused"
+        "429":
+          description: |
+            Yeni kod için bekleme bitmedi ya da hız sınırı aşıldı:
+            `Retry-After` ve `details.retryAfterSeconds` kalan saniyedir.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                resendTooSoon:
+                  summary: RATE_LIMITED (yeni kod için bekle)
+                  value:
+                    success: false
+                    error:
+                      code: RATE_LIMITED
+                      message: "Çok fazla deneme yaptın. Kısa bir süre sonra tekrar dene."
+                      details:
+                        retryAfterSeconds: 42
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          description: |
+            Posta sunucusuna ya da kod deposuna ulaşılamadı
+            (`SERVICE_UNAVAILABLE`). Kod silinir: beklemeden yeniden istenir.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+
+  /v1/me/email/verify:
+    post:
+      tags: [auth]
+      operationId: verifyEmail
+      summary: E-posta doğrulama kodunu onayla (T11.14)
+      description: |
+        Kodu doğrular ve adresi hesaba yazar; cevap güncel profildir
+        (`email` dolu). Adres de gönderilir: başka sekmede yeni adrese kod
+        istenmişse eski pencerenin kodu yanlış adresi doğrulamaz (bekleyenle
+        eşleşmeyen istek "süresi doldu" sayılır). Kod tek kullanımlıktır.
+        `Idempotency-Key` zorunludur.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyEmailRequest"
+      responses:
+        "200":
+          description: Adres doğrulandı; güncel profil
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            Idempotent-Replayed:
+              $ref: "#/components/headers/IdempotentReplayed"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/UserProfile"
+        "400":
+          description: |
+            Biçim hatası ya da kural: yanlış kod (kalan hak cümlede), 5. yanlışta
+            iptal, süresi dolmuş ya da istenmemiş kod (`code`); adres bu arada
+            başka hesapta doğrulanmış (`email`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                wrongCode:
+                  summary: VALIDATION_FAILED (yanlış kod)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        code: "Kod hatalı. 4 deneme hakkın kaldı."
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                expired:
+                  summary: VALIDATION_FAILED (süresi doldu)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        code: "Kodun süresi doldu. Yeni kod isteyebilirsin."
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "409":
+          description: |
+            Aynı `Idempotency-Key` ile ilk istek hâlâ işleniyor
+            (`REQUEST_IN_PROGRESS`) ya da anahtar farklı bir gövdeyle geldi
+            (`CONFLICT`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                inProgress:
+                  $ref: "#/components/examples/IdempotencyRequestInProgress"
+                keyReused:
+                  $ref: "#/components/examples/IdempotencyKeyReused"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /v1/me/favorites:
     get:
       tags: [auth]
@@ -2581,6 +2786,60 @@ components:
           $ref: "#/components/schemas/Phone"
         fullName:
           type: string
+        email:
+          description: |
+            Yalnızca DOĞRULANMIŞ adres (T11.14); yoksa alan hiç yazılmaz
+            (kullanıcı e-posta eklememiş). Kimlik değildir (ADR-12 eki).
+          allOf:
+            - $ref: "#/components/schemas/Email"
+
+    Email:
+      type: string
+      description: |
+        E-posta adresi; kırpılır ve küçük harfe çevrilir (benzersizlik bu
+        biçimdedir). Desen bilinçli olarak sadedir; adresin gerçek olduğunu
+        gönderilen kod kanıtlar (`@getir/contracts` EMAIL_PATTERN).
+      maxLength: 254
+      pattern: '^[^\s@]+@[^\s@]+\.[^\s@]+$'
+      examples: ["ayse@ornek.com"]
+
+    SendEmailCodeRequest:
+      type: object
+      required: [email]
+      additionalProperties: false
+      properties:
+        email:
+          $ref: "#/components/schemas/Email"
+
+    EmailCodeSent:
+      type: object
+      required: [email, expiresInSeconds, resendAfterSeconds]
+      properties:
+        email:
+          $ref: "#/components/schemas/Email"
+        expiresInSeconds:
+          type: integer
+          minimum: 1
+          description: Kodun kalan geçerliliği (saniye; EMAIL_CODE_TTL_SECONDS = 600).
+          examples: [600]
+        resendAfterSeconds:
+          type: integer
+          minimum: 0
+          description: Yeni kod için bekleme (saniye; EMAIL_CODE_RESEND_SECONDS = 60).
+          examples: [60]
+
+    VerifyEmailRequest:
+      type: object
+      required: [email, code]
+      additionalProperties: false
+      properties:
+        email:
+          $ref: "#/components/schemas/Email"
+        code:
+          type: string
+          pattern: "^[0-9]{6}$"
+          description: 6 haneli doğrulama kodu (OTP_PATTERN).
+          examples: ["042137"]
 
     # --- Katalog ------------------------------------------------------------
     Category:

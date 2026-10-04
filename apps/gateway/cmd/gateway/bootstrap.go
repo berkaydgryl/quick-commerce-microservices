@@ -155,6 +155,14 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 	// katalogdan tek cagriyla (BatchGetMarkets).
 	favoriteService := favorites.NewService(identity.favorites, catalogService, time.Now)
 
+	// E-posta dogrulama (T11.14): kod Redis'te (MOCK'ta bellek), ileti SMTP'yle
+	// (gelistirmede Mailpit), adres kullanici kaydinda.
+	emailVerification, err := buildEmailVerification(cfg, shared.client, identity.accounts)
+	if err != nil {
+		cleanup()
+		return nil, nil, fmt.Errorf("e-posta dogrulama: %w", err)
+	}
+
 	// Harita adres servisi (T11.8): Nominatim'e tek sira ve onbellekle gider.
 	places := geo.New(geo.Options{BaseURL: cfg.GeoBaseURL, UserAgent: cfg.GeoUserAgent, Timeout: cfg.GeoTimeout})
 
@@ -189,6 +197,8 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 		ProfileGetter:     identity.service,
 		AddressBook:       identity.service,
 		AddressAdder:      identity.service,
+		EmailCodeSender:   emailVerification,
+		EmailVerifier:     emailVerification,
 		Favorites:         favoriteService,
 		FavoriteAdder:     favoriteService,
 		FavoriteRemover:   favoriteService,

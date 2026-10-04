@@ -39,6 +39,10 @@ type userDocument struct {
 	Addresses            []addressDocument `bson:"addresses,omitempty"`
 	// FavoriteMarkets, favori marketler EN YENI BASTA (T11.13; MongoFavorites).
 	FavoriteMarkets []favoriteDocument `bson:"favoriteMarkets,omitempty"`
+	// Email, dogrulanmis e-posta (T11.14); yoksa alan yazilmaz ve benzersiz
+	// indekse girmez (kismi indeks).
+	Email           string     `bson:"email,omitempty"`
+	EmailVerifiedAt *time.Time `bson:"emailVerifiedAt,omitempty"`
 }
 
 // favoriteDocument, favori market: kimlik ve eklenme zamani.
@@ -83,13 +87,17 @@ type addressDocument struct {
 //
 // Indeksler BILDIRIMLIDIR, gocle degil (roadmap T10.4 kurali): users.phone
 // benzersizligi kaydin tek dogruluk kaynagidir (iki es zamanli kayit yarisini
-// o cozer), sessions.expiresAt TTL'i suresi dolan oturumlari siler.
+// o cozer), sessions.expiresAt TTL'i suresi dolan oturumlari siler. users.email
+// (T11.14) KISMI benzersizdir: yalnizca e-postasi olan belgeler indekse girer;
+// e-postasiz binlerce hesap "bos deger" uzerinden cakismaz.
 func EnsureIndexes(ctx context.Context, db *mongo.Database) error {
 	if _, err := db.Collection(UsersCollection).Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "phone", Value: 1}}, Options: options.Index().SetName("phone_unique").SetUnique(true)},
 		// "Ayni cihazdan acilmis hesap" sayimi (T8.1). Seyrek: cihazi
 		// bilinmeyen eski hesaplar indekse girmez.
 		{Keys: bson.D{{Key: "registrationDeviceId", Value: 1}}, Options: options.Index().SetName("registrationDeviceId").SetSparse(true)},
+		{Keys: bson.D{{Key: "email", Value: 1}}, Options: options.Index().SetName("email_unique").SetUnique(true).
+			SetPartialFilterExpression(bson.D{{Key: "email", Value: bson.D{{Key: "$type", Value: "string"}}}})},
 	}); err != nil {
 		return fmt.Errorf("users indeksleri: %w", err)
 	}
@@ -225,6 +233,39 @@ func (m *MongoUsers) SetPasswordHash(ctx context.Context, userID, passwordHash s
 	return nil
 }
 
+// EmailOwner, adresi dogrulanmis kullanicinin kimligi; kimsede yoksa "" (T11.14).
+// Yalnizca erken uyari icindir: karari SetVerifiedEmail'in benzersiz indeksi verir.
+func (m *MongoUsers) EmailOwner(ctx context.Context, email string) (string, error) {
+	opts := options.FindOne().SetProjection(bson.D{{Key: "_id", Value: 1}})
+	var doc userDocument
+	err := m.collection.FindOne(ctx, bson.D{{Key: "email", Value: email}}, opts).Decode(&doc)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("e-posta sahibi okunamadi: %w", err)
+	}
+	return doc.ID, nil
+}
+
+// SetVerifiedEmail, dogrulanmis adresi kullaniciya yazar (T11.14). Adres
+// baska hesaptaysa auth.ErrEmailTaken: karar benzersiz indekstedir, iki
+// hesabin ayni anda dogrulamasi yarisamaz. Kullanici yoksa auth.ErrUserNotFound.
+func (m *MongoUsers) SetVerifiedEmail(ctx context.Context, userID, email string, verifiedAt time.Time) error {
+	result, err := m.collection.UpdateOne(ctx, bson.D{{Key: "_id", Value: userID}},
+		bson.D{{Key: "$set", Value: bson.D{{Key: "email", Value: email}, {Key: "emailVerifiedAt", Value: verifiedAt}}}})
+	if mongo.IsDuplicateKeyError(err) {
+		return auth.ErrEmailTaken
+	}
+	if err != nil {
+		return fmt.Errorf("e-posta yazilamadi: %w", err)
+	}
+	if result.MatchedCount == 0 {
+		return auth.ErrUserNotFound
+	}
+	return nil
+}
+
 // CountByRegistrationDevice, cihazdan acilmis hesap sayisi (seyrek indeksle).
 func (m *MongoUsers) CountByRegistrationDevice(ctx context.Context, deviceID string) (int, error) {
 	count, err := m.collection.CountDocuments(ctx, bson.D{{Key: "registrationDeviceId", Value: deviceID}})
@@ -312,7 +353,11 @@ func toUserDocument(user auth.User) userDocument {
 	doc := userDocument{
 		ID: user.ID, Phone: user.Phone, PasswordHash: user.PasswordHash, FullName: user.FullName, CreatedAt: user.CreatedAt,
 		RegistrationDeviceID: user.RegistrationDeviceID, LastLoginIP: user.LastLoginIP,
-		LastLocation: toGeoPointDocumentPtr(user.LastLocation),
+		LastLocation: toGeoPointDocumentPtr(user.LastLocation), Email: user.Email,
+	}
+	if !user.EmailVerifiedAt.IsZero() {
+		verifiedAt := user.EmailVerifiedAt
+		doc.EmailVerifiedAt = &verifiedAt
 	}
 	for _, address := range user.Addresses {
 		doc.Addresses = append(doc.Addresses, toAddressDocument(address))
@@ -338,7 +383,10 @@ func fromUserDocument(doc userDocument) auth.User {
 	user := auth.User{
 		ID: doc.ID, Phone: doc.Phone, PasswordHash: doc.PasswordHash, FullName: doc.FullName, CreatedAt: doc.CreatedAt,
 		RegistrationDeviceID: doc.RegistrationDeviceID, LastLoginIP: doc.LastLoginIP,
-		LastLocation: fromGeoPointDocument(doc.LastLocation),
+		LastLocation: fromGeoPointDocument(doc.LastLocation), Email: doc.Email,
+	}
+	if doc.EmailVerifiedAt != nil {
+		user.EmailVerifiedAt = doc.EmailVerifiedAt.UTC()
 	}
 	for _, address := range doc.Addresses {
 		user.Addresses = append(user.Addresses, fromAddressDocument(address))

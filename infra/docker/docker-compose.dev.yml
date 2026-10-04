@@ -1,7 +1,7 @@
 # Gelistirme ortami altyapisi (yalnizca durum tutan servisler).
 #
-# Bu compose dosyasi SADECE MongoDB'yi, Redis'i ve iz goruntuleyicisini
-# (Jaeger, D15) ayaga kaldirir. Uygulama servisleri (apps/*) host uzerinde
+# Bu compose dosyasi SADECE MongoDB'yi, Redis'i, iz goruntuleyicisini
+# (Jaeger, D15) ve sahte posta sunucusunu (Mailpit, T11.14) ayaga kaldirir. Uygulama servisleri (apps/*) host uzerinde
 # "pnpm dev" ile calisir; bilerek konteynerize edilmemislerdir (hizli yeniden
 # yukleme + kolay hata ayiklama).
 #
@@ -123,6 +123,28 @@ services:
       - getir-net
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:13133/status"]
+      interval: 5s
+      retries: 20
+      start_period: 5s
+
+  # ---------------------------------------------------------------------------
+  # Mailpit - sahte posta sunucusu (T11.14: e-posta dogrulama kodu)
+  # ---------------------------------------------------------------------------
+  # Gateway dogrulama kodunu SMTP ile 1025'e gonderir (SMTP_URL=smtp://localhost:1025);
+  # ileti disari CIKMAZ, arayuzde gorunur: http://localhost:8025. Iletiler
+  # BELLEKTE tutulur (Jaeger gibi), konteyner yeniden baslayinca gider. Gercek
+  # SMTP (TLS, kimlik dogrulama) bekleyen is #90.
+  mailpit:
+    image: axllent/mailpit:v1.31.4
+    container_name: getir-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - getir-net
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
       interval: 5s
       retries: 20
       start_period: 5s

@@ -8,6 +8,7 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/authstore"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/config"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/emailverify"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/favorites"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/mongodb"
@@ -30,6 +31,9 @@ type authParts struct {
 	// favorites, favori marketlerin deposu (T11.13): kullanici kaydiyla ayni
 	// yerde (MOCK'ta bellek, aksi halde users koleksiyonu).
 	favorites favorites.Store
+	// accounts, e-posta dogrulamasinin kullanici tarafi (T11.14): kullanici
+	// deposunun kendisi (adres kullanici belgesinde).
+	accounts emailverify.Accounts
 }
 
 // buildAuth, kimlik servisini kurar. passwordCost bcrypt maliyetidir: gercek
@@ -58,6 +62,7 @@ func buildAuth(ctx context.Context, cfg config.Config, passwordCost int) (authPa
 		deps.Users, deps.Sessions = users, authstore.NewMemorySessions()
 		parts.service = auth.NewService(deps)
 		parts.favorites = authstore.NewMemoryFavorites()
+		parts.accounts = users
 		parts.personas = loaded
 		return parts, nil
 	}
@@ -77,9 +82,11 @@ func buildAuth(ctx context.Context, cfg config.Config, passwordCost int) (authPa
 		}
 		return authParts{}, err
 	}
-	deps.Users, deps.Sessions = authstore.NewMongoUsers(db), authstore.NewMongoSessions(db)
+	users := authstore.NewMongoUsers(db)
+	deps.Users, deps.Sessions = users, authstore.NewMongoSessions(db)
 	parts.service = auth.NewService(deps)
 	parts.favorites = authstore.NewMongoFavorites(db)
+	parts.accounts = users
 	parts.pingers = map[string]health.Pinger{mongoHealthName: mongodb.NewPinger(client)}
 	parts.close = client.Disconnect
 	return parts, nil

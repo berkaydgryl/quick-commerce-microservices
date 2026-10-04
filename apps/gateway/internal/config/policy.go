@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/mail"
 	"net/url"
 	"strings"
 )
@@ -180,4 +181,40 @@ func readGeoBaseURL(getenv Getenv) (*url.URL, error) {
 	}
 	parsed.Path = strings.TrimRight(parsed.Path, "/")
 	return parsed, nil
+}
+
+// readSMTPAddress, e-posta dogrulama kodunun SMTP sunucusu (T11.14): smtp://host:port.
+//
+// Verilmezse: MOCK'ta "" (iletiler bellekte; altyapisiz gelistirme), production'da
+// HATA (canli ortam adresini acikca verir), aksi halde compose'daki Mailpit.
+// Bugun yalnizca sifresiz SMTP: kullanici adi/parola ve smtps:// reddedilir;
+// TLS ve kimlik dogrulama bekleyen is #90. Hata metni degeri ICERMEZ.
+func readSMTPAddress(getenv Getenv, mock bool, nodeEnv string) (string, error) {
+	const name = "SMTP_URL"
+	raw := strings.TrimSpace(getenv(name))
+	switch {
+	case raw == "" && mock:
+		return "", nil
+	case raw == "" && nodeEnv == EnvProduction:
+		return "", fmt.Errorf("%s: production'da zorunlu, ornek: %s", name, defaultSMTPURL)
+	case raw == "":
+		raw = defaultSMTPURL
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme != "smtp" || parsed.Hostname() == "" || parsed.Port() == "" ||
+		parsed.User != nil || strings.Trim(parsed.Path, "/") != "" || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", fmt.Errorf("%s: smtp://host:port biciminde olmali (kimlik bilgisi ve TLS bugun yok, bekleyen is #90), ornek: %s", name, defaultSMTPURL)
+	}
+	return parsed.Host, nil
+}
+
+// readMailFrom, iletinin gondereni (T11.14): "Ad <adres>" ya da yalnizca adres.
+func readMailFrom(getenv Getenv) (mail.Address, error) {
+	const name = "MAIL_FROM"
+	raw := readString(getenv, name, defaultMailFrom)
+	address, err := mail.ParseAddress(raw)
+	if err != nil {
+		return mail.Address{}, fmt.Errorf("%s: gecerli bir e-posta adresi olmali, ornek: %s", name, defaultMailFrom)
+	}
+	return *address, nil
 }
