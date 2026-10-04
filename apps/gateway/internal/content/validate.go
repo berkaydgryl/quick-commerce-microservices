@@ -25,6 +25,10 @@ var (
 	countryCodeRule = regexp.MustCompile(countryCodePattern)
 )
 
+// storeTypes, sozlesmedeki dukkan turleri, proto sirasiyla (@getir/contracts
+// storeTypeSchema; esitligi contract_test.go denetler).
+var storeTypes = []string{"MARKET", "MANAV", "KASAP", "SARKUTERI", "KURUYEMIS", "FIRIN", "PETSHOP", "CICEKCI"}
+
 // validateWelcome, icerigin sozlesmeye uydugunu dogrular. Gorsel yollari
 // henuz goreli oldugu icin URL kurali burada degil, cozumlemede (load.go)
 // uygulanir.
@@ -36,6 +40,7 @@ func validateWelcome(welcome Welcome) error {
 		checkAppDownload(welcome.AppDownload),
 		checkFeatures(welcome.Features),
 		checkAddressSetup(welcome.AddressSetup),
+		checkMarketList(welcome.MarketList),
 	)
 }
 
@@ -171,6 +176,52 @@ func checkAddressSetup(setup AddressSetup) error {
 			problems = append(problems, fmt.Errorf("%s.kinds[%d].kind %q iki kez yazilmis", path, index, option.Kind))
 		}
 		seen[option.Kind] = struct{}{}
+	}
+	return errors.Join(problems...)
+}
+
+// checkMarketList (T11.12): her dukkan turunun adi tam bir kez yazilir ve her
+// tur tam bir gruba aittir. Eksik tur istemcide menude gorunmeyen market,
+// bilinmeyen tur adsiz satir olurdu.
+func checkMarketList(list MarketList) error {
+	const path = "marketList"
+	labelled := make([]string, 0, len(list.StoreTypes))
+	for _, option := range list.StoreTypes {
+		labelled = append(labelled, option.Type)
+	}
+	problems := []error{checkStoreTypeCoverage(path+".storeTypes", labelled)}
+	if len(list.Groups) == 0 {
+		problems = append(problems, fmt.Errorf("%s.groups bos", path))
+	}
+	grouped := make([]string, 0, len(storeTypes))
+	for index, group := range list.Groups {
+		if len(group.Types) == 0 {
+			problems = append(problems, fmt.Errorf("%s.groups[%d].types bos", path, index))
+		}
+		grouped = append(grouped, group.Types...)
+	}
+	problems = append(problems, checkStoreTypeCoverage(path+".groups", grouped))
+	return errors.Join(problems...)
+}
+
+// checkStoreTypeCoverage: liste sozlesmedeki turlerin her birini tam bir kez tasir.
+func checkStoreTypeCoverage(path string, types []string) error {
+	var problems []error
+	seen := make(map[string]int, len(types))
+	for _, storeType := range types {
+		if !slices.Contains(storeTypes, storeType) {
+			problems = append(problems, fmt.Errorf("%s: bilinmeyen tur %q", path, storeType))
+		}
+		seen[storeType]++
+	}
+	for _, storeType := range storeTypes {
+		switch count := seen[storeType]; count {
+		case 1:
+		case 0:
+			problems = append(problems, fmt.Errorf("%s: %s yok", path, storeType))
+		default:
+			problems = append(problems, fmt.Errorf("%s: %s %d kez yazilmis", path, storeType, count))
+		}
 	}
 	return errors.Join(problems...)
 }

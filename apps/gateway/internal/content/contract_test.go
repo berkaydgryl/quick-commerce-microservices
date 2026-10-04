@@ -1,6 +1,7 @@
 package content
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/testkit"
@@ -33,5 +34,14 @@ func TestLimitsMatchContractConstants(t *testing.T) {
 		if pattern := testkit.PatternConstant(t, source, name); pattern != goPattern {
 			t.Errorf("%s: sozlesme %q, gateway %q", name, pattern, goPattern)
 		}
+	}
+}
+
+// Dukkan turlerinin listesi (T11.12) @getir/contracts storeTypeSchema ile ayni
+// sirada olmali: icerik o listeyle dogrulanir, web ayni listeyi bekler.
+func TestStoreTypesMatchContract(t *testing.T) {
+	source := testkit.ReadContract(t, "../../../../packages/contracts/src/catalog.ts")
+	if contract := testkit.StringEnum(t, source, "storeTypeSchema"); !slices.Equal(storeTypes, contract) {
+		t.Errorf("dukkan turleri farkli:\n gateway  %v\n sozlesme %v", storeTypes, contract)
 	}
 }

@@ -138,6 +138,21 @@
   --size-map-pin: 2.75rem;
   --size-map-pin-icon: 1.25rem;
 
+  /* Market listesi (T11.12; referans getircarsi): sol menunun kucuk gorseli
+     ve oku, kart kapaginin orani, kapaktaki bas harf rozeti, puan yildizi,
+     Sepetim'in bos durum ikonu ve telefondaki sepet cubugu. Sutunlar oranla
+     (1:2:1) bolunur; sabit sutun genisligi yok. */
+  --size-store-menu-image: 2.5rem;
+  --size-store-menu-chevron: 1.25rem;
+  --ratio-market-cover: 16 / 9;
+  --size-market-badge: 2.75rem;
+  --size-rating-icon: 1em;
+  --size-cart-empty-icon: 2.5rem;
+  --size-cart-bar: 3.5rem;
+
+  /* Ekranda gorunmeyen, ekran okuyucunun okudugu metin (kartin puan adi). */
+  --size-visually-hidden: 0.0625rem;
+
   /* --- Kenar, yaricap, golge --- */
   --border-width-thin: 0.0625rem;
   --focus-ring-width: 0.1875rem;
@@ -164,6 +179,10 @@
 
   /* --- Katman sirasi --- */
   --z-header: 10;
+
+  /* Telefondaki sepet cubugu (T11.12): ekranin altinda sabit, icerigin
+     ustunde; pencereler (dialog) tarayicinin ust katmanindadir, yarismaz. */
+  --z-cart-bar: 10;
 
   /* Sayfanin ustune acilan liste (karsilama kartinin demo hesaplari, T11.6):
      alttaki icerigin ustunde, sabit ust barin (--z-header) ALTINDA kalir;

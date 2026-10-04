@@ -184,6 +184,11 @@ export function itemCount(state: CartState): number {
   return state.items.reduce((sum, item) => sum + item.quantity, 0);
 }
 
+/** Kalemin tutari (birim fiyat x adet), KURUS; gosterim icindir, toplam @getir/pricing'tedir. */
+export function lineTotalMinor(item: CartItem): number {
+  return item.unitPriceMinor * item.quantity;
+}
+
 function withQuantity(state: CartState, offerId: string, quantity: number): CartState {
   return {
     ...state,

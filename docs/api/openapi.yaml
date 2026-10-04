@@ -2465,7 +2465,17 @@ components:
         Karşılama ekranı (T11.6). Form KURALLARI ve hata cümleleri burada
         değildir; onlar kimlik şemalarından gelir.
       required:
-        [header, hero, loginCard, categories, appDownload, features, addressSetup, appHeader]
+        [
+          header,
+          hero,
+          loginCard,
+          categories,
+          appDownload,
+          features,
+          addressSetup,
+          appHeader,
+          marketList,
+        ]
       properties:
         header:
           type: object
@@ -2504,6 +2514,107 @@ components:
           $ref: "#/components/schemas/AddressSetupContent"
         appHeader:
           $ref: "#/components/schemas/AppHeaderContent"
+        marketList:
+          $ref: "#/components/schemas/MarketListContent"
+
+    MarketListContent:
+      type: object
+      description: |
+        Market listesi ekranı (T11.12; referans getirçarşı): solda gruplu
+        dükkân türleri, ortada market kartları, sağda Sepetim. Hangi türün
+        hangi grupta olduğu içerikten gelir: her tür tam bir gruptadır ve adı
+        tam bir kez yazılır (`storeTypes`, `groups`). Para ve süre biçimi
+        istemcidedir; burada yalnızca etiketler.
+      required:
+        [
+          categoriesTitle,
+          allLabel,
+          countLabel,
+          clearFilterLabel,
+          loadingLabel,
+          emptyNotice,
+          filterEmptyNotice,
+          ratingLabel,
+          ratingCountLabel,
+          minBasketLabel,
+          freeDeliveryThresholdLabel,
+          closedLabel,
+          storeTypes,
+          groups,
+          cart,
+        ]
+      properties:
+        categoriesTitle: { $ref: "#/components/schemas/ContentText" }
+        allLabel: { $ref: "#/components/schemas/ContentText" }
+        countLabel:
+          $ref: "#/components/schemas/ContentText"
+          description: 'Sayının arkası: "21 işletme listeleniyor".'
+        clearFilterLabel: { $ref: "#/components/schemas/ContentText" }
+        loadingLabel: { $ref: "#/components/schemas/ContentText" }
+        emptyNotice: { $ref: "#/components/schemas/ContentText" }
+        filterEmptyNotice: { $ref: "#/components/schemas/ContentText" }
+        ratingLabel: { $ref: "#/components/schemas/ContentText" }
+        ratingCountLabel: { $ref: "#/components/schemas/ContentText" }
+        minBasketLabel: { $ref: "#/components/schemas/ContentText" }
+        freeDeliveryThresholdLabel:
+          $ref: "#/components/schemas/ContentText"
+          description: 'Eşiğin arkası: "300,00 TL üzeri ücretsiz teslimat".'
+        closedLabel: { $ref: "#/components/schemas/ContentText" }
+        storeTypes:
+          type: array
+          description: Her dükkân türünün adı, tam bir kez.
+          items:
+            type: object
+            required: [type, label]
+            properties:
+              type: { $ref: "#/components/schemas/StoreType" }
+              label: { $ref: "#/components/schemas/ContentText" }
+        groups:
+          type: array
+          minItems: 1
+          description: Sol menünün akordeon grupları; her tür tam bir grupta.
+          items:
+            type: object
+            required: [label, imageUrl, types]
+            properties:
+              label: { $ref: "#/components/schemas/ContentText" }
+              imageUrl:
+                type: string
+                format: uri
+                description: Satırdaki küçük görsel; MUTLAK URL (gateway kurar).
+              types:
+                type: array
+                minItems: 1
+                items: { $ref: "#/components/schemas/StoreType" }
+        cart:
+          type: object
+          description: Sepetim paneli ve telefondaki sepet çubuğu.
+          required:
+            [
+              title,
+              emptyTitle,
+              emptyHint,
+              itemCountLabel,
+              subtotalLabel,
+              deliveryLabel,
+              freeDeliveryLabel,
+              totalLabel,
+              minBasketRemainingLabel,
+              goToCartLabel,
+              clearLabel,
+            ]
+          properties:
+            title: { $ref: "#/components/schemas/ContentText" }
+            emptyTitle: { $ref: "#/components/schemas/ContentText" }
+            emptyHint: { $ref: "#/components/schemas/ContentText" }
+            itemCountLabel: { $ref: "#/components/schemas/ContentText" }
+            subtotalLabel: { $ref: "#/components/schemas/ContentText" }
+            deliveryLabel: { $ref: "#/components/schemas/ContentText" }
+            freeDeliveryLabel: { $ref: "#/components/schemas/ContentText" }
+            totalLabel: { $ref: "#/components/schemas/ContentText" }
+            minBasketRemainingLabel: { $ref: "#/components/schemas/ContentText" }
+            goToCartLabel: { $ref: "#/components/schemas/ContentText" }
+            clearLabel: { $ref: "#/components/schemas/ContentText" }
 
     ContentImage:
       type: object
@@ -2932,6 +3043,15 @@ components:
             - $ref: "#/components/schemas/Money"
           description: Ara toplam (indirim ÖNCESİ, B12) buna ulaşırsa teslimat ücretsiz.
 
+    StoreType:
+      type: string
+      enum: [MARKET, MANAV, KASAP, SARKUTERI, KURUYEMIS, FIRIN, PETSHOP, CICEKCI]
+      description: |
+        Dükkân türü (T11.11). `getir.catalog.v1.StoreType` ile birebir aynı
+        sözlük. Market listesinin sol menüsü bu alana göre süzer; türün adı ve
+        grubu içerik ucundan gelir (`WelcomeContent.marketList`, T11.12). Market
+        cevabında tür bilinmiyorsa alan yok.
+
     Market:
       type: object
       required:
@@ -2960,12 +3080,7 @@ components:
           format: uri
           description: MUTLAK URL (gateway kurar); logosu olmayan markette alan yok.
         storeType:
-          type: string
-          enum: [MARKET, MANAV, KASAP, SARKUTERI, KURUYEMIS, FIRIN, PETSHOP, CICEKCI]
-          description: |
-            Dükkân türü (T11.11); market listesinin sol menüsü bu alana göre
-            süzer. `getir.catalog.v1.StoreType` ile birebir aynı sözlük; tür
-            bilinmiyorsa alan yok. Türkçe etiket istemcide üretilir.
+          $ref: "#/components/schemas/StoreType"
         coverUrl:
           type: string
           format: uri

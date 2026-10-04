@@ -57,7 +57,8 @@ func decodeStrict(raw []byte) (Welcome, error) {
 }
 
 // resolveImages, banner boylarini, bayraklari ve tanitim gorsellerini (telefon
-// gorseli, magaza rozetleri, kutu gorselleri; T11.7) mutlak adrese cevirir.
+// gorseli, magaza rozetleri, kutu gorselleri; T11.7; market listesinin grup
+// gorselleri; T11.12) mutlak adrese cevirir.
 // Magaza baglantisi cevrilmez: disari giden adrestir (validate.go).
 // Cozulemeyen yol (http(s) disi sema) hatadir: istemcide bos gorsel olurdu.
 // Girdinin dilimleri degistirilmez, cevap yeni dilimlerle kurulur.
@@ -91,10 +92,20 @@ func resolveImages(welcome Welcome, images ImageResolver) (Welcome, error) {
 		}
 		features = append(features, Feature{Image: image, Text: feature.Text})
 	}
+	groups := make([]StoreTypeGroup, 0, len(welcome.MarketList.Groups))
+	for index, group := range welcome.MarketList.Groups {
+		url, err := resolve(images, group.ImageURL, fmt.Sprintf("marketList.groups[%d].imageUrl", index))
+		if err != nil {
+			return Welcome{}, err
+		}
+		group.ImageURL = url
+		groups = append(groups, group)
+	}
 	welcome.Hero.Banner.Sources = sources
 	welcome.LoginCard.Countries = countries
 	welcome.AppDownload = download
 	welcome.Features = features
+	welcome.MarketList.Groups = groups
 	return welcome, nil
 }
 

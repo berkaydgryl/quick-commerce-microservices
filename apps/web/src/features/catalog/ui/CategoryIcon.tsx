@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import styles from './CategoryStrip.module.css';
+import styles from './CategoryIcon.module.css';
 
 interface CategoryIconProps {
   readonly name: string;
@@ -16,17 +16,17 @@ export function CategoryIcon({ name, imageUrl }: CategoryIconProps) {
   const showImage = imageUrl !== undefined && !failed;
 
   return (
-    <span className={styles['c-category-strip__icon']} aria-hidden="true">
+    <span className={styles['c-category-icon']} aria-hidden="true">
       {showImage ? (
         <img
-          className={styles['c-category-strip__image']}
+          className={styles['c-category-icon__image']}
           src={imageUrl}
           alt=""
           loading="lazy"
           onError={() => setFailed(true)}
         />
       ) : (
-        <span className={styles['c-category-strip__initial']}>
+        <span className={styles['c-category-icon__initial']}>
           {name.charAt(0).toLocaleUpperCase('tr-TR')}
         </span>
       )}

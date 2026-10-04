@@ -1,0 +1,22 @@
+/* Kategori gorseli (karsilama ekraninin kategori izgarasi): kare kutu, yoksa bas harf. */
+.c-category-icon {
+  display: grid;
+  place-items: center;
+  width: var(--size-category-icon);
+  aspect-ratio: 1;
+  overflow: hidden;
+  background: var(--color-brand-primary-subtle);
+  border-radius: var(--radius-lg);
+}
+
+.c-category-icon__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.c-category-icon__initial {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-extrabold);
+  color: var(--color-brand-primary);
+}
