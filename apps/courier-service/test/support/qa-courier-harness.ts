@@ -1,8 +1,9 @@
 /**
- * QA kara kutu duzenegi (T13.1): kurye servisini GERCEK gRPC sunucusu ve
- * istemcisiyle acar. Testler yalnizca tel uzerindeki sozlesmeyi gorur: proto
- * cevabi, gRPC durum kodu ve `x-app-error` yuku. Depo disaridan verilir
- * (MOCK'un bellek deposu ya da gercek Mongo); use-case'e dokunulmaz.
+ * QA kara kutu duzenegi (T13.1; havuz T13.2): kurye servisini GERCEK gRPC
+ * sunucusu ve istemcisiyle acar. Testler yalnizca tel uzerindeki sozlesmeyi
+ * gorur: proto cevabi, gRPC durum kodu ve `x-app-error` yuku. Depo ve market
+ * kopyasi disaridan verilir (MOCK'un bellek deposu ya da gercek Mongo);
+ * use-case'e dokunulmaz. Market kopyasi verilmezse demo marketleri bellekte.
  */
 
 import { GRPC_STATUS } from '@getir/core';
@@ -13,10 +14,15 @@ import type { CallResult, TestGrpcServer } from '@getir/service-kit/testing';
 
 import { buildCourierService } from '../../src/bootstrap.js';
 import type { CourierRepository } from '../../src/domain/courier-repository.js';
+import type { MarketLocator } from '../../src/domain/market-locator.js';
 
 export const COURIER_SERVICE = courierV1.CourierServiceService;
 
-/** Katalogun demo marketlerinin sayisi ve markete dusen kurye (T13.1: 21 x 3 = 63). */
+/**
+ * Katalogun demo marketlerinin sayisi ve her marketin YAKININA konan kurye
+ * (21 x 3 = 63). T13.2'den beri kurye markete bagli degil: marketin 3 km
+ * cevresindeki bos kuryelerden biri atanir (semt havuzu).
+ */
 export const DEMO_MARKET_COUNT = 21;
 export const DEMO_COURIERS_PER_MARKET = 3;
 export const DEMO_COURIER_COUNT = DEMO_MARKET_COUNT * DEMO_COURIERS_PER_MARKET;
@@ -42,6 +48,7 @@ export interface QaCourierServer {
 
 export async function startQaCourierServer(options: {
   readonly repository: CourierRepository;
+  readonly markets?: MarketLocator;
   readonly clock: MutableClock;
   readonly logger?: Logger;
   readonly name?: string;
@@ -51,6 +58,7 @@ export async function startQaCourierServer(options: {
     services: [
       buildCourierService({
         couriers: options.repository,
+        ...(options.markets === undefined ? {} : { markets: options.markets }),
         clock: options.clock,
         ...(options.logger === undefined ? {} : { logger: options.logger }),
       }),

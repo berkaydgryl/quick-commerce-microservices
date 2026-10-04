@@ -4,8 +4,9 @@
  * Komut yalnizca ortam degiskenleriyle yonetilir; sonuc cikis kodundan, gunluk
  * satirlarindan ve veritabanindan okunur.
  *
- * Beklenen (T13.1): katalogdaki 21 markete 3'er kurye = 63; hepsi IDLE, hic
- * atanmamis, marketinin konumunda. Tekrar kosmak sifirlar; production reddeder ve
+ * Beklenen (T13.1; havuz T13.2): katalogdaki 21 marketin yakinina 3'er kurye = 63;
+ * hepsi IDLE, hic atanmamis, bosta beklemesi seed aninda baslamis, markete bagli
+ * degil; 21 marketin konumu kopyada. Tekrar kosmak sifirlar; production reddeder ve
  * canli atamalara dokunmaz. Kuryenin adi gunluge yazilmaz.
  *
  * CI'da `pnpm build` entegrasyon testlerinden once kosar; yerelde once derleyin.
@@ -24,8 +25,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
 import { MARKETS } from '../../../catalog-service/src/infrastructure/fixtures/markets.js';
+import { distanceMeters } from '../../src/domain/geo.js';
 import { openCourierStore } from '../../src/infrastructure/courier-store.js';
-import type { CourierDocument } from '../../src/infrastructure/mongo/documents.js';
+import type { CourierDocument, MarketDocument } from '../../src/infrastructure/mongo/documents.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
 import { NOW_MS } from '../support/couriers.js';
 import {
@@ -109,6 +111,19 @@ function collection(dbName: string) {
   return connection.client.db(dbName).collection<CourierDocument>(COLLECTIONS.COURIERS);
 }
 
+function marketCopy(dbName: string) {
+  return connection.client.db(dbName).collection<MarketDocument>(COLLECTIONS.MARKETS);
+}
+
+/** Demo verisinde Kadikoy 41. enlemin guneyinde, Besiktas kuzeyinde. */
+const isKadikoy = (point: { readonly lat: number }): boolean => point.lat < 41;
+
+/** GeoJSON [boylam, enlem] -> {lat, lng}. */
+const pointOf = (document: CourierDocument) => {
+  const [lng = 0, lat = 0] = document.lastLocation.coordinates;
+  return { lat, lng };
+};
+
 beforeAll(async () => {
   if (!existsSync(SEED_ENTRY)) {
     throw new Error(`${SEED_ENTRY} yok: once "pnpm build" (CI'da entegrasyondan once kosar)`);
@@ -123,7 +138,7 @@ afterAll(async () => {
 });
 
 describe('QA kurye seed komutu (node dist/seed.js, gercek Mongo)', () => {
-  it('bos veritabanina 21 x 3 = 63 kurye: hepsi IDLE, atanmamis, marketinin konumunda; indeksler kurulu', async () => {
+  it('bos veritabanina 63 kurye (her marketin yakininda 3) ve 21 market konumu: hepsi IDLE, atanmamis, markete bagli degil; indeksler kurulu', async () => {
     const dbName = freshDb();
 
     const run = await runSeed(dbName, 'development');
@@ -139,26 +154,43 @@ describe('QA kurye seed komutu (node dist/seed.js, gercek Mongo)', () => {
     for (const document of documents) {
       expect(document._id).toMatch(/^crr_[0-9a-f]{32}$/);
       expect(document.status).toBe('IDLE');
+      expect(document.idleSince).toBeInstanceOf(Date);
+      expect(document.lastLocation.type).toBe('Point');
       expect(Object.keys(document)).not.toContain('currentOrderId');
       expect(Object.keys(document)).not.toContain('lastAssignedAt');
+      expect(Object.keys(document)).not.toContain('marketId');
       expect(document.name.trim()).not.toBe('');
     }
     for (const market of MARKETS) {
-      const mine = documents.filter((document) => document.marketId === market.id);
-      expect(mine, market.id).toHaveLength(DEMO_COURIERS_PER_MARKET);
-      for (const document of mine) {
-        expect(document.lastLocation).toEqual({ lat: market.lat, lng: market.lng });
-      }
+      const close = documents.filter((document) => {
+        const distance = distanceMeters(market, pointOf(document));
+        return distance >= 39 && distance <= 151;
+      });
+      expect(close.length, market.id).toBeGreaterThanOrEqual(DEMO_COURIERS_PER_MARKET);
     }
+    const copies = await marketCopy(dbName).find().toArray();
+    expect(
+      copies
+        .map((copy) => ({
+          id: copy._id,
+          lat: copy.location.coordinates[1],
+          lng: copy.location.coordinates[0],
+        }))
+        .sort((left, right) => left.id.localeCompare(right.id)),
+    ).toEqual(
+      MARKETS.map((market) => ({ id: market.id, lat: market.lat, lng: market.lng })).sort(
+        (left, right) => left.id.localeCompare(right.id),
+      ),
+    );
     const indexes = (await collection(dbName).indexes()).map((index) => index.name).sort();
-    expect(indexes).toEqual(['_id_', 'currentOrderId_unique', 'marketId_status_lastAssignedAt']);
+    expect(indexes).toEqual(['_id_', 'currentOrderId_unique', 'lastLocation_2dsphere_status']);
     // Kisisel veri: komutun ciktisinda hicbir kuryenin adi yok.
     for (const document of documents) {
       expect(run.output).not.toContain(document.name);
     }
   });
 
-  it('seed edilen veriyle servis acilir; her marketten tam 3 atama, 4. NOT_FOUND; tekrar seed atanmislari sifirlar', async () => {
+  it('seed edilen veriyle servis acilir; her semt kendi kuryesi kadar atar, fazlasi NOT_FOUND; tekrar seed atanmislari sifirlar', async () => {
     const dbName = freshDb();
     expect((await runSeed(dbName, 'development')).code).toBe(0);
     const before = new Set(
@@ -169,26 +201,33 @@ describe('QA kurye seed komutu (node dist/seed.js, gercek Mongo)', () => {
       { uri: uri(), dbName, serverSelectionTimeoutMs: 5_000, operationTimeoutMs: STORE_TIMEOUT_MS },
       { logger: silentLogger, clock },
     );
-    const server = await startQaCourierServer({ repository: store.repository, clock });
+    const server = await startQaCourierServer({
+      repository: store.repository,
+      markets: store.markets,
+      clock,
+    });
 
     try {
       const requests = MARKETS.flatMap((market) =>
         Array.from({ length: DEMO_COURIERS_PER_MARKET + 1 }, () => ({
-          marketId: market.id,
+          market,
           order: newId(ID_PREFIX.ORDER),
         })),
       );
       const outcomes = (
-        await Promise.all(requests.map(({ marketId, order }) => server.assign(order, marketId)))
+        await Promise.all(requests.map(({ market, order }) => server.assign(order, market.id)))
       ).map(outcomeOf);
 
-      for (const market of MARKETS) {
-        const mine = outcomes.filter((_, index) => requests[index]?.marketId === market.id);
-        expect(
-          mine.filter((outcome) => outcome.kind === 'atandi'),
-          market.id,
-        ).toHaveLength(DEMO_COURIERS_PER_MARKET);
-        expect(mine.filter(isNotFound), market.id).toHaveLength(1);
+      for (const kadikoy of [true, false]) {
+        const marketCount = MARKETS.filter((market) => isKadikoy(market) === kadikoy).length;
+        const mine = outcomes.filter((_, index) => {
+          const market = requests[index]?.market;
+          return market !== undefined && isKadikoy(market) === kadikoy;
+        });
+        expect(mine.filter((outcome) => outcome.kind === 'atandi')).toHaveLength(
+          marketCount * DEMO_COURIERS_PER_MARKET,
+        );
+        expect(mine.filter(isNotFound)).toHaveLength(marketCount);
       }
       expect(await collection(dbName).countDocuments({ status: 'BUSY' })).toBe(DEMO_COURIER_COUNT);
     } finally {

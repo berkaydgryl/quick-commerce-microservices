@@ -1,19 +1,33 @@
 /**
- * CourierRepository'nin Mongo uygulamasi. Sorgu yazmaz (couriers-collection.ts);
- * bellek deposuyla ayni sozlesme testinden gecer.
+ * CourierRepository ve MarketLocator'in Mongo uygulamasi. Sorgu yazmaz
+ * (couriers-collection.ts, markets-collection.ts); bellek deposuyla ayni
+ * sozlesme testinden gecer.
  */
 
-import type { Courier } from '../../domain/courier.js';
-import type { ClaimRequest, CourierRepository } from '../../domain/courier-repository.js';
+import { COURIER_CLAIM_CANDIDATES } from '../../config/constants.js';
+import type { Courier, GeoPoint } from '../../domain/courier.js';
+import type { CourierRepository, NearestClaimRequest } from '../../domain/courier-repository.js';
+import type { MarketLocator } from '../../domain/market-locator.js';
 import type { CouriersCollection } from './couriers-collection.js';
 import type { CourierDocument } from './documents.js';
-import { fromCourierDocument } from './mappers.js';
+import { fromCourierDocument, fromGeoJson } from './mappers.js';
+import type { MarketsCollection } from './markets-collection.js';
 
 const toCourier = (document: CourierDocument | null): Courier | null =>
   document === null ? null : fromCourierDocument(document);
 
-export class CourierMongoStore implements CourierRepository {
-  constructor(private readonly couriers: CouriersCollection) {}
+/** Atomik talebin ayari; testler kucultebilir. */
+export interface ClaimTuning {
+  /** Bir okumada en fazla kac aday. */
+  readonly candidates: number;
+}
+
+export class CourierMongoStore implements CourierRepository, MarketLocator {
+  constructor(
+    private readonly couriers: CouriersCollection,
+    private readonly markets: MarketsCollection,
+    private readonly tuning: ClaimTuning = { candidates: COURIER_CLAIM_CANDIDATES },
+  ) {}
 
   async findById(id: string): Promise<Courier | null> {
     return toCourier(await this.couriers.findById(id));
@@ -23,11 +37,43 @@ export class CourierMongoStore implements CourierRepository {
     return toCourier(await this.couriers.findByOrder(orderId));
   }
 
-  async claimLeastRecentlyAssigned(request: ClaimRequest): Promise<Courier | null> {
-    return toCourier(await this.couriers.claimLeastRecentlyAssigned(request));
+  /**
+   * Sira kuralina gore adaylari okur ve sirayla KOSULLU alir (B7): aday o arada
+   * baska siparise gittiyse siradakine gecer. Kaybedilen adaylar sonraki
+   * okumada DISLANIR; liste bosalana kadar denenir. Her okuma en az bir adayi
+   * tuketir, yani deneme sayisinin ust siniri havuzun buyuklugudur. null
+   * yalnizca "havuzda bos kurye kalmadi" demektir (bellek deposuyla ayni).
+   * Yogun eszamanlilikta butun istekler ayni ilk adaylari okur; sabit tur
+   * sinirli surum bos kurye varken NOT_FOUND donuyordu (QA O1).
+   */
+  async claimNearest({ orderId, near, rule, at }: NearestClaimRequest): Promise<Courier | null> {
+    const lost: string[] = [];
+    for (;;) {
+      const candidates = await this.couriers.poolCandidates(
+        near,
+        rule,
+        this.tuning.candidates,
+        lost,
+      );
+      if (candidates.length === 0) {
+        return null;
+      }
+      for (const courierId of candidates) {
+        const claimed = await this.couriers.claimIfIdle(courierId, orderId, at);
+        if (claimed !== null) {
+          return fromCourierDocument(claimed);
+        }
+        lost.push(courierId);
+      }
+    }
   }
 
-  async releaseByOrder(orderId: string): Promise<Courier | null> {
-    return toCourier(await this.couriers.releaseByOrder(orderId));
+  async releaseByOrder(orderId: string, at: Date): Promise<Courier | null> {
+    return toCourier(await this.couriers.releaseByOrder(orderId, at));
+  }
+
+  async locate(marketId: string): Promise<GeoPoint | null> {
+    const market = await this.markets.findById(marketId);
+    return market === null ? null : fromGeoJson(market.location);
   }
 }

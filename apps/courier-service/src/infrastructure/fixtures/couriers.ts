@@ -1,11 +1,14 @@
 /**
- * Demo kuryeleri (T13.1): katalogdaki her markete COURIERS_PER_MARKET kurye,
- * hepsi marketin konumunda ve IDLE baslar.
+ * Demo kuryeleri (T13.1; havuz T13.2): katalogdaki her marketin YAKININA
+ * DEMO_COURIERS_PER_MARKET_AREA kurye (21 x 3 = 63; Kadikoy 30, Besiktas 33).
+ * Kurye markete bagli degildir; yalnizca baslangic konumu bir marketin
+ * 40-150 m yakininda, belirlenimci bir noktadir. Hepsi IDLE baslar.
  *
  * Market kimlikleri ve konumlari katalogun demo verisiyle ayni olmali
  * (catalog-service fixtures/markets.ts); test ikisini karsilastirir
  * (test/unit/courier-fixtures.spec.ts). Her servis kendi seed'ini yazar
- * (ADR-05): kurye servisi katalogu okumaz.
+ * (ADR-05): kurye servisi katalogu okumaz, konumlarin kopyasini (markets)
+ * tutar.
  *
  * Kimlikler sozlesmedeki bicimdedir (crr_<32 hex>) ve SABITTIR: market ve
  * sira numarasindan turetilir, tekrar kosan seed ayni kuryeleri yazar.
@@ -15,8 +18,10 @@ import { createHash } from 'node:crypto';
 
 import { ID_PREFIX } from '@getir/core';
 
-import { COURIERS_PER_MARKET } from '../../config/constants.js';
+import { DEMO_COURIERS_PER_MARKET_AREA } from '../../config/constants.js';
+import type { GeoPoint } from '../../domain/courier.js';
 import type { CourierSeed } from '../../domain/courier-seed.js';
+import type { MarketLocation } from '../../domain/market-locator.js';
 
 /** Kimlik govdesinin uzunlugu (ID_PREFIX bicimi: 32 onaltilik karakter). */
 const ID_BODY_LENGTH = 32;
@@ -95,12 +100,43 @@ export function courierSeedId(marketId: string, index: number): string {
   return `${ID_PREFIX.COURIER}_${body}`;
 }
 
+/** Market konumu kopyasi (markets koleksiyonu): havuzun merkezleri. */
+export const MARKET_LOCATION_SEEDS: readonly MarketLocation[] = MARKET_LOCATIONS.map((market) => ({
+  marketId: market.marketId,
+  location: { lat: market.lat, lng: market.lng },
+}));
+
+/** Baslangic noktasinin markete uzakligi (m): 40-150, kiyidaki marketlerde de karada kalsin. */
+const OFFSET_MIN_METERS = 40;
+const OFFSET_SPAN_METERS = 110;
+const METERS_PER_DEGREE_LAT = 111_320;
+/** Koordinatlar 6 ondalikla (~10 cm): seed tekrarinda ayni sayi. */
+const COORDINATE_DECIMALS = 6;
+
+/**
+ * Marketten belirlenimci bir uzaklik ve yonde nokta: kimlikle ayni ozetten.
+ * Yuz metrelik olcekte duz (equirectangular) yaklasim yeterli.
+ */
+function nearMarket(market: { lat: number; lng: number }, seedId: string): GeoPoint {
+  const digest = createHash('sha256').update(`konum:${seedId}`).digest();
+  const distance = OFFSET_MIN_METERS + (digest.readUInt16BE(0) % (OFFSET_SPAN_METERS + 1));
+  const bearing = ((digest.readUInt16BE(2) % 360) * Math.PI) / 180;
+  const dLat = (distance * Math.cos(bearing)) / METERS_PER_DEGREE_LAT;
+  const dLng =
+    (distance * Math.sin(bearing)) /
+    (METERS_PER_DEGREE_LAT * Math.cos((market.lat * Math.PI) / 180));
+  const round = (value: number): number => Number(value.toFixed(COORDINATE_DECIMALS));
+  return { lat: round(market.lat + dLat), lng: round(market.lng + dLng) };
+}
+
 export const COURIER_SEEDS: readonly CourierSeed[] = MARKET_LOCATIONS.flatMap(
   (market, marketIndex) =>
-    Array.from({ length: COURIERS_PER_MARKET }, (_, index) => ({
-      id: courierSeedId(market.marketId, index + 1),
-      name: courierName(marketIndex * COURIERS_PER_MARKET + index),
-      marketId: market.marketId,
-      location: { lat: market.lat, lng: market.lng },
-    })),
+    Array.from({ length: DEMO_COURIERS_PER_MARKET_AREA }, (_, index) => {
+      const id = courierSeedId(market.marketId, index + 1);
+      return {
+        id,
+        name: courierName(marketIndex * DEMO_COURIERS_PER_MARKET_AREA + index),
+        location: nearMarket(market, id),
+      };
+    }),
 );

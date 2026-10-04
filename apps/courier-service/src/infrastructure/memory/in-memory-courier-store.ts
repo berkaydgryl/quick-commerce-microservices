@@ -1,39 +1,35 @@
 /**
  * Bellek deposu: MOCK modu ve testler. Mongo uygulamasiyla AYNI sozlesmeden
- * gecer: sira (lastAssignedAt artan, hic atanmamis once, esitlikte kimlik) ve
- * "bir siparisi en fazla bir kurye tasir" kurali (Mongo'da benzersiz indeks,
- * burada acik denetim; ikisi de CONFLICT). Islemler senkron oldugu icin her
- * adim kendiliginden atomiktir.
+ * gecer: havuz ve sira (domain/courier-pool.ts; mesafe haversine, Mongo
+ * $geoNear) ve "bir siparisi en fazla bir kurye tasir" kurali (Mongo'da
+ * benzersiz indeks, burada acik denetim; ikisi de CONFLICT). Islemler senkron
+ * oldugu icin her adim kendiliginden atomiktir.
  */
 
 import { AppError } from '@getir/core';
 
 import { COURIER_STATUS } from '../../domain/courier.js';
-import type { Courier } from '../../domain/courier.js';
+import type { Courier, GeoPoint } from '../../domain/courier.js';
+import { comparePoolCandidates, isWithinPool } from '../../domain/courier-pool.js';
+import type { PoolCandidate } from '../../domain/courier-pool.js';
 import type {
-  ClaimRequest,
   CourierRepository,
   CourierSeedWriter,
+  NearestClaimRequest,
 } from '../../domain/courier-repository.js';
+import { distanceMeters } from '../../domain/geo.js';
+import type { MarketLocation, MarketLocator } from '../../domain/market-locator.js';
 
-/** Hic atanmamis kurye en one: Mongo'da eksik alan tarihlerden once siralanir. */
-const NEVER_ASSIGNED = Number.NEGATIVE_INFINITY;
-
-function assignmentOrder(left: Courier, right: Courier): number {
-  const leftAt = left.lastAssignedAt?.getTime() ?? NEVER_ASSIGNED;
-  const rightAt = right.lastAssignedAt?.getTime() ?? NEVER_ASSIGNED;
-  if (leftAt !== rightAt) {
-    return leftAt < rightAt ? -1 : 1;
-  }
-  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
-}
-
-export class InMemoryCourierStore implements CourierRepository, CourierSeedWriter {
+export class InMemoryCourierStore implements CourierRepository, CourierSeedWriter, MarketLocator {
   private readonly couriers = new Map<string, Courier>();
+  private readonly markets = new Map<string, GeoPoint>();
 
-  constructor(initial: readonly Courier[] = []) {
+  constructor(initial: readonly Courier[] = [], markets: readonly MarketLocation[] = []) {
     for (const courier of initial) {
       this.couriers.set(courier.id, courier);
+    }
+    for (const market of markets) {
+      this.markets.set(market.marketId, market.location);
     }
   }
 
@@ -45,10 +41,15 @@ export class InMemoryCourierStore implements CourierRepository, CourierSeedWrite
     return Promise.resolve(this.carrierOf(orderId));
   }
 
-  claimLeastRecentlyAssigned({ marketId, orderId, at }: ClaimRequest): Promise<Courier | null> {
+  claimNearest({ orderId, near, rule, at }: NearestClaimRequest): Promise<Courier | null> {
     const candidate = [...this.couriers.values()]
-      .filter((courier) => courier.marketId === marketId && courier.status === COURIER_STATUS.IDLE)
-      .sort(assignmentOrder)[0];
+      .filter((courier) => courier.status === COURIER_STATUS.IDLE)
+      .map((courier): PoolCandidate => ({
+        courier,
+        distanceMeters: distanceMeters(near, courier.lastLocation),
+      }))
+      .filter((entry) => isWithinPool(entry.distanceMeters, rule))
+      .sort((left, right) => comparePoolCandidates(left, right, rule.bandMeters))[0];
     if (candidate === undefined) {
       return Promise.resolve(null);
     }
@@ -57,8 +58,9 @@ export class InMemoryCourierStore implements CourierRepository, CourierSeedWrite
         AppError.conflict('Kayit zaten var', { details: { fields: ['currentOrderId'] } }),
       );
     }
+    const { idleSince: _busy, ...rest } = candidate.courier;
     const claimed: Courier = {
-      ...candidate,
+      ...rest,
       status: COURIER_STATUS.BUSY,
       currentOrderId: orderId,
       lastAssignedAt: at,
@@ -67,21 +69,29 @@ export class InMemoryCourierStore implements CourierRepository, CourierSeedWrite
     return Promise.resolve(claimed);
   }
 
-  releaseByOrder(orderId: string): Promise<Courier | null> {
+  releaseByOrder(orderId: string, at: Date): Promise<Courier | null> {
     const carrier = this.carrierOf(orderId);
     if (carrier === null) {
       return Promise.resolve(null);
     }
     const { currentOrderId: _released, ...rest } = carrier;
-    const released: Courier = { ...rest, status: COURIER_STATUS.IDLE };
+    const released: Courier = { ...rest, status: COURIER_STATUS.IDLE, idleSince: at };
     this.couriers.set(released.id, released);
     return Promise.resolve(released);
   }
 
-  replaceAll(couriers: readonly Courier[]): Promise<void> {
+  locate(marketId: string): Promise<GeoPoint | null> {
+    return Promise.resolve(this.markets.get(marketId) ?? null);
+  }
+
+  replaceAll(couriers: readonly Courier[], markets: readonly MarketLocation[]): Promise<void> {
     this.couriers.clear();
     for (const courier of couriers) {
       this.couriers.set(courier.id, courier);
+    }
+    this.markets.clear();
+    for (const market of markets) {
+      this.markets.set(market.marketId, market.location);
     }
     return Promise.resolve();
   }

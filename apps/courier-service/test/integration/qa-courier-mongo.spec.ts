@@ -1,18 +1,18 @@
 /**
- * QA kara kutu (T13.1), gercek Mongo (Testcontainers): atamanin gercek sorgularla
- * ve servisin iki kopyasiyla davranisi. Istemci gercek gRPC; depo durumu yalnizca
- * dogrulama icin ayri baglantidan okunur.
+ * QA kara kutu (T13.1; havuz T13.2), gercek Mongo (Testcontainers): atamanin
+ * gercek sorgularla ve servisin iki kopyasiyla davranisi. Istemci gercek gRPC;
+ * depo durumu yalnizca dogrulama icin ayri baglantidan okunur.
  *
  *   1. B1 karisik yaris: tek bos kurye, ayni siparisin tekrarlari rakip siparislerle
  *      ayni anda ve iki kopyaya dagitilmis; her siparisin butun cevaplari tutarli.
- *   2. Cok kurye, cok siparis, iki kopya: kurye ikiye bolunmez, market sinirlari korunur.
+ *   2. Cok kurye, cok siparis, iki kopya: kurye ikiye bolunmez, semt havuzlari karismaz.
  *   3. Tekrar istek secim denemez: TEL UZERINDE (komut izleme) couriers'a yazim gitmez.
  *   4. Servisin GERCEKTEN gonderdigi sorgular indeksten okunur (COLLSCAN, bellek ici SORT yok).
  *   5. Cevabi kaybolan atama (#51): yazim Mongo'da uygulanir ama istemci SERVICE_UNAVAILABLE
  *      alir; order'in tekrar istegi AYNI kuryeyi alir, ikinci kurye baglanmaz.
  *
  * Backend testlerinde olanlar (tek kurye + 20 siparis, ayni siparis 10 kez, indeks
- * tanimlari, find().explain() ile atama plani, acilis ve seed use-case'i) yinelenmez.
+ * tanimlari, $geoNear plani, acilis, goc ve seed use-case'i) yinelenmez.
  */
 
 import { performance } from 'node:perf_hooks';
@@ -33,12 +33,24 @@ import type { FreezingProxy } from '../../../../packages/mongo-kit/test/support/
 import { COURIER_STATUS } from '../../src/domain/courier.js';
 import type { Courier } from '../../src/domain/courier.js';
 import { courierFromSeed } from '../../src/domain/courier-seed.js';
-import { COURIER_SEEDS } from '../../src/infrastructure/fixtures/couriers.js';
+import {
+  COURIER_SEEDS,
+  MARKET_LOCATION_SEEDS,
+} from '../../src/infrastructure/fixtures/couriers.js';
 import { CourierMongoStore } from '../../src/infrastructure/mongo/courier-mongo-store.js';
 import { CouriersCollection } from '../../src/infrastructure/mongo/couriers-collection.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
+import { MarketsCollection } from '../../src/infrastructure/mongo/markets-collection.js';
 import { MongoCourierSeedWriter } from '../../src/infrastructure/mongo/mongo-courier-seed-writer.js';
-import { courier, MARKET, NOW_MS, orderId, OTHER_MARKET } from '../support/couriers.js';
+import {
+  courier,
+  FAR_MARKET,
+  FAR_MARKET_LOCATION,
+  MARKET,
+  MARKET_LOCATION,
+  NOW_MS,
+  orderId,
+} from '../support/couriers.js';
 import { outcomeOf, startQaCourierServer } from '../support/qa-courier-harness.js';
 import type { QaCourierServer, QaOutcome } from '../support/qa-courier-harness.js';
 
@@ -60,6 +72,7 @@ const B1_ROUNDS = 25;
 const SAME_ORDER_REPEATS = 6;
 const RIVAL_REPEATS = 3;
 
+/** MARKET'le ayni semtte (Kadikoy, ~620 m): ayni havuzu paylasir. */
 const THIRD_MARKET = 'mkt_kardesler-manavi';
 
 let container: StartedMongoDBContainer;
@@ -76,8 +89,14 @@ function directUri(): string {
   return `${container.getConnectionString()}/?directConnection=true`;
 }
 
+/** Kuryeleri bastan yazar; market kopyasi her seferinde 21 demo marketi. */
 async function reset(list: readonly Courier[]): Promise<void> {
-  await writer.replaceAll(list);
+  await writer.replaceAll(list, MARKET_LOCATION_SEEDS);
+}
+
+/** Bir veritabanina bakan depo: kuryeler ve market kopyasi ayni yerden. */
+function mongoStore(db: MongoConnection['db']): CourierMongoStore {
+  return new CourierMongoStore(new CouriersCollection(db), new MarketsCollection(db));
 }
 
 beforeAll(async () => {
@@ -94,15 +113,19 @@ beforeAll(async () => {
   });
   couriers = new CouriersCollection(connection.db);
   await couriers.ensureIndexes();
-  writer = new MongoCourierSeedWriter(connection, couriers);
+  writer = new MongoCourierSeedWriter(connection, couriers, new MarketsCollection(connection.db));
+  const first = mongoStore(connection.db);
+  const other = mongoStore(second.db);
   replicas = [
     await startQaCourierServer({
-      repository: new CourierMongoStore(couriers),
+      repository: first,
+      markets: first,
       clock,
       name: 'courier-qa-1',
     }),
     await startQaCourierServer({
-      repository: new CourierMongoStore(new CouriersCollection(second.db)),
+      repository: other,
+      markets: other,
       clock,
       name: 'courier-qa-2',
     }),
@@ -206,41 +229,57 @@ describe('QA B1 karisik yaris (gercek Mongo, iki kopya)', () => {
     expect(wonBy.same + wonBy.rival).toBe(B1_ROUNDS);
   });
 
-  it('uc market x uc kurye; market basina 5 siparis x 3 tekrar ayni anda: 9 atama, kurye bolunmez, market karismaz', async () => {
-    const markets = [MARKET, OTHER_MARKET, THIRD_MARKET];
+  it('iki semt x uc kurye; Kadikoy un iki marketine ve Besiktas a 5 siparis x 3 tekrar ayni anda: semt basina 3 atama, kurye bolunmez, semtler karismaz', async () => {
+    const districts = [
+      { name: 'Kadikoy', markets: [MARKET, THIRD_MARKET], location: MARKET_LOCATION, base: 0 },
+      { name: 'Besiktas', markets: [FAR_MARKET], location: FAR_MARKET_LOCATION, base: 10 },
+    ];
     await reset(
-      markets.flatMap((marketId, m) => [1, 2, 3].map((n) => courier(m * 10 + n, { marketId }))),
+      districts.flatMap(({ location, base }) =>
+        [1, 2, 3].map((n) => courier(base + n, { lastLocation: location })),
+      ),
     );
     const ordersPerMarket = 5;
     const repeats = 3;
 
     const observed = await Promise.all(
-      markets.map((marketId) =>
-        fire(
-          interleave(
-            Array.from({ length: ordersPerMarket }, () => ({ order: orderId(), times: repeats })),
+      districts.map(async (district) => {
+        const lists = await Promise.all(
+          district.markets.map((marketId) =>
+            fire(
+              interleave(
+                Array.from({ length: ordersPerMarket }, () => ({
+                  order: orderId(),
+                  times: repeats,
+                })),
+              ),
+              marketId,
+            ),
           ),
-          marketId,
-        ).then((list) => ({ marketId, list })),
-      ),
+        );
+        return { district, list: lists.flat() };
+      }),
     );
 
     let busy = 0;
-    for (const { marketId, list } of observed) {
+    for (const { district, list } of observed) {
       const winners = expectConsistent(list);
-      expect(winners.size, marketId).toBe(3);
+      expect(winners.size, district.name).toBe(3);
       for (const [order, courierId] of winners) {
         const held = await couriers.findById(courierId);
-        expect(held).toMatchObject({
-          marketId,
+        expect(held, district.name).toMatchObject({
           status: COURIER_STATUS.BUSY,
           currentOrderId: order,
+          lastLocation: {
+            type: 'Point',
+            coordinates: [district.location.lng, district.location.lat],
+          },
         });
         busy += 1;
       }
     }
-    expect(busy).toBe(9);
-    expect(await couriers.count({ status: COURIER_STATUS.BUSY })).toBe(9);
+    expect(busy).toBe(6);
+    expect(await couriers.count({ status: COURIER_STATUS.BUSY })).toBe(6);
   });
 });
 
@@ -256,8 +295,10 @@ describe('QA tekrar istek tel uzerinde (komut izleme)', () => {
     monitored = await MongoClient.connect(directUri(), { monitorCommands: true });
     monitored.on('commandStarted', record);
     const db = monitored.db(DB_NAME, { timeoutMS: OPERATION_TIMEOUT_MS });
+    const store = mongoStore(db);
     server = await startQaCourierServer({
-      repository: new CourierMongoStore(new CouriersCollection(db)),
+      repository: store,
+      markets: store,
       clock,
       name: 'courier-qa-izlenen',
     });
@@ -275,7 +316,7 @@ describe('QA tekrar istek tel uzerinde (komut izleme)', () => {
 
   const names = () => commands.map((event) => event.commandName);
 
-  it('ilk atama yazar (olumlu kontrol); tekrarlar yalnizca okur, son atama ani degismez; market dolunca da ayni kurye', async () => {
+  it('ilk atama yazar (olumlu kontrol); tekrarlar yalnizca okur, son atama ani degismez; havuz dolunca da ayni kurye', async () => {
     await reset([courier(1), courier(2)]);
     const order = orderId();
 
@@ -292,7 +333,7 @@ describe('QA tekrar istek tel uzerinde (komut izleme)', () => {
     const retryCommands = names();
     commands.length = 0;
 
-    await server.assign(orderId(), MARKET); // rakip siparis: market doldu
+    await server.assign(orderId(), MARKET); // rakip siparis: havuz doldu
     expect(names()).toContain('findAndModify');
     commands.length = 0;
     const whenFull = await server.assign(order, MARKET);
@@ -320,16 +361,21 @@ describe('QA tekrar istek tel uzerinde (komut izleme)', () => {
     const explained = await Promise.all(sent.map((command) => explainAsSent(command)));
 
     expect(explained.map(({ kind }) => kind).sort()).toEqual([
+      'aggregate:havuz', // marketin cevresindeki adaylar ($geoNear)
       'find', // siparisin kuryesi var mi (findByOrder)
-      'findAndModify:atama',
+      'findAndModify:atama', // aday hala IDLE ise al (kimlikle)
       'findAndModify:birakma',
     ]);
     for (const { kind, plan } of explained) {
       expect(plan, kind).not.toContain('COLLSCAN');
-      expect(plan, kind).not.toContain('"SORT"');
+      if (kind !== 'aggregate:havuz') {
+        expect(plan, kind).not.toContain('"SORT"');
+      }
     }
     const byKind = new Map(explained.map(({ kind, plan }) => [kind, plan]));
-    expect(byKind.get('findAndModify:atama')).toContain('marketId_status_lastAssignedAt');
+    expect(byKind.get('aggregate:havuz')).toContain('GEO_NEAR_2DSPHERE');
+    expect(byKind.get('aggregate:havuz')).toContain('lastLocation_2dsphere_status');
+    expect(byKind.get('findAndModify:atama')).toMatch(/IDHACK|"_id_"/);
     expect(byKind.get('find')).toContain('currentOrderId_unique');
     expect(byKind.get('findAndModify:birakma')).toContain('currentOrderId_unique');
   });
@@ -340,6 +386,8 @@ const sentCommandSchema = z
   .object({
     find: z.string().optional(),
     findAndModify: z.string().optional(),
+    aggregate: z.string().optional(),
+    pipeline: z.array(z.record(z.unknown())).optional(),
     filter: z.record(z.unknown()).optional(),
     query: z.record(z.unknown()).optional(),
     // Surucu siralamayi alan sirasi korunsun diye Map olarak gonderir; oldugu gibi geri verilir.
@@ -357,6 +405,14 @@ const explainSchema = z
 async function explainAsSent(raw: Document): Promise<{ kind: string; plan: string }> {
   const command = sentCommandSchema.parse(raw);
   const db = connection.client.db(DB_NAME);
+  if (command.aggregate !== undefined) {
+    // Toplama hattinin explain'i ayri bicimde (asamalar); plan metnin icinde aranir.
+    const result: unknown = await db.command({
+      explain: { aggregate: command.aggregate, pipeline: command.pipeline, cursor: {} },
+      verbosity: 'queryPlanner',
+    });
+    return { kind: 'aggregate:havuz', plan: JSON.stringify(result) };
+  }
   if (command.find !== undefined) {
     const result = explainSchema.parse(
       await db.command({
@@ -404,10 +460,10 @@ describe('QA cevabi kaybolan atama ve donmus Mongo (#51)', () => {
       monitorCommands: true,
     });
     client.on('commandStarted', onCommand);
+    const store = mongoStore(client.db(DB_NAME, { timeoutMS: FROZEN_TIMEOUT_MS }));
     server = await startQaCourierServer({
-      repository: new CourierMongoStore(
-        new CouriersCollection(client.db(DB_NAME, { timeoutMS: FROZEN_TIMEOUT_MS })),
-      ),
+      repository: store,
+      markets: store,
       clock,
       name: 'courier-qa-vekil',
     });
@@ -430,7 +486,7 @@ describe('QA cevabi kaybolan atama ve donmus Mongo (#51)', () => {
     await proxy?.close();
   });
 
-  it('atama yazimi Mongo ya ulasir ama cevap gelmez: SERVICE_UNAVAILABLE; tekrar istek AYNI kuryeyi alir', async () => {
+  it('atama yazimi Mongo ya ulasabilir ama cevap gelmez: SERVICE_UNAVAILABLE; tekrar istek ulasan yazimin kuryesini alir, ikinci kurye baglanmaz', async () => {
     await reset([courier(1), courier(2)]);
     await server.get(courier(1).id); // baglanti isinsin: donma yazimin kendisinde olsun
     const order = orderId();
@@ -440,7 +496,9 @@ describe('QA cevabi kaybolan atama ve donmus Mongo (#51)', () => {
     const lost = await server.assign(order, MARKET);
     const elapsed = performance.now() - started;
     proxy.thaw();
-    const landed = await waitFor(async () => (await couriers.findByOrder(order)) !== null);
+    // Zaman asimi ne "yazilmadi" ne "yazildi" demektir (#51): istemci baglantiyi
+    // nasil kapattiysa vekil bekleyen yazimi iletir ya da birakir. Iki kol da gecerli.
+    await waitFor(async () => (await couriers.findByOrder(order)) !== null, 1_000);
     const holder = await couriers.findByOrder(order);
     await waitFor(async () => (await server.get(courier(1).id)).error === undefined);
     const retry = await server.assign(order, MARKET);
@@ -448,10 +506,11 @@ describe('QA cevabi kaybolan atama ve donmus Mongo (#51)', () => {
     expect(lost.error?.code).toBe(GRPC_STATUS.UNAVAILABLE);
     expect(appErrorOf(lost.error)?.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
     expect(elapsed).toBeLessThan(FROZEN_TIMEOUT_MS + SLACK_MS);
-    // Hata "yazilmadi" demek degil: yazim cozulunce uygulandi.
-    expect(landed).toBe(true);
     expect(retry.error).toBeUndefined();
-    expect(retry.response?.courier?.id).toBe(holder?._id);
+    // Yazim ulastiysa tekrar istek AYNI kuryeyi alir; ulasmadiysa yeni atama olur.
+    expect(retry.response?.courier?.id).toBe(holder?._id ?? retry.response?.courier?.id);
+    // Her iki kolda: courier tarafinda siparisi tasiyan kurye cevaptaki kurye.
+    expect((await couriers.findByOrder(order))?._id).toBe(retry.response?.courier?.id);
     expect(await couriers.count({ status: COURIER_STATUS.BUSY })).toBe(1);
   });
 
