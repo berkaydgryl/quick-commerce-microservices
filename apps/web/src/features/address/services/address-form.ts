@@ -13,6 +13,7 @@ import type {
   AddressKindOption,
   CreateAddressRequest,
   GeoPoint,
+  SavedAddress,
 } from '@getir/contracts';
 import type { z } from 'zod';
 
@@ -58,7 +59,8 @@ export function uniqueTitle(label: string, taken: readonly string[]): string {
 }
 
 /**
- * Formun acilis degerleri: ilk tur secili, baslik onun etiketi ("Ev"; defterde
+ * Formun acilis degerleri: verilen tur (Adreslerim'in "Ev / İş / Diğer adres
+ * ekle"si, T11.15 T4) ya da ilk tur secili, baslik onun etiketi ("Ev"; defterde
  * varsa "Ev 2"); satir haritadan cozulen adres (bulunamadiysa bos, kullanici
  * yazar).
  */
@@ -66,16 +68,37 @@ export function initialAddressValues(
   kinds: readonly AddressKindOption[],
   line: string,
   taken: readonly string[] = [],
+  kind?: AddressKind,
 ): AddressFormValues {
-  const [first] = kinds;
+  const option = kinds.find((candidate) => candidate.kind === kind) ?? kinds[0];
   return {
-    kind: first?.kind ?? 'HOME',
-    title: first === undefined ? '' : uniqueTitle(first.label, taken),
+    kind: option?.kind ?? kind ?? 'HOME',
+    title: option === undefined ? '' : uniqueTitle(option.label, taken),
     line,
     building: '',
     floor: '',
     apartment: '',
     note: '',
+  };
+}
+
+/**
+ * Duzenlenen adresin form degerleri (T11.15): kayitli adres; satir verilirse
+ * (nokta haritada degisti) cozulen satir. Turu olmayan eski kayit "Ev"
+ * turuyle acilir (kayitta zorunlu).
+ */
+export function editAddressValues(
+  address: SavedAddress,
+  line: string = address.line,
+): AddressFormValues {
+  return {
+    kind: address.kind ?? 'HOME',
+    title: address.title,
+    line,
+    building: address.building ?? '',
+    floor: address.floor ?? '',
+    apartment: address.apartment ?? '',
+    note: address.note ?? '',
   };
 }
 

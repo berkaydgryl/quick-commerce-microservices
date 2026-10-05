@@ -1,0 +1,62 @@
+/* Adres silme onayi (T11.15, T5): soru, ipucu, hata ve iki dugme yan yana. */
+.c-delete-address {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.c-delete-address__question {
+  font-size: var(--font-size-md);
+  overflow-wrap: anywhere;
+}
+
+.c-delete-address__name {
+  font-weight: var(--font-weight-bold);
+}
+
+.c-delete-address__hint {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.c-delete-address__alert {
+  padding: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-danger);
+  border: var(--border-width-thin) solid var(--border-danger);
+  border-radius: var(--radius-md);
+}
+
+.c-delete-address__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-block-start: var(--space-2);
+}
+
+.c-delete-address__cancel,
+.c-delete-address__confirm {
+  min-height: var(--size-field-min-height);
+  padding: var(--space-3) var(--space-4);
+  font: inherit;
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+}
+
+.c-delete-address__cancel {
+  color: var(--color-brand-primary);
+  background: var(--bg-surface);
+  border: var(--border-width-thin) solid var(--color-brand-primary);
+}
+
+.c-delete-address__confirm {
+  color: var(--text-on-brand);
+  background: var(--bg-danger);
+  border: none;
+}
+
+.c-delete-address__cancel:disabled,
+.c-delete-address__confirm:disabled {
+  cursor: progress;
+  opacity: var(--opacity-disabled);
+}

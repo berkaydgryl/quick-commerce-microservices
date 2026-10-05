@@ -1,13 +1,15 @@
 /**
  * Adres ekleme formu (T11.8): acilis degerleri, turle gelen baslik, istek
- * govdesi ve sozlesmenin kurallari (mesajlar gateway'le ayni cumle).
+ * govdesi ve sozlesmenin kurallari (mesajlar gateway'le ayni cumle). T11.15:
+ * turu secili ekleme ve duzenlemenin degerleri.
  */
 
-import type { AddressKindOption } from '@getir/contracts';
+import type { AddressKindOption, SavedAddress } from '@getir/contracts';
 import { describe, expect, it } from 'vitest';
 
 import {
   addressFormSchema,
+  editAddressValues,
   initialAddressValues,
   titleForKind,
   toCreateAddressRequest,
@@ -102,5 +104,52 @@ describe('uniqueTitle ve defterdeki adlar (T11.10: ust bardan ikinci adres)', ()
   it('onerilen numarali ad da ture uyar; "İş" doluysa "İş 2"', () => {
     expect(titleForKind(KINDS, 'Ev 2', 'WORK', ['Ev', 'İş'])).toBe('İş 2');
     expect(titleForKind(KINDS, 'Annemler 2', 'WORK', ['Ev'])).toBe('Annemler 2');
+  });
+});
+
+describe('Adreslerim (T11.15): turu secili ekleme ve duzenleme', () => {
+  it('"İş adresi ekle": tur secili, baslik turun adi; doluysa "İş 2" (T4)', () => {
+    expect(initialAddressValues(KINDS, 'Levent', [], 'WORK')).toMatchObject({
+      kind: 'WORK',
+      title: 'İş',
+      line: 'Levent',
+    });
+    expect(initialAddressValues(KINDS, 'Levent', ['Ev', 'İş'], 'WORK').title).toBe('İş 2');
+    expect(initialAddressValues(KINDS, '', [], 'OTHER').title).toBe('Diğer');
+  });
+
+  it('icerikte olmayan tur ilk ture duser', () => {
+    expect(initialAddressValues(KINDS.slice(0, 1), '', [], 'WORK')).toMatchObject({
+      kind: 'HOME',
+      title: 'Ev',
+    });
+  });
+
+  const kayitli: SavedAddress = {
+    id: 'adr_00000000000000000000000000000002',
+    title: 'Ofis',
+    kind: 'WORK',
+    line: 'Barbaros Blv. 40',
+    location: LOCATION,
+    floor: '3',
+    note: 'Resepsiyon',
+  };
+
+  it('duzenleme kayitli degerlerle acilir; bos alan bos metin', () => {
+    expect(editAddressValues(kayitli)).toEqual({
+      kind: 'WORK',
+      title: 'Ofis',
+      line: 'Barbaros Blv. 40',
+      building: '',
+      floor: '3',
+      apartment: '',
+      note: 'Resepsiyon',
+    });
+  });
+
+  it('nokta degistiyse satir yeni noktanin satiri; turu olmayan eski kayit "Ev" turuyle', () => {
+    expect(editAddressValues(kayitli, 'Levent').line).toBe('Levent');
+    const { kind: _kind, ...turusuz } = kayitli;
+    expect(editAddressValues(turusuz).kind).toBe('HOME');
   });
 });

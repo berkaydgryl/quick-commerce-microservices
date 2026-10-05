@@ -138,6 +138,7 @@ const welcome = {
   },
   favorites: CONTENT_FALLBACK.favorites,
   profile: CONTENT_FALLBACK.profile,
+  addresses: CONTENT_FALLBACK.addresses,
 };
 
 function clientReturning(body: unknown) {

@@ -1,7 +1,9 @@
-import type { AddressSetupContent, GeoPoint } from '@getir/contracts';
+import type { AddressKind, AddressSetupContent, GeoPoint, SavedAddress } from '@getir/contracts';
 import { useState } from 'react';
 
 import { useLineResolver } from '../hooks/useLineResolver';
+import { isSamePoint } from '../services/geo-point';
+import { resolvedLine } from '../services/line-notice';
 import type { ResolvedLine } from '../services/line-notice';
 
 import { AddressDetailsForm } from './AddressDetailsForm';
@@ -27,6 +29,19 @@ interface AddressSetupDialogProps {
   readonly closableOnDetails?: boolean;
   /** Kayittan sonra (ust bardan eklemede pencere kapanir; ilk adreste kapi gecer). */
   readonly onSaved?: () => void;
+  /** Eklemede secili tur (Adreslerim'in "Ev / İş / Diğer adres ekle"si, T11.15). */
+  readonly initialKind?: AddressKind;
+  /**
+   * Duzenleme modu (T11.15, T7): harita adresin noktasinda acilir, detay
+   * kayitli degerlerle dolu gelir, kayit PUT'tur. Baslik `editing.title`.
+   */
+  readonly editing?: {
+    readonly address: SavedAddress;
+    readonly title: string;
+    /** Detay adimindaki "Adresi sil" (T1: secili adres buradan silinir). */
+    readonly deleteLabel: string;
+    readonly onDelete: () => void;
+  };
 }
 
 type Step =
@@ -46,6 +61,11 @@ type Step =
  *
  * Ayni pencere ust bardaki "Adreslerim"den de acilir (T11.10): orada X
  * yalnizca kapatir ve kaydedince pencere kapanir.
+ *
+ * Adreslerim sekmesi (T11.15) ayni pencereyi duzenleme modunda acar: nokta
+ * adresin konumunda secili gelir; nokta degismediyse "Bu adresi kullan"
+ * adresin kendi satirini korur (yeniden sorgu yok), degistiyse satir yeni
+ * noktadan cozulur.
  */
 export function AddressSetupDialog({
   content,
@@ -56,10 +76,12 @@ export function AddressSetupDialog({
   closeError = null,
   closableOnDetails = false,
   onSaved,
+  initialKind,
+  editing,
 }: AddressSetupDialogProps) {
   const [step, setStep] = useState<Step>({ name: 'map' });
-  const [center, setCenter] = useState<GeoPoint>(content.map.center);
-  const [chosen, setChosen] = useState(false);
+  const [center, setCenter] = useState<GeoPoint>(editing?.address.location ?? content.map.center);
+  const [chosen, setChosen] = useState(editing !== undefined);
   const resolver = useLineResolver(content.unresolvedNotice);
 
   const choose = (point: GeoPoint): void => {
@@ -68,6 +90,11 @@ export function AddressSetupDialog({
   };
   const useAddress = (): void => {
     const location = center;
+    const kept = editing?.address;
+    if (kept !== undefined && isSamePoint(kept.location, location)) {
+      setStep({ name: 'details', location, resolved: resolvedLine(kept.line) });
+      return;
+    }
     resolver.mutate(location, {
       onSuccess: (resolved) => setStep({ name: 'details', location, resolved }),
     });
@@ -78,7 +105,7 @@ export function AddressSetupDialog({
 
   return (
     <AddressDialog
-      title={content.title}
+      title={editing?.title ?? content.title}
       back={
         onDetails
           ? { label: content.backLabel, onAction: () => setStep({ name: 'map' }) }
@@ -110,6 +137,8 @@ export function AddressSetupDialog({
           location={step.location}
           resolved={step.resolved}
           onSaved={onSaved}
+          initialKind={initialKind}
+          editing={editing}
         />
       )}
     </AddressDialog>

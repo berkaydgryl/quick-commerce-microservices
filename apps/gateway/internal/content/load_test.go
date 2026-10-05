@@ -122,6 +122,15 @@ const validJSON = `{
       "resendLabel": "Yeniden gönder", "resendWaitLabel": "Bekle", "changeEmailLabel": "Değiştir",
       "verifiedToast": "Doğrulandı."
     }
+  },
+  "addresses": {
+    "title": "Adreslerim", "loadingLabel": "Yükleniyor", "emptyNotice": "Adres yok.", "selectedLabel": "Seçili",
+    "editSuffix": "adresini düzenle", "deleteSuffix": "adresini sil",
+    "addOptions": [{ "kind": "HOME", "label": "Ev adresi ekle" }],
+    "editTitle": "Adresi Düzenle", "deleteLabel": "Adresi sil", "confirmTitle": "Adresi sil",
+    "confirmQuestionSuffix": "adresini silmek istiyor musun?", "confirmHint": "Siparişler etkilenmez.",
+    "confirmLabel": "Sil", "deletingLabel": "Siliniyor", "cancelLabel": "Vazgeç",
+    "deletedToastSuffix": "adresi silindi.", "updatedToast": "Güncellendi."
   }
 }`
 

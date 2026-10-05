@@ -1,4 +1,9 @@
-import type { FavoritesContent, MarketListContent, ProfileContent } from './content.js';
+import type {
+  AddressesContent,
+  FavoritesContent,
+  MarketListContent,
+  ProfileContent,
+} from './content.js';
 
 /**
  * Market listesinin yedegi (T11.12): icerik gelmese de marketler, dukkan turu
@@ -135,6 +140,31 @@ const PROFILE_FALLBACK: ProfileContent = {
   },
 };
 
+/** Adreslerim sekmesinin yedegi (T11.15): icerik gelmese de liste ve eylemler calisir. */
+const ADDRESSES_FALLBACK: AddressesContent = {
+  title: 'Adreslerim',
+  loadingLabel: 'Adreslerin yükleniyor…',
+  emptyNotice: 'Kayıtlı adresin yok. Aşağıdan ekleyebilirsin.',
+  selectedLabel: 'Seçili adres',
+  editSuffix: 'adresini düzenle',
+  deleteSuffix: 'adresini sil',
+  addOptions: [
+    { kind: 'HOME', label: 'Ev adresi ekle' },
+    { kind: 'WORK', label: 'İş adresi ekle' },
+    { kind: 'OTHER', label: 'Diğer adres ekle' },
+  ],
+  editTitle: 'Adresi Düzenle',
+  deleteLabel: 'Adresi sil',
+  confirmTitle: 'Adresi sil',
+  confirmQuestionSuffix: 'adresini silmek istiyor musun?',
+  confirmHint: 'Geçmiş siparişlerin bundan etkilenmez.',
+  confirmLabel: 'Sil',
+  deletingLabel: 'Siliniyor…',
+  cancelLabel: 'Vazgeç',
+  deletedToastSuffix: 'adresi silindi.',
+  updatedToast: 'Adresin güncellendi.',
+};
+
 /**
  * Icerik yedegi (T11.10 duzeltmesi): GET /v1/content/welcome hata verirse
  * ust barin calismasi icin gereken en az metin. Oturumdaki kullanici icerik
@@ -167,6 +197,8 @@ export const CONTENT_FALLBACK = {
   favorites: FAVORITES_FALLBACK,
   /** profile: bloğun tamami (T11.14). */
   profile: PROFILE_FALLBACK,
+  /** addresses: bloğun tamami (T11.15). */
+  addresses: ADDRESSES_FALLBACK,
 } as const;
 
 export type ContentFallback = typeof CONTENT_FALLBACK;

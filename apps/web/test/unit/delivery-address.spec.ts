@@ -20,9 +20,12 @@ import {
 import {
   addressBookState,
   resolveDeliveryAddress,
-  selectedAddressIndex,
+  selectedAddress,
 } from '../../src/features/address/services/delivery-address';
-import type { DeliveryInputs } from '../../src/features/address/services/delivery-address';
+import type {
+  DeliveryAddressState,
+  DeliveryInputs,
+} from '../../src/features/address/services/delivery-address';
 
 const SEED_ADDRESSES_JSON = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -80,7 +83,7 @@ describe('resolveDeliveryAddress: beklenir', () => {
         session: 'unknown',
         userId: null,
         addresses: 'loading',
-        selection: { userId: AYSE, title: 'İş' },
+        selection: { userId: AYSE, addressId: IS.id },
       }),
     ).toEqual({ status: 'pending' });
   });
@@ -88,7 +91,7 @@ describe('resolveDeliveryAddress: beklenir', () => {
   it('oturum acik, defter yukleniyor: once varsayilana gidip sonra degismez', () => {
     expect(
       resolveDeliveryAddress(
-        signedIn({ addresses: 'loading', selection: { userId: AYSE, title: 'İş' } }),
+        signedIn({ addresses: 'loading', selection: { userId: AYSE, addressId: IS.id } }),
       ),
     ).toEqual({ status: 'pending' });
   });
@@ -112,7 +115,7 @@ describe('resolveDeliveryAddress: varsayilan "Ev" ve nedeni', () => {
         session: 'anonymous',
         userId: null,
         addresses: 'loading',
-        selection: { userId: AYSE, title: 'İş' },
+        selection: { userId: AYSE, addressId: IS.id },
       }),
     ).toEqual(defaultAddress('anonymous'));
   });
@@ -130,23 +133,34 @@ describe('resolveDeliveryAddress: varsayilan "Ev" ve nedeni', () => {
   });
 });
 
+/** Hesabin adresi olarak cozulmus durum. */
+const account = (address: SavedAddress) => ({
+  status: 'ready',
+  source: 'account',
+  addressId: address.id,
+  title: address.title,
+  location: address.location,
+});
+
 describe('resolveDeliveryAddress: hesabin adresi', () => {
   it('secim yoksa defterin ilk adresi', () => {
-    expect(resolveDeliveryAddress(signedIn())).toEqual({
-      status: 'ready',
-      source: 'account',
-      title: 'Ev',
-      location: EV.location,
-    });
+    expect(resolveDeliveryAddress(signedIn())).toEqual(account(EV));
   });
 
-  it('kullanicinin secimi, defterinde o adda adres varsa', () => {
-    expect(resolveDeliveryAddress(signedIn({ selection: { userId: AYSE, title: 'İş' } }))).toEqual({
-      status: 'ready',
-      source: 'account',
-      title: 'İş',
-      location: IS.location,
-    });
+  it('kullanicinin secimi (kimlikle), defterinde o kimlikte adres varsa', () => {
+    expect(
+      resolveDeliveryAddress(signedIn({ selection: { userId: AYSE, addressId: IS.id } })),
+    ).toEqual(account(IS));
+  });
+
+  it('adi degisen adres secili kalir: secim kimliktir (T11.15)', () => {
+    const ofis: SavedAddress = { ...IS, title: 'Ofis' };
+
+    expect(
+      resolveDeliveryAddress(
+        signedIn({ addresses: [EV, ofis], selection: { userId: AYSE, addressId: IS.id } }),
+      ),
+    ).toEqual(account(ofis));
   });
 
   // Asagidaki defterler "Ev" ile BASLAMAZ: ilk adres varsayilandan ayirt edilsin
@@ -154,55 +168,56 @@ describe('resolveDeliveryAddress: hesabin adresi', () => {
   it('baska hesabin secimi uygulanmaz: ayni tarayicida ikinci kullanici KENDI ilk adresini gorur', () => {
     expect(
       resolveDeliveryAddress(
-        signedIn({ addresses: [IS, EV, YAZLIK], selection: { userId: MEHMET, title: 'Yazlık' } }),
+        signedIn({
+          addresses: [IS, EV, YAZLIK],
+          selection: { userId: MEHMET, addressId: YAZLIK.id },
+        }),
       ),
-    ).toEqual({ status: 'ready', source: 'account', title: 'İş', location: IS.location });
+    ).toEqual(account(IS));
   });
 
-  it('secilen adres defterden kalkmissa ilk adres', () => {
+  it('secili adres silinmisse defterin ilk adresi (K6)', () => {
     expect(
       resolveDeliveryAddress(
-        signedIn({ addresses: [IS, YAZLIK], selection: { userId: AYSE, title: 'Ev' } }),
+        signedIn({ addresses: [IS, YAZLIK], selection: { userId: AYSE, addressId: EV.id } }),
       ),
-    ).toEqual({ status: 'ready', source: 'account', title: 'İş', location: IS.location });
+    ).toEqual(account(IS));
+  });
+
+  it('surum 1 kaydindan tasinmis adla secim, kimlige cevrilene kadar adla eslesir', () => {
+    expect(
+      resolveDeliveryAddress(
+        signedIn({ addresses: [YAZLIK, IS], selection: { userId: AYSE, title: 'İş' } }),
+      ),
+    ).toEqual(account(IS));
   });
 
   it.each([
     ['kucuk harf', 'İş'.toLocaleLowerCase('tr')],
     ['buyuk harf', 'İş'.toLocaleUpperCase('tr')],
     ['Turkce karaktersiz', 'Is'],
-  ])('ad birebir eslesir: %s secim "Is" adresini secmez, ilk adres', (_durum, title) => {
-    expect(
-      resolveDeliveryAddress(
-        signedIn({ addresses: [YAZLIK, IS], selection: { userId: AYSE, title } }),
-      ),
-    ).toEqual({ status: 'ready', source: 'account', title: 'Yazlık', location: YAZLIK.location });
-  });
-
-  it('ayni adli iki adreste ilki gecerli (adres adiyla taninir; kimlik sozlesmede yok)', () => {
-    const baskaEv: SavedAddress = {
-      ...EV,
-      line: 'Kizilay Mah. No:1, Cankaya',
-      location: IS.location,
-    };
-
-    expect(
-      resolveDeliveryAddress(
-        signedIn({ addresses: [YAZLIK, EV, baskaEv], selection: { userId: AYSE, title: 'Ev' } }),
-      ),
-    ).toEqual({ status: 'ready', source: 'account', title: 'Ev', location: EV.location });
-  });
+  ])(
+    'tasinmis adla secimde ad birebir eslesir: %s secim "İş"i secmez, ilk adres',
+    (_durum, title) => {
+      expect(
+        resolveDeliveryAddress(
+          signedIn({ addresses: [YAZLIK, IS], selection: { userId: AYSE, title } }),
+        ),
+      ).toEqual(account(YAZLIK));
+    },
+  );
 });
 
-describe('selectedAddressIndex (secicinin "secili" isareti)', () => {
-  it('o adi tasiyan ILK adres: ayni adli ikinci adres secili gorunmez (cozum de ilkini alir)', () => {
-    const baskaEv: SavedAddress = { ...EV, line: 'Kizilay Mah. No:1, Cankaya' };
-
-    expect(selectedAddressIndex([YAZLIK, EV, baskaEv], 'Ev')).toBe(1);
+describe('selectedAddress (secicinin ve Adreslerim sekmesinin "secili" isareti)', () => {
+  it('hesabin adresi: defterdeki kaydi', () => {
+    expect(selectedAddress([EV, IS], account(IS) as DeliveryAddressState)).toBe(IS);
   });
 
-  it('defterde olmayan ad: hicbiri secili degil', () => {
-    expect(selectedAddressIndex([EV, IS], 'Yazlık')).toBe(-1);
+  it('varsayilan adres ve bekleme: hicbiri secili degil (varsayilan defterde yok)', () => {
+    expect(
+      selectedAddress([EV, IS], defaultAddress('no-addresses') as DeliveryAddressState),
+    ).toBeUndefined();
+    expect(selectedAddress([EV, IS], { status: 'pending' })).toBeUndefined();
   });
 });
 

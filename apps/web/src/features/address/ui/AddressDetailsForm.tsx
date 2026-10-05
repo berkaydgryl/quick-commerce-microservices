@@ -1,4 +1,4 @@
-import type { AddressSetupContent, GeoPoint } from '@getir/contracts';
+import type { AddressKind, AddressSetupContent, GeoPoint, SavedAddress } from '@getir/contracts';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -11,10 +11,12 @@ import { focusFirstInvalid, showServerErrors } from '../../auth/ui/form-errors';
 import { useNearbyMarkets } from '../../markets/hooks/useNearbyMarkets';
 import { useAddAddress } from '../hooks/useAddAddress';
 import { useSavedAddresses } from '../hooks/useSavedAddresses';
+import { useUpdateAddress } from '../hooks/useUpdateAddress';
 import {
   ADDRESS_BOOK_FIELD,
   ADDRESS_FORM_FIELDS,
   addressFormSchema,
+  editAddressValues,
   initialAddressValues,
   titleForKind,
   toCreateAddressRequest,
@@ -36,6 +38,16 @@ interface AddressDetailsFormProps {
   readonly resolved: ResolvedLine;
   /** Kayittan sonra (ust bardan eklemede pencereyi kapatir). */
   readonly onSaved?: (() => void) | undefined;
+  /** Eklemede secili tur (T11.15, T4). */
+  readonly initialKind?: AddressKind | undefined;
+  /** Duzenleme modu (T11.15): kayitli adres, kayit PUT, altta "Adresi sil". */
+  readonly editing?:
+    | {
+        readonly address: SavedAddress;
+        readonly deleteLabel: string;
+        readonly onDelete: () => void;
+      }
+    | undefined;
 }
 
 /**
@@ -45,6 +57,10 @@ interface AddressDetailsFormProps {
  * yeni adres secilir; ana sayfa kapisi (RootPage) market listesine gecer.
  *
  * Secilen yere hizmet veren market yoksa uyari gorunur ama kayit engellenmez.
+ *
+ * Duzenleme modunda (T11.15) alanlar kayitli adresle dolu gelir; nokta
+ * degistiyse satir yeni noktanin satiridir (bulunamadiysa eski satir kalir).
+ * Kayit PUT'tur ve adin tekilligi adresin KENDI adini saymaz.
  */
 export function AddressDetailsForm({
   content,
@@ -52,11 +68,17 @@ export function AddressDetailsForm({
   location,
   resolved,
   onSaved,
+  initialKind,
+  editing,
 }: AddressDetailsFormProps) {
   const adding = useAddAddress(userId);
+  const updating = useUpdateAddress(userId);
   const markets = useNearbyMarkets(location);
-  // Defterdeki adlar: onerilen baslik bunlardan biri olmasin ("Ev 2").
-  const taken = (useSavedAddresses(userId).data ?? []).map((address) => address.title);
+  // Defterdeki adlar: onerilen baslik bunlardan biri olmasin ("Ev 2"). Duzenlenen
+  // adresin kendi adi sayilmaz.
+  const taken = (useSavedAddresses(userId).data ?? [])
+    .filter((address) => address.id !== editing?.address.id)
+    .map((address) => address.title);
   const [formMessage, setFormMessage] = useState<string | null>(null);
   const {
     control,
@@ -69,7 +91,10 @@ export function AddressDetailsForm({
     formState: { errors, isSubmitting },
   } = useForm<AddressFormValues, unknown, AddressFormOutput>({
     resolver: zodResolver(addressFormSchema),
-    defaultValues: initialAddressValues(content.kinds, resolved.line, taken),
+    defaultValues:
+      editing === undefined
+        ? initialAddressValues(content.kinds, resolved.line, taken, initialKind)
+        : editAddressValues(editing.address, resolved.line === '' ? undefined : resolved.line),
     // Odak sirasi form-errors.ts'te: react-hook-form kayit sirasiyla gezer.
     shouldFocusError: false,
   });
@@ -82,7 +107,12 @@ export function AddressDetailsForm({
   const submit = async (values: AddressFormOutput): Promise<void> => {
     setFormMessage(null);
     try {
-      await adding.mutateAsync(toCreateAddressRequest(values, location));
+      const request = toCreateAddressRequest(values, location);
+      if (editing === undefined) {
+        await adding.mutateAsync(request);
+      } else {
+        await updating.mutateAsync({ addressId: editing.address.id, request });
+      }
       onSaved?.();
     } catch (error) {
       const feedback = formFeedback(error, [...ADDRESS_FORM_FIELDS, ADDRESS_BOOK_FIELD]);
@@ -187,6 +217,16 @@ export function AddressDetailsForm({
       <AddressButton type="submit" disabled={isSubmitting} aria-busy={isSubmitting}>
         {isSubmitting ? content.savingLabel : content.saveLabel}
       </AddressButton>
+      {editing !== undefined && (
+        <button
+          type="button"
+          className={styles['c-address-form__delete']}
+          disabled={isSubmitting}
+          onClick={editing.onDelete}
+        >
+          {editing.deleteLabel}
+        </button>
+      )}
     </form>
   );
 }

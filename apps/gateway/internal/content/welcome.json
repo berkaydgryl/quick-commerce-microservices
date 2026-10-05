@@ -265,5 +265,28 @@
       "verifiedToast": "Telefon numaran doğrulandı.",
       "changedToast": "Telefon numaran değişti. Diğer cihazlardaki oturumların kapatıldı."
     }
+  },
+  "addresses": {
+    "title": "Adreslerim",
+    "loadingLabel": "Adreslerin yükleniyor…",
+    "emptyNotice": "Kayıtlı adresin yok. Aşağıdan ekleyebilirsin.",
+    "selectedLabel": "Seçili adres",
+    "editSuffix": "adresini düzenle",
+    "deleteSuffix": "adresini sil",
+    "addOptions": [
+      { "kind": "HOME", "label": "Ev adresi ekle" },
+      { "kind": "WORK", "label": "İş adresi ekle" },
+      { "kind": "OTHER", "label": "Diğer adres ekle" }
+    ],
+    "editTitle": "Adresi Düzenle",
+    "deleteLabel": "Adresi sil",
+    "confirmTitle": "Adresi sil",
+    "confirmQuestionSuffix": "adresini silmek istiyor musun?",
+    "confirmHint": "Geçmiş siparişlerin bundan etkilenmez.",
+    "confirmLabel": "Sil",
+    "deletingLabel": "Siliniyor…",
+    "cancelLabel": "Vazgeç",
+    "deletedToastSuffix": "adresi silindi.",
+    "updatedToast": "Adresin güncellendi."
   }
 }

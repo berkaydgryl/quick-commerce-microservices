@@ -1,0 +1,184 @@
+/*
+ * Adreslerim (T11.15): profil kartinin gorsel dili (T11.14 PR 2). Beyaz kart;
+ * satirlar ince lavanta cizgilerle ayrilir. Satirin solu secim (radyo gizli,
+ * odak halkasi satirda), sagi eylemler: secili adreste yesil onay, digerlerinde
+ * cop kutusu; her satirda kalem. Eylemler en az 44 px dokunma alanidir. Uzun
+ * ad ve adres satiri kirilir.
+ */
+.c-addresses {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.c-addresses__title {
+  font-size: var(--font-size-lg);
+}
+
+.c-addresses__card {
+  display: grid;
+  padding: var(--space-2) var(--space-5);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-addresses__empty {
+  padding-block: var(--space-4);
+  color: var(--text-muted);
+}
+
+/* Radyo grubu bir liste ama role="list" degil: global liste sifirlamasi
+   ona ulasmaz, girinti ve isaret burada kalkar. */
+.c-addresses__list,
+.c-addresses__adds {
+  display: grid;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.c-addresses__row {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  padding-block: var(--space-3);
+}
+
+.c-addresses__row + .c-addresses__row,
+.c-addresses__adds {
+  border-block-start: var(--border-width-thin) solid var(--border-faint);
+}
+
+/* Satirin secim alani: tur ikonu, ad ve adres satiri; radyo ekranda gizli. */
+.c-addresses__choice {
+  display: flex;
+  flex: 1;
+  gap: var(--space-3);
+  align-items: center;
+  min-width: 0;
+  min-height: var(--size-address-action);
+  padding-inline-end: var(--space-2);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.c-addresses__choice:has(.c-addresses__radio:focus-visible) {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.c-addresses__radio {
+  position: absolute;
+  width: var(--size-visually-hidden);
+  height: var(--size-visually-hidden);
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.c-addresses__icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: var(--size-address-row-icon);
+  aspect-ratio: 1;
+  font-size: var(--font-size-lg);
+  color: var(--color-brand-primary);
+}
+
+.c-addresses__text {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.c-addresses__name {
+  font-weight: var(--font-weight-bold);
+  overflow-wrap: anywhere;
+}
+
+.c-addresses__line {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.c-addresses__row.is-selected .c-addresses__name {
+  color: var(--color-brand-primary);
+}
+
+/* Sagdaki eylemler: kalem ve cop kutusu, ayni boyutta. */
+.c-addresses__action,
+.c-addresses__selected {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: var(--size-address-action);
+  aspect-ratio: 1;
+}
+
+.c-addresses__action {
+  padding: calc((var(--size-address-action) - var(--size-address-action-icon)) / 2);
+  color: var(--color-brand-primary-soft);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--radius-md);
+  transition: color var(--duration-fast) var(--easing-standard);
+}
+
+.c-addresses__action:disabled {
+  cursor: progress;
+  opacity: var(--opacity-disabled);
+}
+
+.c-addresses__action:hover:not(:disabled) {
+  color: var(--color-brand-primary);
+}
+
+.c-addresses__selected {
+  padding: calc((var(--size-address-action) - var(--size-profile-verified-icon)) / 2);
+  color: var(--text-success);
+}
+
+/* Ekleme satirlari: arti ve "Ev adresi ekle"; marka renginde, tam satir. */
+.c-addresses__add {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  width: 100%;
+  min-height: var(--size-address-action);
+  padding-block: var(--space-2);
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-brand-primary);
+  text-align: start;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+}
+
+.c-addresses__add:disabled {
+  cursor: progress;
+  opacity: var(--opacity-disabled);
+}
+
+.c-addresses__add:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.c-addresses__add-icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: var(--size-address-row-icon);
+  aspect-ratio: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-addresses__action {
+    transition: none;
+  }
+}

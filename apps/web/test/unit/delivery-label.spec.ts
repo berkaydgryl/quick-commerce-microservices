@@ -19,6 +19,7 @@ describe('deliveryLabel', () => {
     const delivery = {
       status: 'ready',
       source: 'account',
+      addressId: 'adr_00000000000000000000000000000001',
       title: 'Annemler',
       location: LOCATION,
     } as const;
