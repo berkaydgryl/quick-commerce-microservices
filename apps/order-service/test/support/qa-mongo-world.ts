@@ -68,6 +68,9 @@ export async function courierOnMongo(options: {
   const hooks = new HookedCourierRepository(store.repository);
   const service = await startCourierService({
     repository: hooks,
+    // Uretimdeki gibi market kopyasi ve rotalar da Mongo'da (T13.2 PR 3).
+    markets: store.markets,
+    routes: store.routes,
     clock: options.clock,
     logger,
     ...(options.port === undefined ? {} : { port: options.port }),
