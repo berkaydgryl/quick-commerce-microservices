@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { catalogV1, commonV1, inventoryV1, orderV1 } from '../../gen/ts/index.js';
+import { cardvaultV1, catalogV1, commonV1, inventoryV1, orderV1 } from '../../gen/ts/index.js';
 
 /**
  * Bu dosya ELLE YAZILMIS KOD test etmez; T2.3'un kapisidir: ".proto dosyalarindan
@@ -165,5 +165,42 @@ describe('pazaryeri sozlesmesi (ADR-15)', () => {
 
     expect(decoded.price?.amountMinor).toBe(3190);
     expect(decoded.marketId).toBe('mkt_a101-caferaga');
+  });
+});
+
+describe('kart kasasi sozlesmesi (T11.17)', () => {
+  it('kart numarasi ve CVV yalnizca AddCardRequest te; maskeli kartta ve diger mesajlarda alan yok', () => {
+    expect(Object.keys(cardvaultV1.AddCardRequest.fromPartial({}))).toEqual(
+      expect.arrayContaining(['number', 'cvv']),
+    );
+    for (const message of [
+      cardvaultV1.SavedCard.fromPartial({}),
+      cardvaultV1.AddCardResponse.fromPartial({ card: {} }).card,
+      cardvaultV1.ListCardsRequest.fromPartial({}),
+      cardvaultV1.DeleteCardRequest.fromPartial({}),
+    ]) {
+      expect(Object.keys(message ?? {})).not.toContain('number');
+      expect(Object.keys(message ?? {})).not.toContain('cvv');
+    }
+  });
+
+  it('servis tanimi tam nitelikli gRPC yolunu tasir; maskeli kart telden bozulmadan gelir', () => {
+    expect(cardvaultV1.CardVaultServiceService.addCard.path).toBe(
+      '/getir.cardvault.v1.CardVaultService/AddCard',
+    );
+    const card = cardvaultV1.SavedCard.fromPartial({
+      id: 'crd_0123456789abcdef0123456789abcdef',
+      brand: cardvaultV1.CardBrand.CARD_BRAND_TROY,
+      first4: '9792',
+      last4: '0003',
+      expiryMonth: 12,
+      expiryYear: 2031,
+      holderName: 'Ayşe Yılmaz',
+      expired: false,
+    });
+
+    const decoded = cardvaultV1.SavedCard.decode(cardvaultV1.SavedCard.encode(card).finish());
+
+    expect(decoded).toEqual(card);
   });
 });
