@@ -1,6 +1,7 @@
 /**
  * Atama use-case'i (T13.1; havuz T13.2): atomik secim depoda (sozlesme testi),
  * burada market konumu, tekrar ve eszamanlilik kurallari, NOT_FOUND ve gunluk.
+ * Rotanin kurallari assignment-route.spec.ts'te; burada cevaptaki ETA rotanin.
  */
 
 import { AppError, ERROR_CODES, fixedClock } from '@getir/core';
@@ -9,23 +10,41 @@ import type { LogLine } from '@getir/core/testing';
 import { describe, expect, it } from 'vitest';
 
 import { createAssignCourier, MARKET_UNKNOWN } from '../../src/application/assign-courier.js';
+import { createAssignmentRoute } from '../../src/application/assignment-route.js';
 import { createNearestAvailableStrategy } from '../../src/application/nearest-available.js';
-import { ETA_NOT_COMPUTED_SECONDS } from '../../src/config/constants.js';
 import type { AssignmentStrategy } from '../../src/domain/assignment-strategy.js';
 import { COURIER_STATUS } from '../../src/domain/courier.js';
-import type { Courier } from '../../src/domain/courier.js';
+import type { Courier, GeoPoint } from '../../src/domain/courier.js';
+import type { MarketLocator } from '../../src/domain/market-locator.js';
+import { planRoute } from '../../src/domain/route-planner.js';
 import { InMemoryCourierStore } from '../../src/infrastructure/memory/in-memory-courier-store.js';
+import { InMemoryRouteStore } from '../../src/infrastructure/memory/in-memory-route-store.js';
 import {
   courier,
   courierId,
   DELIVERY,
   FAR_MARKET,
   MARKET,
+  MARKET_LOCATION,
   NOW_MS,
   orderId,
   POOL_RULE,
+  ROUTE_RULE,
   TEST_MARKETS,
 } from '../support/couriers.js';
+
+/** Atamanin rotasi: bellek rota deposu, uretimdeki kural. */
+const routeOf = (markets: MarketLocator) =>
+  createAssignmentRoute({
+    routes: new InMemoryRouteStore(),
+    markets,
+    rule: ROUTE_RULE,
+    clock: fixedClock(NOW_MS),
+  });
+
+/** Kuryenin `from` konumundan MARKET'e, oradan DELIVERY'ye rotanin varis tahmini. */
+const etaFrom = (from: GeoPoint): number =>
+  planRoute({ from, pickup: MARKET_LOCATION, dropoff: DELIVERY }, ROUTE_RULE).etaSeconds;
 
 function setup(couriers: readonly Courier[], strategy?: AssignmentStrategy) {
   const repository = new InMemoryCourierStore(couriers, TEST_MARKETS);
@@ -34,6 +53,7 @@ function setup(couriers: readonly Courier[], strategy?: AssignmentStrategy) {
     repository,
     markets: repository,
     strategy: strategy ?? createNearestAvailableStrategy(repository, POOL_RULE),
+    route: routeOf(repository),
     clock: fixedClock(NOW_MS),
   });
   const run = (order: string, marketId = MARKET) =>
@@ -53,7 +73,7 @@ function losingStrategy(onClaim: () => void): AssignmentStrategy {
 }
 
 describe('createAssignCourier', () => {
-  it('bos kuryeyi atar: BUSY, siparise bagli, atama ani saatten; ETA henuz hesaplanmaz', async () => {
+  it('bos kuryeyi atar: BUSY, siparise bagli, atama ani saatten; ETA kurye -> market -> adres rotasindan', async () => {
     const { run, lines } = setup([courier(1)]);
     const order = orderId();
 
@@ -66,9 +86,10 @@ describe('createAssignCourier', () => {
         currentOrderId: order,
         lastAssignedAt: new Date(NOW_MS),
       },
-      etaSeconds: ETA_NOT_COMPUTED_SECONDS,
+      etaSeconds: etaFrom(courier(1).lastLocation),
       reused: false,
     });
+    expect(assignment.etaSeconds).toBeGreaterThan(0);
     expect(lines).toEqual([
       {
         level: 'info',
@@ -78,6 +99,11 @@ describe('createAssignCourier', () => {
           courierId: courierId(1),
           marketId: MARKET,
           strategy: 'nearest-available',
+          etaSeconds: assignment.etaSeconds,
+          distanceMeters: planRoute(
+            { from: courier(1).lastLocation, pickup: MARKET_LOCATION, dropoff: DELIVERY },
+            ROUTE_RULE,
+          ).distanceMeters,
         },
       },
     ]);
@@ -110,6 +136,7 @@ describe('createAssignCourier', () => {
       repository,
       markets: repository,
       strategy: counting,
+      route: routeOf(repository),
       clock: fixedClock(NOW_MS),
     });
     const order = orderId();
@@ -210,6 +237,7 @@ describe('createAssignCourier', () => {
       strategy: losingStrategy(() => {
         void repository.replaceAll([courier(1), winner], TEST_MARKETS);
       }),
+      route: routeOf(repository),
       clock: fixedClock(NOW_MS),
     });
     const lines: LogLine[] = [];
@@ -219,7 +247,11 @@ describe('createAssignCourier', () => {
       recordingLogger(lines),
     );
 
-    expect(assignment).toEqual({ courier: winner, etaSeconds: 0, reused: true });
+    expect(assignment).toEqual({
+      courier: winner,
+      etaSeconds: etaFrom(winner.lastLocation),
+      reused: true,
+    });
     expect(lines.map((line) => line.message)).toEqual([
       'eszamanli atamada siparisin kuryesi okundu',
     ]);

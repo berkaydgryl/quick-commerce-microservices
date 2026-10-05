@@ -5,6 +5,7 @@ import { ID_PREFIX, newId } from '@getir/core';
 import { COURIER_STATUS } from '../../src/domain/courier.js';
 import type { Courier, GeoPoint } from '../../src/domain/courier.js';
 import type { PoolRule } from '../../src/domain/courier-pool.js';
+import type { RouteRule } from '../../src/domain/route-planner.js';
 import type { MarketLocation } from '../../src/domain/market-locator.js';
 
 /** Kadikoy'de iki market (aralari ~570 m) ve Besiktas'ta bir market (6,6 km uzakta). */
@@ -23,6 +24,14 @@ export const TEST_MARKETS: readonly MarketLocation[] = [
 
 /** Uretimdeki kural: 3 km havuz, 300 m dilim. */
 export const POOL_RULE: PoolRule = { radiusMeters: 3_000, bandMeters: 300 };
+
+/** Uretimdeki rota kurali (T13.2): 100 m aralik, 20-40 nokta, 20 km/sa. */
+export const ROUTE_RULE: RouteRule = {
+  spacingMeters: 100,
+  minPoints: 20,
+  maxPoints: 40,
+  speedKmh: 20,
+};
 
 export const SEEDED_AT = new Date('2026-10-04T08:00:00.000Z');
 export const NOW_MS = Date.parse('2026-10-04T09:00:00.000Z');

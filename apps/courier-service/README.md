@@ -8,25 +8,26 @@ geçer (T13.1 PR 2). Canlı konum bu servisin RPC'lerinden geçmez (`courier.pro
 çevresindeki boş kuryelerden biri atanır; demo verisinde Kadıköy ve Beşiktaş iki ayrı havuzdur
 (aralarında 6,6 km). Teslimattan sonra kurye olduğu yerde boşa çıkar, markete dönmez.
 
-## Bugünkü durum (T13.2 PR 1 — kurye havuzu)
+## Bugünkü durum (T13.2 — kurye havuzu, rota ve varış tahmini)
 
-| Parça                        | Durum                                                                                       |
-| ---------------------------- | ------------------------------------------------------------------------------------------- |
-| `couriers` şeması            | ✅ `infrastructure/mongo/documents.ts` (konum GeoJSON), indeksler `couriers-collection.ts`  |
-| Havuz ataması (B7)           | ✅ `application/assign-courier.ts` + `nearest-available.ts`, kural `domain/courier-pool.ts` |
-| Market konumu kopyası        | ✅ `markets` koleksiyonu (seed ve göç 0001 yazar), MOCK'ta bellek                           |
-| Okuma, bırakma               | ✅ `GetCourier`, `ReleaseCourier` (kurye olduğu yerde boşa çıkar)                           |
-| Demo kuryeleri               | ✅ `pnpm seed`: her marketin 40-150 m yakınına 3 kurye, 63 (Kadıköy 30, Beşiktaş 33)        |
-| Rota, ETA, GPS, `StartRoute` | ⏳ T13.2 PR 3 (rota, ETA), T13.3 (GPS); `StartRoute` bugün `NOT_IMPLEMENTED`                |
+| Parça                     | Durum                                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------------------- |
+| `couriers` şeması         | ✅ `infrastructure/mongo/documents.ts` (konum GeoJSON), indeksler `couriers-collection.ts`  |
+| Havuz ataması (B7)        | ✅ `application/assign-courier.ts` + `nearest-available.ts`, kural `domain/courier-pool.ts` |
+| Market konumu kopyası     | ✅ `markets` koleksiyonu (seed ve göç 0001 yazar), MOCK'ta bellek                           |
+| Okuma, bırakma            | ✅ `GetCourier`, `ReleaseCourier` (kurye olduğu yerde boşa çıkar)                           |
+| Demo kuryeleri            | ✅ `pnpm seed`: her marketin 40-150 m yakınına 3 kurye, 63 (Kadıköy 30, Beşiktaş 33)        |
+| Rota ve ETA, `StartRoute` | ✅ atamada kurye -> market -> adres, 20-40 eşit aralıklı nokta; `routes` (T13.2 PR 3)       |
+| GPS, canlı ETA            | ⏳ T13.3 (tick, `courier.location`)                                                         |
 
 ## RPC'ler
 
 | RPC              | Ne yapar                                                                                 |
 | ---------------- | ---------------------------------------------------------------------------------------- |
-| `AssignCourier`  | Marketin çevresindeki boş kuryeyi bağlar; yoksa `NOT_FOUND` (order 30 sn bekler)         |
+| `AssignCourier`  | Marketin çevresindeki boş kuryeyi bağlar, rotasını üretir, ETA döner; yoksa `NOT_FOUND`  |
 | `GetCourier`     | Kuryenin durumu ve son bilinen konumu; yoksa `NOT_FOUND`                                 |
 | `ReleaseCourier` | Siparişi taşıyan kuryeyi yerinde `IDLE` yapar; taşıyan yoksa hata değil `released=false` |
-| `StartRoute`     | `NOT_IMPLEMENTED` (T13.2)                                                                |
+| `StartRoute`     | Atamanın rotasını döner (`already_started = true`); bu kuryeyle rotası yoksa `NOT_FOUND` |
 
 Girdi sözleşme biçimiyle denetlenir: sipariş `ord_<32 hex>`, market `mkt_…`, kurye `crr_<32 hex>`,
 teslimat konumu zorunlu. Kullanımdan kalkan `dark_store_id` okunmaz (ADR-15). Cevaptaki kuryenin
@@ -53,11 +54,28 @@ idleSince silinir)`. Aday o arada başka siparişe gittiyse koşul tutmaz, sıra
 - **Tekrar güvenli:** sipariş zaten bir kuryedeyse aynısı döner. `currentOrderId` üzerindeki kısmi
   benzersiz indeks, aynı sipariş için eşzamanlı ikinci isteği durdurur; kaybeden kazananın kuryesini
   okur (test: aynı sipariş 10 kez eşzamanlı → tek kurye).
-- **ETA:** atama cevabında `eta_seconds = 0` (hesaplanmadı); rota ve ETA T13.2 PR 3'te.
+- **Rota (T13.2):** atama, kuryenin o anki konumundan markete (paket alma), oradan teslimat adresine
+  iki parçalı rotayı üretir ve **bir kez** saklar (`routes`, `_id = siparis`). Nokta sayısı
+  `ceil(toplam m / 100)`, 20 ile 40 arasına kırpılır; parçalar iki bacağa uzunluk oranında bölünür
+  (kurye marketteyse ilk bacak yok). Noktalar büyük daire üzerinde, **her bacakta eşit aralıklı**
+  (slerp, `domain/geo.ts`); iki bacağın aralığı yakın ama eşit olmayabilir (kurye marketten 1 cm
+  uzaktaysa ilk parça 1 cm). Simülasyon (T13.3) nokta başına değil mesafe ya da zamanla ilerler.
+  Market noktası birebir rotanın köşesi. Kural `domain/route-planner.ts`. Rota uçları birbirine
+  antipot olamaz (slerp orada tanımsız): havuz 3 km, adres markete yakın.
+- **ETA:** `ceil(distance_meters / (COURIER_SPEED_KMH / 3,6))` saniye, tam sayı; tek kaynak
+  yuvarlanmış mesafe (istemci ikisinden aynı sonucu bulur). Atama cevabındaki `eta_seconds` budur. Tekrar istek saklanan rotayı döner: aynı noktalar, aynı ETA (kurye o arada
+  yer değiştirse de). Market kopyada yoksa rota üretilemez: atama yine döner, ETA 0 ve WARN.
+- **`StartRoute` (karar K a):** rota atamada başlar (kurye hemen markete yürür); `StartRoute` aynı
+  rotayı `already_started = true` ve `started_at` = atama anıyla döner, yeni rota üretmez. Kurye
+  `BUSY` değilse ya da siparişi taşımıyorsa (bıraktıysa) `NOT_FOUND`; rota belgesi geçmiş olarak
+  kalır. Order bu PR'da `StartRoute`'u çağırmaz; `ON_THE_WAY` ve canlı konum T13.3'te.
+- **Yeniden atama:** sipariş bırakılıp başka kuryeye ya da aynı kuryeye yeniden atanırsa (bugün
+  akışta yok) rota yenisiyle değiştirilir: saklanan rota kuryenin son atamasından eskiyse o atamanın
+  değildir.
 - **Bırakma:** kurye olduğu yerde `IDLE` olur, `idleSince` bırakma anı; `lastAssignedAt` geçmiş
   bilgisi olarak kalır. Konum Mongo'da durum değişiminde yazılır: teslimat bitince adres (T13.3/T14.3).
 
-## `couriers` ve `markets` belgeleri
+## `couriers`, `markets` ve `routes` belgeleri
 
 `couriers`: `_id (crr_…)`, `name`, `status` (`IDLE | BUSY | OFFLINE`), `currentOrderId?`,
 `lastAssignedAt?`, `idleSince?` (yalnızca `IDLE`), `lastLocation` (GeoJSON `Point`, `[boylam, enlem]`),
@@ -75,6 +93,10 @@ okuyarak): katalogda yeni market courier'de `market_unknown` olur; courier seed'
 `IDLE`'a `idleSince`: son atama ya da seed anı), eski `marketId_status_lastAssignedAt` indeksini düşürür
 ve 21 marketin konumunu yazar. Açılışta kendiliğinden uygulanır; `down` geri alır (`marketId` en yakın
 marketten). Transaction'sız ve yeniden çalıştırılabilir (indeks düşürmek transaction'da yapılamaz).
+
+`routes` (T13.2): `_id (ord_…)`, `courierId`, `points` (`{lat, lng}` dizisi, 20-40), `pickupIndex`
+(market noktasının sırası), `distanceMeters`, `etaSeconds`, `createdAt` (atama anı). Yalnızca `_id`
+ile okunur, ek indeks yok. Göç gerekmez: koleksiyon ilk rotayla oluşur.
 
 Kuryenin adı istemcide görünür, **günlüğe yazılmaz**; günlükte kimlik yeter.
 
@@ -101,6 +123,7 @@ Metrikler `:51056/metrics` (gRPC portu + 1000).
 | `COURIER_MONGO_URI` | —               | `MOCK=false` iken zorunlu; kendi kullanıcısı (D14)      |
 | `COURIER_MONGO_DB`  | `getir_courier` |                                                         |
 | `MOCK`              | `false`         | `true`: demo kuryeleri ve marketler bellekte, Mongo yok |
+| `COURIER_SPEED_KMH` | `20`            | Kurye hızı (km/sa, tam sayı 1-120): rotanın ETA'sı      |
 
 **Yerel Mongo'da kullanıcı:** `infra/docker/mongo/init/service-users.js` kullanıcıları yalnızca **boş
 hacimde** oluşturur. Daha önce kurulmuş bir `getir-mongo`'da `courier` kullanıcısı kendiliğinden

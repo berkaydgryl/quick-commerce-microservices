@@ -21,12 +21,14 @@ import { appErrorOf, startTestGrpcServer } from '@getir/service-kit/testing';
 import type { TestGrpcServer } from '@getir/service-kit/testing';
 import { MongoDBContainer } from '@testcontainers/mongodb';
 import type { StartedMongoDBContainer } from '@testcontainers/mongodb';
+import type { Document } from 'mongodb';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createSeedCouriers } from '../../src/application/seed-couriers.js';
 import { buildCourierService } from '../../src/bootstrap.js';
 import { COURIER_STATUS } from '../../src/domain/courier.js';
 import type { Courier } from '../../src/domain/courier.js';
+import { planRoute } from '../../src/domain/route-planner.js';
 import { openCourierStore } from '../../src/infrastructure/courier-store.js';
 import {
   COURIER_SEEDS,
@@ -38,8 +40,11 @@ import type { CourierDocument } from '../../src/infrastructure/mongo/documents.j
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
 import { toGeoJson } from '../../src/infrastructure/mongo/mappers.js';
 import { MarketsCollection } from '../../src/infrastructure/mongo/markets-collection.js';
+import { RouteMongoStore } from '../../src/infrastructure/mongo/route-mongo-store.js';
+import { RoutesCollection } from '../../src/infrastructure/mongo/routes-collection.js';
 import { MongoCourierSeedWriter } from '../../src/infrastructure/mongo/mongo-courier-seed-writer.js';
 import { describeCourierStoreContract } from '../support/courier-store-contract.js';
+import { describeRouteStoreContract } from '../support/route-store-contract.js';
 import {
   courier,
   DELIVERY,
@@ -52,6 +57,7 @@ import {
   orderId,
   OTHER_MARKET,
   POOL_RULE,
+  ROUTE_RULE,
   TEST_MARKETS,
 } from '../support/couriers.js';
 
@@ -70,6 +76,7 @@ let couriers: CouriersCollection;
 let markets: MarketsCollection;
 let store: CourierMongoStore;
 let writer: MongoCourierSeedWriter;
+let routes: RouteMongoStore;
 
 /** Koleksiyonlari verilen kuryeler ve test marketleriyle bastan yazar (seed yazicisi: tek transaction). */
 async function reset(list: readonly Courier[]): Promise<CourierMongoStore> {
@@ -94,6 +101,7 @@ beforeAll(async () => {
   await couriers.ensureIndexes();
   store = new CourierMongoStore(couriers, markets);
   writer = new MongoCourierSeedWriter(connection, couriers, markets);
+  routes = new RouteMongoStore(new RoutesCollection(connection.db));
 });
 
 afterAll(async () => {
@@ -102,6 +110,7 @@ afterAll(async () => {
 });
 
 describeCourierStoreContract('mongo', reset);
+describeRouteStoreContract('mongo', () => routes);
 
 describe('indeksler', () => {
   it('havuz indeksi (2dsphere + durum) ve kismi benzersiz currentOrderId kurulu; eski market indeksi yok', async () => {
@@ -167,7 +176,7 @@ describe('gRPC uzerinden eszamanli atama (gercek Mongo, havuz)', () => {
     server = await startTestGrpcServer({
       serviceName: 'courier-int',
       services: [
-        buildCourierService({ couriers: store, markets: store, clock: fixedClock(NOW_MS) }),
+        buildCourierService({ couriers: store, markets: store, routes, clock: fixedClock(NOW_MS) }),
       ],
     });
   });
@@ -369,6 +378,77 @@ describe('atomik talep: kaybedilen aday ayni talepte yeniden denenmez', () => {
   });
 });
 
+describe('rota gercek Mongo da (T13.2): atama yazar, iki kopya ayni rotayi gorur', () => {
+  let copyA: TestGrpcServer | undefined;
+  let copyB: TestGrpcServer | undefined;
+  const service = courierV1.CourierServiceService;
+
+  const started = (name: string) =>
+    startTestGrpcServer({
+      serviceName: name,
+      services: [
+        buildCourierService({ couriers: store, markets: store, routes, clock: fixedClock(NOW_MS) }),
+      ],
+    });
+
+  beforeAll(async () => {
+    copyA = await started('courier-rota-a');
+    copyB = await started('courier-rota-b');
+  });
+
+  afterAll(async () => {
+    await copyA?.stop();
+    await copyB?.stop();
+  });
+
+  it('A atar ve rotayi routes a yazar (_id siparis); B nin StartRoute u ayni rotayi, B nin tekrar istegi ayni ETA yi doner', async () => {
+    if (copyA === undefined || copyB === undefined) throw new Error('sunucular baslamadi');
+    await reset([near(1, 700)]);
+    const order = orderId();
+    const request = courierV1.AssignCourierRequest.fromPartial({
+      orderId: order,
+      marketId: MARKET,
+      deliveryLocation: DELIVERY,
+    });
+
+    const assigned = await copyA.call(service.assignCourier, request);
+    const stored = await connection.db
+      .collection(COLLECTIONS.ROUTES)
+      .findOne({ _id: order } as Document);
+    const startedRoute = await copyB.call(service.startRoute, {
+      orderId: order,
+      courierId: courier(1).id,
+    });
+    const retry = await copyB.call(service.assignCourier, request);
+
+    const plan = planRoute(
+      { from: northOf(MARKET_LOCATION, 700), pickup: MARKET_LOCATION, dropoff: DELIVERY },
+      ROUTE_RULE,
+    );
+    expect(assigned.response?.etaSeconds).toBe(plan.etaSeconds);
+    expect(stored).toMatchObject({
+      courierId: courier(1).id,
+      pickupIndex: plan.pickupIndex,
+      distanceMeters: plan.distanceMeters,
+      etaSeconds: plan.etaSeconds,
+      createdAt: new Date(NOW_MS),
+    });
+    expect(startedRoute.response).toEqual({
+      route: {
+        points: plan.points,
+        distanceMeters: plan.distanceMeters,
+        etaSeconds: plan.etaSeconds,
+      },
+      startedAt: new Date(NOW_MS),
+      alreadyStarted: true,
+    });
+    expect(retry.response).toEqual(assigned.response);
+    expect(
+      await connection.db.collection(COLLECTIONS.ROUTES).countDocuments({ _id: order } as Document),
+    ).toBe(1);
+  });
+});
+
 describe('acilis ve seed', () => {
   it('openCourierStore bos veritabaninda gocu, indeksleri ve market kopyasini kurar', async () => {
     const otherDb = 'getir_courier_acilis';
@@ -391,6 +471,8 @@ describe('acilis ve seed', () => {
       expect(await opened.repository.findById(courier(1).id)).toBeNull();
       // Goc 0001 bos veritabaninda da market konumlarini yazar (seed beklemeden).
       expect(await opened.markets.locate(MARKET)).toEqual(MARKET_LOCATION);
+      // Rota deposu da acilir (T13.2): bos.
+      expect(await opened.routes.findByOrder(orderId())).toBeNull();
       expect(
         await connection.client.db(otherDb).collection(COLLECTIONS.MARKETS).countDocuments(),
       ).toBe(MARKET_LOCATION_SEEDS.length);

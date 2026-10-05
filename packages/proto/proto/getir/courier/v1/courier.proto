@@ -32,7 +32,9 @@ service CourierService {
   // Kuryenin o anki halini ve son bilinen konumunu okur.
   rpc GetCourier(GetCourierRequest) returns (GetCourierResponse);
 
-  // Rotayi uretir ve GPS simulasyonunu baslatir.
+  // Siparisin rotasini baslatir. T13.2'den beri rota ATAMADA uretilir ve
+  // saklanir; bu cagri ayni rotayi already_started = true ile doner. GPS
+  // simulasyonu T13.3'te.
   rpc StartRoute(StartRouteRequest) returns (StartRouteResponse);
 
   // Siparisi tasiyan kuryeyi bosa cikarir (BUSY -> IDLE).
@@ -80,17 +82,24 @@ message Courier {
   google.protobuf.Timestamp last_location_at = 7;
 }
 
-// Depodan teslimat adresine cizilen rota.
+// Kuryenin atama anindaki konumundan markete (paket alma), oradan teslimat
+// adresine cizilen iki parcali rota (T13.2).
 message Route {
-  // Duz polyline uzerindeki ara noktalar (20-40 adet). Ilk nokta depo, son
-  // nokta teslimat adresidir.
+  // Buyuk daire uzerinde noktalar (20-40 adet; ceil(toplam m / 100),
+  // sinirlara kirpilir). Ilk nokta kuryenin konumu, son nokta teslimat
+  // adresidir; market noktasi birebir rotanin kosesidir (kurye marketteyse
+  // ilk nokta). Iki parca uzunluk oraninda bolunur; aralik HER BACAKTA esittir,
+  // iki bacagin araligi yakin ama esit olmayabilir. Ilerleme nokta basina
+  // degil mesafeyle olculmeli.
   repeated getir.common.v1.GeoPoint points = 1;
 
   // Toplam yol uzunlugu, METRE cinsinden.
   int32 distance_meters = 2;
 
-  // Tahmini varis suresi, SANIYE cinsinden. Hesap basittir: kalan mesafe
-  // bolu sabit hiz (COURIER_SPEED_KMH). Her 10 tick'te bir guncellenir.
+  // Tahmini varis suresi, SANIYE cinsinden, tam sayi (yukari yuvarlanir).
+  // Hesap basittir: kalan mesafe bolu sabit hiz (COURIER_SPEED_KMH). Atamada
+  // butun rota, distance_meters'tan (ayni tam sayi mesafe); T13.3'ten
+  // itibaren her 10 tick'te bir guncellenir.
   int32 eta_seconds = 3;
 }
 
@@ -118,7 +127,9 @@ message AssignCourierRequest {
 message AssignCourierResponse {
   Courier courier = 1;
 
-  // Atama anindaki ilk tahmin. courier.assigned olayiyla istemciye de gider.
+  // Atama anindaki ilk tahmin: rotanin (Route.eta_seconds) degeri. Tekrar
+  // istek ayni rotayi ve ayni tahmini doner. Market konumu bilinmiyorsa 0.
+  // courier.assigned olayiyla istemciye de gider (T13.4).
   int32 eta_seconds = 2;
 }
 
@@ -140,7 +151,9 @@ message StartRouteRequest {
 //
 // Ayni siparis icin ikinci cagri YENI rota uretmez ve simulasyonu bastan
 // baslatmaz; calisan rotayi oldugu gibi doner. Aksi halde yeniden denenen
-// bir worker, haritadaki ikonu basa isinlardi.
+// bir worker, haritadaki ikonu basa isinlardi. T13.2'den beri rota atamada
+// baslar: cevap hep already_started = true, started_at atama anidir.
+// Siparisin bu kuryeyle rotasi yoksa NOT_FOUND.
 message StartRouteResponse {
   Route route = 1;
 

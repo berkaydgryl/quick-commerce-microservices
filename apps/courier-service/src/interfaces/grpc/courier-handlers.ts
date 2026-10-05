@@ -5,23 +5,26 @@
 
 import type { Logger } from '@getir/core';
 import type { courierV1 } from '@getir/proto';
-import { unaryHandler, unimplemented } from '@getir/service-kit';
+import { unaryHandler } from '@getir/service-kit';
 import type { UntypedServiceImplementation } from '@grpc/grpc-js';
 
 import type { AssignCourier } from '../../application/assign-courier.js';
 import type { GetCourier } from '../../application/get-courier.js';
 import type { ReleaseCourier } from '../../application/release-courier.js';
-import { toProtoCourier, toProtoRelease } from './mappers.js';
+import type { StartRoute } from '../../application/start-route.js';
+import { toProtoCourier, toProtoRelease, toProtoStartedRoute } from './mappers.js';
 import {
   assignCourierRequestSchema,
   getCourierRequestSchema,
   releaseCourierRequestSchema,
+  startRouteRequestSchema,
 } from './schemas.js';
 
 export interface CourierHandlerDeps {
   readonly assignCourier: AssignCourier;
   readonly getCourier: GetCourier;
   readonly releaseCourier: ReleaseCourier;
+  readonly startRoute: StartRoute;
   readonly logger?: Logger;
 }
 
@@ -61,7 +64,13 @@ export function createCourierImplementation(
         toProtoRelease(await deps.releaseCourier(orderId, ctx.logger)),
     }),
 
-    // Rota ve GPS simulasyonu T13.2-T13.3'te gelir.
-    startRoute: unimplemented('StartRoute', 'T13.2', logger),
+    // Rota atamada uretilir (T13.2); burasi ayni rotayi doner. GPS T13.3'te.
+    startRoute: unaryHandler({
+      name: 'StartRoute',
+      schema: startRouteRequestSchema,
+      ...(logger === undefined ? {} : { logger }),
+      handle: async (command, ctx): Promise<courierV1.StartRouteResponse> =>
+        toProtoStartedRoute(await deps.startRoute(command, ctx.logger)),
+    }),
   };
 }

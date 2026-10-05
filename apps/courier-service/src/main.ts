@@ -47,7 +47,13 @@ const { handle, store } = await startOrExit(
       otlpEndpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
       logger,
       services: [
-        buildCourierService({ logger, couriers: opened.repository, markets: opened.markets }),
+        buildCourierService({
+          logger,
+          couriers: opened.repository,
+          markets: opened.markets,
+          routes: opened.routes,
+          speedKmh: env.COURIER_SPEED_KMH,
+        }),
       ],
       // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti kesilmesin.
       onShutdown: () => opened.close(),
