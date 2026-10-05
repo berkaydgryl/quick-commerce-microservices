@@ -16,8 +16,9 @@
  *   9. courier coker ve ayni adreste geri gelir: siparisler bekler, sonra atanir.
  *  13. Iscinin GONDERDIGI kuyruk sorgusu (profiler): kismi indeksten, bellekte siralama yok.
  *
- * Gunluk metni ve sira (#92 FIFO, D1-D3) sonraki order PR'inda degisecek: burada
- * yalnizca davranis (cift atama yok, toparlanma var, tutarlilik) dogrulanir.
+ * Burada davranis (cift atama yok, toparlanma var, tutarlilik). Kuyruk sirasi (#92),
+ * O2 ve gunluk/geri cekilme (D1-D3) T13.2 QA dosyalarinda: qa-courier-queue,
+ * qa-order-migration-0001, qa-dispatch-reachability, unit/qa-dispatch-backoff.
  */
 
 import { fixedClock, ORDER_STATUS, silentLogger } from '@getir/core';

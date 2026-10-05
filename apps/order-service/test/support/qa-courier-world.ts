@@ -42,6 +42,7 @@ import {
   COURIER_RETRY_DELAY_MS,
 } from '../../src/config/constants.js';
 import { applyRiskDecision, decideRisk } from '../../src/domain/checkout-risk.js';
+import { queuedForCourier } from '../../src/domain/courier-dispatch.js';
 import { orderCreatedEvents, statusChangedEvents } from '../../src/domain/order-events.js';
 import type { OrderRepository } from '../../src/domain/order-repository.js';
 import type { Order } from '../../src/domain/order.js';
@@ -277,7 +278,7 @@ export function orderSide(options: {
   };
 }
 
-/** insertPaid'in aynisi, kimlik disaridan (order-builders.ts insertPaid adimlari). */
+/** insertPaid'in aynisi, kimlik disaridan (order-builders.ts insertPaid adimlari, #92 kuyruk ani dahil). */
 async function insertPaidAs(
   repository: Pick<OrderRepository, 'insert' | 'update'>,
   clock: Clock,
@@ -294,7 +295,8 @@ async function insertPaidAs(
   };
   await repository.insert(draft, orderCreatedEvents(draft));
   const awaiting = applyRiskDecision(draft, RISK_BANDS.LOW, decideRisk(RISK_BANDS.LOW), clock);
-  const paid = transitionOrder(awaiting, ORDER_STATUS.PAID, clock);
+  // Odeme adimi gibi (payment-step markPaid): kurye kuyruguna odeme aniyla girer (#92).
+  const paid = queuedForCourier(transitionOrder(awaiting, ORDER_STATUS.PAID, clock));
   await repository.update(paid, draft.version, statusChangedEvents(draft, paid));
   return paid;
 }
