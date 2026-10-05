@@ -15,6 +15,10 @@
  * kurye servisinin kopyasindan (markets) okunur ve cevresindeki bos kuryeler
  * arasindan secilir (domain/courier-pool.ts).
  *
+ * ROTA (T13.2): atanan kuryenin rotasi (kurye -> market -> adres) uretilir ve
+ * saklanir; cevaptaki varis tahmini rotanindir. Tekrar istek saklanan rotayi
+ * doner (assignment-route.ts).
+ *
  * Bos kurye yoksa NOT_FOUND: beklenen durumdur, order siparisi PREPARING'de
  * tutar ve 30 sn sonra yeniden dener (roadmap saga tablosu). Market kopyada
  * yoksa da NOT_FOUND (reason market_unknown) ve WARN: order dongude kalmaz,
@@ -29,6 +33,8 @@ import type { AssignmentStrategy } from '../domain/assignment-strategy.js';
 import type { Courier, GeoPoint } from '../domain/courier.js';
 import type { CourierRepository } from '../domain/courier-repository.js';
 import type { MarketLocator } from '../domain/market-locator.js';
+import type { Route } from '../domain/route.js';
+import type { AssignmentRoute } from './assignment-route.js';
 
 export interface AssignCourierCommand {
   readonly orderId: string;
@@ -38,7 +44,7 @@ export interface AssignCourierCommand {
 
 export interface CourierAssignment {
   readonly courier: Courier;
-  /** Ilk varis tahmini; rota gelene kadar (T13.2) ETA_NOT_COMPUTED_SECONDS. */
+  /** Ilk varis tahmini (rotadan); rota uretilemediyse ETA_NOT_COMPUTED_SECONDS. */
   readonly etaSeconds: number;
   /** true: kurye bu cagridan ONCE de bu siparisi tasiyordu (tekrar istek). */
   readonly reused: boolean;
@@ -53,16 +59,25 @@ export interface AssignCourierDeps {
   readonly repository: CourierRepository;
   readonly markets: MarketLocator;
   readonly strategy: AssignmentStrategy;
+  /** Atamanin rotasi (T13.2): uretir ya da saklanani doner. */
+  readonly route: AssignmentRoute;
   readonly clock: Clock;
 }
 
 /** Market kopyada yok: veri hatasi; order icin "kurye yok" gibi gorunur. */
 export const MARKET_UNKNOWN = 'market_unknown';
 
+const etaOf = (route: Route | null): number => route?.etaSeconds ?? ETA_NOT_COMPUTED_SECONDS;
+
 export function createAssignCourier(deps: AssignCourierDeps): AssignCourier {
-  const reuse = (courier: Courier): CourierAssignment => ({
+  /** Siparisi zaten tasiyan kurye: rotasi (saklanan ya da simdi uretilen) ile. */
+  const reuse = async (
+    courier: Courier,
+    command: AssignCourierCommand,
+    logger: Logger,
+  ): Promise<CourierAssignment> => ({
     courier,
-    etaSeconds: ETA_NOT_COMPUTED_SECONDS,
+    etaSeconds: etaOf(await deps.route({ ...command, courier }, logger)),
     reused: true,
   });
 
@@ -82,7 +97,7 @@ export function createAssignCourier(deps: AssignCourierDeps): AssignCourier {
         { orderId: command.orderId, courierId: existing.id },
         'siparisin kuryesi zaten atanmis',
       );
-      return reuse(existing);
+      return reuse(existing, command, logger);
     }
 
     const marketLocation = await deps.markets.locate(command.marketId);
@@ -114,29 +129,32 @@ export function createAssignCourier(deps: AssignCourierDeps): AssignCourier {
         // Kazanan bu arada birakildi: order yeniden ister, yeni kurye alir.
         throw error;
       }
-      return reuse(winner);
+      return reuse(winner, command, logger);
     }
 
     if (claimed === null) {
       // Son bos kuryeyi ayni siparis icin eszamanli baska istek almis olabilir.
       const winner = await winnerOf(command.orderId, logger);
       if (winner !== null) {
-        return reuse(winner);
+        return reuse(winner, command, logger);
       }
       throw AppError.notFound('Marketin cevresinde uygun kurye yok', {
         details: { marketId: command.marketId },
       });
     }
 
+    const route = await deps.route({ ...command, courier: claimed, marketLocation }, logger);
     logger.info(
       {
         orderId: command.orderId,
         courierId: claimed.id,
         marketId: command.marketId,
         strategy: deps.strategy.name,
+        etaSeconds: etaOf(route),
+        distanceMeters: route?.distanceMeters,
       },
       'kurye atandi',
     );
-    return { courier: claimed, etaSeconds: ETA_NOT_COMPUTED_SECONDS, reused: false };
+    return { courier: claimed, etaSeconds: etaOf(route), reused: false };
   };
 }

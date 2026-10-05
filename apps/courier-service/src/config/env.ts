@@ -4,16 +4,28 @@
  * COURIER_MONGO_URI zorunlu (kendi veritabani ve kullanicisi, D14).
  */
 
-import { loadEnvOrExit } from '@getir/core';
+import { envInt, loadEnvOrExit } from '@getir/core';
 import type { MongoEnv } from '@getir/mongo-kit';
 import { mongoEnvSchemaFor, withoutOperationTimeout } from '@getir/mongo-kit';
 import { grpcPort, serviceEnvSchema } from '@getir/service-kit';
 import { z } from 'zod';
 
-import { DEFAULT_COURIER_GRPC_PORT, DEFAULT_MONGO_DB } from './constants.js';
+import {
+  COURIER_SPEED_KMH_MAX,
+  COURIER_SPEED_KMH_MIN,
+  DEFAULT_COURIER_GRPC_PORT,
+  DEFAULT_COURIER_SPEED_KMH,
+  DEFAULT_MONGO_DB,
+} from './constants.js';
 
 const serviceSchema = serviceEnvSchema.extend({
   COURIER_GRPC_PORT: grpcPort(DEFAULT_COURIER_GRPC_PORT),
+  /** Kurye hizi (km/sa): rotanin varis tahmini (T13.2). */
+  COURIER_SPEED_KMH: envInt({
+    min: COURIER_SPEED_KMH_MIN,
+    max: COURIER_SPEED_KMH_MAX,
+    defaultValue: DEFAULT_COURIER_SPEED_KMH,
+  }),
 });
 
 /** Servisin kendi veritabani ve kullanicisi (D14): COURIER_MONGO_URI, COURIER_MONGO_DB. */

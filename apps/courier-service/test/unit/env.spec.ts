@@ -7,7 +7,7 @@
 import { NO_OPERATION_TIMEOUT } from '@getir/mongo-kit';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { DEFAULT_MONGO_DB } from '../../src/config/constants.js';
+import { DEFAULT_COURIER_SPEED_KMH, DEFAULT_MONGO_DB } from '../../src/config/constants.js';
 import { loadCommandEnv, loadHealthcheckEnv, loadServiceEnv } from '../../src/config/env.js';
 
 const URI = 'mongodb://courier:parola@localhost:27017/?directConnection=true&authSource=admin';
@@ -65,6 +65,30 @@ describe('kurye ortami: depo secimi (MOCK)', () => {
       operationTimeoutMs: 750,
     });
   });
+});
+
+describe('kurye ortami: kurye hizi (COURIER_SPEED_KMH, T13.2)', () => {
+  it('verilmezse 20 km/sa; verilirse o (tam sayi)', () => {
+    vi.stubEnv('MOCK', 'true');
+    vi.stubEnv('COURIER_SPEED_KMH', '');
+    expect(loadServiceEnv().COURIER_SPEED_KMH).toBe(DEFAULT_COURIER_SPEED_KMH);
+
+    vi.stubEnv('COURIER_SPEED_KMH', '35');
+    expect(loadServiceEnv().COURIER_SPEED_KMH).toBe(35);
+  });
+
+  it.each(['0', '121', '12.5', 'hizli'])(
+    '"%s" reddedilir: acilis durur, degisken adi yazilir',
+    (value) => {
+      vi.stubEnv('MOCK', 'true');
+      vi.stubEnv('COURIER_SPEED_KMH', value);
+      const { exit, written } = captureExit();
+
+      expect(() => loadServiceEnv()).toThrow();
+      expect(exit).toHaveBeenCalledWith(1);
+      expect(written.join('')).toContain('COURIER_SPEED_KMH');
+    },
+  );
 });
 
 describe('kurye ortami: seed ve goc komutu', () => {

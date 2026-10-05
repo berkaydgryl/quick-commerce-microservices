@@ -13,6 +13,7 @@ import { ID_PREFIX, isId } from '@getir/core';
 import { z } from 'zod';
 
 import type { AssignCourierCommand } from '../../application/assign-courier.js';
+import type { StartRouteCommand } from '../../application/start-route.js';
 
 const courierIdSchema = z
   .string()
@@ -33,6 +34,10 @@ export const assignCourierRequestSchema = z
 export const getCourierRequestSchema = z
   .object({ courierId: courierIdSchema })
   .transform(({ courierId }) => courierId);
+
+export const startRouteRequestSchema = z
+  .object({ orderId: orderIdSchema, courierId: courierIdSchema })
+  .transform(({ orderId, courierId }): StartRouteCommand => ({ orderId, courierId }));
 
 export const releaseCourierRequestSchema = z
   .object({ orderId: orderIdSchema })

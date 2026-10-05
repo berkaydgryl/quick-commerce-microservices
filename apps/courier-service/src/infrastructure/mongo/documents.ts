@@ -16,6 +16,8 @@ export const COLLECTIONS = {
   COURIERS: 'couriers',
   /** Market konumu kopyasi (T13.2); kaydin sahibi catalog (ADR-05). */
   MARKETS: 'markets',
+  /** Siparisin kurye rotasi (T13.2): kurye -> market -> adres. */
+  ROUTES: 'routes',
 } as const;
 
 export interface GeoJsonPoint {
@@ -39,4 +41,17 @@ export interface CourierDocument extends BaseDocument {
 /** _id market kimligidir (mkt_...). */
 export interface MarketDocument extends BaseDocument {
   location: GeoJsonPoint;
+}
+
+/**
+ * _id siparis kimligidir (ord_...): siparis basina tek rota. Noktalar duz
+ * {lat, lng}: rota uzerinde geo sorgusu yok (ayni noktalar da gecerli).
+ */
+export interface RouteDocument extends BaseDocument {
+  courierId: string;
+  points: { lat: number; lng: number }[];
+  pickupIndex: number;
+  distanceMeters: number;
+  etaSeconds: number;
+  createdAt: Date;
 }

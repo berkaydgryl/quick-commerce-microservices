@@ -1,5 +1,5 @@
 /**
- * couriers deposunu ve market konumu kopyasini ACAR: MOCK=true -> demo
+ * couriers deposunu, market konumu kopyasini ve rotalari ACAR: MOCK=true -> demo
  * kuryeleri ve marketlerle dolu bellek, aksi halde Mongo. Baglanmak, gocleri
  * ve indeksleri kurmak ve hata olursa baglantiyi birakmak altyapi isidir.
  */
@@ -12,17 +12,23 @@ import { SERVICE_NAME } from '../config/constants.js';
 import type { CourierRepository } from '../domain/courier-repository.js';
 import { courierFromSeed } from '../domain/courier-seed.js';
 import type { MarketLocator } from '../domain/market-locator.js';
+import type { RouteRepository } from '../domain/route-repository.js';
 import { MIGRATIONS } from '../migrations/index.js';
 import { COURIER_SEEDS, MARKET_LOCATION_SEEDS } from './fixtures/couriers.js';
 import { InMemoryCourierStore } from './memory/in-memory-courier-store.js';
+import { InMemoryRouteStore } from './memory/in-memory-route-store.js';
 import { CourierMongoStore } from './mongo/courier-mongo-store.js';
 import { CouriersCollection } from './mongo/couriers-collection.js';
 import { MarketsCollection } from './mongo/markets-collection.js';
+import { RouteMongoStore } from './mongo/route-mongo-store.js';
+import { RoutesCollection } from './mongo/routes-collection.js';
 
 export interface CourierStore {
   readonly repository: CourierRepository;
   /** Market konumu kopyasi (T13.2): havuzun merkezi. */
   readonly markets: MarketLocator;
+  /** Siparislerin kurye rotalari (T13.2). */
+  readonly routes: RouteRepository;
   readonly name: 'bellek (MOCK)' | 'mongo';
   /** Kapanista EN SON cagrilir (once cagrilar, sonra veritabani). */
   close(): Promise<void>;
@@ -42,6 +48,7 @@ export async function openCourierStore(
     return {
       repository: memory,
       markets: memory,
+      routes: new InMemoryRouteStore(),
       name: 'bellek (MOCK)',
       close: () => Promise.resolve(),
     };
@@ -55,11 +62,13 @@ export async function openCourierStore(
 
   const couriers = new CouriersCollection(connection.db);
   const markets = new MarketsCollection(connection.db);
+  const routes = new RoutesCollection(connection.db);
   try {
     // Gocler indekslerden ONCE (T10.4, ADR-19): kod uygulanmamis semayla calismaz.
     await applyMigrations(connection, MIGRATIONS, options.logger);
     await couriers.ensureIndexes();
     await markets.ensureIndexes();
+    await routes.ensureIndexes();
   } catch (error: unknown) {
     await connection.close();
     throw error;
@@ -69,6 +78,7 @@ export async function openCourierStore(
   return {
     repository: store,
     markets: store,
+    routes: new RouteMongoStore(routes),
     name: 'mongo',
     close: () => connection.close(),
   };

@@ -2,7 +2,8 @@
 
 import type { Courier, GeoPoint } from '../../domain/courier.js';
 import type { MarketLocation } from '../../domain/market-locator.js';
-import type { CourierDocument, GeoJsonPoint, MarketDocument } from './documents.js';
+import type { Route } from '../../domain/route.js';
+import type { CourierDocument, GeoJsonPoint, MarketDocument, RouteDocument } from './documents.js';
 
 export function toGeoJson(point: GeoPoint): GeoJsonPoint {
   return { type: 'Point', coordinates: [point.lng, point.lat] };
@@ -41,4 +42,28 @@ export function fromCourierDocument(document: CourierDocument): Courier {
 
 export function toMarketDocument(market: MarketLocation): MarketDocument {
   return { _id: market.marketId, location: toGeoJson(market.location) };
+}
+
+export function toRouteDocument(route: Route): RouteDocument {
+  return {
+    _id: route.orderId,
+    courierId: route.courierId,
+    points: route.points.map((point) => ({ lat: point.lat, lng: point.lng })),
+    pickupIndex: route.pickupIndex,
+    distanceMeters: route.distanceMeters,
+    etaSeconds: route.etaSeconds,
+    createdAt: route.createdAt,
+  };
+}
+
+export function fromRouteDocument(document: RouteDocument): Route {
+  return {
+    orderId: document._id,
+    courierId: document.courierId,
+    points: document.points.map((point) => ({ lat: point.lat, lng: point.lng })),
+    pickupIndex: document.pickupIndex,
+    distanceMeters: document.distanceMeters,
+    etaSeconds: document.etaSeconds,
+    createdAt: document.createdAt,
+  };
 }

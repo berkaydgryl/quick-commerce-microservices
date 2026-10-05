@@ -15,11 +15,27 @@ export const DEFAULT_COURIER_GRPC_PORT = 50_056;
 export const DEFAULT_MONGO_DB = 'getir_courier';
 
 /**
- * Atamadaki ilk varis tahmini. Rota ve ETA T13.2 PR 3'un isidir (kurye ->
- * market -> adres, COURIER_SPEED_KMH); o gelene kadar 0 = "henuz hesaplanmadi".
- * Sozlesmede eta_seconds proto3 sayisidir, gonderilmeyen deger de 0 okunur.
+ * Varis tahmini hesaplanamadiginda (rota yok: siparisin marketi kopyada
+ * bulunamadi) atama cevabindaki deger. 0 = "hesaplanmadi".
  */
 export const ETA_NOT_COMPUTED_SECONDS = 0;
+
+/**
+ * Rota (T13.2): kurye -> market -> adres, buyuk daire uzerinde esit aralikli
+ * noktalar. Nokta sayisi ceil(toplam m / 100), 20 ile 40 arasina kirpilir
+ * (proto Route.points: 20-40 nokta).
+ */
+export const ROUTE_POINT_SPACING_METERS = 100;
+export const ROUTE_MIN_POINTS = 20;
+export const ROUTE_MAX_POINTS = 40;
+
+/**
+ * Kurye hizi (km/sa): ETA = toplam yol / hiz. Ortamdan (COURIER_SPEED_KMH,
+ * .env.example) okunur; tam sayi, bu sinirlar icinde.
+ */
+export const DEFAULT_COURIER_SPEED_KMH = 20;
+export const COURIER_SPEED_KMH_MIN = 1;
+export const COURIER_SPEED_KMH_MAX = 120;
 
 /**
  * Kurye havuzu (T13.2, domain/courier-pool.ts): marketin 3 km cevresindeki
