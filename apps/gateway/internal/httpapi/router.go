@@ -270,6 +270,8 @@ type Deps struct {
 	ProfileGetter    ProfileGetter
 	AddressBook      AddressBookGetter
 	AddressAdder     AddressAdder
+	AddressUpdater   AddressUpdater
+	AddressDeleter   AddressDeleter
 	// E-posta dogrulama (T11.14): tek emailverify servisi iki ucu karsilar.
 	EmailCodeSender EmailCodeSender
 	EmailVerifier   EmailVerifier
@@ -394,6 +396,8 @@ func New(deps Deps) *fiber.App {
 	v1.Patch("/me", user, generalByUser, mutation, updateProfileHandler(deps.ProfileUpdater))
 	v1.Get("/me/addresses", user, generalByUser, addressesHandler(deps.AddressBook))
 	v1.Post("/me/addresses", user, generalByUser, mutation, addAddressHandler(deps.AddressAdder))
+	v1.Put("/me/addresses/:"+addressIDParam, user, generalByUser, mutation, updateAddressHandler(deps.AddressUpdater))
+	v1.Delete("/me/addresses/:"+addressIDParam, user, generalByUser, mutation, deleteAddressHandler(deps.AddressDeleter))
 	v1.Post("/me/email/code", user, authByUser, mutation, sendEmailCodeHandler(deps.EmailCodeSender))
 	v1.Post("/me/email/verify", user, authByUser, mutation, verifyEmailHandler(deps.EmailVerifier))
 	if deps.PhoneCodeSender != nil && deps.PhoneVerifier != nil {

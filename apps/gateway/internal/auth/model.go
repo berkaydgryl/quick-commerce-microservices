@@ -50,7 +50,12 @@ type GeoPoint struct {
 // Building, Floor ve Apartment T11.8'de eklendi. Persona seed'inin hazir
 // adreslerinde Kind doludur (T11.10: ust bardaki ikon); bina, kat ve daire
 // bostur. T11.8 oncesi kayitlarda Kind olmayabilir.
+//
+// ID (T11.15) defterdeki satiri tanir (adr_...): guncelleme ve silme yolu
+// onu tasir. Ad degisebildigi icin kimlik ad degildir. T11.15 oncesi
+// kayitlara gateway'in 0001 gocu kimlik verir.
 type SavedAddress struct {
+	ID        string
 	Title     string
 	Kind      string
 	Line      string
@@ -97,6 +102,7 @@ type AddressBook struct {
 // AddressEntry, istemciye giden kayitli adres (@getir/contracts savedAddressSchema).
 // Istege bagli alanlar bossa hic yazilmaz.
 type AddressEntry struct {
+	ID        string        `json:"id"`
 	Title     string        `json:"title"`
 	Kind      string        `json:"kind,omitempty"`
 	Line      string        `json:"line"`
@@ -116,6 +122,7 @@ func (u User) AddressBook() AddressBook {
 	items := make([]AddressEntry, 0, len(addresses))
 	for _, address := range addresses {
 		items = append(items, AddressEntry{
+			ID:        address.ID,
 			Title:     address.Title,
 			Kind:      address.Kind,
 			Line:      address.Line,

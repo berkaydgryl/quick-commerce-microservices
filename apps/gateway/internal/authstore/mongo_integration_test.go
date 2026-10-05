@@ -526,6 +526,12 @@ func TestAddressBookOnMongoFollowsThePersonaSeed(t *testing.T) {
 	if first := book.Items[0]; first.Location.Lat != 40.9885 || first.Location.Lng != 29.0262 || first.Line == "" {
 		t.Errorf("konum ve adres satiri Mongo'dan aynen donmeli: %+v", first)
 	}
+	// T11.15: seed kimligi yazar; her seed'de ayni (tarayicidaki secim korunur).
+	for i, entry := range book.Items {
+		if entry.ID != persona.AddressID(seeded[0].ID, i) {
+			t.Errorf("%d. hazir adresin kimligi seed'deki gibi olmali: %q", i, entry.ID)
+		}
+	}
 }
 
 func savedAddress(title string) auth.SavedAddress {
@@ -619,6 +625,138 @@ func countOutcomes(errs []error, rejection error) (succeeded, rejected int) {
 		}
 	}
 	return succeeded, rejected
+}
+
+// addressWithID, kimlikli kayitli adres (T11.15).
+func addressWithID(title string) auth.SavedAddress {
+	address := savedAddress(title)
+	address.ID = ids.New(ids.Address)
+	return address
+}
+
+func TestUpdateAndDeleteAddressOnMongo(t *testing.T) {
+	users := authstore.NewMongoUsers(testDatabase(t))
+	user := newUser("+905321234567")
+	home, work, mother := addressWithID("Ev"), addressWithID("İş"), addressWithID("Annem")
+	user.Addresses = []auth.SavedAddress{home, work, mother}
+	if err := users.Create(t.Context(), user); err != nil {
+		t.Fatalf("kullanici yazilamadi: %v", err)
+	}
+
+	changed := savedAddress("Ofis")
+	changed.ID, changed.Kind, changed.Building, changed.Note = work.ID, auth.AddressKindWork, "", ""
+	updated, err := users.UpdateAddress(t.Context(), user.ID, changed)
+	if err != nil || len(updated.Addresses) != 3 || updated.Addresses[1] != changed || updated.Addresses[0] != home || updated.Addresses[2] != mother {
+		t.Fatalf("yalnizca hedef satir yerinde degismeli (bos alanlar silinir): %+v %v", updated.Addresses, err)
+	}
+	if read, err := users.ByID(t.Context(), user.ID); err != nil || read.Addresses[1] != changed {
+		t.Errorf("okunan defter guncellenenle ayni olmali: %+v %v", read.Addresses, err)
+	}
+	same := home
+	same.Note = "Yeni tarif"
+	if _, err := users.UpdateAddress(t.Context(), user.ID, same); err != nil {
+		t.Errorf("adres kendi adini koruyabilmeli: %v", err)
+	}
+
+	taken := savedAddress("Annem")
+	taken.ID = home.ID
+	if _, err := users.UpdateAddress(t.Context(), user.ID, taken); !errors.Is(err, auth.ErrAddressTitleTaken) {
+		t.Errorf("baska adresin adi ErrAddressTitleTaken donmeli: %v", err)
+	}
+	if _, err := users.UpdateAddress(t.Context(), user.ID, addressWithID("Yok")); !errors.Is(err, auth.ErrAddressNotFound) {
+		t.Errorf("olmayan kimlik ErrAddressNotFound donmeli: %v", err)
+	}
+	// Olmayan kimlik + defterde olan ad: once kimlik sorulur (bellek deposuyla
+	// ayni sira; canli testte yakalandi: 404 yerine 400 donuyordu).
+	if _, err := users.UpdateAddress(t.Context(), user.ID, addressWithID("Annem")); !errors.Is(err, auth.ErrAddressNotFound) {
+		t.Errorf("olmayan kimlik, ad catissa da ErrAddressNotFound donmeli: %v", err)
+	}
+	if _, err := users.UpdateAddress(t.Context(), ids.New(ids.User), changed); !errors.Is(err, auth.ErrUserNotFound) {
+		t.Errorf("olmayan kullanici ErrUserNotFound donmeli: %v", err)
+	}
+
+	left, err := users.DeleteAddress(t.Context(), user.ID, work.ID)
+	if err != nil || len(left.Addresses) != 2 || left.Addresses[0].ID != home.ID || left.Addresses[1] != mother {
+		t.Fatalf("yalnizca hedef silinmeli, sira korunmali: %+v %v", left.Addresses, err)
+	}
+	if _, err := users.DeleteAddress(t.Context(), user.ID, work.ID); !errors.Is(err, auth.ErrAddressNotFound) {
+		t.Errorf("silinmis adres ErrAddressNotFound donmeli: %v", err)
+	}
+	if _, err := users.DeleteAddress(t.Context(), ids.New(ids.User), home.ID); !errors.Is(err, auth.ErrUserNotFound) {
+		t.Errorf("olmayan kullanici ErrUserNotFound donmeli: %v", err)
+	}
+}
+
+func TestConcurrentRenamesOnMongoKeepTitlesUnique(t *testing.T) {
+	// "Once oku, sonra yaz" bu yarista iki adrese ayni adi verirdi; karar tek
+	// FindOneAndUpdate'in filtresinde ($not $elemMatch).
+	users := authstore.NewMongoUsers(testDatabase(t))
+	user := newUser("+905321234567")
+	for i := range auth.MaxSavedAddresses {
+		user.Addresses = append(user.Addresses, addressWithID(fmt.Sprintf("Adres %d", i)))
+	}
+	if err := users.Create(t.Context(), user); err != nil {
+		t.Fatalf("kullanici yazilamadi: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	errs := make([]error, len(user.Addresses))
+	for i, address := range user.Addresses {
+		wg.Go(func() {
+			renamed := address
+			renamed.Title = "Yeni"
+			_, errs[i] = users.UpdateAddress(t.Context(), user.ID, renamed)
+		})
+	}
+	wg.Wait()
+
+	if renamed, taken := countOutcomes(errs, auth.ErrAddressTitleTaken); renamed != 1 || taken != len(errs)-1 {
+		t.Errorf("ayni ada yalnizca bir adres gecmeli: %d gecti, %d reddedildi (%v)", renamed, taken, errs)
+	}
+	read, err := users.ByID(t.Context(), user.ID)
+	if err != nil {
+		t.Fatalf("okuma: %v", err)
+	}
+	titles := map[string]int{}
+	for _, address := range read.Addresses {
+		titles[address.Title]++
+	}
+	if titles["Yeni"] != 1 || len(titles) != auth.MaxSavedAddresses {
+		t.Errorf("defterde adlar tekil kalmali: %v", titles)
+	}
+}
+
+func TestConcurrentUpdateAndDeleteNeverResurrectTheAddress(t *testing.T) {
+	// Guncelleme yalnizca var olan satiri degistirir (arrayFilters); silme ile
+	// yaristiginda silinmis adres geri gelmez.
+	users := authstore.NewMongoUsers(testDatabase(t))
+	user := newUser("+905321234567")
+	if err := users.Create(t.Context(), user); err != nil {
+		t.Fatalf("kullanici yazilamadi: %v", err)
+	}
+	for round := range concurrency {
+		address := addressWithID(fmt.Sprintf("Tur %d", round))
+		if _, err := users.AddAddress(t.Context(), user.ID, address, auth.MaxSavedAddresses); err != nil {
+			t.Fatalf("adres eklenemedi: %v", err)
+		}
+		var wg sync.WaitGroup
+		var updateErr, deleteErr error
+		wg.Go(func() {
+			changed := address
+			changed.Note = "yarista"
+			_, updateErr = users.UpdateAddress(t.Context(), user.ID, changed)
+		})
+		wg.Go(func() { _, deleteErr = users.DeleteAddress(t.Context(), user.ID, address.ID) })
+		wg.Wait()
+
+		if deleteErr != nil || (updateErr != nil && !errors.Is(updateErr, auth.ErrAddressNotFound)) {
+			t.Fatalf("tur %d: silme basarmali, guncelleme ya basarir ya NotFound: %v / %v", round, deleteErr, updateErr)
+		}
+		read, err := users.ByID(t.Context(), user.ID)
+		if err != nil || len(read.Addresses) != 0 {
+			t.Fatalf("tur %d: silinen adres geri gelmemeli: %+v %v", round, read.Addresses, err)
+		}
+	}
 }
 
 func TestSetPasswordHashAndRevokeAllForUser(t *testing.T) {

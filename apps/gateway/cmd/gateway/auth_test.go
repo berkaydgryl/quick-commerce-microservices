@@ -28,7 +28,7 @@ func authConfig(mock bool, mongoURI string) config.Config {
 func TestBuildAuthInMockModeUsesMemoryAndSkipsMongo(t *testing.T) {
 	// MOCK'ta Mongo adresi verilmis olsa bile ona HIC gidilmez (Node
 	// servisleriyle ayni kural); /healthz'de de mongo gorunmez.
-	parts, err := buildAuth(t.Context(), authConfig(true, "mongodb://127.0.0.1:1"), bcrypt.MinCost)
+	parts, err := buildAuth(t.Context(), authConfig(true, "mongodb://127.0.0.1:1"), bcrypt.MinCost, discardLogger())
 	if err != nil {
 		t.Fatalf("MOCK'ta kurulum Mongo'suz basarmali: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestBuildAuthFailsFastWhenMongoIsUnreachable(t *testing.T) {
 	// Mongo kapaliyken gateway "ayakta" gorunmemeli: hata acilista gelir.
 	startedAt := time.Now()
 
-	_, err := buildAuth(t.Context(), authConfig(false, "mongodb://127.0.0.1:1/?directConnection=true"), bcrypt.MinCost)
+	_, err := buildAuth(t.Context(), authConfig(false, "mongodb://127.0.0.1:1/?directConnection=true"), bcrypt.MinCost, discardLogger())
 
 	if err == nil || !strings.Contains(err.Error(), "mongo'ya ulasilamadi") {
 		t.Fatalf("ulasilamayan Mongo acilis hatasi vermeli: %v", err)
@@ -64,7 +64,7 @@ func TestBuildAuthFailsFastWhenMongoIsUnreachable(t *testing.T) {
 }
 
 func TestMockModePreloadsLoginablePersonas(t *testing.T) {
-	parts, err := buildAuth(t.Context(), authConfig(true, ""), bcrypt.MinCost)
+	parts, err := buildAuth(t.Context(), authConfig(true, ""), bcrypt.MinCost, discardLogger())
 	if err != nil {
 		t.Fatalf("MOCK kurulumu basarmali: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestProductionMockLoadsNoPersonas(t *testing.T) {
 	cfg := authConfig(true, "")
 	cfg.NodeEnv = config.EnvProduction
 
-	parts, err := buildAuth(t.Context(), cfg, bcrypt.MinCost)
+	parts, err := buildAuth(t.Context(), cfg, bcrypt.MinCost, discardLogger())
 
 	if err != nil || parts.personas != 0 {
 		t.Errorf("production'da persona yuklenmemeli: %d %v", parts.personas, err)

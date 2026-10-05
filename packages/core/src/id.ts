@@ -38,6 +38,12 @@ export const ID_PREFIX = {
    * uretmez, bicim disi deger yok sayilir ve yenisi verilir.
    */
   DEVICE: 'dvc',
+  /**
+   * Kayitli adres (T11.15): kullanicinin adres defterindeki satir. Gateway
+   * eklemede uretir; T11.15 oncesi adreslere gateway'in 0001 gocu verir.
+   * Kimlik yalnizca kendi defterinde anlamlidir (/v1/me/addresses/{id}).
+   */
+  ADDRESS: 'adr',
 } as const;
 
 export type IdPrefix = (typeof ID_PREFIX)[keyof typeof ID_PREFIX];

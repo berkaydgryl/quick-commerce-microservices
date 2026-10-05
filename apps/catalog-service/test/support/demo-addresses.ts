@@ -5,6 +5,7 @@
  * Onceki surumde koordinatlar dort yerde elle yaziliydi (JSON, sozlesme testi,
  * use-case testi, gRPC testi); biri degisince digerleri sessizce eskirdi.
  * Dosya sozlesmedeki savedAddressSchema (kayitli adres) ile dogrulanarak okunur (ADR-10).
+ * Kimlik (T11.15) dosyada yoktur: gateway her personaya seed aninda turetir.
  */
 
 import { readFileSync } from 'node:fs';
@@ -20,8 +21,8 @@ const ADDRESSES_PATH = fileURLToPath(
   new URL('../../../gateway/internal/persona/addresses.json', import.meta.url),
 );
 
-export const DEMO_ADDRESSES: readonly SavedAddress[] = z
-  .array(savedAddressSchema)
+export const DEMO_ADDRESSES: readonly Omit<SavedAddress, 'id'>[] = z
+  .array(savedAddressSchema.omit({ id: true }))
   .parse(JSON.parse(readFileSync(ADDRESSES_PATH, 'utf8')));
 
 export type DemoAddressTitle = 'Ev' | 'İş' | 'Yazlık';

@@ -20,8 +20,9 @@ import (
 
 // fakeProfiles, /v1/me ve /v1/me/addresses'in arkasindaki servisin yerine gecer.
 type fakeProfiles struct {
-	userID string
-	called bool
+	userID    string
+	addressID string
+	called    bool
 }
 
 func (f *fakeProfiles) Profile(_ context.Context, userID string) (auth.Profile, error) {
@@ -31,12 +32,24 @@ func (f *fakeProfiles) Profile(_ context.Context, userID string) (auth.Profile, 
 
 func (f *fakeProfiles) Addresses(_ context.Context, userID string) (auth.AddressBook, error) {
 	f.called, f.userID = true, userID
-	return auth.AddressBook{Items: []auth.AddressEntry{{Title: "Ev", Line: "Moda Cad. 12", Location: rest.GeoPoint{Lat: 40.9885, Lng: 29.0262}}}}, nil
+	return auth.AddressBook{Items: []auth.AddressEntry{{ID: testAddressID, Title: "Ev", Line: "Moda Cad. 12", Location: rest.GeoPoint{Lat: 40.9885, Lng: 29.0262}}}}, nil
 }
 
 func (f *fakeProfiles) AddAddress(_ context.Context, userID string, input auth.AddressInput) (auth.AddressBook, error) {
 	f.called, f.userID = true, userID
 	return auth.User{Addresses: []auth.SavedAddress{input.Address()}}.AddressBook(), nil
+}
+
+func (f *fakeProfiles) UpdateAddress(_ context.Context, userID, addressID string, input auth.AddressInput) (auth.AddressBook, error) {
+	f.called, f.userID, f.addressID = true, userID, addressID
+	address := input.Address()
+	address.ID = addressID
+	return auth.User{Addresses: []auth.SavedAddress{address}}.AddressBook(), nil
+}
+
+func (f *fakeProfiles) DeleteAddress(_ context.Context, userID, addressID string) (auth.AddressBook, error) {
+	f.called, f.userID, f.addressID = true, userID, addressID
+	return auth.AddressBook{Items: []auth.AddressEntry{}}, nil
 }
 
 // protectedApp, korumali uclarin hepsini (siparis + /v1/me) tasiyan uygulama.
@@ -50,6 +63,8 @@ func protectedApp(orders *fakeOrders, profiles *fakeProfiles, logger *slog.Logge
 		ProfileGetter:    profiles,
 		AddressBook:      profiles,
 		AddressAdder:     profiles,
+		AddressUpdater:   profiles,
+		AddressDeleter:   profiles,
 		GeoReverser:      &fakeGeo{},
 		GeoSearcher:      &fakeGeo{},
 		CheckoutSignals:  &fakeSignals{},
@@ -64,6 +79,8 @@ var protectedRoutes = []struct{ method, path, body string }{
 	{http.MethodGet, "/v1/me", ""},
 	{http.MethodGet, "/v1/me/addresses", ""},
 	{http.MethodPost, "/v1/me/addresses", validAddressBody},
+	{http.MethodPut, "/v1/me/addresses/" + testAddressID, validAddressBody},
+	{http.MethodDelete, "/v1/me/addresses/" + testAddressID, ""},
 	{http.MethodGet, "/v1/geo/reverse?lat=41&lng=29", ""},
 	{http.MethodGet, "/v1/geo/search?q=Moda", ""},
 	{http.MethodPost, "/v1/cart/reserve", validReserveBody},
@@ -191,7 +208,7 @@ func TestAddressBookReceivesUserFromToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("data yeniden yazilamadi: %v", err)
 	}
-	if want := `{"items":[{"line":"Moda Cad. 12","location":{"lat":40.9885,"lng":29.0262},"title":"Ev"}]}`; string(data) != want {
+	if want := `{"items":[{"id":"` + testAddressID + `","line":"Moda Cad. 12","location":{"lat":40.9885,"lng":29.0262},"title":"Ev"}]}`; string(data) != want {
 		t.Errorf("zarfin data alani adres defteri olmali:\n got %s\nwant %s", data, want)
 	}
 }

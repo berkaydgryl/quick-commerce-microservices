@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
+
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/authstore"
@@ -11,6 +14,7 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/emailverify"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/favorites"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/migrations"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/mongodb"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/persona"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/phoneverify"
@@ -47,8 +51,9 @@ type authParts struct {
 //
 // Depo MOCK ile secilir (Node servisleriyle ayni kural): MOCK=true ise
 // kayitlar BELLEKTE tutulur ve Mongo'ya HIC dokunulmaz (surec kapaninca
-// hesaplar kaybolur); aksi halde Mongo'ya baglanilir ve indeksler kurulur.
-func buildAuth(ctx context.Context, cfg config.Config, passwordCost int) (authParts, error) {
+// hesaplar kaybolur); aksi halde Mongo'ya baglanilir, bekleyen gocler
+// uygulanir (T11.15) ve indeksler kurulur.
+func buildAuth(ctx context.Context, cfg config.Config, passwordCost int, logger *slog.Logger) (authParts, error) {
 	passwords, err := auth.NewPasswordHasher(passwordCost)
 	if err != nil {
 		return authParts{}, err
@@ -83,7 +88,9 @@ func buildAuth(ctx context.Context, cfg config.Config, passwordCost int) (authPa
 		return authParts{}, err
 	}
 	db := client.Database(cfg.MongoDB)
-	if err := authstore.EnsureIndexes(ctx, db); err != nil {
+	// Gocler indekslerden ONCE (mongo-kit applyMigrations ile ayni sira; T11.15,
+	// ADR-19 gateway eki): kod, uygulanmamis semayla calismamali.
+	if err := prepareDatabase(ctx, db, logger); err != nil {
 		if disconnectErr := client.Disconnect(ctx); disconnectErr != nil {
 			return authParts{}, fmt.Errorf("%w (kapatma: %w)", err, disconnectErr)
 		}
@@ -97,6 +104,14 @@ func buildAuth(ctx context.Context, cfg config.Config, passwordCost int) (authPa
 	parts.pingers = map[string]health.Pinger{mongoHealthName: mongodb.NewPinger(client)}
 	parts.close = client.Disconnect
 	return parts, nil
+}
+
+// prepareDatabase, acilista bekleyen gocleri uygular, sonra indeksleri kurar.
+func prepareDatabase(ctx context.Context, db *mongo.Database, logger *slog.Logger) error {
+	if err := migrations.Apply(ctx, db, logger); err != nil {
+		return fmt.Errorf("gocler: %w", err)
+	}
+	return authstore.EnsureIndexes(ctx, db)
 }
 
 // preloadPersonas, MOCK'ta demo personalarini bellege yukler: Mongo yoktur,

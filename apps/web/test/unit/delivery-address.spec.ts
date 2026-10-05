@@ -29,24 +29,29 @@ const SEED_ADDRESSES_JSON = join(
   '../../../gateway/internal/persona/addresses.json',
 );
 
+// Dosyada kimlik yok: gateway her personaya kimligi seed aninda turetir (T11.15).
 const seed = z
-  .array(savedAddressSchema)
-  .parse(JSON.parse(readFileSync(SEED_ADDRESSES_JSON, 'utf8')));
+  .array(savedAddressSchema.omit({ id: true }))
+  .parse(JSON.parse(readFileSync(SEED_ADDRESSES_JSON, 'utf8')))
+  .map((address, index) => ({ ...address, id: `adr_${String(index + 1).padStart(32, '0')}` }));
 
 const AYSE = 'usr_0123456789abcdef0123456789abcdef';
 const MEHMET = 'usr_fedcba9876543210fedcba9876543210';
 
 const EV: SavedAddress = {
+  id: 'adr_00000000000000000000000000000001',
   title: 'Ev',
   line: 'Caferağa Mah. Moda Cad. No:12, Kadıköy',
   location: { lat: 40.9885, lng: 29.0262 },
 };
 const IS: SavedAddress = {
+  id: 'adr_00000000000000000000000000000002',
   title: 'İş',
   line: 'Sinanpaşa Mah. Barbaros Blv. No:40, Beşiktaş',
   location: { lat: 41.0431, lng: 29.0071 },
 };
 const YAZLIK: SavedAddress = {
+  id: 'adr_00000000000000000000000000000003',
   title: 'Yazlık',
   line: 'Ağva Mah. Sahil Yolu No:3, Şile',
   location: { lat: 41.1363, lng: 29.8539 },
@@ -231,8 +236,8 @@ describe('varsayilan adres seed ile ayni', () => {
     expect(seed[0]?.location).toEqual(DEFAULT_DELIVERY_LOCATION);
   });
 
-  it("testteki adresler seed'in kopyasi (not haric)", () => {
-    expect(seed.map(({ title, line, location }) => ({ title, line, location }))).toEqual([
+  it("testteki adresler seed'in kopyasi (not haric; kimlik testin)", () => {
+    expect(seed.map(({ id, title, line, location }) => ({ id, title, line, location }))).toEqual([
       EV,
       IS,
       YAZLIK,

@@ -13,12 +13,14 @@ import { addressKeys } from '../../src/features/address/api/query-keys';
 import { createHttpClient } from '../../src/shared/api/http-client';
 
 const EV = {
+  id: 'adr_00000000000000000000000000000001',
   title: 'Ev',
   line: 'Caferağa Mah. Moda Cad. No:12, Kadıköy',
   location: { lat: 40.9885, lng: 29.0262 },
   note: 'Zil çalışmıyor, gelince arayın.',
 };
 const IS = {
+  id: 'adr_00000000000000000000000000000002',
   title: 'İş',
   line: 'Sinanpaşa Mah. Barbaros Blv. No:40, Beşiktaş',
   location: { lat: 41.0431, lng: 29.0071 },

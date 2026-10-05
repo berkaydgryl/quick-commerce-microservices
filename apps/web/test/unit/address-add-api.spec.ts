@@ -44,7 +44,8 @@ function callOf(fetchMock: ReturnType<typeof vi.fn<typeof fetch>>) {
 
 describe('addSavedAddress', () => {
   it('POST /v1/me/addresses: anahtar basligi ve govde; cevap guncel defter', async () => {
-    const { fetchMock, client } = clientAnswering(201, ok({ items: [REQUEST] }));
+    const saved = { ...REQUEST, id: 'adr_00000000000000000000000000000001' };
+    const { fetchMock, client } = clientAnswering(201, ok({ items: [saved] }));
 
     const book = await addSavedAddress(client, REQUEST, 'adres-anahtari-01');
 

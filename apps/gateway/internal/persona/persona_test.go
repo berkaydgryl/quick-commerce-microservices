@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/ids"
 )
 
 // Risk kurallarinin esikleri (risk-service config/constants.ts). Personalarin
@@ -125,6 +126,32 @@ func TestUsersAreRelativeToNowAndCarryAddresses(t *testing.T) {
 	users[0].Addresses[0].Title = "degisti"
 	if users[1].Addresses[0].Title == "degisti" {
 		t.Error("hesaplar ayni adres dilimini paylasmamali")
+	}
+}
+
+func TestDemoAddressIDsAreStableAndScopedToTheUser(t *testing.T) {
+	// T11.15: adres kimligi tarayicidaki secimin anahtaridir; seed her
+	// calistiginda ayni kalmali, bir defterde tekil olmali.
+	set := loadSet(t)
+	first := set.Users(time.Now(), "ozet")
+	second := set.Users(time.Now(), "ozet")
+
+	seen := map[string]string{}
+	for i, user := range first {
+		inBook := map[string]bool{}
+		for j, address := range user.Addresses {
+			if !ids.Valid(ids.Address, address.ID) || inBook[address.ID] {
+				t.Errorf("%s: gecersiz ya da tekrar eden kimlik %q", user.ID, address.ID)
+			}
+			inBook[address.ID] = true
+			if second[i].Addresses[j].ID != address.ID {
+				t.Errorf("%s: kimlik seed'den seed'e degisti", user.ID)
+			}
+			if owner, taken := seen[address.ID]; taken && owner != user.ID {
+				t.Errorf("iki hesap ayni adres kimligini tasiyor: %s", address.ID)
+			}
+			seen[address.ID] = user.ID
+		}
 	}
 }
 

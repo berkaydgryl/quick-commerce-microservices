@@ -762,6 +762,141 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /v1/me/addresses/{addressId}:
+    parameters:
+      - $ref: "#/components/parameters/AddressIdPath"
+    put:
+      tags: [auth]
+      operationId: updateSavedAddress
+      summary: Kayıtlı adresi düzenle (T11.15)
+      description: |
+        Adresi TAM gövdeyle değiştirir (gövde eklemeyle aynı:
+        `UpdateAddressRequest` = `CreateAddressRequest`; gönderilmeyen isteğe
+        bağlı alan silinir). Kurallar eklemeyle aynı: aynı ad BAŞKA bir adreste
+        olamaz (adres kendi adını koruyabilir), uzunluklar aynı. Kural tek
+        atomik yazımda uygulanır: aynı ada eş zamanlı iki yeniden adlandırmadan
+        yalnızca biri başarır. Cevap GÜNCEL defterdir; kimlik ve sıra korunur.
+
+        Adres defterde yoksa (biçimsiz kimlik dahil) `404 NOT_FOUND`. Siparişler
+        adresin kopyasını taşır: düzenleme geçmiş ve açık siparişlere dokunmaz.
+        `Idempotency-Key` zorunludur.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAddressRequest"
+      responses:
+        "200":
+          description: Adres değişti; güncel defter
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            Idempotent-Replayed:
+              $ref: "#/components/headers/IdempotentReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedAddressListResponse"
+        "400":
+          description: |
+            Biçim ya da kural hatası; eklemeyle aynı (`title`, `location.lat`,
+            `Idempotency-Key`). Başka adresin adı `title` alanındadır ("Bu adla
+            kayıtlı bir adresin var").
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          description: Adres bu hesabın defterinde yok (NOT_FOUND; ayrıntısız).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "409":
+          description: |
+            Aynı `Idempotency-Key` ile ilk istek hâlâ işleniyor
+            (`REQUEST_IN_PROGRESS`) ya da anahtar farklı bir gövdeyle geldi
+            (`CONFLICT`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    delete:
+      tags: [auth]
+      operationId: deleteSavedAddress
+      summary: Kayıtlı adresi sil (T11.15)
+      description: |
+        Adresi defterden çıkarır; gövdesizdir, cevap GÜNCEL defterdir (kalanların
+        sırası korunur). Seçili adres istemcinin durumudur: web, seçimi bulamayınca
+        defterin ilk adresini seçer; son adres silinince adres ekleme penceresini
+        açar. Siparişler adresin kopyasını taşır: silme onlara dokunmaz.
+
+        Adres defterde yoksa `404 NOT_FOUND` (silinmiş adresi yeniden silmek dahil;
+        aynı `Idempotency-Key` ile tekrar ise ilk cevabı alır). `Idempotency-Key`
+        zorunludur.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Adres silindi; güncel defter
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            Idempotent-Replayed:
+              $ref: "#/components/headers/IdempotentReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedAddressListResponse"
+        "400":
+          description: "`Idempotency-Key` eksik ya da bilinmeyen sorgu parametresi (VALIDATION_FAILED)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          description: Adres bu hesabın defterinde yok (NOT_FOUND; ayrıntısız).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "409":
+          description: |
+            Aynı `Idempotency-Key` ile ilk istek hâlâ işleniyor
+            (`REQUEST_IN_PROGRESS`) ya da anahtar farklı bir gövdeyle geldi
+            (`CONFLICT`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /v1/me/email/code:
     post:
       tags: [auth]
@@ -2560,6 +2695,14 @@ components:
         pattern: "^[A-Za-z0-9_-]+$"
       example: "4f1c3a2b-9d8e-4b7a-8c6d-5e4f3a2b1c0d"
 
+    AddressIdPath:
+      name: addressId
+      in: path
+      required: true
+      description: Kayıtlı adresin kimliği (`SavedAddress.id`, T11.15).
+      schema:
+        $ref: "#/components/schemas/AddressId"
+
     MarketIdPath:
       name: marketId
       in: path
@@ -4086,18 +4229,30 @@ components:
         isFavorite:
           type: boolean
 
+    AddressId:
+      type: string
+      description: |
+        Kayıtlı adresin kalıcı kimliği (T11.15): `adr_` + 32 küçük onaltılık.
+        Gateway eklemede üretir; T11.15 öncesi adreslere gateway'in 0001 göçü
+        verir. Yalnızca kendi defterinde anlamlıdır.
+      pattern: "^adr_[0-9a-f]{32}$"
+      example: "adr_0123456789abcdef0123456789abcdef"
+
     SavedAddress:
       type: object
       description: |
         Kayıtlı adres (adres defteri, T8.1 users.addresses[]): teslimat adresi +
         etiket + isteğe bağlı not. Siparişe giderken yalnızca `line` ve
-        `location` taşınır (`DeliveryAddress`).
-      required: [title, line, location]
+        `location` taşınır (`DeliveryAddress`): sipariş adresin kopyasını tutar.
+      required: [id, title, line, location]
       properties:
+        id:
+          $ref: "#/components/schemas/AddressId"
         title:
           type: string
           minLength: 1
-          description: Kullanıcının verdiği ad ("Ev", "İş").
+          maxLength: 40
+          description: Kullanıcının verdiği ad ("Ev", "İş"); hesapta tekil (#47). Karşılaştırma birebirdir (büyük/küçük harf duyarlı); "Ev" ile "ev" farklı adlardır.
         line:
           type: string
           minLength: 1
@@ -4123,6 +4278,29 @@ components:
       type: string
       description: Adres türü (seçicideki ikon); eski kayıtlarda olmayabilir.
       enum: [HOME, WORK, OTHER]
+
+    SavedAddressListResponse:
+      description: Güncel adres defteri (kayıt sırasında, en fazla 10).
+      allOf:
+        - $ref: "#/components/schemas/ApiSuccessResponse"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  maxItems: 10
+                  items:
+                    $ref: "#/components/schemas/SavedAddress"
+
+    UpdateAddressRequest:
+      description: |
+        Kayıtlı adresin tam gövdesi (T11.15); `CreateAddressRequest` ile aynı
+        kurallar. Kimlik yoldadır, gövdede değil (bilinmeyen alan reddedilir).
+      allOf:
+        - $ref: "#/components/schemas/CreateAddressRequest"
 
     CreateAddressRequest:
       type: object
