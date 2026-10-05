@@ -64,6 +64,8 @@ func authAppWith(t *testing.T, logger *slog.Logger, secureCookies bool) *fiber.A
 		ProfileGetter:     service,
 		AddressBook:       service,
 		AddressAdder:      service,
+		AddressUpdater:    service,
+		AddressDeleter:    service,
 		AccessTokens:      testTokens(),
 		Idempotency:       testIdempotency(),
 		SecureCookies:     secureCookies,

@@ -217,6 +217,7 @@ var routeParamValues = map[string]string{
 	marketIDParam:      "mkt_a101-caferaga",
 	orderIDParam:       testOrderID,
 	reservationIDParam: testOrderID,
+	addressIDParam:     testAddressID,
 }
 
 type sweptRoute struct {

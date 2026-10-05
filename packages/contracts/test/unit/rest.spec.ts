@@ -176,7 +176,12 @@ describe('reserveCartRequestSchema', () => {
 });
 
 describe('savedAddressSchema (kayitli adres) ve deliveryAddressSchema (siparis)', () => {
-  const saved = { ...VALID_ADDRESS, title: 'Ev', note: 'Zil calismiyor, gelince arayin' };
+  const saved = {
+    ...VALID_ADDRESS,
+    id: 'adr_0123456789abcdef0123456789abcdef',
+    title: 'Ev',
+    note: 'Zil calismiyor, gelince arayin',
+  };
 
   it('kayitli adres etiket ister; not istege bagli', () => {
     expect(savedAddressSchema.safeParse(saved).success).toBe(true);
@@ -189,7 +194,7 @@ describe('savedAddressSchema (kayitli adres) ve deliveryAddressSchema (siparis)'
 });
 
 describe('savedAddressListSchema (adres defteri, T9.5)', () => {
-  const address = { ...VALID_ADDRESS, title: 'Ev' };
+  const address = { ...VALID_ADDRESS, id: 'adr_0123456789abcdef0123456789abcdef', title: 'Ev' };
   const book = (count: number) => ({ items: Array.from({ length: count }, () => address) });
 
   it('adresi olmayan hesap: bos liste gecerli, hata degil', () => {

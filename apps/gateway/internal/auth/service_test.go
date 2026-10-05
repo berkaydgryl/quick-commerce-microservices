@@ -317,8 +317,8 @@ func TestProfile(t *testing.T) {
 func TestAddressBook(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	home := auth.SavedAddress{Title: "Ev", Line: "Moda Cad. 12", Location: auth.GeoPoint{Lat: 40.9885, Lng: 29.0262}, Note: "Zil bozuk"}
-	work := auth.SavedAddress{Title: "İş", Line: "Barbaros Blv. 40", Location: auth.GeoPoint{Lat: 41.0431, Lng: 29.0071}}
+	home := auth.SavedAddress{ID: "adr_00000000000000000000000000000001", Title: "Ev", Line: "Moda Cad. 12", Location: auth.GeoPoint{Lat: 40.9885, Lng: 29.0262}, Note: "Zil bozuk"}
+	work := auth.SavedAddress{ID: "adr_00000000000000000000000000000002", Title: "İş", Line: "Barbaros Blv. 40", Location: auth.GeoPoint{Lat: 41.0431, Lng: 29.0071}}
 	user := auth.User{ID: ids.New(ids.User), Phone: "+905551112299", FullName: "Adres Sahibi", Addresses: []auth.SavedAddress{home, work}}
 	if err := f.users.Create(ctx, user); err != nil {
 		t.Fatalf("kullanici yazilamadi: %v", err)
@@ -334,8 +334,8 @@ func TestAddressBook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("JSON: %v", err)
 	}
-	want := `{"items":[{"title":"Ev","line":"Moda Cad. 12","location":{"lat":40.9885,"lng":29.0262},"note":"Zil bozuk"},` +
-		`{"title":"İş","line":"Barbaros Blv. 40","location":{"lat":41.0431,"lng":29.0071}}]}`
+	want := `{"items":[{"id":"adr_00000000000000000000000000000001","title":"Ev","line":"Moda Cad. 12","location":{"lat":40.9885,"lng":29.0262},"note":"Zil bozuk"},` +
+		`{"id":"adr_00000000000000000000000000000002","title":"İş","line":"Barbaros Blv. 40","location":{"lat":41.0431,"lng":29.0071}}]}`
 	if string(encoded) != want {
 		t.Errorf("JSON:\n got %s\nwant %s", encoded, want)
 	}
@@ -573,11 +573,16 @@ func TestAddAddressAppendsAndReturnsTheBook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("adres eklenmeli: %v", err)
 	}
+	// T11.15: gateway her yeni adrese kalici kimlik verir.
+	id := book.Items[0].ID
+	if !ids.Valid(ids.Address, id) {
+		t.Fatalf("yeni adres adr_ kimligi tasimali: %q", id)
+	}
 	encoded, err := json.Marshal(book)
 	if err != nil {
 		t.Fatalf("JSON: %v", err)
 	}
-	want := `{"items":[{"title":"Ev","kind":"HOME","line":"Acıbadem, 34660 Üsküdar/İstanbul, Türkiye","location":{"lat":40.9885,"lng":29.027},` +
+	want := `{"items":[{"id":"` + id + `","title":"Ev","kind":"HOME","line":"Acıbadem, 34660 Üsküdar/İstanbul, Türkiye","location":{"lat":40.9885,"lng":29.027},` +
 		`"building":"19C3","floor":"3","apartment":"12"}]}`
 	if string(encoded) != want {
 		t.Errorf("cevap guncel defter olmali (bos tarif yazilmaz):\n got %s\nwant %s", encoded, want)
@@ -590,6 +595,9 @@ func TestAddAddressAppendsAndReturnsTheBook(t *testing.T) {
 	read, err := f.service.Addresses(ctx, registered.User.ID)
 	if err != nil || len(read.Items) != 2 || read.Items[0].Title != "Ev" || read.Items[1].Title != "Annem" {
 		t.Errorf("defter kayit sirasinda iki adres tasimali: %+v %v", read, err)
+	}
+	if read.Items[0].ID != id || read.Items[1].ID == id {
+		t.Errorf("kimlik kalici ve adrese ozgu olmali: %+v", read)
 	}
 }
 
@@ -661,6 +669,154 @@ func TestConcurrentAddAddressWithSameTitleSucceedsOnce(t *testing.T) {
 	}
 	if succeeded != 1 {
 		t.Errorf("ayni ad yalnizca bir kez eklenmeli, %d kez eklendi", succeeded)
+	}
+}
+
+// bookWith, kayitli kullaniciya adlari verilen adresleri ekler ve defteri doner.
+func bookWith(t *testing.T, f *fixture, userID string, titles ...string) auth.AddressBook {
+	t.Helper()
+	var book auth.AddressBook
+	for _, title := range titles {
+		var err error
+		if book, err = f.service.AddAddress(context.Background(), userID, homeInput(title)); err != nil {
+			t.Fatalf("%s eklenemedi: %v", title, err)
+		}
+	}
+	return book
+}
+
+func TestUpdateAddressReplacesTheEntryInPlace(t *testing.T) {
+	f := newFixture(t)
+	registered := f.register(t)
+	book := bookWith(t, f, registered.User.ID, "Ev", "İş", "Annem")
+	target := book.Items[1]
+
+	input := homeInput("Ofis")
+	input.Kind, input.Line, input.Building, input.Note = auth.AddressKindWork, "Levent, 34330 Beşiktaş/İstanbul, Türkiye", "", "Resepsiyon"
+	updated, err := f.service.UpdateAddress(context.Background(), registered.User.ID, target.ID, input)
+
+	if err != nil {
+		t.Fatalf("adres guncellenmeli: %v", err)
+	}
+	got := updated.Items[1]
+	if len(updated.Items) != 3 || got.ID != target.ID || got.Title != "Ofis" || got.Kind != auth.AddressKindWork ||
+		got.Building != "" || got.Note != "Resepsiyon" || updated.Items[0] != book.Items[0] || updated.Items[2] != book.Items[2] {
+		t.Errorf("yalnizca hedef satir, yerinde ve tam govdeyle degismeli: %+v", updated)
+	}
+}
+
+func TestUpdateAddressKeepsItsOwnTitleButNotAnothers(t *testing.T) {
+	f := newFixture(t)
+	registered := f.register(t)
+	book := bookWith(t, f, registered.User.ID, "Ev", "İş")
+
+	if _, err := f.service.UpdateAddress(context.Background(), registered.User.ID, book.Items[0].ID, homeInput("Ev")); err != nil {
+		t.Errorf("adres kendi adini koruyabilmeli: %v", err)
+	}
+	_, err := f.service.UpdateAddress(context.Background(), registered.User.ID, book.Items[0].ID, homeInput("İş"))
+	if codeOf(err) != apperror.CodeValidationFailed || detailOf(err, auth.FieldTitle) != "Bu adla kayıtlı bir adresin var" {
+		t.Errorf("baska adresin adi alan hatasi olmali: %v", err)
+	}
+}
+
+func TestUpdateAndDeleteOfUnknownAddressAreNotFound(t *testing.T) {
+	f := newFixture(t)
+	registered := f.register(t)
+	bookWith(t, f, registered.User.ID, "Ev")
+	unknown := ids.New(ids.Address)
+
+	for name, call := range map[string]func(string) error{
+		"guncelleme": func(id string) error {
+			_, err := f.service.UpdateAddress(context.Background(), registered.User.ID, id, homeInput("Ev"))
+			return err
+		},
+		"silme": func(id string) error {
+			_, err := f.service.DeleteAddress(context.Background(), registered.User.ID, id)
+			return err
+		},
+	} {
+		for _, id := range []string{unknown, "Ev", "usr_00000000000000000000000000000001", ""} {
+			if err := call(id); codeOf(err) != apperror.CodeNotFound {
+				t.Errorf("%s %q: NOT_FOUND bekleniyordu: %v", name, id, err)
+			}
+		}
+	}
+}
+
+func TestAddressOfAnotherUserIsNotFound(t *testing.T) {
+	f := newFixture(t)
+	owner := f.register(t)
+	book := bookWith(t, f, owner.User.ID, "Ev")
+	other := ids.New(ids.User)
+	if err := f.users.Create(context.Background(), auth.User{ID: other, Phone: "+905551112288", FullName: "Baska"}); err != nil {
+		t.Fatalf("ikinci kullanici: %v", err)
+	}
+
+	_, updateErr := f.service.UpdateAddress(context.Background(), other, book.Items[0].ID, homeInput("Benim"))
+	_, deleteErr := f.service.DeleteAddress(context.Background(), other, book.Items[0].ID)
+
+	if codeOf(updateErr) != apperror.CodeNotFound || codeOf(deleteErr) != apperror.CodeNotFound {
+		t.Errorf("baskasinin adresi bu hesapta yok sayilmali: %v / %v", updateErr, deleteErr)
+	}
+}
+
+func TestDeleteAddressRemovesOnlyThatEntry(t *testing.T) {
+	f := newFixture(t)
+	registered := f.register(t)
+	book := bookWith(t, f, registered.User.ID, "Ev", "İş", "Annem")
+
+	left, err := f.service.DeleteAddress(context.Background(), registered.User.ID, book.Items[1].ID)
+
+	if err != nil || len(left.Items) != 2 || left.Items[0] != book.Items[0] || left.Items[1] != book.Items[2] {
+		t.Fatalf("yalnizca hedef silinmeli, sira korunmali: %+v %v", left, err)
+	}
+	if _, err := f.service.DeleteAddress(context.Background(), registered.User.ID, book.Items[1].ID); codeOf(err) != apperror.CodeNotFound {
+		t.Errorf("silinmis adresi yeniden silmek NOT_FOUND olmali: %v", err)
+	}
+	// Silinen adin yeniden kullanilmasi serbest.
+	if _, err := f.service.AddAddress(context.Background(), registered.User.ID, homeInput("İş")); err != nil {
+		t.Errorf("silinen adres adi yeniden eklenebilmeli: %v", err)
+	}
+}
+
+func TestAddressChangesForDeletedUserAreUnauthorized(t *testing.T) {
+	f := newFixture(t)
+	missing := ids.New(ids.User)
+
+	_, updateErr := f.service.UpdateAddress(context.Background(), missing, ids.New(ids.Address), homeInput("Ev"))
+	_, deleteErr := f.service.DeleteAddress(context.Background(), missing, ids.New(ids.Address))
+
+	if codeOf(updateErr) != apperror.CodeUnauthorized || codeOf(deleteErr) != apperror.CodeUnauthorized {
+		t.Errorf("olmayan kullanici UNAUTHORIZED donmeli: %v / %v", updateErr, deleteErr)
+	}
+}
+
+func TestConcurrentRenamesToTheSameTitleSucceedOnce(t *testing.T) {
+	f := newFixture(t)
+	registered := f.register(t)
+	book := bookWith(t, f, registered.User.ID, "Ev", "İş", "Annem", "Yazlık")
+
+	var wg sync.WaitGroup
+	results := make(chan error, len(book.Items))
+	for _, item := range book.Items {
+		wg.Go(func() {
+			_, err := f.service.UpdateAddress(context.Background(), registered.User.ID, item.ID, homeInput("Yeni"))
+			results <- err
+		})
+	}
+	wg.Wait()
+	close(results)
+
+	succeeded := 0
+	for err := range results {
+		if err == nil {
+			succeeded++
+		} else if codeOf(err) != apperror.CodeValidationFailed {
+			t.Errorf("kaybeden istek ad catismasi almali: %v", err)
+		}
+	}
+	if succeeded != 1 {
+		t.Errorf("ayni ada yalnizca bir adres gecebilmeli, %d gecti", succeeded)
 	}
 }
 

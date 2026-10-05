@@ -14,6 +14,7 @@
 import { z } from 'zod';
 
 import {
+  addressIdSchema,
   geoPointSchema,
   idSchema,
   isoDateTimeSchema,
@@ -75,14 +76,23 @@ export const deliveryAddressSchema = z.object({
  * Kullanicinin KAYITLI adresi (adres defteri; T8.1 users.addresses[]):
  * teslimat adresi + etiket + istege bagli not. Demo adresleri
  * (apps/gateway/internal/persona/addresses.json) bu bicimdedir. Siparise giderken yalnizca
- * teslimat adresi kismi (line, location) tasinir.
+ * teslimat adresi kismi (line, location) tasinir: siparis adresin KOPYASINI
+ * tutar, adresi duzenlemek ya da silmek siparise dokunmaz (T11.15).
  */
 /** Adres turu (T11.8): adres defterinde ikonu belirler. T11.8'den once yazilan kayitlarda yok. */
 export const addressKindSchema = z.enum(['HOME', 'WORK', 'OTHER']);
 
 export const savedAddressSchema = deliveryAddressSchema.extend({
-  /** Kullanicinin verdigi ad ("Ev", "Is"). */
-  title: z.string().trim().min(1),
+  /**
+   * Kalici kimlik (T11.15): guncelleme ve silme yolunda tasinir. T11.15
+   * oncesi adreslere gateway'in 0001 gocu verir; cevapta her adreste vardir.
+   */
+  id: addressIdSchema,
+  /**
+   * Kullanicinin verdigi ad ("Ev", "Is"): hesapta tekil ve en fazla
+   * ADDRESS_TITLE_MAX_LENGTH (T11.8 eklemede, T11.15 guncellemede; #47).
+   */
+  title: z.string().trim().min(1).max(ADDRESS_TITLE_MAX_LENGTH),
   kind: addressKindSchema.optional(),
   /** Bina, kat, daire (T11.8): kisa serbest metin; bossa alan yok. */
   building: z.string().max(ADDRESS_UNIT_MAX_LENGTH).optional(),
@@ -134,6 +144,15 @@ export const createAddressRequestSchema = z.object({
     )
     .optional(),
 });
+
+/**
+ * PUT /v1/me/addresses/{addressId} (T11.15): adresi TAM govdeyle degistirir;
+ * kurallar eklemeyle ayni (ad tekilligi kendisi disindaki adreslere bakar).
+ * Kalici kayit: Idempotency-Key ister. Cevap guncel adres defteridir. Kimlik
+ * defterde yoksa 404 NOT_FOUND. DELETE ayni yolda govdesizdir; cevap yine
+ * guncel defter. Yeni hata kodu yok.
+ */
+export const updateAddressRequestSchema = createAddressRequestSchema;
 
 /**
  * GET /v1/me/addresses (T9.5): oturumdaki kullanicinin adres defteri, kayit
@@ -217,6 +236,7 @@ export type DeliveryAddress = z.infer<typeof deliveryAddressSchema>;
 export type SavedAddress = z.infer<typeof savedAddressSchema>;
 export type AddressKind = z.infer<typeof addressKindSchema>;
 export type CreateAddressRequest = z.infer<typeof createAddressRequestSchema>;
+export type UpdateAddressRequest = z.infer<typeof updateAddressRequestSchema>;
 export type SavedAddressList = z.infer<typeof savedAddressListSchema>;
 export type ReserveCartRequest = z.infer<typeof reserveCartRequestSchema>;
 export type ReservationLine = z.infer<typeof reservationLineSchema>;

@@ -16,6 +16,8 @@ var (
 	ErrAddressTitleTaken = errors.New("bu adla kayitli adres var")
 	// ErrAddressBookFull, adres defteri MaxSavedAddresses'a ulasti.
 	ErrAddressBookFull = errors.New("adres defteri dolu")
+	// ErrAddressNotFound, kimligi verilen adres defterde yok (T11.15).
+	ErrAddressNotFound = errors.New("adres yok")
 	// ErrEmailTaken, e-posta adresi baska bir hesapta dogrulanmis (T11.14;
 	// users.email benzersiz).
 	ErrEmailTaken = errors.New("e-posta baska hesapta kayitli")
@@ -48,6 +50,16 @@ type UserStore interface {
 	// defterde max adres varsa ErrAddressBookFull, kullanici yoksa
 	// ErrUserNotFound. Es zamanli iki ekleme siniri asamaz.
 	AddAddress(ctx context.Context, userID string, address SavedAddress, max int) (User, error)
+	// UpdateAddress, kimligi address.ID olan adresi ATOMIK degistirir ve guncel
+	// kullaniciyi doner (T11.15). Adres yoksa ErrAddressNotFound, baska bir
+	// adres ayni adi tasiyorsa ErrAddressTitleTaken, kullanici yoksa
+	// ErrUserNotFound. Ayni ada es zamanli iki yeniden adlandirmadan yalnizca
+	// biri basarir.
+	UpdateAddress(ctx context.Context, userID string, address SavedAddress) (User, error)
+	// DeleteAddress, kimligi verilen adresi defterden ATOMIK cikarir ve guncel
+	// kullaniciyi doner (T11.15). Adres yoksa ErrAddressNotFound, kullanici
+	// yoksa ErrUserNotFound.
+	DeleteAddress(ctx context.Context, userID, addressID string) (User, error)
 }
 
 // SessionStore, oturum kayitlari.

@@ -3,7 +3,8 @@
 // ID_BODY_PATTERN); Node servisleri kimligi ayni bicimde uretir.
 //
 // NEDEN TEK PAKET: korelasyon kimligi (req), kullanici (usr), oturum (ses) ve
-// cihaz (dvc) ayni bicimi kullanir; bicim iki yerde yazilsaydi bir gun ayrisirdi.
+// cihaz (dvc) ve kayitli adres (adr) ayni bicimi kullanir; bicim iki yerde
+// yazilsaydi bir gun ayrisirdi.
 package ids
 
 import (
@@ -18,6 +19,8 @@ const (
 	User    = "usr"
 	Session = "ses"
 	Device  = "dvc"
+	// Address, kayitli adres (T11.15).
+	Address = "adr"
 )
 
 // bodyBytes, kimlik govdesinin rastgele bayt sayisi: 16 bayt = 32 onaltilik.

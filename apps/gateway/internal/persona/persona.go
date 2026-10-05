@@ -18,10 +18,13 @@ package persona
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
@@ -131,7 +134,11 @@ func (s Set) Users(now time.Time, passwordHash string) []auth.User {
 			user.LastLocation = &auth.GeoPoint{Lat: account.LastLocation.Lat, Lng: account.LastLocation.Lng}
 		}
 		if account.WithAddresses {
-			user.Addresses = append([]auth.SavedAddress(nil), s.Addresses...)
+			user.Addresses = make([]auth.SavedAddress, 0, len(s.Addresses))
+			for index, address := range s.Addresses {
+				address.ID = AddressID(account.ID, index)
+				user.Addresses = append(user.Addresses, address)
+			}
 		}
 		users = append(users, user)
 	}
@@ -178,6 +185,15 @@ func (s Set) validate() error {
 		}
 	}
 	return errors.Join(problems...)
+}
+
+// AddressID, hazir adresin kimligi (T11.15): kullanici kimliginden ve adresin
+// sirasindan TURETILIR (adr_ + SHA-256'nin ilk 16 bayti). Rastgele olsaydi her
+// seed'de degisir, tarayicida kalan secim (getir.address, kimlikle) bir sonraki
+// seed'de bosa duserdi. Kimlik yalnizca kendi defterinde anlamlidir.
+func AddressID(userID string, index int) string {
+	sum := sha256.Sum256([]byte(userID + "/adres/" + strconv.Itoa(index)))
+	return ids.Address + "_" + hex.EncodeToString(sum[:16])
 }
 
 // decodeStrict, gomulu dosyayi bilinmeyen alana izin vermeden cozer: yanlis

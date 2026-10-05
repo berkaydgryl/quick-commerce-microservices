@@ -66,7 +66,7 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 		}
 	}
 
-	identity, err := buildAuth(ctx, cfg, auth.DefaultPasswordCost)
+	identity, err := buildAuth(ctx, cfg, auth.DefaultPasswordCost, logger)
 	if err != nil {
 		closePool()
 		return nil, nil, fmt.Errorf("kimlik: %w", err)
@@ -204,6 +204,8 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 		ProfileGetter:     identity.service,
 		AddressBook:       identity.service,
 		AddressAdder:      identity.service,
+		AddressUpdater:    identity.service,
+		AddressDeleter:    identity.service,
 		EmailCodeSender:   emailVerification,
 		EmailVerifier:     emailVerification,
 		ProfileUpdater:    identity.service,

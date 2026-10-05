@@ -112,6 +112,7 @@ Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci 
   (sipariş hemen `401`). Kalıcı çözüm bekleyen iş #24 (iptal edilen oturum listesi).
 - **Idempotency-Key**, kalıcı durum değiştiren uçlarda zorunludur:
   `POST /v1/auth/register`, `PATCH /v1/me`, `POST /v1/me/addresses`, `PUT` ve
+  `DELETE /v1/me/addresses/{addressId}` (T11.15), `PUT` ve
   `DELETE /v1/me/favorites/{marketId}`, `POST /v1/me/email/code`,
   `POST /v1/me/email/verify` (T11.14), `POST /v1/me/phone/code`,
   `POST /v1/me/phone/verify` (T11.14 PR 3; yalnızca geliştirmede), `POST /v1/cart/reserve`,

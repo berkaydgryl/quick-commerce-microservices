@@ -50,6 +50,14 @@ export const orderIdSchema = z.string().regex(new RegExp(`^${ID_PREFIX.ORDER}_[0
 });
 
 /**
+ * Kayitli adres kimligi (T11.15): yalnizca `adr_` onekli. Adres defterinde
+ * satiri tanir; ad ("Ev") degisebildigi icin kimlik ad degildir.
+ */
+export const addressIdSchema = z.string().regex(new RegExp(`^${ID_PREFIX.ADDRESS}_[0-9a-f]{32}$`), {
+  message: 'adres kimligi bekleniyor',
+});
+
+/**
  * Katalog kimligi semasi uretir: "<onek>_<okunabilir-govde>" (ADR-15).
  * Seed ile gelen kimlikler icindir; UUID ya da 32 hex DEGILDIR.
  */

@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { rootView } from '../../src/features/address/services/address-gate';
 
 const EV: SavedAddress = {
+  id: 'adr_00000000000000000000000000000001',
   title: 'Ev',
   line: 'Moda Caddesi',
   location: { lat: 40.98, lng: 29.02 },

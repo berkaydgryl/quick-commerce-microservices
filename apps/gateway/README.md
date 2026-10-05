@@ -40,6 +40,7 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `GET /v1/me`         | ✅ Jetondaki kullanıcının profili |
 | `GET /v1/me/addresses` | ✅ Adres defteri (T9.5): kayıtlı adresler, kayıt sırasında; en fazla 10 (sınırlı liste); önbelleğe alınmaz |
 | `POST /v1/me/addresses` | ✅ Adres ekleme (T11.8): tür, bina/kat/daire, tarif; aynı ad ve 11. adres tek atomik Mongo yazımında reddedilir; `Idempotency-Key` ister, cevap güncel defter |
+| `PUT`, `DELETE /v1/me/addresses/{addressId}` | ✅ Adres düzenleme ve silme (T11.15): kalıcı kimlik `adr_…` (eski adreslere göç 0001); düzenleme tam gövde, aynı ad başka adreste olamaz (birebir karşılaştırma: "Ev" ile "ev" farklı), tek atomik Mongo yazımı; yok olan adres 404; `Idempotency-Key` ister, cevap güncel defter |
 | `GET /v1/geo/reverse?lat&lng`, `GET /v1/geo/search?q` | ✅ Harita adres servisi (T11.8, `internal/geo`): OpenStreetMap Nominatim'e **tek sıra** (saniyede en fazla bir istek, kullanım koşulu) ve 24 saat önbellekle; sıra `GEO_TIMEOUT_MS` içinde ilerlemezse 503, adres yoksa 404. Oturum ister |
 | Kullanıcı kimliği    | ✅ `Authorization: Bearer` JWT (HS256); `X-User-Id` kalktı (T8.1) |
 | Kimlik deposu        | ✅ Mongo `users` + `sessions` (TTL indeksi); MOCK'ta bellek |
@@ -239,9 +240,20 @@ bilmez), `internal/authstore` (Mongo ve bellek depoları), `internal/httpapi` (`
 - **Depo seçimi:** `MOCK=true` ise hesaplar bellekte tutulur ve Mongo'ya hiç gidilmez (Node
   servisleriyle aynı kural; süreç kapanınca hesaplar gider). Değilse `GATEWAY_MONGO_URI` zorunludur
   (gateway'in kendi Mongo kullanıcısı, yalnızca kendi veritabanında `getir_gateway` yetkili; D14),
-  açılışta ping atılır ve indeksler kurulur (`users.phone` benzersiz; `sessions.tokenHash`
-  benzersiz, `sessions.expiresAt` TTL, `sessions.userId`). Mongo işlemleri de
+  açılışta ping atılır, bekleyen göçler uygulanır ve indeksler kurulur (`users.phone` benzersiz;
+  `sessions.tokenHash` benzersiz, `sessions.expiresAt` TTL, `sessions.userId`). Mongo işlemleri de
   `GATEWAY_REQUEST_TIMEOUT_MS` ile sınırlıdır.
+- **Göçler (T11.15, ADR-19 gateway eki):** `internal/migrations`, Node çalıştırıcısının kurallarıyla:
+  uygulananlar `migrations` koleksiyonunda (sürüm `_id`), eşzamanlı açılışa karşı `migrations_lock`
+  kilidi, açılışta indekslerden önce; tutarsız kayıt açılışı durdurur. Transaction yok, her göç
+  yeniden çalıştırılabilir. Elle `up/down` komutu yok (`down` yalnızca testte). İlk göç
+  `0001-adres-kimlikleri`: kimliksiz kayıtlı adreslere `adr_` kimliği verir. Dağıtım sırası önce
+  gateway, sonra web (ADR-19 eki; çok kopyalı dağıtım bekleyen iş #99).
+  - **Persona adresleri:** yerelde göçün verdiği rastgele kimliklerle kalır; sonraki
+    `pnpm seed:personas` türetilmiş kimlikleri yazar ve seçili adres bir kez ilk adrese döner.
+  - **Kalan kilit:** sert öldürülen (`kill -9`) bir açılışın kilidi 10 dk yaşar; bu sürede yeni
+    açılış bekler. Beklemeden temizlemek için `pnpm infra:mongosh` içinde:
+    `use getir_gateway` ve `db.migrations_lock.deleteOne({ _id: "migrations" })`.
 - **Bilinen sınırlar:** çıkıştan sonra erişim jetonu süresi (≤ `JWT_TTL`) dolana kadar geçerli
   kalır (durumsuz jetonun bedeli); yalnızca sipariş kapanır (aşağıda). Numara değişince (T11.14 PR 3)
   diğer cihazların yenilemesi hemen durur; ellerindeki erişim jetonu en geç `JWT_TTL` (1 sa) içinde
@@ -264,7 +276,8 @@ curl -s -X POST -c /tmp/getir-cerez -b /tmp/getir-cerez localhost:8080/v1/auth/l
 ## Tekrar koruması (`Idempotency-Key`, T8.2)
 
 Yazan uçlar (`POST /v1/auth/register`, `/v1/cart/reserve`, `DELETE /v1/cart/reserve/{orderId}` (T11.4),
-`/v1/orders`, `/v1/orders/{id}/3ds`, `POST /v1/me/addresses`) aynı niyetin ikinci kez işlenmesine karşı korunur
+`/v1/orders`, `/v1/orders/{id}/3ds`, `POST /v1/me/addresses`, `PUT`/`DELETE /v1/me/addresses/{addressId}` (T11.15))
+aynı niyetin ikinci kez işlenmesine karşı korunur
 (ADR-08 ve T8.2 eki).
 Katmanlar: `internal/idempotency` (kayıt deposu: Redis ve bellek; HTTP bilmez),
 `internal/httpapi/idempotency.go` (ara katman: ne saklanır, ne tekrar edilir),
@@ -328,7 +341,7 @@ bellek içi sayaç sınırı örnek sayısı kadar gevşetirdi (proje kuralları
 | `POST`/`DELETE /v1/cart/reserve`, `/v1/orders`, `/v1/orders/{id}/3ds` | `RATE_LIMIT_ORDER_MAX_REQUESTS` (20) | kullanıcı   |
 | Katalog, market ve genel arama uçları                     | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
 | `GET /v1/me`, `/v1/me/addresses`, `GET /v1/orders/{id}` (`/token` dahil) | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
-| `POST /v1/me/addresses`, `/v1/geo/*` (T11.8)               | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
+| `POST`/`PUT`/`DELETE /v1/me/addresses…`, `/v1/geo/*` (T11.8, T11.15) | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
 | `/healthz`                                                | sınırsız                         | —           |
 
 - **Anahtar:** `rate:{ozne}:POST_/v1/orders/id/3ds` (`@getir/redis-kit` `rateLimitKey`;

@@ -61,7 +61,36 @@ veritabani ve kendi kullanicisi var (ADR-05 eki); gocun kaydi da oraya aittir.
   tabidir; buyuk veri gocu `transaction: false` ve parcali, yeniden calistirilabilir
   yazilmalidir. Acilis, goc suresi kadar uzar.
 - Kapsam disi: gateway (Go) bu calistiriciyi kullanmaz; gateway'in koleksiyonlarina goc
-  gerekirse ayri karar.
+  gerekirse ayri karar (verildi: asagidaki T11.15 eki).
+
+## Ek (T11.15, 2026-10-05): gateway gocleri
+
+Ilk gateway gocu T11.15'te geldi: kayitli adresler adla taniniyordu, duzenleme adi
+degistirebildigi icin her adres kalici kimlik (`adr_`) aldi ve T11.15 oncesi adreslere
+kimlik verilmesi gerekti. Yukaridaki "gateway'in koleksiyonlarina goc gerekirse ayri
+karar" kararinin karsiligi (kullanici karari PM onerisiyle, (a)):
+
+- Gateway Go'dur, mongo-kit'i kullanamaz: ayni KURALLARI kendi kucuk duzeninde uygular
+  (`apps/gateway/internal/migrations`). Kayit `getir_gateway.migrations` (`_id` surum,
+  `name`, `appliedAt`, `durationMs`), kilit `migrations_lock` (tek belge, sahip ve omur;
+  iki kopya ayni anda acilirsa tek uygulayici), acilista indekslerden ONCE; kayitla kod
+  tutarsizsa acilis durur. Koleksiyon ve alan adlari Node'dakiyle ayni.
+- Transaction yok (Node'daki `transaction: false` gibi): her goc YENIDEN
+  CALISTIRILABILIR yazilir ve satiri kendi filtresiyle yazar. Goc donmus kopyadir;
+  `auth`/`authstore` tiplerine baglanmaz.
+- Elle `up/down/status` komutu yok: gateway'in tek gocu var ve gateway kopyalari zaten
+  acilista uygular. `down` yazilir ve testte kosar (up, down, up); gerekirse komut
+  sonra eklenir.
+- Ilk goc `0001-adres-kimlikleri`: up kimliksiz adreslere `adr_` + 32 hex verir,
+  kimligi olana dokunmaz; down butun adres kimliklerini siler.
+- Elenen: tembel doldurma (okurken kimlik verip yazmak; kayit ve geri alma yok,
+  kurala aykiri), yerel veriyi silip seed'le yeniden yazmak (elle eklenmis adreslerin
+  kimligi olmazdi).
+- Dagitim sirasi (QA A1, kullanici (b)): goc, eski kopyalar kapandiktan sonraki
+  acilisi varsayar. Dagitim sirasi once gateway, sonra web. Gocten sonra kimliksiz
+  kalan bir adres (eski surumlu bir kopyanin araya ekledigi) yeni web'in defter
+  semasini dusurur. Cok kopyali dagitim icin kimliksiz adresi acilista ya da yazim
+  yolunda onarmak bekleyen is #99'dur. Bugun tek gateway kopyasi calisir.
 
 ## Ilgili
 
