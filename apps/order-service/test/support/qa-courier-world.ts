@@ -32,6 +32,8 @@ import type {
   NearestClaimRequest,
 } from '../../../courier-service/src/domain/courier-repository.js';
 import { courierFromSeed } from '../../../courier-service/src/domain/courier-seed.js';
+import type { MarketLocator } from '../../../courier-service/src/domain/market-locator.js';
+import type { RouteRepository } from '../../../courier-service/src/domain/route-repository.js';
 import { createDispatchCouriers } from '../../src/application/dispatch-couriers.js';
 import type { DispatchRound } from '../../src/application/dispatch-couriers.js';
 import { startCourierDispatching } from '../../src/bootstrap.js';
@@ -137,12 +139,17 @@ export interface QaCourierService {
   readonly port: number;
   get(courierId: string): Promise<courierV1.Courier | undefined>;
   release(orderId: string): Promise<courierV1.ReleaseCourierResponse | undefined>;
+  /** Siparisin rotasi (T13.2 PR 3): courier'in kendi RPC'siyle. */
+  startRoute(orderId: string, courierId: string): Promise<courierV1.StartRouteResponse | undefined>;
   /** Yalnizca sunucuyu kapatir (courier "coktu"); istemci acik kalir. */
   stop(): Promise<void>;
 }
 
 export async function startCourierService(options: {
   readonly repository: CourierRepository;
+  /** Market kopyasi ve rotalar (T13.2): verilmezse courier'in bellek varsayilanlari. */
+  readonly markets?: MarketLocator;
+  readonly routes?: RouteRepository;
   readonly clock: Clock;
   readonly logger?: Logger;
   /** Verilirse bu portta acilir (coken courier'i ayni adreste yeniden acmak icin). */
@@ -155,6 +162,8 @@ export async function startCourierService(options: {
     services: [
       buildCourierService({
         couriers: options.repository,
+        ...(options.markets === undefined ? {} : { markets: options.markets }),
+        ...(options.routes === undefined ? {} : { routes: options.routes }),
         clock: options.clock,
         ...(options.logger === undefined ? {} : { logger: options.logger }),
       }),
@@ -172,6 +181,8 @@ export async function startCourierService(options: {
       (await unaryCall(client, service.getCourier, { courierId })).response?.courier,
     release: async (orderId) =>
       (await unaryCall(client, service.releaseCourier, { orderId })).response,
+    startRoute: async (orderId, courierId) =>
+      (await unaryCall(client, service.startRoute, { orderId, courierId })).response,
     // Iki kez cagrilabilir: test courier'i "cokertir", temizlik yine kapatir.
     stop: async () => {
       if (stopped) return;

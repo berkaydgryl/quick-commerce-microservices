@@ -4,6 +4,7 @@
  * gorur: proto cevabi, gRPC durum kodu ve `x-app-error` yuku. Depo ve market
  * kopyasi disaridan verilir (MOCK'un bellek deposu ya da gercek Mongo);
  * use-case'e dokunulmaz. Market kopyasi verilmezse demo marketleri bellekte.
+ * Rota deposu (T13.2 PR 3) verilmezse bellekte; hiz verilmezse varsayilan.
  */
 
 import { GRPC_STATUS } from '@getir/core';
@@ -15,6 +16,7 @@ import type { CallResult, TestGrpcServer } from '@getir/service-kit/testing';
 import { buildCourierService } from '../../src/bootstrap.js';
 import type { CourierRepository } from '../../src/domain/courier-repository.js';
 import type { MarketLocator } from '../../src/domain/market-locator.js';
+import type { RouteRepository } from '../../src/domain/route-repository.js';
 
 export const COURIER_SERVICE = courierV1.CourierServiceService;
 
@@ -43,12 +45,15 @@ export interface QaCourierServer {
   ): Promise<CallResult<courierV1.AssignCourierResponse>>;
   get(courierId: string): Promise<CallResult<courierV1.GetCourierResponse>>;
   release(orderId: string): Promise<CallResult<courierV1.ReleaseCourierResponse>>;
+  startRoute(orderId: string, courierId: string): Promise<CallResult<courierV1.StartRouteResponse>>;
   stop(): Promise<void>;
 }
 
 export async function startQaCourierServer(options: {
   readonly repository: CourierRepository;
   readonly markets?: MarketLocator;
+  readonly routes?: RouteRepository;
+  readonly speedKmh?: number;
   readonly clock: MutableClock;
   readonly logger?: Logger;
   readonly name?: string;
@@ -59,6 +64,8 @@ export async function startQaCourierServer(options: {
       buildCourierService({
         couriers: options.repository,
         ...(options.markets === undefined ? {} : { markets: options.markets }),
+        ...(options.routes === undefined ? {} : { routes: options.routes }),
+        ...(options.speedKmh === undefined ? {} : { speedKmh: options.speedKmh }),
         clock: options.clock,
         ...(options.logger === undefined ? {} : { logger: options.logger }),
       }),
@@ -81,6 +88,11 @@ export async function startQaCourierServer(options: {
       server.call(
         COURIER_SERVICE.releaseCourier,
         courierV1.ReleaseCourierRequest.fromPartial({ orderId }),
+      ),
+    startRoute: (orderId, courierId) =>
+      server.call(
+        COURIER_SERVICE.startRoute,
+        courierV1.StartRouteRequest.fromPartial({ orderId, courierId }),
       ),
     stop: () => server.stop(),
   };
