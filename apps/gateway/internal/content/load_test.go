@@ -27,9 +27,10 @@ const validJSON = `{
     "banner": {"sources": [{"url": "/img/banner/a-960.jpg", "width": 960}], "width": 960, "height": 277}
   },
   "loginCard": {
-    "title": "Giriş yap veya kayıt ol", "countryLabel": "Ülke kodu", "phoneLabel": "Telefon numarası",
-    "phonePlaceholder": "5XX XXX XX XX", "continueLabel": "Devam Et", "closeLabel": "Kapat",
+    "title": "Giriş yap veya kayıt ol", "countryLabel": "Ülke kodu", "phoneLabel": "Telefon Numarası",
+    "continueLabel": "Devam Et", "closeLabel": "Kapat",
     "showPasswordLabel": "Şifreyi göster",
+    "hidePasswordLabel": "Şifreyi gizle",
     "countries": [{"code": "TR", "name": "Türkiye", "dialCode": "+90", "flagUrl": "/img/flag/tr.svg"}],
     "login": {"passwordLabel": "Şifren", "submitLabel": "Giriş yap", "pendingLabel": "Giriş yapılıyor…",
       "registerPrompt": "Hesabın yok mu?", "registerLinkLabel": "Kayıt ol",
@@ -67,7 +68,7 @@ const validJSON = `{
     "addressBookTitle": "Adreslerim", "addressConfirmLabel": "Adresi Onayla", "addressAddPrompt": "Başka bir adreste misin?",
     "addressAddLabel": "Adres Ekle", "addressLoginLabel": "Adres seçmek için giriş yap",
     "noAddressNotice": "Kayıtlı adresin yok.", "addressLoadingLabel": "Adreslerin yükleniyor…", "profileLabel": "Profil",
-    "accountLabel": "Hesabım", "favoritesLabel": "Favori marketlerim", "logoutLabel": "Çıkış yap",
+    "accountLabel": "Hesabım", "logoutLabel": "Çıkış yap",
     "logoutPendingLabel": "Çıkış yapılıyor…"
   },
   "marketList": {
@@ -96,8 +97,11 @@ const validJSON = `{
     "title": "Favori İşletmelerim", "addLabel": "Favorilere ekle", "removeLabel": "Favorilerden çıkar",
     "loadingLabel": "Favorilerin yükleniyor…", "emptyTitle": "Henüz favori işletmen yok", "emptyHint": "Kalbe dokun.",
     "removedNotice": "favorilerden çıkarıldı",
-    "updateFailedToast": "Favori güncellenemedi.", "listFullToast": "Favori listen dolu.", "toastDismissLabel": "Kapat",
-    "profileMenuLabel": "Hesap menüsü", "addressesLabel": "Adreslerim", "favoritesMenuLabel": "Favori İşletmeler"
+    "updateFailedToast": "Favori güncellenemedi.", "listFullToast": "Favori listen dolu.", "toastDismissLabel": "Kapat"
+  },
+  "accountMenu": {
+    "label": "Hesap menüsü", "profileLabel": "Profilim", "addressesLabel": "Adreslerim",
+    "favoritesLabel": "Favori İşletmeler", "ordersLabel": "Geçmiş Siparişlerim"
   },
   "profile": {
     "phoneLabel": "Telefon", "emailLabel": "E-posta", "addEmailLabel": "E-posta ekle",
@@ -109,7 +113,7 @@ const validJSON = `{
     },
     "phoneDialog": {
       "title": "Telefon", "changeDescription": "Şifreni gir.", "verifyDescription": "Kod göndereceğiz.", "phoneFieldLabel": "Numara",
-      "passwordLabel": "Şifre", "showPasswordLabel": "Göster", "sendLabel": "Gönder", "sendingLabel": "Gönderiliyor",
+      "passwordLabel": "Şifre", "showPasswordLabel": "Göster", "hidePasswordLabel": "Gizle", "sendLabel": "Gönder", "sendingLabel": "Gönderiliyor",
       "codeSentToLabel": "Şu numaraya:", "codeFieldLabel": "Kod", "verifyLabel": "Doğrula", "verifyingLabel": "Doğrulanıyor",
       "expiresInLabel": "Geçerlilik", "expiredNotice": "Süre doldu.", "resendLabel": "Yeniden gönder", "resendWaitLabel": "Bekle",
       "changePhoneLabel": "Başka numara", "verifiedToast": "Doğrulandı.", "changedToast": "Değişti."
@@ -131,6 +135,13 @@ const validJSON = `{
     "confirmQuestionSuffix": "adresini silmek istiyor musun?", "confirmHint": "Siparişler etkilenmez.",
     "confirmLabel": "Sil", "deletingLabel": "Siliniyor", "cancelLabel": "Vazgeç",
     "deletedToastSuffix": "adresi silindi.", "updatedToast": "Güncellendi."
+  },
+  "orders": {
+    "title": "Siparişler", "loadingLabel": "Yükleniyor", "emptyNotice": "Sipariş yok.", "unknownMarketLabel": "Market",
+    "completedLabel": "Tamamlandı", "inProgressLabel": "Devam ediyor", "cancelledLabel": "İptal", "refundedLabel": "İade",
+    "notDeliveredLabel": "Teslim edilmedi", "moreLabel": "Daha fazla", "loadingMoreLabel": "Yükleniyor",
+    "dateLabel": "Tarih", "addressLabel": "Adres", "itemsTitle": "Ürünler", "subtotalLabel": "Ara toplam",
+    "deliveryFeeLabel": "Teslimat", "freeDeliveryLabel": "Ücretsiz", "discountLabel": "İndirim", "totalLabel": "Toplam"
   }
 }`
 

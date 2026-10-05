@@ -26,6 +26,7 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/httpapi"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/inventory"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/orderhistory"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/roomtoken"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rpc"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/storefront"
@@ -193,6 +194,7 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 		OrderPlacer:         orderService,
 		ThreeDSConfirmer:    orderService,
 		OrderGetter:         orderService,
+		OrderLister:         orderhistory.New(orderService, catalogService),
 		OrderRoomTokens:     roomTokens,
 		// Tek kimlik servisi bes kimlik ucunu karsilar (T8.1).
 		UserRegistrar:     identity.service,

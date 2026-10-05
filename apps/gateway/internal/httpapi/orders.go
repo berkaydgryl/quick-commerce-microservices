@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gofiber/fiber/v3"
 
@@ -134,7 +135,8 @@ func confirmThreeDSHandler(confirmer ThreeDSConfirmer) fiber.Handler {
 	}
 }
 
-// getOrderHandler, GET /v1/orders/{id}: kullanicinin tek siparisi.
+// getOrderHandler, GET /v1/orders/{id}: kullanicinin tek siparisi. Kisisel
+// veridir (adres, urunler): onbelleklenmez (T11.16, L8).
 func getOrderHandler(getter OrderGetter) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if err := rejectUnknownQuery(c); err != nil {
@@ -144,6 +146,27 @@ func getOrderHandler(getter OrderGetter) fiber.Handler {
 		if err != nil {
 			return err
 		}
-		return ok(c, http.StatusOK, found)
+		return private(c, http.StatusOK, found)
+	}
+}
+
+// listOrdersHandler, GET /v1/orders (T11.16): kullanicinin gecmis
+// siparisleri, yeniden eskiye, imlecle sayfali. Sepet taslaklari gorunmez
+// (orderhistory). Kisisel veridir: onbelleklenmez.
+func listOrdersHandler(lister OrderLister) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if err := rejectUnknownQuery(c, "pageToken", "pageSize"); err != nil {
+			return err
+		}
+		errs := fieldErrors{}
+		pageSize := optionalInt32(c, "pageSize", errs)
+		if len(errs) > 0 {
+			return apperror.New(apperror.CodeValidationFailed, errs)
+		}
+		list, err := lister.List(outgoingContext(c), userIDOf(c), pageSize, strings.Clone(c.Query("pageToken")))
+		if err != nil {
+			return err
+		}
+		return private(c, http.StatusOK, list)
 	}
 }

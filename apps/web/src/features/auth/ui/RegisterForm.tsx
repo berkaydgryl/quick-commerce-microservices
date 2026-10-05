@@ -135,7 +135,6 @@ export function RegisterForm({
               id="kayit-telefon"
               name={field.name}
               label={content.phoneLabel}
-              placeholder={content.phonePlaceholder}
               autoComplete="tel-national"
               value={field.value}
               onChange={field.onChange}
@@ -155,7 +154,8 @@ export function RegisterForm({
       <PasswordField
         id="kayit-sifre"
         label={text.passwordLabel}
-        toggleLabel={content.showPasswordLabel}
+        showLabel={content.showPasswordLabel}
+        hideLabel={content.hidePasswordLabel}
         autoComplete="new-password"
         error={errors.password?.message}
         {...register('password')}

@@ -130,7 +130,6 @@ export function ResetPasswordForm({
               id="yenile-telefon"
               name={field.name}
               label={content.phoneLabel}
-              placeholder={content.phonePlaceholder}
               autoComplete="tel-national"
               value={field.value}
               onChange={field.onChange}
@@ -150,7 +149,8 @@ export function ResetPasswordForm({
       <PasswordField
         id="yenile-sifre"
         label={text.passwordLabel}
-        toggleLabel={content.showPasswordLabel}
+        showLabel={content.showPasswordLabel}
+        hideLabel={content.hidePasswordLabel}
         autoComplete="new-password"
         error={errors.password?.message}
         {...register('password')}

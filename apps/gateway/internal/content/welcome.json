@@ -20,11 +20,11 @@
   "loginCard": {
     "title": "Giriş yap veya kayıt ol",
     "countryLabel": "Ülke kodu",
-    "phoneLabel": "Telefon numarası",
-    "phonePlaceholder": "5XX XXX XX XX",
+    "phoneLabel": "Telefon Numarası",
     "continueLabel": "Devam Et",
     "closeLabel": "Kapat",
     "showPasswordLabel": "Şifreyi göster",
+    "hidePasswordLabel": "Şifreyi gizle",
     "countries": [
       { "code": "TR", "name": "Türkiye", "dialCode": "+90", "flagUrl": "/img/flag/tr.svg" }
     ],
@@ -138,7 +138,6 @@
     "addressLoadingLabel": "Adreslerin yükleniyor…",
     "profileLabel": "Profil",
     "accountLabel": "Hesabım",
-    "favoritesLabel": "Favori marketlerim",
     "logoutLabel": "Çıkış yap",
     "logoutPendingLabel": "Çıkış yapılıyor…"
   },
@@ -198,10 +197,14 @@
     "removedNotice": "favorilerden çıkarıldı",
     "updateFailedToast": "Favori güncellenemedi, tekrar dene.",
     "listFullToast": "Favori listen dolu; yenisini eklemek için birini çıkar.",
-    "toastDismissLabel": "Bildirimi kapat",
-    "profileMenuLabel": "Hesap menüsü",
+    "toastDismissLabel": "Bildirimi kapat"
+  },
+  "accountMenu": {
+    "label": "Hesap menüsü",
+    "profileLabel": "Profilim",
     "addressesLabel": "Adreslerim",
-    "favoritesMenuLabel": "Favori İşletmeler"
+    "favoritesLabel": "Favori İşletmeler",
+    "ordersLabel": "Geçmiş Siparişlerim"
   },
   "profile": {
     "phoneLabel": "Telefon",
@@ -251,6 +254,7 @@
       "phoneFieldLabel": "Yeni telefon numarası",
       "passwordLabel": "Şifren",
       "showPasswordLabel": "Şifreyi göster",
+      "hidePasswordLabel": "Şifreyi gizle",
       "sendLabel": "Kod gönder",
       "sendingLabel": "Gönderiliyor…",
       "codeSentToLabel": "Doğrulama kodunu şu numaraya gönderdik:",
@@ -288,5 +292,26 @@
     "cancelLabel": "Vazgeç",
     "deletedToastSuffix": "adresi silindi.",
     "updatedToast": "Adresin güncellendi."
+  },
+  "orders": {
+    "title": "Geçmiş Siparişlerim",
+    "loadingLabel": "Siparişlerin yükleniyor…",
+    "emptyNotice": "Geçmiş siparişiniz bulunmamaktadır.",
+    "unknownMarketLabel": "Market",
+    "completedLabel": "Tamamlandı",
+    "inProgressLabel": "Devam ediyor",
+    "cancelledLabel": "İptal edildi",
+    "refundedLabel": "Ücret iade edildi",
+    "notDeliveredLabel": "Teslim edilmedi",
+    "moreLabel": "Daha fazla göster",
+    "loadingMoreLabel": "Yükleniyor…",
+    "dateLabel": "Sipariş tarihi",
+    "addressLabel": "Teslimat adresi",
+    "itemsTitle": "Ürünler",
+    "subtotalLabel": "Ara toplam",
+    "deliveryFeeLabel": "Teslimat",
+    "freeDeliveryLabel": "Ücretsiz",
+    "discountLabel": "İndirim",
+    "totalLabel": "Toplam"
   }
 }

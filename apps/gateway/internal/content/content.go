@@ -52,12 +52,16 @@ type Welcome struct {
 	AppHeader AppHeader `json:"appHeader"`
 	// MarketList, market listesi ekrani (T11.12).
 	MarketList MarketList `json:"marketList"`
-	// Favorites, favori marketler (T11.13): kalp, profil menusu, favori sayfasi.
+	// Favorites, favori marketler (T11.13): kalp, favori sayfasi.
 	Favorites Favorites `json:"favorites"`
+	// AccountMenu, hesap menusu (T11.16): sol menu ve Profil acilir menusu.
+	AccountMenu AccountMenu `json:"accountMenu"`
 	// Profile, profil karti ve e-posta penceresi (T11.14).
 	Profile Profile `json:"profile"`
 	// Addresses, Adreslerim sekmesi (T11.15).
 	Addresses Addresses `json:"addresses"`
+	// Orders, Gecmis Siparislerim (T11.16).
+	Orders Orders `json:"orders"`
 }
 
 // Header, ust bar: logonun iki parcasi ve iki dugme.
@@ -91,13 +95,17 @@ type BannerSource struct {
 
 // LoginCard, karsilama karti ile giris ve kayit penceresinin metinleri.
 type LoginCard struct {
-	Title             string         `json:"title"`
-	CountryLabel      string         `json:"countryLabel"`
-	PhoneLabel        string         `json:"phoneLabel"`
-	PhonePlaceholder  string         `json:"phonePlaceholder"`
-	ContinueLabel     string         `json:"continueLabel"`
-	CloseLabel        string         `json:"closeLabel"`
+	Title        string `json:"title"`
+	CountryLabel string `json:"countryLabel"`
+	// PhoneLabel, telefon alaninin etiketi ("Telefon Numarası"): bos alanda
+	// kutunun icinde, deger girilince uste kayar (T11.16; ipucu yok).
+	PhoneLabel    string `json:"phoneLabel"`
+	ContinueLabel string `json:"continueLabel"`
+	CloseLabel    string `json:"closeLabel"`
+	// ShowPasswordLabel ve HidePasswordLabel, sifre alanindaki goz dugmesinin
+	// duruma gore adi: gizliyken "Şifreyi göster", gorunurken "Şifreyi gizle".
 	ShowPasswordLabel string         `json:"showPasswordLabel"`
+	HidePasswordLabel string         `json:"hidePasswordLabel"`
 	Countries         []PhoneCountry `json:"countries"`
 	// ForgotPasswordLabel, karttaki ve giris penceresindeki "Sifremi unuttum" (T11.9).
 	ForgotPasswordLabel string            `json:"forgotPasswordLabel"`
@@ -230,10 +238,8 @@ type AppHeader struct {
 	AddressLoadingLabel string `json:"addressLoadingLabel"`
 	ProfileLabel        string `json:"profileLabel"`
 	AccountLabel        string `json:"accountLabel"`
-	// FavoritesLabel, Profil menusunun favori sayfasi baglantisi (T11.13).
-	FavoritesLabel     string `json:"favoritesLabel"`
-	LogoutLabel        string `json:"logoutLabel"`
-	LogoutPendingLabel string `json:"logoutPendingLabel"`
+	LogoutLabel         string `json:"logoutLabel"`
+	LogoutPendingLabel  string `json:"logoutPendingLabel"`
 }
 
 // MarketList, market listesi ekrani (T11.12; referans getircarsi): solda
@@ -259,22 +265,32 @@ type MarketList struct {
 }
 
 // Favorites, favori marketlerin metinleri (T11.13; referans getircarsi
-// "Favori Isletmelerim"): kalbin erisilebilir adlari, favori sayfasi, hata
-// bildirimleri ve profil sayfasinin menusu. Yalnizca metin; kural yok.
+// "Favori Isletmelerim"): kalbin erisilebilir adlari, favori sayfasi ve hata
+// bildirimleri. Yalnizca metin; kural yok.
 type Favorites struct {
-	Title              string `json:"title"`
-	AddLabel           string `json:"addLabel"`
-	RemoveLabel        string `json:"removeLabel"`
-	LoadingLabel       string `json:"loadingLabel"`
-	EmptyTitle         string `json:"emptyTitle"`
-	EmptyHint          string `json:"emptyHint"`
-	RemovedNotice      string `json:"removedNotice"`
-	UpdateFailedToast  string `json:"updateFailedToast"`
-	ListFullToast      string `json:"listFullToast"`
-	ToastDismissLabel  string `json:"toastDismissLabel"`
-	ProfileMenuLabel   string `json:"profileMenuLabel"`
-	AddressesLabel     string `json:"addressesLabel"`
-	FavoritesMenuLabel string `json:"favoritesMenuLabel"`
+	Title             string `json:"title"`
+	AddLabel          string `json:"addLabel"`
+	RemoveLabel       string `json:"removeLabel"`
+	LoadingLabel      string `json:"loadingLabel"`
+	EmptyTitle        string `json:"emptyTitle"`
+	EmptyHint         string `json:"emptyHint"`
+	RemovedNotice     string `json:"removedNotice"`
+	UpdateFailedToast string `json:"updateFailedToast"`
+	ListFullToast     string `json:"listFullToast"`
+	ToastDismissLabel string `json:"toastDismissLabel"`
+}
+
+// AccountMenu, hesap menusunun metinleri (T11.16; kullanici istegi): profil
+// sayfasinin sol menusu ve ust barin Profil acilir menusu AYNI maddeleri ayni
+// sirayla gosterir; sira ve adresler web'de (accountMenuItems), burada
+// yalnizca etiketler. T11.17'de Odeme Yontemlerim eklenir.
+type AccountMenu struct {
+	// Label, sol menunun erisilebilir adi.
+	Label          string `json:"label"`
+	ProfileLabel   string `json:"profileLabel"`
+	AddressesLabel string `json:"addressesLabel"`
+	FavoritesLabel string `json:"favoritesLabel"`
+	OrdersLabel    string `json:"ordersLabel"`
 }
 
 // Profile, profil kartinin metinleri (T11.14; PR 2'de Hesabim paneli kalkti,
@@ -320,6 +336,7 @@ type PhoneDialog struct {
 	PhoneFieldLabel   string `json:"phoneFieldLabel"`
 	PasswordLabel     string `json:"passwordLabel"`
 	ShowPasswordLabel string `json:"showPasswordLabel"`
+	HidePasswordLabel string `json:"hidePasswordLabel"`
 	SendLabel         string `json:"sendLabel"`
 	SendingLabel      string `json:"sendingLabel"`
 	CodeSentToLabel   string `json:"codeSentToLabel"`
@@ -406,6 +423,32 @@ type Addresses struct {
 	CancelLabel           string             `json:"cancelLabel"`
 	DeletedToastSuffix    string             `json:"deletedToastSuffix"`
 	UpdatedToast          string             `json:"updatedToast"`
+}
+
+// Orders, Gecmis Siparislerim'in metinleri (T11.16; /hesabim/siparislerim):
+// liste satiri, durum gruplari (Tamamlandı, Devam ediyor, İptal edildi ve
+// "Ücret iade edildi"), "Teslim edilmedi" (#91), bos not, "Daha fazla göster"
+// ve detay etiketleri. Yalnizca metin; durum eslemesi web'dedir.
+type Orders struct {
+	Title              string `json:"title"`
+	LoadingLabel       string `json:"loadingLabel"`
+	EmptyNotice        string `json:"emptyNotice"`
+	UnknownMarketLabel string `json:"unknownMarketLabel"`
+	CompletedLabel     string `json:"completedLabel"`
+	InProgressLabel    string `json:"inProgressLabel"`
+	CancelledLabel     string `json:"cancelledLabel"`
+	RefundedLabel      string `json:"refundedLabel"`
+	NotDeliveredLabel  string `json:"notDeliveredLabel"`
+	MoreLabel          string `json:"moreLabel"`
+	LoadingMoreLabel   string `json:"loadingMoreLabel"`
+	DateLabel          string `json:"dateLabel"`
+	AddressLabel       string `json:"addressLabel"`
+	ItemsTitle         string `json:"itemsTitle"`
+	SubtotalLabel      string `json:"subtotalLabel"`
+	DeliveryFeeLabel   string `json:"deliveryFeeLabel"`
+	FreeDeliveryLabel  string `json:"freeDeliveryLabel"`
+	DiscountLabel      string `json:"discountLabel"`
+	TotalLabel         string `json:"totalLabel"`
 }
 
 // AddressAddOption, Adreslerim'in ekleme satiri: tur ve metni ("Ev adresi ekle").

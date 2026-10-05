@@ -160,7 +160,6 @@ export function LoginForm({
                 id="giris-telefon"
                 name={field.name}
                 label={content.phoneLabel}
-                placeholder={content.phonePlaceholder}
                 autoComplete="tel-national"
                 value={field.value}
                 onChange={field.onChange}
@@ -180,7 +179,8 @@ export function LoginForm({
         <PasswordField
           id="giris-sifre"
           label={text.passwordLabel}
-          toggleLabel={content.showPasswordLabel}
+          showLabel={content.showPasswordLabel}
+          hideLabel={content.hidePasswordLabel}
           autoComplete="current-password"
           error={errors.password?.message}
           {...register('password')}

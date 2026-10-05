@@ -4,7 +4,6 @@ import { Link, useLocation } from 'react-router-dom';
 import { useSessionStore } from '../../../shared/session/session-store';
 import { useDisclosure } from '../../../shared/ui/disclosure/useDisclosure';
 import { useLogout } from '../hooks/useLogout';
-import { AUTH_ROUTES } from '../routes';
 import { loginPathFor } from '../services/next-path';
 
 import styles from './HeaderAccount.module.css';
@@ -18,32 +17,39 @@ import { ChevronDownIcon, UserIcon } from './icons';
 export interface HeaderAccountTexts {
   readonly loginLabel: string;
   readonly profileLabel: string;
-  readonly accountLabel: string;
-  /** Favori sayfasi baglantisi (T11.13). */
-  readonly favoritesLabel: string;
   readonly logoutLabel: string;
   readonly logoutPendingLabel: string;
+}
+
+/** Profil menusunun baglantisi: adres ve etiket. */
+export interface HeaderMenuLink {
+  readonly href: string;
+  readonly label: string;
 }
 
 interface HeaderAccountProps {
   /** Metinler; icerik gelene kadar undefined (yer tutucu). */
   readonly texts: HeaderAccountTexts | undefined;
-  /** Favori sayfasinin adresi (T11.13); uygulama verir: kimlik ozelligi favorileri tanimaz. */
-  readonly favoritesHref: string;
+  /**
+   * Menunun baglantilari, sirasiyla (T11.16): uygulama verir, hesap
+   * sayfalarinin sol menusuyle AYNI liste (kimlik ozelligi sayfalari tanimaz).
+   * Icerik gelene kadar undefined.
+   */
+  readonly menu: readonly HeaderMenuLink[] | undefined;
 }
 
 /**
  * Ust barin hesap alani (T8.5; T11.10'dan beri Profil menusu; referans
- * getircarsi "👤 Profil ▾"): oturumdayken menu ("Hesabim", "Cikis yap"),
+ * getircarsi "👤 Profil ▾"): oturumdayken menu (hesap sayfalari, "Cikis yap"),
  * oturumsuzken "Giris yap" (karsilama ekrani, donus bu sayfa). Acilistaki
  * sessiz yenileme ve icerik bitene kadar ayni boyda bos yer: bar kaymaz. Dar
  * ekranda yalnizca ikon gorunur; adi aria-label tasir.
  */
-export function HeaderAccount({ texts, favoritesHref }: HeaderAccountProps) {
+export function HeaderAccount({ texts, menu }: HeaderAccountProps) {
   const status = useSessionStore((state) => state.status);
   const location = useLocation();
 
-  if (status === 'unknown' || texts === undefined) {
+  if (status === 'unknown' || texts === undefined || menu === undefined) {
     return <span className={styles['c-header-account__placeholder']} aria-hidden="true" />;
   }
   if (status === 'anonymous') {
@@ -60,20 +66,22 @@ export function HeaderAccount({ texts, favoritesHref }: HeaderAccountProps) {
       </Link>
     );
   }
-  return <ProfileMenu texts={texts} favoritesHref={favoritesHref} />;
+  return <ProfileMenu texts={texts} menu={menu} />;
 }
 
 /**
- * Profil menusu: dugme ve altinda saga yasli liste ("Hesabim", "Favori
- * marketlerim" (T11.13), "Cikis yap"). Cikis basarisizsa (ag,
- * 503) oturum yerinde kalir ve mesaj listede gorunur (useLogout).
+ * Profil menusu: dugme ve altinda saga yasli liste. Ustte hesap sayfalari
+ * (T11.16'dan beri sol menuyle ayni liste: Profilim, Adreslerim, Favori
+ * İşletmeler, Geçmiş Siparişlerim), altta ayri satirda "Cikis yap". Cikis
+ * basarisizsa (ag, 503) oturum yerinde kalir ve mesaj listede gorunur
+ * (useLogout).
  */
 function ProfileMenu({
   texts,
-  favoritesHref,
+  menu,
 }: {
   readonly texts: HeaderAccountTexts;
-  readonly favoritesHref: string;
+  readonly menu: readonly HeaderMenuLink[];
 }) {
   const disclosure = useDisclosure();
   const logout = useLogout();
@@ -100,35 +108,28 @@ function ProfileMenu({
       </button>
       <div id={panelId} className={styles['c-header-account__panel']} hidden={!disclosure.open}>
         <ul className={styles['c-header-account__list']} role="list">
-          <li>
-            <Link
-              to={AUTH_ROUTES.account}
-              className={styles['c-header-account__item']}
-              onClick={disclosure.close}
-            >
-              {texts.accountLabel}
-            </Link>
-          </li>
-          <li>
-            <Link
-              to={favoritesHref}
-              className={styles['c-header-account__item']}
-              onClick={disclosure.close}
-            >
-              {texts.favoritesLabel}
-            </Link>
-          </li>
-          <li>
-            <button
-              type="button"
-              className={styles['c-header-account__item']}
-              disabled={logout.isPending}
-              onClick={() => logout.mutate()}
-            >
-              {logout.isPending ? texts.logoutPendingLabel : texts.logoutLabel}
-            </button>
-          </li>
+          {menu.map((link) => (
+            <li key={link.href}>
+              <Link
+                to={link.href}
+                className={styles['c-header-account__item']}
+                onClick={disclosure.close}
+              >
+                {link.label}
+              </Link>
+            </li>
+          ))}
         </ul>
+        <div className={styles['c-header-account__logout']}>
+          <button
+            type="button"
+            className={styles['c-header-account__item']}
+            disabled={logout.isPending}
+            onClick={() => logout.mutate()}
+          >
+            {logout.isPending ? texts.logoutPendingLabel : texts.logoutLabel}
+          </button>
+        </div>
         {logout.error !== null && (
           <p className={styles['c-header-account__error']} role="alert">
             {logout.error.message}

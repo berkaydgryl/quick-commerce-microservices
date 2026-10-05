@@ -46,6 +46,20 @@
   pointer-events: none;
 }
 
+/* Yuzen etiketin kaymasi (T11.16; durum kurallari dosyanin sonunda); hareket azaltmada aninda. */
+.c-auth-field--floating .c-auth-field__label {
+  transition:
+    inset-block-start var(--duration-fast) var(--easing-standard),
+    font-size var(--duration-fast) var(--easing-standard),
+    transform var(--duration-fast) var(--easing-standard);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-auth-field--floating .c-auth-field__label {
+    transition: none;
+  }
+}
+
 /* Onek ("+90"): sol kutu; tiklama altindaki inputa gecer. */
 .c-auth-field__prefix {
   position: absolute;
@@ -99,4 +113,21 @@
 /* Odaktaki alanin etiketi marka renginde (konum kurallarindan sonra: ozgulluk sirasi). */
 .c-auth-field__input:focus + .c-auth-field__label {
   color: var(--color-brand-primary);
+}
+
+/*
+ * Yuzen etiket (T11.16, telefon alanlari; referans: bos alanda yalnizca
+ * "Telefon Numarası"). Alan bosken (:placeholder-shown; ipucu tek bosluk)
+ * etiket kutunun ortasinda deger boyunda ve gri durur, odakta da; input ust
+ * payini birakir. Deger girilince etiket yukaridaki kurallarla uste kucuk kayar.
+ */
+.c-auth-field--floating .c-auth-field__input:placeholder-shown {
+  padding-block: var(--space-2);
+}
+
+.c-auth-field--floating .c-auth-field__input:placeholder-shown + .c-auth-field__label {
+  inset-block-start: 50%;
+  font-size: var(--font-size-md);
+  color: var(--text-muted);
+  transform: translateY(-50%);
 }

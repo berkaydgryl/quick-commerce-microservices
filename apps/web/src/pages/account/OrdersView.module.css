@@ -1,0 +1,97 @@
+/*
+ * Gecmis Siparislerim (T11.16): Adreslerim'in gorsel dili (beyaz kart, ince
+ * lavanta cizgiler). Satirin tamami detay baglantisi (en az 44 px); ustte
+ * "Market · tutar · durum" (dar ekranda kirilir), altinda tarih, sagda ok.
+ */
+.c-orders {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.c-orders__title {
+  font-size: var(--font-size-lg);
+}
+
+.c-orders__card {
+  display: grid;
+  padding: var(--space-2) var(--space-5);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-orders__empty {
+  padding-block: var(--space-4);
+  color: var(--text-muted);
+}
+
+.c-orders__list {
+  display: grid;
+}
+
+.c-orders__row + .c-orders__row {
+  border-block-start: var(--border-width-thin) solid var(--border-faint);
+}
+
+.c-orders__link {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: var(--size-order-row);
+  padding-block: var(--space-3);
+  color: var(--text-default);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+}
+
+.c-orders__text {
+  display: grid;
+  flex: 1;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.c-orders__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  align-items: center;
+}
+
+.c-orders__market {
+  font-weight: var(--font-weight-bold);
+  overflow-wrap: anywhere;
+}
+
+.c-orders__date {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.c-orders__arrow {
+  display: grid;
+  flex-shrink: 0;
+  width: var(--size-order-arrow);
+  color: var(--color-brand-primary);
+}
+
+.c-orders__link:hover .c-orders__market {
+  color: var(--color-brand-primary);
+}
+
+.c-orders__more {
+  min-height: var(--size-order-row);
+  padding: var(--space-3);
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-brand-primary);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-block-start: var(--border-width-thin) solid var(--border-faint);
+}
+
+.c-orders__more:disabled {
+  cursor: progress;
+  opacity: var(--opacity-disabled);
+}
