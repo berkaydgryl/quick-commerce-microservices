@@ -4,11 +4,11 @@
  * Iki taraf da bellekte (MOCK depolari); Mongo'lu senaryolar
  * test/integration/qa-courier-dispatch.spec.ts'te.
  *
- * Bu dosya DAVRANISI dogrular, gunluk metnini ve sirayi DEGIL: bekleyen siparislerin
- * sirasi (#92 FIFO), Mongo/courier hata ayrimi (D1), gunluk sikligi (D2) ve kalici
- * hatada geri cekilme (D3) sonraki order PR'inda degisecek.
+ * Bu dosya DAVRANISI dogrular, gunluk metnini ve sirayi DEGIL. Sira (#92), hata
+ * kaynagi (D1), gunluk (D2) ve geri cekilme (D3) T13.2 PR 2'nin QA testlerinde:
+ * qa-courier-queue.spec.ts, qa-dispatch-reachability.spec.ts, qa-dispatch-backoff.spec.ts.
  *
- *   3. Turda en fazla COURIER_DISPATCH_BATCH_SIZE siparis; kalanlar sonraki turda.
+ *   3. Turda en fazla COURIER_DISPATCH_BATCH_SIZE talep; kurye yoksa markete tek cagri (O2).
  *  10. Yavas courier (cevap > 1 sn): cift atama yok, courier hizlaninca toparlanir.
  *  11. courier'in reddettigi (INVALID_ARGUMENT) siparis digerlerini engellemez, devreyi acmaz.
  *  12. Kapanis: stop suren turu bekler, yarim atama birakmaz, sonra tur yok.
@@ -99,26 +99,35 @@ async function ordersOf(side: QaOrderSide, ids: readonly string[]): Promise<Orde
   return found.flatMap((order) => (order === null ? [] : [order]));
 }
 
-describe('QA T13.1 PR 2 tur siniri (3)', () => {
-  it(`turda en fazla ${COURIER_DISPATCH_BATCH_SIZE} siparis courier'e gider; kalanlar sonraki turda (sira #92 ile degisecek, kilitlenmez)`, async () => {
+describe('QA T13.1 PR 2 tur siniri (3; T13.2 #92 ve O2 ile guncel)', () => {
+  it(`turda en fazla ${COURIER_DISPATCH_BATCH_SIZE} TALEP ele alinir, kalanlar sonraki turda; kurye yoksa markete turda tek cagri, bekleyen yeniden yazilmaz (O2)`, async () => {
     const w = await world(0);
     const total = COURIER_DISPATCH_BATCH_SIZE + 50;
     const ids: string[] = [];
     for (let index = 0; index < total; index += 1) {
+      w.clock.advance(1_000); // farkli odeme anlari: ikinci turda bekleyenler de kuyruga girer (#92)
       ids.push((await w.order.paid()).id);
     }
 
     await w.order.tour();
     const askedFirst = assignRequests(w.courierLines).size;
-    const paidAfterFirst = (await ordersOf(w.order, ids)).filter(
-      (order) => order.status === ORDER_STATUS.PAID,
-    ).length;
+    const afterFirst = await ordersOf(w.order, ids);
+    const movedFirst = afterFirst.filter((order) => order.status !== ORDER_STATUS.PAID);
     await w.order.tour();
+    const askedSecond = assignRequests(w.courierLines).size - askedFirst;
     const afterSecond = await ordersOf(w.order, ids);
+    const versionOf = new Map(afterSecond.map((order) => [order.id, order.version]));
 
-    expect(askedFirst).toBeGreaterThan(0);
-    expect(askedFirst).toBeLessThanOrEqual(COURIER_DISPATCH_BATCH_SIZE);
-    expect(total - paidAfterFirst).toBeLessThanOrEqual(COURIER_DISPATCH_BATCH_SIZE);
+    // Turda en fazla batch kadar talep: ilk turda kalanlar PAID bekler.
+    expect(movedFirst.length).toBeGreaterThan(0);
+    expect(movedFirst.length).toBeLessThanOrEqual(COURIER_DISPATCH_BATCH_SIZE);
+    // Tek market, kurye yok: ilk "kurye yok"tan sonra o market sorulmaz (O2).
+    expect(askedFirst).toBe(1);
+    expect(askedSecond).toBe(1);
+    // Ilk turda bekleyene gecenler ikinci turda yeniden YAZILMAZ (surum ayni).
+    expect(movedFirst.map((order) => versionOf.get(order.id))).toEqual(
+      movedFirst.map((order) => order.version),
+    );
     // Bos kurye yok: hepsi kuryesiz PREPARING'de bekliyor, hicbiri unutulmadi.
     expect(afterSecond.map((order) => [order.status, order.courier])).toEqual(
       Array.from({ length: total }, () => [ORDER_STATUS.PREPARING, undefined]),
