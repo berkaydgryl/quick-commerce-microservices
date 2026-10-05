@@ -1,7 +1,9 @@
 import type {
+  AccountMenuContent,
   AddressesContent,
   FavoritesContent,
   MarketListContent,
+  OrdersContent,
   ProfileContent,
 } from './content.js';
 
@@ -69,9 +71,18 @@ const FAVORITES_FALLBACK: FavoritesContent = {
   updateFailedToast: 'Favori güncellenemedi, tekrar dene.',
   listFullToast: 'Favori listen dolu; yenisini eklemek için birini çıkar.',
   toastDismissLabel: 'Bildirimi kapat',
-  profileMenuLabel: 'Hesap menüsü',
+};
+
+/**
+ * Hesap menusunun yedegi (T11.16): icerik gelmese de oturumdaki kullanici
+ * Profil menusunden ve sol menuden hesap sayfalarina gidebilir.
+ */
+const ACCOUNT_MENU_FALLBACK: AccountMenuContent = {
+  label: 'Hesap menüsü',
+  profileLabel: 'Profilim',
   addressesLabel: 'Adreslerim',
-  favoritesMenuLabel: 'Favori İşletmeler',
+  favoritesLabel: 'Favori İşletmeler',
+  ordersLabel: 'Geçmiş Siparişlerim',
 };
 
 /** Profil kartinin ve pencerelerinin yedegi (T11.14): icerik gelmese de profil duzenlenebilir. */
@@ -124,6 +135,7 @@ const PROFILE_FALLBACK: ProfileContent = {
     phoneFieldLabel: 'Yeni telefon numarası',
     passwordLabel: 'Şifren',
     showPasswordLabel: 'Şifreyi göster',
+    hidePasswordLabel: 'Şifreyi gizle',
     sendLabel: 'Kod gönder',
     sendingLabel: 'Gönderiliyor…',
     codeSentToLabel: 'Doğrulama kodunu şu numaraya gönderdik:',
@@ -138,6 +150,29 @@ const PROFILE_FALLBACK: ProfileContent = {
     verifiedToast: 'Telefon numaran doğrulandı.',
     changedToast: 'Telefon numaran değişti. Diğer cihazlardaki oturumların kapatıldı.',
   },
+};
+
+/** Gecmis Siparislerim'in yedegi (T11.16): icerik gelmese de liste ve detay calisir. */
+const ORDERS_FALLBACK: OrdersContent = {
+  title: 'Geçmiş Siparişlerim',
+  loadingLabel: 'Siparişlerin yükleniyor…',
+  emptyNotice: 'Geçmiş siparişiniz bulunmamaktadır.',
+  unknownMarketLabel: 'Market',
+  completedLabel: 'Tamamlandı',
+  inProgressLabel: 'Devam ediyor',
+  cancelledLabel: 'İptal edildi',
+  refundedLabel: 'Ücret iade edildi',
+  notDeliveredLabel: 'Teslim edilmedi',
+  moreLabel: 'Daha fazla göster',
+  loadingMoreLabel: 'Yükleniyor…',
+  dateLabel: 'Sipariş tarihi',
+  addressLabel: 'Teslimat adresi',
+  itemsTitle: 'Ürünler',
+  subtotalLabel: 'Ara toplam',
+  deliveryFeeLabel: 'Teslimat',
+  freeDeliveryLabel: 'Ücretsiz',
+  discountLabel: 'İndirim',
+  totalLabel: 'Toplam',
 };
 
 /** Adreslerim sekmesinin yedegi (T11.15): icerik gelmese de liste ve eylemler calisir. */
@@ -185,8 +220,6 @@ export const CONTENT_FALLBACK = {
   /** appHeader.profileLabel, accountLabel, logoutLabel, logoutPendingLabel. */
   profileLabel: 'Profil',
   accountLabel: 'Hesabım',
-  /** appHeader.favoritesLabel (T11.13). */
-  favoritesLabel: 'Favori marketlerim',
   logoutLabel: 'Çıkış yap',
   logoutPendingLabel: 'Çıkış yapılıyor…',
   /** Icerigi yeniden isteyen dugme (icerikte karsiligi yok: icerik gelmeyince gorunur). */
@@ -195,10 +228,14 @@ export const CONTENT_FALLBACK = {
   marketList: MARKET_LIST_FALLBACK,
   /** favorites: bloğun tamami (T11.13). */
   favorites: FAVORITES_FALLBACK,
+  /** accountMenu: bloğun tamami (T11.16). */
+  accountMenu: ACCOUNT_MENU_FALLBACK,
   /** profile: bloğun tamami (T11.14). */
   profile: PROFILE_FALLBACK,
   /** addresses: bloğun tamami (T11.15). */
   addresses: ADDRESSES_FALLBACK,
+  /** orders: bloğun tamami (T11.16). */
+  orders: ORDERS_FALLBACK,
 } as const;
 
 export type ContentFallback = typeof CONTENT_FALLBACK;

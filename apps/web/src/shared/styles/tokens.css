@@ -145,11 +145,13 @@
 
   /* Uygulamanin ust bari (T11.10): ortadaki arama kutusunun en fazla genisligi
      (referans getircarsi: logo ile Profil arasinda, ortada), kutunun icindeki
-     adres adinin en fazla genisligi ve Profil menusunun en az genisligi. */
+     adres adinin en fazla genisligi, Profil menusunun en az genisligi ve
+     menu maddesinin en az yuksekligi (T11.16: en az 44 px dokunma alani). */
   --container-max-header-search: 40rem;
   --size-header-search: 2.75rem;
   --size-header-address-title: 8rem;
   --size-header-menu-min: 12rem;
+  --size-header-menu-item: 2.75rem;
 
   /* Adres ekleme penceresi (T11.8): harita icin giris penceresinden genis;
      1. adimin haritasi ekran yuksekligiyle olceklenir, 2. adimda kucuk
@@ -194,6 +196,11 @@
   --size-address-action: 2.75rem;
   --size-address-action-icon: 1.25rem;
   --size-address-row-icon: 1.5rem;
+
+  /* Gecmis Siparislerim (T11.16): satir ve "Daha fazla göster" en az 44 px
+     dokunma alani; satirin sagindaki ok. */
+  --size-order-row: 2.75rem;
+  --size-order-arrow: 1.25rem;
 
   /* Bildirim (toast, T11.13): en genis hali ve kapatma dugmesi. */
   --container-max-toast: 24rem;

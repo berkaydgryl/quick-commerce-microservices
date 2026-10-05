@@ -3,6 +3,7 @@
  *   POST /v1/orders
  *   POST /v1/orders/{id}/3ds
  *   GET  /v1/orders/{id}
+ *   GET  /v1/orders            (T11.16: gecmis siparisler, sayfali ozet)
  *
  * T7.5: govdeler order sozlesmesine (proto) hizalandi. Teslimat adresi artik
  * rezervasyonda gelir (cart.ts); siparis ve 3DS cevabi, servisin dondurdugu
@@ -17,9 +18,10 @@ import {
   isoDateTimeSchema,
   marketIdSchema,
   moneySchema,
+  pageSchema,
 } from './common.js';
 import { deliveryAddressSchema, reservationLineSchema } from './cart.js';
-import { OTP_PATTERN } from './constants.js';
+import { ORDER_HISTORY_PAGE_SIZE_MAX, OTP_PATTERN } from './constants.js';
 import { orderStatusSchema } from './order-status.js';
 
 /**
@@ -125,6 +127,35 @@ export const orderSchema = z.object({
   reservationTtlSeconds: z.number().int().min(0).optional(),
 });
 
+/**
+ * Gecmis Siparislerim'in satiri (T11.16; GET /v1/orders): siparisin ozeti.
+ * Sepet taslaklari (DRAFT, hic ilerlemeden suresi dolan) listede YOKTUR.
+ * Market adi katalogdan gelir; market kaldirilmissa ya da katalog cevap
+ * vermediyse yoktur (istemci genel ad yazar).
+ */
+export const orderSummarySchema = z.object({
+  id: idSchema,
+  status: orderStatusSchema,
+  marketId: marketIdSchema,
+  marketName: z.string().min(1).optional(),
+  total: moneySchema,
+  /**
+   * Ucreti alinmis siparisin iptali (gecmiste PAID, durum CANCELLED): odeme
+   * iade edildi. Degilse yoktur.
+   */
+  refunded: z.literal(true).optional(),
+  createdAt: isoDateTimeSchema,
+});
+
+/**
+ * GET /v1/orders cevabi: yeniden eskiye, imlecle sayfali. Suzme yuzunden
+ * toplam sayilmaz (page.totalSize 0). Sayfa ORDER_HISTORY_PAGE_SIZE_MAX'i asmaz.
+ */
+export const orderSummaryListSchema = z.object({
+  items: z.array(orderSummarySchema).max(ORDER_HISTORY_PAGE_SIZE_MAX),
+  page: pageSchema,
+});
+
 export type PaymentMethod = z.infer<typeof paymentMethodSchema>;
 export type OrderPaymentInput = z.infer<typeof orderPaymentInputSchema>;
 export type CreateOrderRequest = z.infer<typeof createOrderRequestSchema>;
@@ -134,3 +165,5 @@ export type OrderPlacement = z.infer<typeof orderPlacementSchema>;
 export type OrderTimelineEntry = z.infer<typeof orderTimelineEntrySchema>;
 export type CourierSummary = z.infer<typeof courierSummarySchema>;
 export type Order = z.infer<typeof orderSchema>;
+export type OrderSummary = z.infer<typeof orderSummarySchema>;
+export type OrderSummaryList = z.infer<typeof orderSummaryListSchema>;

@@ -19,6 +19,13 @@ const ratingFormat = new Intl.NumberFormat(LOCALE, {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,
 });
+const dateTimeFormat = new Intl.DateTimeFormat(LOCALE, {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
 
 /** 4599 -> "45,99 TL". Sozlesmede tek para birimi TRY'dir. */
 export function formatMoney(money: Money): string {
@@ -40,4 +47,9 @@ export function formatDeliveryTime({ minMinutes, maxMinutes }: DeliveryTime): st
 /** 4.7 -> "4,7". */
 export function formatRating(average: number): string {
   return ratingFormat.format(average);
+}
+
+/** "2026-10-05T11:30:00Z" -> "5 Ekim 2026 14:30" (tarayicinin saat diliminde). */
+export function formatDateTime(iso: string): string {
+  return dateTimeFormat.format(new Date(iso));
 }

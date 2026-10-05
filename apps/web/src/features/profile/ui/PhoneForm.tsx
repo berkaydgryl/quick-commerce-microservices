@@ -3,14 +3,10 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 
-import {
-  formatNationalPhone,
-  nationalDigits,
-  PHONE_COUNTRY_PREFIX,
-} from '../../auth/services/phone';
-import { AuthField } from '../../auth/ui/AuthField';
+import { PHONE_COUNTRY_PREFIX } from '../../auth/services/phone';
 import { focusFirstInvalid, showServerErrors } from '../../auth/ui/form-errors';
 import { PasswordField } from '../../auth/ui/PasswordField';
+import { PhoneField } from '../../auth/ui/PhoneField';
 import { useSendPhoneCode } from '../hooks/usePhoneVerification';
 import { codeWindow } from '../services/code-window';
 import type { CodeWindow } from '../services/code-window';
@@ -85,17 +81,15 @@ export function PhoneForm({ texts, initialDigits, onSent }: PhoneFormProps) {
         name="phone"
         control={control}
         render={({ field, fieldState }) => (
-          <AuthField
+          <PhoneField
             ref={field.ref}
             id="telefon-yeni"
             name={field.name}
             label={texts.phoneFieldLabel}
             prefix={PHONE_COUNTRY_PREFIX}
-            type="tel"
-            inputMode="numeric"
             autoComplete="tel-national"
-            value={formatNationalPhone(field.value)}
-            onChange={(event) => field.onChange(nationalDigits(event.target.value))}
+            value={field.value}
+            onChange={field.onChange}
             onBlur={field.onBlur}
             error={fieldState.error?.message}
           />
@@ -104,7 +98,8 @@ export function PhoneForm({ texts, initialDigits, onSent }: PhoneFormProps) {
       <PasswordField
         id="telefon-sifre"
         label={texts.passwordLabel}
-        toggleLabel={texts.showPasswordLabel}
+        showLabel={texts.showPasswordLabel}
+        hideLabel={texts.hidePasswordLabel}
         autoComplete="current-password"
         error={errors.password?.message}
         {...register('password')}

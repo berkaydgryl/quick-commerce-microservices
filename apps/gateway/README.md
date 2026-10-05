@@ -29,7 +29,8 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `DELETE /v1/cart/reserve/{orderId}` | ✅ order `CancelOrder` (T11.4): taslağı ya da ödeme bekleyen siparişi bırakır, stok döner; zaten bırakılmışsa 200 `released:false`; parası alınmışsa 409 `REQUEST_IN_PROGRESS`; başkasının siparişi 404 |
 | `POST /v1/orders`    | ✅ order `CreateOrder` (saga): 201 `PAID` ya da `AWAITING_PAYMENT` + `threeDs` |
 | `POST /v1/orders/{id}/3ds` | ✅ order `ConfirmPayment`; yanlış kod 402 + kalan hak |
-| `GET /v1/orders/{id}` | ✅ order `GetOrder`; başkasının siparişi 404; kilit canlıyken `reservationExpiresAt` ve `reservationTtlSeconds` (T11.4) |
+| `GET /v1/orders` | ✅ Geçmiş siparişler (T11.16, `internal/orderhistory`): order `ListMyOrders` + market adları sayfa başına TEK `BatchGetMarkets` (katalog hatasında adsız, sipariş yine listelenir); yeniden eskiye, imleçle; `DRAFT` ve hiç ilerlemeden süresi dolan `EXPIRED` süzülür, eksik kadar en fazla 3 tur (sunucu tarafı süzme #101); `CANCELLED` + geçmişte `PAID` = `refunded`; sayfa 20, en fazla 50 (kırpılır); önbelleğe alınmaz |
+| `GET /v1/orders/{id}` | ✅ order `GetOrder`; başkasının siparişi 404; kilit canlıyken `reservationExpiresAt` ve `reservationTtlSeconds` (T11.4); T11.16'dan beri önbelleğe alınmaz (`no-store`) |
 | `GET /v1/orders/{id}/token` | ✅ T12.2: sahiplik order `GetOrder` ile (başkasınınki 404, bitmiş sipariş 200); `order:{id}` odası için 60 sn'lik oda jetonu (`internal/roomtoken`, `REALTIME_TOKEN_SECRET`) |
 | `POST /v1/auth/register` | ✅ Kayıt + oturum (201); telefon benzersiz, şifre bcrypt (T8.1) |
 | `POST /v1/auth/login` | ✅ Giriş (200); yanlış şifre ile kayıtsız numara aynı cevabı alır |
@@ -340,7 +341,7 @@ bellek içi sayaç sınırı örnek sayısı kadar gevşetirdi (proje kuralları
 | `POST /v1/auth/refresh`, `/v1/auth/logout` (T8.5)         | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
 | `POST`/`DELETE /v1/cart/reserve`, `/v1/orders`, `/v1/orders/{id}/3ds` | `RATE_LIMIT_ORDER_MAX_REQUESTS` (20) | kullanıcı   |
 | Katalog, market ve genel arama uçları                     | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
-| `GET /v1/me`, `/v1/me/addresses`, `GET /v1/orders/{id}` (`/token` dahil) | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
+| `GET /v1/me`, `/v1/me/addresses`, `GET /v1/orders` (T11.16), `GET /v1/orders/{id}` (`/token` dahil) | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
 | `POST`/`PUT`/`DELETE /v1/me/addresses…`, `/v1/geo/*` (T11.8, T11.15) | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
 | `/healthz`                                                | sınırsız                         | —           |
 

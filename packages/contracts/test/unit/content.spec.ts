@@ -94,11 +94,11 @@ const WELCOME: WelcomeContent = {
   loginCard: {
     title: 'Giriş yap veya kayıt ol',
     countryLabel: 'Ülke kodu',
-    phoneLabel: 'Telefon numarası',
-    phonePlaceholder: '5XX XXX XX XX',
+    phoneLabel: 'Telefon Numarası',
     continueLabel: 'Devam Et',
     closeLabel: 'Kapat',
     showPasswordLabel: 'Şifreyi göster',
+    hidePasswordLabel: 'Şifreyi gizle',
     countries: [TURKIYE],
     login: {
       passwordLabel: 'Şifren',
@@ -152,14 +152,15 @@ const WELCOME: WelcomeContent = {
     addressLoadingLabel: 'Adreslerin yükleniyor…',
     profileLabel: 'Profil',
     accountLabel: 'Hesabım',
-    favoritesLabel: 'Favori marketlerim',
     logoutLabel: 'Çıkış yap',
     logoutPendingLabel: 'Çıkış yapılıyor…',
   },
   marketList: MARKET_LIST,
   favorites: CONTENT_FALLBACK.favorites,
+  accountMenu: CONTENT_FALLBACK.accountMenu,
   profile: CONTENT_FALLBACK.profile,
   addresses: CONTENT_FALLBACK.addresses,
+  orders: CONTENT_FALLBACK.orders,
 };
 
 const withMarketList = (marketList: Partial<WelcomeContent['marketList']>) => ({

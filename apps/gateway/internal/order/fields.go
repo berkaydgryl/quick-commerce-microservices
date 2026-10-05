@@ -55,6 +55,13 @@ var releaseFieldNames = renamer(
 // getFieldNames, GetOrder -> GET /v1/orders/{id}.
 var getFieldNames = renamer(map[string]string{"orderId": "id"}, nil)
 
+// listFieldNames, ListMyOrders -> GET /v1/orders (T11.16): sayfa alanlari
+// sorgu parametresidir.
+var listFieldNames = renamer(
+	map[string]string{"page.pageToken": "pageToken", "page.pageSize": "pageSize"},
+	nil,
+)
+
 // renamer, tam ad ve onek eslemesinden bir ad cevirici kurar. Tam ad once
 // denenir; sonra onekler (proto'nun dizinli yolu icin).
 func renamer(names, prefixes map[string]string) func(string) string {

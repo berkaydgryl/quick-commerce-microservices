@@ -73,7 +73,6 @@ export function PhoneEntryForm({ content, onAccepted, onPhoneChange }: PhoneEntr
               id="karsilama-telefon"
               name={field.name}
               label={content.phoneLabel}
-              placeholder={content.phonePlaceholder}
               autoComplete="tel-national"
               value={field.value}
               onChange={field.onChange}

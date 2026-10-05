@@ -14,6 +14,7 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/orderhistory"
 )
 
 const testOrderID = "ord_db77f4c0e24f49919cc1d78a649c9c94"
@@ -27,6 +28,9 @@ type fakeOrders struct {
 	releaseInput order.ReleaseInput
 	getUserID    string
 	getOrderID   string
+	listUserID   string
+	listSize     int32
+	listToken    string
 	ctx          context.Context
 	called       bool
 	// calls, adaptorun kac kez cagrildigi (tekrar korumasi: ayni anahtar tek cagri).
@@ -57,6 +61,11 @@ func (f *fakeOrders) Release(ctx context.Context, input order.ReleaseInput) (ord
 func (f *fakeOrders) Get(ctx context.Context, userID, orderID string) (order.Order, error) {
 	f.called, f.ctx, f.getUserID, f.getOrderID = true, ctx, userID, orderID
 	return order.Order{ID: orderID, Status: "PAID", Lines: []order.Line{}, Timeline: []order.TimelineEntry{}}, f.err
+}
+
+func (f *fakeOrders) List(ctx context.Context, userID string, pageSize int32, pageToken string) (orderhistory.List, error) {
+	f.called, f.ctx, f.listUserID, f.listSize, f.listToken = true, ctx, userID, pageSize, pageToken
+	return orderhistory.List{Items: []orderhistory.Summary{{ID: testOrderID, Status: "DELIVERED", MarketID: "mkt_a101-caferaga"}}}, f.err
 }
 
 // fakeSignals, siparis sinyallerini oturum yerine sabit degerlerden verir;
@@ -93,6 +102,7 @@ func orderAppWithSignals(orders *fakeOrders, signals *fakeSignals) *fiber.App {
 		OrderPlacer:         orders,
 		ThreeDSConfirmer:    orders,
 		OrderGetter:         orders,
+		OrderLister:         orders,
 		CheckoutSignals:     signals,
 		AccessTokens:        testTokens(),
 		Idempotency:         testIdempotency(),
@@ -349,5 +359,50 @@ func TestReleaseReservationPassesServiceErrors(t *testing.T) {
 
 	if status != http.StatusConflict || envelope.Error.Code != apperror.CodeRequestInProgress {
 		t.Fatalf("409 REQUEST_IN_PROGRESS bekleniyordu: %d %+v", status, envelope)
+	}
+}
+
+func TestListOrdersPassesUserCursorAndSizeAndIsPrivate(t *testing.T) {
+	orders := &fakeOrders{}
+	app := orderApp(orders)
+
+	status, header, envelope := exchange(t, app, orderRequest(t, http.MethodGet, "/v1/orders?pageSize=5&pageToken=imlec", "", nil))
+
+	if status != http.StatusOK || orders.listUserID != testUserID || orders.listSize != 5 || orders.listToken != "imlec" {
+		t.Fatalf("200, jetondaki kullanici, boy ve imlec bekleniyordu: %d %+v %+v", status, orders, envelope)
+	}
+	if header.Get(fiber.HeaderCacheControl) != noStore {
+		t.Errorf("gecmis siparisler kisisel veridir, onbelleklenmemeli: %q", header.Get(fiber.HeaderCacheControl))
+	}
+	if list := dataOf[orderhistory.List](t, envelope); len(list.Items) != 1 || list.Items[0].ID != testOrderID {
+		t.Errorf("zarfin data alani gecmis listesi olmali: %+v", list)
+	}
+}
+
+func TestListOrdersRejectsBadSizeAndUnknownQuery(t *testing.T) {
+	orders := &fakeOrders{}
+	app := orderApp(orders)
+
+	status, envelope := send(t, app, orderRequest(t, http.MethodGet, "/v1/orders?pageSize=iki", "", nil))
+	if status != http.StatusBadRequest || detailsOf(t, envelope)["pageSize"] == nil {
+		t.Errorf("tam sayi olmayan boy 400 pageSize: %d %+v", status, envelope)
+	}
+	status, envelope = send(t, app, orderRequest(t, http.MethodGet, "/v1/orders?status=DELIVERED", "", nil))
+	if status != http.StatusBadRequest || detailsOf(t, envelope)["status"] != unknownQueryReason {
+		t.Errorf("bilinmeyen sorgu 400: %d %+v", status, envelope)
+	}
+	if orders.called {
+		t.Error("gecersiz istekte adaptor cagrilmamali")
+	}
+}
+
+func TestGetOrderIsPrivate(t *testing.T) {
+	// T11.16, L8: tek siparis de kisisel veridir (adres, urunler).
+	app := orderApp(&fakeOrders{})
+
+	status, header, _ := exchange(t, app, orderRequest(t, http.MethodGet, "/v1/orders/"+testOrderID, "", nil))
+
+	if status != http.StatusOK || header.Get(fiber.HeaderCacheControl) != noStore {
+		t.Errorf("200 ve no-store bekleniyordu: %d %q", status, header.Get(fiber.HeaderCacheControl))
 	}
 }
