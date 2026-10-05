@@ -1,0 +1,157 @@
+syntax = "proto3";
+
+// Kart kasasi sozlesmesi (T11.17).
+//
+// Kasa payment-svc'de calisir (ayni gRPC sunucusu, 50054) ve cards
+// koleksiyonunun TEK sahibidir. Kullanicinin kayitli kartlarini tutar: yalnizca
+// ilk 4 ve son 4 hane, marka, son kullanma, kart sahibinin adi, karta verilen
+// ad ve rastgele kimlik. TAM KART NUMARASI VE CVV SAKLANMAZ, GUNLUGE, HATA
+// AYRINTISINA VE IZE YAZILMAZ.
+//
+// KART NUMARASI YALNIZCA AddCardRequest'te ve BIR KEZ gecer: kasa numarayi
+// dogrular (Luhn, marka), saglayiciya 0 TL dogrulatir, maskeleyip saklar ve
+// numarayi birakir. CVV yalnizca bu dogrulamada kullanilir (D2). Odeme
+// sozlesmesi (payment.proto) kart verisi tasimaz; kayitli kartla odeme T12.4'te
+// kartin kimligiyle (card_id) yapilir.
+//
+// Proto paketi ayridir (getir.cardvault.v1): her proto paketinde tek dosya
+// (packages/proto scripts/write-barrel.mjs) ve kart numarasi tasiyan tek
+// sozlesme odeme sozlesmesinden ayri dursun.
+//
+// user_id gateway'den gelir (erisim jetonunun sub'i); servis jetonu
+// dogrulamaz, alana guvenir (order ve payment ile ayni kural).
+
+package getir.cardvault.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/cardvault/v1;cardvaultv1";
+
+// Kart kasasi servisi.
+service CardVaultService {
+  // Karti dogrular ve kaydeder. Kart numarasinin gectigi TEK cagri.
+  rpc AddCard(AddCardRequest) returns (AddCardResponse);
+
+  // Kullanicinin kayitli kartlari, yeniden eskiye.
+  rpc ListCards(ListCardsRequest) returns (ListCardsResponse);
+
+  // Karti siler (yumusak silme); cevap guncel liste.
+  rpc DeleteCard(DeleteCardRequest) returns (DeleteCardResponse);
+}
+
+// Kart markasi: numaranin ilk hanelerinden (IIN) bulunur. Rozetleri istemci
+// kendisi cizer (D3). Listede olmayan marka eklenemez.
+enum CardBrand {
+  CARD_BRAND_UNSPECIFIED = 0;
+
+  // 4 ile baslar; 13, 16 ya da 19 hane.
+  CARD_BRAND_VISA = 1;
+
+  // 51-55 ya da 2221-2720 ile baslar; 16 hane.
+  CARD_BRAND_MASTERCARD = 2;
+
+  // 34 ya da 37 ile baslar; 15 hane, CVV 4 hane.
+  CARD_BRAND_AMEX = 3;
+
+  // 9792 ile baslar; 16 hane. Troy'un 65 araligi Discover ile cakistigi icin
+  // taninmaz (yalnizca 9792).
+  CARD_BRAND_TROY = 4;
+}
+
+// Kayitli kart: MASKELI gorunum. Tam numara ve CVV hicbir alanda yoktur.
+message SavedCard {
+  // crd_ + 32 kucuk onaltilik; rastgele. Silmede ve (T12.4) odemede bu kimlik
+  // tasinir.
+  string id = 1;
+
+  CardBrand brand = 2;
+
+  // Numaranin ilk 4 hanesi.
+  string first4 = 3;
+
+  // Numaranin son 4 hanesi.
+  string last4 = 4;
+
+  // 1-12.
+  int32 expiry_month = 5;
+
+  // Dort haneli yil (2031).
+  int32 expiry_year = 6;
+
+  // Kart uzerindeki ad.
+  string holder_name = 7;
+
+  // Kullanicinin karta verdigi ad ("Maas kartim"); verilmediyse bos.
+  string nickname = 8;
+
+  // Son kullanma ayi gecti mi (okuma anina gore, Turkiye saatiyle). Suresi
+  // gecen kart listede kalir, odemede kullanilamaz.
+  bool expired = 9;
+
+  google.protobuf.Timestamp created_at = 10;
+}
+
+message AddCardRequest {
+  string user_id = 1;
+
+  // Kart numarasi: rakamlar; bosluk ve tire kasada atilir. 13-19 hane, Luhn,
+  // bilinen marka ve markanin hane sayisi. SAKLANMAZ VE GUNLUGE YAZILMAZ;
+  // dogrulama hatasi degeri yankilamaz.
+  string number = 2;
+
+  int32 expiry_month = 3;
+  int32 expiry_year = 4;
+
+  // Guvenlik kodu: yalnizca ekleme dogrulamasinda kullanilir (D2); 3 hane,
+  // AMEX'te 4. SAKLANMAZ VE GUNLUGE YAZILMAZ.
+  string cvv = 5;
+
+  // Kart uzerindeki ad: Unicode NFC'ye cevrilip kirpilir; 2-26 karakter, harf,
+  // bosluk, nokta, kesme ve tire; en az bir harf.
+  string holder_name = 6;
+
+  // Istege bagli kart adi: NFC'ye cevrilip kirpilir; en fazla 30 karakter;
+  // harf, rakam, bosluk ve . , ' - (bicim ve kontrol karakterleri yok); bu
+  // ayraclar atilinca 8 ya da daha fazla yan yana rakam yok (kart adinda kart
+  // numarasi saklanmaz). Bos ya da yalnizca bosluk: kart adi yok.
+  string nickname = 7;
+}
+
+// Ekleme cevabi.
+//
+// Hatalar (yeni hata kodu yok):
+//   - bicim, Luhn, marka, gecmis son kullanma (ay Turkiye saatiyle), CVV, ad
+//     ve kart adi kurallari ve kart siniri (kullanici basina 10):
+//     INVALID_ARGUMENT + VALIDATION_FAILED, alan -> cumle (deger yankilanmaz);
+//   - saglayici karti dogrulamadi: FAILED_PRECONDITION + PAYMENT_DECLINED;
+//   - ayni kart (ilk 4, son 4 ve son kullanma ayni) kullanicinin kasasinda
+//     zaten kayitli: ABORTED + CONFLICT, details.cardId kullanicinin var olan
+//     karti. Baska kullanicinin ayni karti engel degildir. Bu anahtari
+//     paylasan iki farkli kart nadirdir; olursa ikincisi CONFLICT alir
+//     (numaranin HMAC'i bilerek tutulmaz, D1).
+// Dogrulamada 3DS isteyen kart kaydedilir; 3DS odeme aninda sorulur.
+message AddCardResponse {
+  SavedCard card = 1;
+}
+
+message ListCardsRequest {
+  string user_id = 1;
+}
+
+// Silinmemis kartlar, yeniden eskiye; en fazla 10 (sayfasiz, sinirli liste).
+// Kayitli karti olmayan kullanicida bos liste.
+message ListCardsResponse {
+  repeated SavedCard cards = 1;
+}
+
+message DeleteCardRequest {
+  string user_id = 1;
+  string card_id = 2;
+}
+
+// Silme cevabi: guncel liste. Kart yoksa, baskasinin ya da zaten silinmisse
+// NOT_FOUND. Silinen kart listeden cikar; gecmis odemeler ve acik siparisler
+// karta bagli degildir, etkilenmez.
+message DeleteCardResponse {
+  repeated SavedCard cards = 1;
+}

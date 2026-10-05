@@ -6,7 +6,7 @@ import (
 )
 
 func TestNewMatchesContractFormat(t *testing.T) {
-	for _, prefix := range []string{Request, User, Session} {
+	for _, prefix := range []string{Request, User, Session, Device, Address, Card} {
 		id := New(prefix)
 		if !Valid(prefix, id) {
 			t.Errorf("%s: uretilen kimlik bicim disi: %q", prefix, id)

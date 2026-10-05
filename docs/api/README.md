@@ -86,7 +86,7 @@ Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci 
   istemcinin gönderdiği addır (`items.0.quantity`, `address.location.lat`,
   `Idempotency-Key`).
 - **Kimlik** (T8.1): `GET /v1/me`, `/v1/me/...` uçları (adres defteri, favoriler,
-  e-posta doğrulama) ve sipariş uçları (`/v1/cart/reserve`, `/v1/orders...`)
+  e-posta doğrulama, kart kasası) ve sipariş uçları (`/v1/cart/reserve`, `/v1/orders...`)
   `Authorization: Bearer <erişim jetonu>` ister. Jeton kayıt,
   giriş ya da yenilemeyle alınır (HS256 JWT, ömrü JWT_TTL); yoksa ya da
   geçersizse `401 UNAUTHORIZED` + `WWW-Authenticate` döner. Yenileme jetonu
@@ -113,7 +113,8 @@ Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci 
 - **Idempotency-Key**, kalıcı durum değiştiren uçlarda zorunludur:
   `POST /v1/auth/register`, `PATCH /v1/me`, `POST /v1/me/addresses`, `PUT` ve
   `DELETE /v1/me/addresses/{addressId}` (T11.15), `PUT` ve
-  `DELETE /v1/me/favorites/{marketId}`, `POST /v1/me/email/code`,
+  `DELETE /v1/me/favorites/{marketId}`, `POST /v1/me/cards` ve
+  `DELETE /v1/me/cards/{cardId}` (T11.17), `POST /v1/me/email/code`,
   `POST /v1/me/email/verify` (T11.14), `POST /v1/me/phone/code`,
   `POST /v1/me/phone/verify` (T11.14 PR 3; yalnızca geliştirmede), `POST /v1/cart/reserve`,
   `DELETE /v1/cart/reserve/{orderId}`, `POST /v1/orders`,
@@ -135,6 +136,20 @@ Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci 
   başına kayıt ve giriş 10, rezervasyon/sipariş/3DS 20, diğerleri (yenileme ve çıkış dahil) 120 (`RATE_LIMIT_*`). Aşılınca
   `429 RATE_LIMITED` + `Retry-After` (saniye) + `details.retryAfterSeconds`; yalnızca kabul edilen
   istek sayılır. Sayaca ulaşılamazsa istek geçer (tekrar koruması ise 503 der). `/healthz` sınırsız.
+- **Kart verisi** (T11.17): tam kart numarası ve CVV yalnızca `POST /v1/me/cards`
+  gövdesinde ve bir kez geçer; kasa (payment) doğrular, maskeleyip saklar. Hiçbir
+  cevapta, günlükte, izde ve hata ayrıntısında yoktur: doğrulama cümleleri girilen
+  değeri yankılamaz (`@getir/contracts` `CARD_FIELD_MESSAGES`). Cevaplar maskelidir:
+  `id`, `brand`, `first4`, `last4`, `expiryMonth`, `expiryYear`, `holderName`,
+  `nickname?`, `expired`, `createdAt`. Yeni hata kodu yok: `VALIDATION_FAILED`
+  (alan → cümle; dolu kasa `cards`), `PAYMENT_DECLINED` (doğrulama reddi,
+  `details.reason = verification_declined`), `CONFLICT` (aynı kart, `details.cardId`),
+  `NOT_FOUND` (silme). Kurallar `@getir/contracts` `cards.ts`'te, kasa aynı
+  fonksiyonlarla denetler: TROY yalnızca 9792 (65 aralığı Discover ile çakışır);
+  son kullanma ayı Türkiye saatiyle; ad ve kart adı NFC'ye çevrilir, adda en az bir
+  harf; kart adında biçim/kontrol karakteri ve 8+ yan yana rakam yok, boş kart adı
+  "yok" demektir. Aynı kart kullanıcının kasasında ilk 4 + son 4 + son kullanma ile
+  tanınır; bunu paylaşan iki farklı kart nadirdir, numaranın HMAC'i tutulmaz (D1).
 - **İzleme**: her cevap `X-Request-Id` başlığı taşır; hata gövdesindeki
   `error.requestId` ile aynı değerdir. Biçim `req_` + 32 küçük onaltılık karakter
   (Node servisleriyle aynı). İstemci bu biçimde kendi kimliğini gönderirse korunur;

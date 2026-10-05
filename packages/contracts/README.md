@@ -29,6 +29,7 @@ packages/contracts/
 │   ├── geo.ts         # harita adres çözümleme ve arama (T11.8)
 │   ├── cart.ts        # sepet girdisi, rezervasyon, serbest bırakma, adres defteri ve ekleme
 │   ├── order.ts       # sipariş, adres, 3DS, kurye özeti
+│   ├── cards.ts       # kart kasası (T11.17): ekleme, maskeli kart; Luhn, marka, ad ve kart adı kuralları
 │   ├── socket.ts      # oda adları, olay payload'ları, olay sözlüğü
 │   ├── events.ts      # servisler arası olay gövdeleri (payment.refund_requested T7.4, payment.cancel_requested T11.2)
 │   └── index.ts

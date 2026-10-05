@@ -58,6 +58,14 @@ export const addressIdSchema = z.string().regex(new RegExp(`^${ID_PREFIX.ADDRESS
 });
 
 /**
+ * Kayitli kart kimligi (T11.17): yalnizca `crd_` onekli, rastgele; kart
+ * numarasindan turetilmez. Kart kasasinda satiri tanir.
+ */
+export const cardIdSchema = z.string().regex(new RegExp(`^${ID_PREFIX.CARD}_[0-9a-f]{32}$`), {
+  message: 'kart kimligi bekleniyor',
+});
+
+/**
  * Katalog kimligi semasi uretir: "<onek>_<okunabilir-govde>" (ADR-15).
  * Seed ile gelen kimlikler icindir; UUID ya da 32 hex DEGILDIR.
  */

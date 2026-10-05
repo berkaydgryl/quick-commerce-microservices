@@ -897,6 +897,279 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /v1/me/cards:
+    get:
+      tags: [auth]
+      operationId: listSavedCards
+      summary: Kayıtlı kartlar (T11.17)
+      description: |
+        Oturumdaki kullanıcının kart kasası, yeniden eskiye. Sayfasız SINIRLI
+        liste (en fazla 10). Kartlar MASKELİDİR: ilk 4 ve son 4 hane, marka, son
+        kullanma, kart sahibinin adı, kart adı ve kimlik. Tam numara ve CVV
+        hiçbir cevapta yoktur. `expired`, son kullanma ayı geçmiş kartı işaretler
+        (okuma anına göre); böyle kart listede kalır, ödemede kullanılamaz
+        (T12.4). Kartı olmayan hesapta boş liste.
+
+        Kasa payment servisindedir (`getir/cardvault/v1`); gateway iletir.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Kayıtlı kartlar
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedCardListResponse"
+        "400":
+          description: Bilinmeyen sorgu parametresi (VALIDATION_FAILED).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    post:
+      tags: [auth]
+      operationId: addSavedCard
+      summary: Kart ekle (T11.17)
+      description: |
+        Kartı doğrular ve kasaya kaydeder. KART NUMARASI VE CVV YALNIZCA BU
+        İSTEKTE VE BİR KEZ geçer: saklanmaz, günlüğe ve ize yazılmaz; hata
+        ayrıntısı değeri yankılamaz (yalnızca alan → cümle). Gateway'in tekrar
+        koruması gövdenin yalnızca sunucu sırrıyla alınmış özetini (HMAC) tutar.
+
+        Sıra: biçim ve kurallar (numara: rakam, boşluk ve tire; 13-19 hane, Luhn,
+        bilinen marka: VISA, MASTERCARD, AMEX, TROY; ay 1-12; dört haneli yıl,
+        geçmemiş ve en fazla 20 yıl ileri; CVV 3 hane, AMEX'te 4; ad 2-26 harf;
+        kart adı en fazla 30) → kart sınırı (10) → aynı kart → sağlayıcının 0 TL
+        doğrulaması. Doğrulamada 3DS isteyen kart kaydedilir; 3DS ödeme anında
+        sorulur. Aynı kart: ilk 4, son 4 ve son kullanma aynı kart zaten
+        kayıtlıysa `409 CONFLICT` (`details.cardId` var olan kart). Başka
+        kullanıcının aynı kartı engel değildir.
+
+        Cevap `201` ve eklenen kart (maskeli). `Idempotency-Key` zorunludur.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddCardRequest"
+      responses:
+        "201":
+          description: Kart doğrulandı ve kaydedildi; maskeli kart
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            Idempotent-Replayed:
+              $ref: "#/components/headers/IdempotentReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedCardResponse"
+        "400":
+          description: |
+            Biçim ya da kural hatası; hepsi tek cevapta. `details` alanı gövdedeki
+            adla gösterir (`number`, `expiryMonth`, `expiryYear`, `cvv`,
+            `holderName`, `nickname`, `Idempotency-Key`); dolu kasa `cards`
+            alanındadır. Cümleler girilen değeri İÇERMEZ.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                invalidNumber:
+                  summary: VALIDATION_FAILED (numara ve CVV)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        number: "Kart numarası geçersiz"
+                        cvv: "Güvenlik kodu geçersiz"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                wrongLength:
+                  summary: VALIDATION_FAILED (hane sayısı markaya uymuyor, ör. 18 haneli Visa)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        number: "Kart numarası eksik ya da fazla haneli"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                nicknameDigits:
+                  summary: VALIDATION_FAILED (kart adında kart numarası)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        nickname: "Kart adında 8 ya da daha fazla rakam yan yana olamaz"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                expired:
+                  summary: VALIDATION_FAILED (son kullanma geçmiş)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        expiryMonth: "Kartın son kullanma tarihi geçmiş"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                walletFull:
+                  summary: VALIDATION_FAILED (dolu kasa)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        cards: "En fazla 10 kart kaydedebilirsin"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "402":
+          description: |
+            Sağlayıcı kartı doğrulamadı (`PAYMENT_DECLINED`,
+            `details.reason = "verification_declined"`). Kart kaydedilmez.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                declined:
+                  summary: PAYMENT_DECLINED (kart doğrulanamadı)
+                  value:
+                    success: false
+                    error:
+                      code: PAYMENT_DECLINED
+                      message: "Ödeme alınamadı. Başka bir kart deneyebilirsin."
+                      details:
+                        reason: verification_declined
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+        "409":
+          description: |
+            Aynı kart kullanıcının kasasında zaten kayıtlı (`CONFLICT`,
+            `details.cardId` kullanıcının kendi kartı; başka kullanıcının aynı kartı
+            engel değildir. Aynı kart ilk 4 + son 4 hane + son kullanma ile tanınır;
+            bunu paylaşan iki farklı kart nadirdir ve ikincisi de `CONFLICT` alır.
+            Numaranın HMAC'i tutulmaz, D1); ya da aynı
+            `Idempotency-Key` ile ilk istek hâlâ işleniyor (`REQUEST_IN_PROGRESS`)
+            veya anahtar farklı bir gövdeyle geldi (`CONFLICT`, `details` anahtarı
+            söyler).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                alreadySaved:
+                  summary: CONFLICT (aynı kart)
+                  value:
+                    success: false
+                    error:
+                      code: CONFLICT
+                      message: "Bu kayıt az önce değişti. Sayfayı yenileyip tekrar dener misin?"
+                      details:
+                        cardId: "crd_0123456789abcdef0123456789abcdef"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                inProgress:
+                  $ref: "#/components/examples/IdempotencyRequestInProgress"
+                keyReused:
+                  $ref: "#/components/examples/IdempotencyKeyReused"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /v1/me/cards/{cardId}:
+    parameters:
+      - $ref: "#/components/parameters/CardIdPath"
+    delete:
+      tags: [auth]
+      operationId: deleteSavedCard
+      summary: Kayıtlı kartı sil (T11.17)
+      description: |
+        Kartı kasadan çıkarır (yumuşak silme); gövdesizdir, cevap GÜNCEL
+        listedir. Geçmiş ödemeler ve açık siparişler karta bağlı değildir:
+        silme onlara dokunmaz. Aynı kart sonra yeniden eklenebilir.
+
+        Kart bu hesapta yoksa, başkasınınsa ya da zaten silinmişse `404 NOT_FOUND`
+        (biçimsiz kimlik dahil; aynı `Idempotency-Key` ile tekrar ise ilk cevabı
+        alır). `Idempotency-Key` zorunludur.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Kart silindi; güncel liste
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            Idempotent-Replayed:
+              $ref: "#/components/headers/IdempotentReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedCardListResponse"
+        "400":
+          description: "`Idempotency-Key` eksik ya da bilinmeyen sorgu parametresi (VALIDATION_FAILED)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          description: Kart bu hesabın kasasında yok (NOT_FOUND; ayrıntısız).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "409":
+          description: |
+            Aynı `Idempotency-Key` ile ilk istek hâlâ işleniyor
+            (`REQUEST_IN_PROGRESS`) ya da anahtar farklı bir gövdeyle geldi
+            (`CONFLICT`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                inProgress:
+                  $ref: "#/components/examples/IdempotencyRequestInProgress"
+                keyReused:
+                  $ref: "#/components/examples/IdempotencyKeyReused"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /v1/me/email/code:
     post:
       tags: [auth]
@@ -2703,6 +2976,14 @@ components:
       schema:
         $ref: "#/components/schemas/AddressId"
 
+    CardIdPath:
+      name: cardId
+      in: path
+      required: true
+      description: Kayıtlı kartın kimliği (`SavedCard.id`, T11.17).
+      schema:
+        $ref: "#/components/schemas/CardId"
+
     MarketIdPath:
       name: marketId
       in: path
@@ -4294,6 +4575,143 @@ components:
                   maxItems: 10
                   items:
                     $ref: "#/components/schemas/SavedAddress"
+
+    CardId:
+      type: string
+      description: |
+        Kayıtlı kartın kimliği (T11.17): `crd_` + 32 küçük onaltılık. Rastgele
+        üretilir; kart numarasından TÜRETİLMEZ. Silmede ve (T12.4) ödemede taşınır.
+      pattern: "^crd_[0-9a-f]{32}$"
+      example: "crd_0123456789abcdef0123456789abcdef"
+
+    CardBrand:
+      type: string
+      description: |
+        Kart markası, numaranın ilk hanelerinden: VISA (4; 13, 16 ya da 19 hane),
+        MASTERCARD (51-55 ya da 2221-2720; 16 hane), AMEX (34 ya da 37; 15 hane,
+        CVV 4 hane), TROY (yalnızca 9792; 16 hane — Troy'un 65 aralığı Discover ile
+        çakıştığı için tanınmaz). Rozetleri istemci çizer.
+      enum: [VISA, MASTERCARD, AMEX, TROY]
+
+    SavedCard:
+      type: object
+      description: |
+        Kayıtlı kart, MASKELİ (T11.17). Tam numara ve CVV hiçbir cevapta yoktur.
+      required: [id, brand, first4, last4, expiryMonth, expiryYear, holderName, expired, createdAt]
+      properties:
+        id:
+          $ref: "#/components/schemas/CardId"
+        brand:
+          $ref: "#/components/schemas/CardBrand"
+        first4:
+          type: string
+          pattern: "^[0-9]{4}$"
+          description: Numaranın ilk 4 hanesi.
+          example: "4242"
+        last4:
+          type: string
+          pattern: "^[0-9]{4}$"
+          description: Numaranın son 4 hanesi.
+          example: "4242"
+        expiryMonth:
+          type: integer
+          minimum: 1
+          maximum: 12
+          example: 12
+        expiryYear:
+          type: integer
+          minimum: 2000
+          maximum: 2099
+          example: 2031
+        holderName:
+          type: string
+          maxLength: 26
+          description: Kart üzerindeki ad.
+          example: "Ayşe Yılmaz"
+        nickname:
+          type: string
+          maxLength: 30
+          description: Kullanıcının karta verdiği ad; verilmediyse alan yok.
+          example: "Maaş kartım"
+        expired:
+          type: boolean
+          description: Son kullanma ayı geçti mi (okuma anına göre, Türkiye saatiyle); geçen kart ödemede kullanılamaz.
+        createdAt:
+          type: string
+          format: date-time
+
+    SavedCardResponse:
+      description: Eklenen kart (maskeli).
+      allOf:
+        - $ref: "#/components/schemas/ApiSuccessResponse"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/SavedCard"
+
+    SavedCardListResponse:
+      description: Kayıtlı kartlar, yeniden eskiye (en fazla 10).
+      allOf:
+        - $ref: "#/components/schemas/ApiSuccessResponse"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  maxItems: 10
+                  items:
+                    $ref: "#/components/schemas/SavedCard"
+
+    AddCardRequest:
+      type: object
+      description: |
+        Kart ekleme gövdesi (T11.17). `number` ve `cvv` yalnızca bu istekte
+        geçer; saklanmaz, günlüğe yazılmaz, hata ayrıntısında yankılanmaz.
+      required: [number, expiryMonth, expiryYear, cvv, holderName]
+      additionalProperties: false
+      properties:
+        number:
+          type: string
+          description: |
+            Kart numarası; boşluk ve tire olabilir (atılır). 13-19 hane, Luhn, bilinen
+            marka ve markanın hane sayısı (hane hatası ayrı cümle alır).
+          example: "4242 4242 4242 4242"
+        expiryMonth:
+          type: integer
+          minimum: 1
+          maximum: 12
+          example: 12
+        expiryYear:
+          type: integer
+          minimum: 2000
+          maximum: 2099
+          description: Dört haneli yıl; geçmemiş ve en fazla 20 yıl ileri (kasa denetler).
+          example: 2031
+        cvv:
+          type: string
+          pattern: "^[0-9]{3,4}$"
+          description: Güvenlik kodu; 3 hane, AMEX'te 4. Yalnızca ekleme doğrulamasında kullanılır.
+          example: "123"
+        holderName:
+          type: string
+          minLength: 2
+          maxLength: 26
+          description: |
+            Kart üzerindeki ad: Unicode NFC'ye çevrilip kırpılır; harf, boşluk, nokta,
+            kesme ve tire; en az bir harf.
+          example: "Ayşe Yılmaz"
+        nickname:
+          type: string
+          maxLength: 30
+          description: |
+            İsteğe bağlı kart adı: NFC'ye çevrilip kırpılır; harf, rakam, boşluk ve
+            `. , ' -` (biçim ve kontrol karakterleri reddedilir). Bu ayraçlar atılınca
+            8 ya da daha fazla yan yana rakam reddedilir (kart adında kart numarası
+            saklanmaz). Boş ya da yalnızca boşluk: kart adı yok.
+          example: "Maaş kartım"
 
     UpdateAddressRequest:
       description: |
