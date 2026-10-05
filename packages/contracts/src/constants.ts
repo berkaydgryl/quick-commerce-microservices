@@ -87,6 +87,41 @@ export const SAVED_ADDRESSES_MAX = 10;
 export const FAVORITE_MARKETS_MAX = 50;
 
 /**
+ * Kart kasasi (T11.17): kullanici basina en fazla kayitli kart. Liste sinirlidir,
+ * sayfalanmaz (adres defteri gibi); kasa (payment) eklemede sinirdaki kullaniciyi
+ * reddeder (VALIDATION_FAILED, details.cards). Gateway'deki karsiligi
+ * cards.MaxCards (contract_test esitligini denetler).
+ */
+export const SAVED_CARDS_MAX = 10;
+
+/** Kart numarasinin hane sayisi (bosluk ve tire atildiktan sonra). */
+export const CARD_NUMBER_MIN_DIGITS = 13;
+export const CARD_NUMBER_MAX_DIGITS = 19;
+
+/** Kart uzerindeki ad: kartlara basilan alanin uzunlugu (26). */
+export const CARD_HOLDER_NAME_MIN_LENGTH = 2;
+export const CARD_HOLDER_NAME_MAX_LENGTH = 26;
+
+/** Kullanicinin karta verdigi ad ("Maas kartim"). */
+export const CARD_NICKNAME_MAX_LENGTH = 30;
+
+/**
+ * Kart adinda yan yana olabilecek en uzun rakam dizisi; ayraclar (bosluk, nokta,
+ * virgul, kesme, tire) atilarak sayilir. Daha uzunu reddedilir: kart adi kart
+ * numarasi saklamanin yolu olmasin (QA S2). "Maas 2026" gibi adlar gecer.
+ */
+export const CARD_NICKNAME_MAX_DIGIT_RUN = 7;
+
+/** Son kullanma yili: dort hane, bugunden en fazla bu kadar yil ileri (kasa denetler). */
+export const CARD_EXPIRY_MAX_YEARS_AHEAD = 20;
+
+/**
+ * Son kullanma ayinin hesaplandigi saat dilimi: kart, Turkiye saatiyle ayin son
+ * gunu 23.59'a kadar gecerlidir (UTC ile ay sonunda 3 saat erken dolardi, QA B3).
+ */
+export const CARD_EXPIRY_TIME_ZONE = 'Europe/Istanbul';
+
+/**
  * E-posta adresi (T11.14): profilde DOGRULANARAK eklenen iletisim alani; kimlik
  * degildir, giris yine telefon + sifredir (ADR-12 eki). 254, RFC 5321'in yol
  * siniridir. Desen bilincli olarak sadedir (tek @, iki yanda bosluksuz metin,

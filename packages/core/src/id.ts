@@ -44,6 +44,11 @@ export const ID_PREFIX = {
    * Kimlik yalnizca kendi defterinde anlamlidir (/v1/me/addresses/{id}).
    */
   ADDRESS: 'adr',
+  /**
+   * Kayitli kart (T11.17): kart kasasinin satiri (payment-svc, cards). Rastgele
+   * uretilir; kart numarasindan TURETILMEZ. Silmede ve (T12.4) odemede tasinir.
+   */
+  CARD: 'crd',
 } as const;
 
 export type IdPrefix = (typeof ID_PREFIX)[keyof typeof ID_PREFIX];

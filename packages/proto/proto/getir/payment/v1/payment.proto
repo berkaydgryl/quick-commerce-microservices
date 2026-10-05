@@ -9,7 +9,10 @@ syntax = "proto3";
 //
 // KART VERISI BU SOZLESMEDEN GECMEZ. Ham kart numarasi, CVV ve son kullanma
 // tarihi hicbir alanda tasinmaz; yalnizca saklanmis kart jetonu (card_token)
-// kullanilir. Bu, mock bir serviste bile bilincli bir sinirdir.
+// kullanilir. Bu, mock bir serviste bile bilincli bir sinirdir. Tek istisna
+// ayri sozlesmededir: kart kasasinin AddCard'i (getir/cardvault/v1, T11.17)
+// numarayi ve CVV'yi bir kez alir, dogrular, maskeleyip saklar; tam numara ve
+// CVV saklanmaz. Kasa ayni servisin (payment-svc) icindedir.
 //
 // Bu servisin ISI DEGILDIR: siparis durumunu degistirmek (order-svc), stok
 // dusurmek (inventory-svc), riski hesaplamak (risk-svc). Odeme basarisiz
