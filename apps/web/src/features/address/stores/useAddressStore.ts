@@ -16,13 +16,18 @@ import type { KeyValueStorage } from '../../../shared/services/storage';
 import {
   ADDRESS_STORAGE_KEY,
   ADDRESS_STORAGE_VERSION,
-  DISCARDED_ADDRESS,
+  migrateAddress,
   restoreSelection,
 } from '../services/address-selection';
-import type { AddressSelection, PersistedAddress } from '../services/address-selection';
+import type {
+  AddressSelection,
+  PersistedAddress,
+  StoredSelection,
+} from '../services/address-selection';
 
 export interface AddressState {
-  readonly selection: AddressSelection | null;
+  /** Kimlikle secim; surum 1'den tasinmis kayitta cevrilene kadar adla. */
+  readonly selection: StoredSelection | null;
 }
 
 /** Aksiyon FONKSIYON ALANI (metot degil): bilesen tek basina secer (bkz. useCartStore). */
@@ -51,8 +56,8 @@ export function createAddressStore(deps: AddressStoreDeps) {
         storage: createJSONStorage(deps.storage),
         // Yalnizca secim yazilir; aksiyonlar degil.
         partialize: (store): PersistedAddress => ({ selection: store.selection }),
-        // Farkli surumlu kayit sessizce atilir.
-        migrate: () => DISCARDED_ADDRESS,
+        // Surum 1'in adla secimi tasinir (T11.15, K3); baska surum atilir.
+        migrate: migrateAddress,
         // Okunan kayit DOGRULANIR: yoksa ya da bozuksa secim yoktur.
         merge: (persisted, current) => ({ ...current, selection: restoreSelection(persisted) }),
       },

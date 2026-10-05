@@ -1,6 +1,8 @@
 import type { SavedAddress } from '@getir/contracts';
+import { useEffect } from 'react';
 
 import { useSessionStore } from '../../../shared/session/session-store';
+import { upgradeSelection } from '../services/address-selection';
 import { addressBookState, resolveDeliveryAddress } from '../services/delivery-address';
 import type { DeliveryAddressState } from '../services/delivery-address';
 import { useAddressStore } from '../stores/useAddressStore';
@@ -15,8 +17,8 @@ export interface AddressBook {
   /** Defterin hatasi; yeniden denerken null. */
   readonly error: Error | null;
   readonly retry: () => void;
-  /** Adresi oturumdaki kullanici adina secer (secim kullaniciya baglidir). */
-  readonly choose: (title: string) => void;
+  /** Adresi (kimligiyle) oturumdaki kullanici adina secer (secim kullaniciya baglidir). */
+  readonly choose: (addressId: string) => void;
 }
 
 /**
@@ -32,6 +34,17 @@ export function useAddressBook(): AddressBook {
   const selection = useAddressStore((state) => state.selection);
   const select = useAddressStore((state) => state.select);
 
+  // Surum 1'den tasinmis adla secim: defter gelince kimlige cevrilir (K3 (a)).
+  // Etki ilkel degerlere baglidir: her cizimde yeni nesne etkiyi yeniden kosturmasin.
+  const upgraded = upgradeSelection(selection, userId, book.data ?? []);
+  const upgradeUserId = upgraded?.userId;
+  const upgradeAddressId = upgraded?.addressId;
+  useEffect(() => {
+    if (upgradeUserId !== undefined && upgradeAddressId !== undefined) {
+      select({ userId: upgradeUserId, addressId: upgradeAddressId });
+    }
+  }, [upgradeUserId, upgradeAddressId, select]);
+
   return {
     delivery: resolveDeliveryAddress({
       session,
@@ -42,9 +55,9 @@ export function useAddressBook(): AddressBook {
     addresses: book.data ?? [],
     error: book.error,
     retry: () => void book.refetch(),
-    choose: (title) => {
+    choose: (addressId) => {
       if (userId !== null) {
-        select({ userId, title });
+        select({ userId, addressId });
       }
     },
   };

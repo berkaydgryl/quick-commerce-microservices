@@ -159,6 +159,7 @@ const WELCOME: WelcomeContent = {
   marketList: MARKET_LIST,
   favorites: CONTENT_FALLBACK.favorites,
   profile: CONTENT_FALLBACK.profile,
+  addresses: CONTENT_FALLBACK.addresses,
 };
 
 const withMarketList = (marketList: Partial<WelcomeContent['marketList']>) => ({

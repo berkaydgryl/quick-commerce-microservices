@@ -67,8 +67,7 @@ export function AddressBookDialog({
           <fieldset className={styles['c-address-book__list']}>
             <legend className={styles['c-address-book__legend']}>{content.addressListLabel}</legend>
             {addresses.map((address, index) => (
-              // Sozlesmede adres kimligi yok; ad tekrarlanabilir, sira eklenir.
-              <label key={`${index}-${address.title}`} className={styles['c-address-book__option']}>
+              <label key={address.id} className={styles['c-address-book__option']}>
                 <input
                   type="radio"
                   name={groupName}

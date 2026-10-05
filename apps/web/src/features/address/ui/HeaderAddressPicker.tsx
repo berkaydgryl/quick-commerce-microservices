@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 
 import { useSessionStore } from '../../../shared/session/session-store';
 import { useAddressBook } from '../hooks/useAddressBook';
-import { selectedAddressIndex } from '../services/delivery-address';
+import { selectedAddress } from '../services/delivery-address';
 import { deliveryLabel } from '../services/delivery-label';
 
 import { AddressDialogs } from './AddressDialogs';
@@ -63,7 +63,7 @@ export function HeaderAddressPicker({
     );
   }
 
-  const current = addresses[selectedAddressIndex(addresses, delivery.title)];
+  const current = selectedAddress(addresses, delivery);
   // Gorunen ad: hesabin adresi kendi adiyla, varsayilan adres icerikteki "Ev" etiketiyle.
   const label = deliveryLabel(delivery, setup.kinds);
   // Varsayilan adres "Ev"dir; hesabin adresi kendi turunun ikonunu gosterir.

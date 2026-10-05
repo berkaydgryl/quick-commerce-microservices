@@ -25,7 +25,11 @@ export function useAddAddress(userId: string) {
       addSavedAddress(authorizedClient, request, keyFor(request)),
     onSuccess: (book, request) => {
       queryClient.setQueryData(addressKeys.list(userId), book);
-      select({ userId, title: request.title });
+      // Yeni adres secilir: ad defterde tekil, kimligi cevaptaki kayittan.
+      const added = book.items.find((address) => address.title === request.title);
+      if (added !== undefined) {
+        select({ userId, addressId: added.id });
+      }
     },
   });
 }

@@ -33,6 +33,9 @@
   /* Bildirimin (toast, T11.13) koyu zemini: acik sayfanin ustunde ayrisir. */
   --bg-toast: var(--palette-gray-900);
 
+  /* Geri alinamaz eylemin dugmesi (T11.15 adres silme onayi). */
+  --bg-danger: var(--palette-red-600);
+
   /* Pencerenin (giris/kayit, T11.6) arkasindaki karartma. */
   --bg-overlay: rgb(25 25 25 / 55%);
   --text-default: var(--palette-gray-900);
@@ -185,6 +188,12 @@
      kendi genisligini vermez; kap sola yaslidir, sagi bos kalir. */
   --size-account-side: 18.5rem;
   --size-account-content: 38rem;
+
+  /* Adreslerim (T11.15): satir eylemleri (kalem, cop kutusu, ekleme) en az
+     44 px dokunma alani; ikonlari, satirin tur ikonu ve secili onayi. */
+  --size-address-action: 2.75rem;
+  --size-address-action-icon: 1.25rem;
+  --size-address-row-icon: 1.5rem;
 
   /* Bildirim (toast, T11.13): en genis hali ve kapatma dugmesi. */
   --container-max-toast: 24rem;

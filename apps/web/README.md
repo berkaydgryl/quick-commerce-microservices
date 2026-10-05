@@ -231,12 +231,12 @@ cihazda da aynı favoriler.
 | Veri             | `features/favorites/api`, `hooks/useFavorites.ts`         | `GET /v1/me/favorites` (TanStack Query, kullanıcı kimliğiyle anahtarlı); kalpler ve sayfa aynı sorgu |
 | Tıklama          | `hooks/useToggleFavorite.ts`, `services/favorite-list.ts` | İyimser: liste hemen değişir; sunucu reddederse eski hali geri yazılır ve bildirim çıkar             |
 | Bildirim (toast) | `shared/toast/`, `shared/ui/toast/Toaster.tsx`            | Zustand kuyruğu (en fazla 3, 5 sn), `aria-live`; roadmap T15.4'ten öne alındı                        |
-| Profil sayfası   | `pages/account/AccountLayout.tsx`, `FavoritesPage.tsx`    | Solda profil kartı ve menü (Adreslerim penceresi, Favori İşletmeler); `/hesabim/favoriler`           |
+| Profil sayfası   | `pages/account/AccountLayout.tsx`, `FavoritesPage.tsx`    | Solda profil kartı ve menü (Adreslerim, Favori İşletmeler); `/hesabim/favoriler`                     |
 | Kart             | `features/markets/ui/MarketCard.tsx`                      | Bağlantı market adında, katmanı kartı kaplar; kalp bağlantının dışında (iç içe etkileşim geçersizdi) |
 
 - **Metinler içerikten** (`favorites` bloğu, `appHeader.favoritesLabel`); içerik gelmezse yedekle.
-- **"Adreslerim"** profil menüsünde üst bardaki pencerenin aynısını açar (`features/address/ui/AddressDialogs.tsx`,
-  iki yer ortak kullanır).
+- **"Adreslerim"** profil menüsünde `/hesabim/adreslerim` sekmesine gider (T11.15; aşağıda "Adreslerim sekmesi").
+  Üst bardaki adres seçici kendi penceresini açmaya devam eder (`features/address/ui/AddressDialogs.tsx`).
 - Açılış saati verisi yok: kapalı market yalnızca "Kapalı" etiketiyle görünür.
 
 ## Teslimat adresi (T9.5) — tasarımsız kabuk
@@ -259,9 +259,10 @@ sorulur; adres değişince hemen yenilenir. Kural veri katmanında, arayüz yaln
   Adresi olmayan hesap "Kayıtlı adresin yok.", defteri okunamayan oturum sunucunun mesajını ve "Tekrar
   dene"yi görür; ikisi de varsayılan "Ev"i kullanır. Varsayılanın seed'deki "Ev" ile aynı kaldığını
   `delivery-address.spec.ts` denetler.
-- **Seçim adıyla tanınır:** sözleşmede adres kimliği yok. `getir.address` = `{ userId, title }`, kalıcı;
-  çıkışta silinmez, aynı kullanıcı dönünce seçimini bulur. Başka hesabın seçimi uygulanmaz; seçilen ad
-  defterde yoksa ilk adres. Kayıt sürümlüdür ve okunurken doğrulanır (bozuk kayıt = seçim yok).
+- **Seçim kimlikle tanınır (T11.15):** `getir.address` sürüm 2 = `{ userId, addressId }`, kalıcı; çıkışta
+  silinmez, aynı kullanıcı dönünce seçimini bulur. Ad değişse de seçim kalır. Sürüm 1 kaydı (`{ userId, title }`)
+  atılmaz: defter gelince adla eşleşip kimliğe çevrilir. Başka hesabın seçimi uygulanmaz; seçilen adres defterde
+  yoksa (silinmiş) ilk adres. Kayıt sürümlüdür ve okunurken doğrulanır (bozuk kayıt = seçim yok).
 - **Önce doğru konum:** oturum ve defter çözülene kadar konuma bağlı sorgu **gitmez** (`skipToken`, konumu
   `null` olan ayrı sorgu anahtarı); bölümler "yükleniyor" gösterir. İstek önce varsayılan konuma gidip sonra
   değişmez (canlı testte 800 ms geciktirilen defterle ölçüldü).
@@ -417,3 +418,21 @@ o da core'u import ettiği için bu satır tarayıcı paketine girer ve Rollup �
 `vite.config.ts` bu importu `src/shared/shims/node-crypto.ts`'e (Web Crypto) yönlendirir.
 Kalıcı çözüm core'un `globalThis.crypto.randomUUID()` kullanmasıdır (Node 22'de de global);
 o değişiklik platform alanında ayrı bir PR'dır ve yapıldığında takma ad silinir.
+
+## Adreslerim sekmesi (T11.15)
+
+`/hesabim/adreslerim` (korumalı), hesap sayfalarının ortak içerik kabında; görsel dil profil kartının (T11.14 PR 2).
+
+| Parça       | Dosya                                                    | Not                                                                                 |
+| ----------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Sayfa       | `pages/account/AddressesPage.tsx`                        | Birleştirir: liste, T11.8'in penceresi (ekleme ve düzenleme modu), silme onayı      |
+| Liste       | `pages/account/AddressesView.tsx`                        | Durumsuz; satırlar radyo grubu (satıra tıklamak seçer), sağda onay ya da çöp, kalem |
+| Düzenleme   | `features/address/ui/AddressSetupDialog.tsx` (`editing`) | Harita adresin noktasında; nokta değişmediyse satır korunur (`isSamePoint`, ~1 m)   |
+| Silme onayı | `features/address/ui/DeleteAddressDialog.tsx`            | Küçük pencere: "<ad> adresini silmek istiyor musun?", Vazgeç / Sil                  |
+| Veri        | `hooks/useUpdateAddress.ts`, `hooks/useDeleteAddress.ts` | `PUT`/`DELETE /v1/me/addresses/{addressId}`; cevap güncel defter, önbelleğe yazılır |
+
+- **Kararlar (5 Ekim, hepsi (a)):** seçili adreste yeşil onay, diğerlerinde çöp kutusu; seçili adres düzenleme
+  penceresindeki "Adresi sil"le silinir. Her satırda kalem. "Ev / İş / Diğer adres ekle" türü seçili açar, başlık
+  türün adıyla dolu (varsa "Ev 2"). Silmeden önce onay. Son adres silinince ekleme penceresi açılır, X ile kapanır.
+- **Seçili adres silinince** defterin ilk adresi geçerli olur (kod gerekmez: seçim defterde bulunamaz).
+- **Metinler içerikten** (`addresses` bloğu; içerik gelmezse yedek). Satır eylemleri en az 44 px (`--size-address-action`).

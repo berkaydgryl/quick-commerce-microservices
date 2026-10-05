@@ -2,7 +2,7 @@ import type { AddressSetupContent, AppHeaderContent } from '@getir/contracts';
 
 import { QueryError, QueryLoading } from '../../../shared/ui/query-status/QueryStatus';
 import type { AddressBook } from '../hooks/useAddressBook';
-import { selectedAddressIndex } from '../services/delivery-address';
+import { selectedAddress } from '../services/delivery-address';
 
 import { AddressBookDialog } from './AddressBookDialog';
 import styles from './AddressDialogs.module.css';
@@ -54,10 +54,7 @@ export function AddressDialogs({
     );
   }
 
-  const current =
-    delivery.status === 'pending'
-      ? undefined
-      : addresses[selectedAddressIndex(addresses, delivery.title)];
+  const current = selectedAddress(addresses, delivery);
   // Defter okunurken (oturum ya da defter cozuluyor) bos liste ve pasif
   // "Onayla" yerine yukleniyor notu (QA W3); defter okunamadiysa hata.
   const loading = <QueryLoading>{content.addressLoadingLabel}</QueryLoading>;
@@ -83,7 +80,7 @@ export function AddressDialogs({
       current={current}
       notice={notice}
       onConfirm={(address) => {
-        choose(address.title);
+        choose(address.id);
         onClose();
       }}
       onAdd={() => onOpen('add')}

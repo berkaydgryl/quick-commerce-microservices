@@ -3,11 +3,10 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useEffect, useRef } from 'react';
 
+import { isSamePoint } from '../services/geo-point';
+
 import styles from './AddressMap.module.css';
 import { HomePinIcon } from './icons';
-
-/** Ayni nokta sayilan fark (~1 m): pin kendi hareketinden gelen merkezi yeniden uygulamaz. */
-const SAME_POINT = 1e-5;
 
 interface AddressMapProps {
   readonly map: MapContent;
@@ -77,21 +76,19 @@ export function AddressMap({ map, center, label, interactive, hint, onMove }: Ad
   }, [map.tileUrl, map.attribution, map.zoom, interactive]);
 
   // Disaridan gelen yeni nokta (arama sonucu): harita oraya gider.
+  const { lat, lng } = center;
   useEffect(() => {
     const leaflet = instance.current;
     if (leaflet === null) {
       return;
     }
-    const current = leaflet.getCenter();
-    if (
-      Math.abs(current.lat - center.lat) < SAME_POINT &&
-      Math.abs(current.lng - center.lng) < SAME_POINT
-    ) {
+    // Ayni nokta (~1 m): pin kendi hareketinden gelen merkezi yeniden uygulamaz.
+    if (isSamePoint(leaflet.getCenter(), { lat, lng })) {
       return;
     }
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    leaflet.setView([center.lat, center.lng], leaflet.getZoom(), { animate: !reduceMotion });
-  }, [center.lat, center.lng]);
+    leaflet.setView([lat, lng], leaflet.getZoom(), { animate: !reduceMotion });
+  }, [lat, lng]);
 
   return (
     <div
