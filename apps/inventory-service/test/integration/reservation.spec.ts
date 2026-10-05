@@ -647,7 +647,14 @@ describe('supurucu (T10.3)', () => {
 
       expect(tookOverInMs).toBeLessThanOrEqual(LOCK_TTL_MS + 1_000);
       expect(lines.filter((line) => line.message === 'supurucu lider oldu')).toHaveLength(1);
-      expect(await ledger.settlementOf(MARKET, orderId(1))).toBe('expired');
+      // Supurucu once sayaci geri verir, defteri sonra yazar (sweep-expired.ts
+      // settle): sayac goruldugunde defter henuz yazilmamis olabilir (#96).
+      await vi.waitFor(
+        async () => {
+          expect(await ledger.settlementOf(MARKET, orderId(1))).toBe('expired');
+        },
+        { timeout: 2_000, interval: 20 },
+      );
     } finally {
       await sweeper.stop();
     }

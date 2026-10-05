@@ -3,6 +3,11 @@
  * tel uzerinden: sahte bir inventory sunucusu ayaga kalkar. Istek cevirisi,
  * requestId iletimi, beklenen sonuclarin (stok yetmedi, kullanicinin aktif
  * kilidi, kilidin dusmesi) ayrimi, sonuc sozlugu ve sure siniri denenir.
+ *
+ * Sure siniri yuke bagli olmasin (#98): davranis testleri bol sureli
+ * istemciyle kosar; sure siniri testinin kendi kisa sureli istemcisi vardir ve
+ * yavas sunucu CEVAP VERMEZ (test bitince birakilir). Iki surenin orani yerine
+ * "cevap hic gelmedi" olayina dayanir.
  */
 
 import { AppError, ERROR_CODES, silentLogger } from '@getir/core';
@@ -22,7 +27,10 @@ import { SETTLEMENT } from '../../src/application/stock-reservations.js';
 import type { ReserveStockRequest } from '../../src/application/stock-reservations.js';
 import { GrpcStockReservations } from '../../src/infrastructure/inventory/grpc-stock-reservations.js';
 
-const TIMEOUT_MS = 200;
+/** Davranis testleri: yuklu makinede de asilmayacak kadar bol. */
+const CALL_TIMEOUT_MS = 5_000;
+/** Yalnizca sure siniri testinin istemcisi. */
+const SHORT_TIMEOUT_MS = 200;
 const scope = { requestId: 'req_stok_1', logger: silentLogger };
 const EXPIRES_AT = new Date('2026-10-02T10:10:00.000Z');
 
@@ -45,6 +53,8 @@ const ORDER = {
   /** Kilit dusmus: RESERVATION_EXPIRED (T11.3). */
   LAPSED: 'ord_dustu',
 } as const;
+/** Yavas sunucunun bekletilen cevaplari: test sonunda birakilir. */
+const heldSlowReplies: (() => void)[] = [];
 let flakyReserves = 0;
 let flakyExtends = 0;
 let flakyShortens = 0;
@@ -108,9 +118,9 @@ const implementation = {
         callback(null, inventoryV1.ReserveResponse.fromPartial({}));
         return;
       case ORDER.SLOW:
-        setTimeout(
-          () => callback(null, { expiresAt: EXPIRES_AT, alreadyReserved: false }),
-          TIMEOUT_MS * 3,
+        // Cevap istemcinin suresi icinde HIC gelmez: sure siniri oranla degil olayla.
+        heldSlowReplies.push(() =>
+          callback(null, { expiresAt: EXPIRES_AT, alreadyReserved: false }),
         );
         return;
       default:
@@ -188,6 +198,7 @@ const implementation = {
 
 let handle: GrpcServerHandle;
 let stock: GrpcStockReservations;
+let shortStock: GrpcStockReservations;
 
 beforeAll(async () => {
   handle = await startGrpcServer({
@@ -202,11 +213,14 @@ beforeAll(async () => {
       },
     ],
   });
-  stock = new GrpcStockReservations(`127.0.0.1:${handle.port}`, TIMEOUT_MS);
+  stock = new GrpcStockReservations(`127.0.0.1:${handle.port}`, CALL_TIMEOUT_MS);
+  shortStock = new GrpcStockReservations(`127.0.0.1:${handle.port}`, SHORT_TIMEOUT_MS);
 });
 
 afterAll(async () => {
+  for (const reply of heldSlowReplies.splice(0)) reply();
   stock?.close();
+  shortStock?.close();
   await handle?.shutdown('test bitti');
 });
 
@@ -282,10 +296,11 @@ describe('GrpcStockReservations.reserve', () => {
     expect(error.code).toBe(ERROR_CODES.INTERNAL);
   });
 
-  it('sure siniri dolarsa SERVICE_UNAVAILABLE', async () => {
-    const error = await rejectionOf(stock.reserve(reserveRequest(ORDER.SLOW), scope));
+  it('sure siniri dolarsa SERVICE_UNAVAILABLE (sunucu cevap vermez)', async () => {
+    const error = await rejectionOf(shortStock.reserve(reserveRequest(ORDER.SLOW), scope));
 
     expect(error.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+    expect(heldSlowReplies.length).toBeGreaterThan(0);
   });
 });
 
