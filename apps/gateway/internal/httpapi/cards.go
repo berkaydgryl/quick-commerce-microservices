@@ -2,8 +2,8 @@ package httpapi
 
 // Kart kasasi uclari (T11.17): GET ve POST /v1/me/cards, DELETE
 // /v1/me/cards/{cardId}. Kasa payment-svc'dedir (CardVaultService). Ayri
-// dosyadadir: router.go yalnizca registerCardRoutes'u cagirir (dosya boyutu
-// kurali).
+// dosyadadir: routes.go (registerMeRoutes) yalnizca registerCardRoutes'u
+// cagirir (dosya boyutu kurali).
 //
 // Kart numarasi ve CVV yalnizca POST govdesinde gecer; gateway onlari kasaya
 // iletir ve hicbir yere yazmaz: istek satiri yalnizca yontem, yol ve durum
