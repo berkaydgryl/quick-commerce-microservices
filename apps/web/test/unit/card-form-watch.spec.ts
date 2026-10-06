@@ -3,8 +3,8 @@
  * verir, kosul onayi vermez (QA D2); son kullanma hatasi iki secimde birlikte
  * yeniden denetlenir (QA O3). Gercek react-hook-form denetimiyle
  * (createFormControl), DOM'suz. Bagli alan yalnizca dokunulmus ya da
- * hatasi gorunurken yeniden denetlenir (QA K2); ayni degerle gelen
- * degisiklik anahtari yenilemez (QA K6).
+ * hatasi gorunurken yeniden denetlenir (QA K2); ayni deger kaynakta elenir
+ * (QA K6) ve izleyici alan degerlerini okumaz, saklamaz (QA M7).
  */
 
 import { CARD_FIELD_MESSAGES, CONTENT_FALLBACK } from '@getir/contracts';
@@ -15,6 +15,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { EMPTY_CARD_FORM, cardFormSchema } from '../../src/features/cards/services/card-form';
 import type { CardFormValues } from '../../src/features/cards/services/card-form';
 import { watchCardForm } from '../../src/features/cards/services/card-form-watch';
+import type { WatchedCardForm } from '../../src/features/cards/services/card-form-watch';
+import { onlyWhenChanged } from '../../src/features/cards/services/changed-only';
 
 import { VISA_NUMBER } from './card-test-support';
 
@@ -133,14 +135,46 @@ describe('watchCardForm (T11.17)', () => {
     expect(form.getFieldState('cvv').invalid).toBe(false);
   });
 
-  it('QA K6: ayni degerle gelen degisiklik anahtari yenilemez', async () => {
-    const { form, changed } = setup();
+  it('QA M7: izleyici alan degerlerini okumaz (numara ve CVV kopyasi tutulmaz)', async () => {
+    const { form } = setup();
+    const read = new Set<PropertyKey>();
+    // watch'un verdigi degerler her okumayi kaydeden bir vekille sarilir.
+    const spied: WatchedCardForm = {
+      getFieldState: form.getFieldState,
+      trigger: form.trigger,
+      watch: ((callback: Parameters<WatchedCardForm['watch']>[0]) =>
+        form.watch((values, info) =>
+          callback(
+            new Proxy(values, {
+              get: (target, key) => {
+                read.add(key);
+                return Reflect.get(target, key) as unknown;
+              },
+            }),
+            info,
+          ),
+        )) as WatchedCardForm['watch'],
+    };
+    const changed = vi.fn();
+    watchCardForm(spied, changed);
 
-    await type(form, 'cvv', '');
-    expect(changed).not.toHaveBeenCalled();
+    await type(form, 'number', VISA_NUMBER);
+    await type(form, 'cvv', '987');
 
-    await type(form, 'cvv', '1');
-    await type(form, 'cvv', '1');
-    expect(changed).toHaveBeenCalledOnce();
+    expect(changed).toHaveBeenCalledTimes(2);
+    expect([...read]).toEqual([]);
+  });
+});
+
+describe('onlyWhenChanged (QA K6)', () => {
+  it('ayni deger forma gitmez; degisen deger bir kez gider', () => {
+    const onChange = vi.fn();
+
+    onlyWhenChanged<string>('987', onChange)('987');
+    expect(onChange).not.toHaveBeenCalled();
+
+    onlyWhenChanged<string>('987', onChange)('98');
+    expect(onChange).toHaveBeenCalledOnce();
+    expect(onChange).toHaveBeenCalledWith('98');
   });
 });

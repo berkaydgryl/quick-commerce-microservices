@@ -6,7 +6,7 @@ import type { CardFormField, CardFormValues } from './card-form';
 /** Formun izlenen kismi (react-hook-form; testte createFormControl). */
 export type WatchedCardForm = Pick<
   UseFormReturn<CardFormValues>,
-  'watch' | 'getFieldState' | 'getValues' | 'trigger'
+  'watch' | 'getFieldState' | 'trigger'
 >;
 
 /**
@@ -26,8 +26,11 @@ const asField = (name: string): CardFormField | undefined =>
 
 /**
  * Kart formundaki degisikliklere tepki (T11.17):
- *   - istegin bir alaninin DEGERI degisince deneme anahtarina haber verilir
- *     (QA C3, D2, K6): ayni degerle gelen degisiklik ve kosul onayi sayilmaz;
+ *   - istegin bir alani degisince deneme anahtarina haber verilir (QA C3,
+ *     D2); kosul onayi sayilmaz. Izleyici alan DEGERLERINI OKUMAZ ve
+ *     SAKLAMAZ (QA M7: numara ve CVV'nin kopyasi form durumu disinda
+ *     tutulmaz); ayni deger forma kaynakta hic gitmez (onlyWhenChanged,
+ *     CardNumberField; QA K6);
  *   - bagli alan yeniden denetlenir (QA O3, K2), ama yalnizca kullanici ona
  *     dokunduysa ya da hatasi gorunuyorsa: 01/2027 -> 2026'da ayin "gecmis"
  *     hatasi cikar, ay secilince dokunulmamis yil kirmizi olmaz; marka
@@ -35,17 +38,11 @@ const asField = (name: string): CardFormField | undefined =>
  * Donen fonksiyon aboneligi birakir.
  */
 export function watchCardForm(form: WatchedCardForm, changed: () => void): () => void {
-  const last = new Map<CardFormField, unknown>();
-  const initial = form.getValues();
-  for (const field of CARD_FORM_FIELDS) {
-    last.set(field, initial[field]);
-  }
-  const subscription = form.watch((values, { name }) => {
+  const subscription = form.watch((_values, { name }) => {
     const field = name === undefined ? undefined : asField(name);
-    if (field === undefined || values[field] === last.get(field)) {
+    if (field === undefined) {
       return;
     }
-    last.set(field, values[field]);
     if (isRequestField(field)) {
       changed();
     }
