@@ -27,6 +27,7 @@ const WELCOME = JSON.parse(
   profile: unknown;
   addresses: unknown;
   orders: unknown;
+  paymentMethods: unknown;
 };
 
 /** Yapidaki butun metinler (dizi ve ic nesneler dahil). */
@@ -73,6 +74,10 @@ describe('CONTENT_FALLBACK', () => {
 
   it('Adreslerim metinleri (T11.15) welcome.json addresses ile birebir', () => {
     expect(CONTENT_FALLBACK.addresses).toEqual(WELCOME.addresses);
+  });
+
+  it('Odeme Yontemlerim metinleri (T11.17) welcome.json paymentMethods ile birebir', () => {
+    expect(CONTENT_FALLBACK.paymentMethods).toEqual(WELCOME.paymentMethods);
   });
 
   it('Gecmis Siparislerim metinleri (T11.16) welcome.json orders ile birebir', () => {

@@ -104,7 +104,7 @@ describe('checkBundle', () => {
 
     expect(checkBundle(dir, PERSONAS)).toEqual({
       ok: true,
-      lines: ['paket temiz: 2 dosya, 5 persona degeri arandi'],
+      lines: ['paket temiz: 2 dosya, 5 persona degeri ve 2 kapali ozellik izi arandi'],
     });
   });
 
@@ -115,6 +115,20 @@ describe('checkBundle', () => {
 
     expect(result.ok).toBe(false);
     expect(result.lines).toContain('  - assets/i.js: demo sifresi');
+  });
+
+  it('production da kapali ozelligin izi (T11.17 kart kasasi) kalir ve raporlanir', () => {
+    const dir = bundleWith({
+      'assets/i.js': 'fetch("/v1/me/cards");path:"/hesabim/odeme-yontemlerim"',
+    });
+
+    const result = checkBundle(dir, PERSONAS);
+
+    expect(result.ok).toBe(false);
+    expect(result.lines).toContain('  - assets/i.js: kart kasasi ucu (T11.17, __CARD_VAULT__)');
+    expect(result.lines).toContain(
+      '  - assets/i.js: Odeme Yontemlerim adresi (T11.17, __CARD_VAULT__)',
+    );
   });
 
   it('bos ya da olmayan paket temiz sayilmaz', () => {

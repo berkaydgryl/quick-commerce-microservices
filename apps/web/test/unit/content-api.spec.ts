@@ -140,6 +140,7 @@ const welcome = {
   profile: CONTENT_FALLBACK.profile,
   addresses: CONTENT_FALLBACK.addresses,
   orders: CONTENT_FALLBACK.orders,
+  paymentMethods: CONTENT_FALLBACK.paymentMethods,
 };
 
 function clientReturning(body: unknown) {

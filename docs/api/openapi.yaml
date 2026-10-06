@@ -3698,6 +3698,7 @@ components:
           addresses,
           accountMenu,
           orders,
+          paymentMethods,
         ]
       properties:
         header:
@@ -3749,6 +3750,8 @@ components:
           $ref: "#/components/schemas/AccountMenuContent"
         orders:
           $ref: "#/components/schemas/OrdersContent"
+        paymentMethods:
+          $ref: "#/components/schemas/PaymentMethodsContent"
 
     FavoritesContent:
       type: object
@@ -4006,7 +4009,8 @@ components:
         ve üst barın Profil açılır menüsü AYNI maddeleri aynı sırayla gösterir.
         Sıra ve adresler web'dedir (`accountMenuItems`); burada yalnızca
         etiketler. T11.17'de Ödeme Yöntemlerim eklenir.
-      required: [label, profileLabel, addressesLabel, favoritesLabel, ordersLabel]
+      required:
+        [label, profileLabel, addressesLabel, favoritesLabel, ordersLabel, paymentMethodsLabel]
       properties:
         label:
           $ref: "#/components/schemas/ContentText"
@@ -4015,6 +4019,105 @@ components:
         addressesLabel: { $ref: "#/components/schemas/ContentText" }
         favoritesLabel: { $ref: "#/components/schemas/ContentText" }
         ordersLabel: { $ref: "#/components/schemas/ContentText" }
+        paymentMethodsLabel: { $ref: "#/components/schemas/ContentText" }
+
+    PaymentMethodsContent:
+      type: object
+      description: |
+        Ödeme Yöntemlerim (T11.17; `/hesabim/odeme-yontemlerim`): kayıtlı kartlar,
+        "Kart ekle" sayfası (tasarım B "Markanın rengi") ve silme onayı. Kural
+        cümleleri içerikte değil, sözleşmede (`CARD_FIELD_MESSAGES`); kasa aynı
+        cümleleri döner. `*Suffix` metinleri kartın adının arkasına eklenir.
+      required:
+        [
+          title,
+          loadingLabel,
+          emptyNotice,
+          addLabel,
+          expiredLabel,
+          deleteSuffix,
+          confirmTitle,
+          confirmQuestionSuffix,
+          confirmHint,
+          confirmLabel,
+          deletingLabel,
+          cancelLabel,
+          deletedToastSuffix,
+          addTitle,
+          brandsLabel,
+          numberLabel,
+          numberValidLabel,
+          holderNameLabel,
+          expiryLabel,
+          expiryFormatNotice,
+          cvvLabel,
+          nicknameLabel,
+          saveLabel,
+          savingLabel,
+          retryWaitLabel,
+          addedToastPrefix,
+          privacyNote,
+          holderCaption,
+          expiryCaption,
+          holderPlaceholder,
+          expiryPlaceholder,
+          nicknamePlaceholder,
+          cvvCaption,
+          cvvNote,
+          brandLabels,
+          brandMarks,
+        ]
+      properties:
+        title: { $ref: "#/components/schemas/ContentText" }
+        loadingLabel: { $ref: "#/components/schemas/ContentText" }
+        emptyNotice: { $ref: "#/components/schemas/ContentText" }
+        addLabel: { $ref: "#/components/schemas/ContentText" }
+        expiredLabel: { $ref: "#/components/schemas/ContentText" }
+        deleteSuffix: { $ref: "#/components/schemas/ContentText" }
+        confirmTitle: { $ref: "#/components/schemas/ContentText" }
+        confirmQuestionSuffix: { $ref: "#/components/schemas/ContentText" }
+        confirmHint: { $ref: "#/components/schemas/ContentText" }
+        confirmLabel: { $ref: "#/components/schemas/ContentText" }
+        deletingLabel: { $ref: "#/components/schemas/ContentText" }
+        cancelLabel: { $ref: "#/components/schemas/ContentText" }
+        deletedToastSuffix: { $ref: "#/components/schemas/ContentText" }
+        addTitle: { $ref: "#/components/schemas/ContentText" }
+        brandsLabel: { $ref: "#/components/schemas/ContentText" }
+        numberLabel: { $ref: "#/components/schemas/ContentText" }
+        numberValidLabel: { $ref: "#/components/schemas/ContentText" }
+        holderNameLabel: { $ref: "#/components/schemas/ContentText" }
+        expiryLabel: { $ref: "#/components/schemas/ContentText" }
+        expiryFormatNotice: { $ref: "#/components/schemas/ContentText" }
+        cvvLabel: { $ref: "#/components/schemas/ContentText" }
+        nicknameLabel: { $ref: "#/components/schemas/ContentText" }
+        saveLabel: { $ref: "#/components/schemas/ContentText" }
+        savingLabel: { $ref: "#/components/schemas/ContentText" }
+        retryWaitLabel:
+          $ref: "#/components/schemas/ContentText"
+          description: 'Çok fazla başarısız doğrulamada (429) geri sayımın başı: "Yeniden deneyebilmen için 4:59".'
+        addedToastPrefix: { $ref: "#/components/schemas/ContentText" }
+        privacyNote: { $ref: "#/components/schemas/ContentText" }
+        holderCaption: { $ref: "#/components/schemas/ContentText" }
+        expiryCaption: { $ref: "#/components/schemas/ContentText" }
+        holderPlaceholder: { $ref: "#/components/schemas/ContentText" }
+        expiryPlaceholder: { $ref: "#/components/schemas/ContentText" }
+        nicknamePlaceholder: { $ref: "#/components/schemas/ContentText" }
+        cvvCaption: { $ref: "#/components/schemas/ContentText" }
+        cvvNote: { $ref: "#/components/schemas/ContentText" }
+        brandLabels: { $ref: "#/components/schemas/CardBrandLabels" }
+        brandMarks:
+          $ref: "#/components/schemas/CardBrandLabels"
+          description: Kartın üstündeki soluk büyük marka işareti (kısa; "MC").
+
+    CardBrandLabels:
+      type: object
+      description: Kart markalarının görünen adları; anahtarlar sözleşmedeki marka (`CardBrand`).
+      required: [VISA, MASTERCARD, AMEX, TROY]
+      properties:
+        VISA: { $ref: "#/components/schemas/ContentText" }
+        MASTERCARD: { $ref: "#/components/schemas/ContentText" }
+        AMEX: { $ref: "#/components/schemas/ContentText" }
+        TROY: { $ref: "#/components/schemas/ContentText" }
 
     OrdersContent:
       type: object

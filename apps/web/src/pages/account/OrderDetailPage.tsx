@@ -49,7 +49,7 @@ function OrderDetailSection({
     market.data?.name ?? (market.error === null ? undefined : texts?.unknownMarketLabel);
 
   return (
-    <AccountLayout userId={userId} variant="section">
+    <AccountLayout userId={userId} variant="nested">
       {texts !== undefined && (
         <OrderDetailView
           texts={texts}

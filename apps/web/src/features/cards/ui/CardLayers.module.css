@@ -1,0 +1,65 @@
+/*
+ * Kartin gradyan katmanlari (T11.17, tasarim B): markaninki gorunur, digerleri
+ * saydam; renk gecisi opaklikla. Acisi yuzden (--card-angle).
+ */
+.c-payment-card__layer {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity var(--duration-card-color) ease;
+}
+
+.c-payment-card__layer.is-active {
+  opacity: 1;
+}
+
+.c-payment-card__layer--default {
+  background: linear-gradient(
+    var(--card-angle),
+    var(--card-brand-default-start) 0%,
+    var(--card-brand-default-mid) 55%,
+    var(--card-brand-default-end) 100%
+  );
+}
+
+.c-payment-card__layer--visa {
+  background: linear-gradient(
+    var(--card-angle),
+    var(--card-brand-visa-start) 0%,
+    var(--card-brand-visa-mid) 55%,
+    var(--card-brand-visa-end) 100%
+  );
+}
+
+.c-payment-card__layer--mastercard {
+  background: linear-gradient(
+    var(--card-angle),
+    var(--card-brand-mastercard-start) 0%,
+    var(--card-brand-mastercard-mid) 50%,
+    var(--card-brand-mastercard-end) 100%
+  );
+}
+
+.c-payment-card__layer--amex {
+  background: linear-gradient(
+    var(--card-angle),
+    var(--card-brand-amex-start) 0%,
+    var(--card-brand-amex-mid) 55%,
+    var(--card-brand-amex-end) 100%
+  );
+}
+
+.c-payment-card__layer--troy {
+  background: linear-gradient(
+    var(--card-angle),
+    var(--card-brand-troy-start) 0%,
+    var(--card-brand-troy-mid) 55%,
+    var(--card-brand-troy-end) 100%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-payment-card__layer {
+    transition: none;
+  }
+}

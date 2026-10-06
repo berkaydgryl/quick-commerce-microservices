@@ -1,0 +1,140 @@
+/*
+ * Odeme Yontemlerim (T11.17, M4): kucuk kart gorselleri iki sutunda (dar
+ * ekranda tek); kartin altinda kisa adi, suresi gectiyse rozet ve cop kutusu.
+ * Sondaki "Kart ekle" kart biciminde kesikli kutu: ayni ritimde durur.
+ */
+.c-payment-methods {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.c-payment-methods__title {
+  font-size: var(--font-size-lg);
+}
+
+.c-payment-methods__empty {
+  color: var(--text-muted);
+}
+
+.c-payment-methods__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--size-card-tile-min)), 1fr));
+  gap: var(--space-5) var(--space-4);
+}
+
+.c-payment-methods__tile {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+}
+
+.c-payment-methods__visual {
+  display: grid;
+}
+
+/* Suresi gecen kart solgun; rozet nedenini soyler. */
+.c-payment-methods__tile.is-expired .c-payment-methods__visual {
+  opacity: var(--opacity-disabled);
+  filter: grayscale(1);
+}
+
+.c-payment-methods__meta {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.c-payment-methods__name {
+  flex: 1;
+  min-width: 0;
+  font-weight: var(--font-weight-bold);
+  overflow-wrap: anywhere;
+}
+
+.c-payment-methods__expired {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-muted);
+  white-space: nowrap;
+  border: var(--border-width-thin) solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+}
+
+.c-payment-methods__delete {
+  display: grid;
+  place-items: center;
+  inline-size: var(--size-card-action);
+  block-size: var(--size-card-action);
+  padding: 0;
+  color: var(--color-brand-primary-soft);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+}
+
+.c-payment-methods__delete svg {
+  inline-size: var(--size-card-action-icon);
+}
+
+.c-payment-methods__delete:disabled {
+  cursor: progress;
+  opacity: var(--opacity-disabled);
+}
+
+.c-payment-methods__delete:hover:not(:disabled) {
+  color: var(--text-danger);
+}
+
+/* Kasa dolu: "Kart ekle" yerine sozlesmenin cumlesi, ayni kutuda. */
+.c-payment-methods__full {
+  display: grid;
+  place-content: center;
+  max-inline-size: var(--size-payment-card);
+  aspect-ratio: var(--ratio-payment-card);
+  padding: var(--space-4);
+  color: var(--text-muted);
+  text-align: center;
+  border: var(--border-width-thin) dashed var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+
+/* Kart ekle: kart oraninda kesikli kutu, ortada arti ve yazi. */
+.c-payment-methods__add {
+  display: grid;
+  gap: var(--space-2);
+  place-content: center;
+  justify-items: center;
+  max-inline-size: var(--size-payment-card);
+  aspect-ratio: var(--ratio-payment-card);
+  font-weight: var(--font-weight-extrabold);
+  color: var(--color-brand-primary);
+  text-decoration: none;
+  border: var(--border-width-thin) dashed var(--color-brand-primary-soft);
+  border-radius: var(--radius-lg);
+  transition: background var(--duration-fast) var(--easing-standard);
+}
+
+.c-payment-methods__add:hover {
+  background: var(--color-brand-primary-subtle);
+}
+
+.c-payment-methods__add-icon {
+  display: grid;
+  inline-size: var(--size-card-action);
+  aspect-ratio: 1;
+  place-items: center;
+  background: var(--color-brand-primary-subtle);
+  border-radius: var(--radius-pill);
+}
+
+.c-payment-methods__add-icon svg {
+  inline-size: var(--size-card-action-icon);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-payment-methods__add {
+    transition: none;
+  }
+}

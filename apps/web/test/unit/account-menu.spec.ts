@@ -2,7 +2,7 @@
  * Hesap menusu (T11.16; kullanici istegi): profil sayfasinin sol menusu ve
  * ust barin Profil acilir menusu TEK listeden (accountMenuItems) cizilir; ikisi
  * ayni maddeleri ayni sirayla gosterir. Sira: Profilim, Adreslerim, Favori
- * İşletmeler, Geçmiş Siparişlerim. Acilir menude "Çıkış yap" ayri satirda;
+ * İşletmeler, Geçmiş Siparişlerim, Ödeme Yöntemlerim (T11.17). Acilir menude "Çıkış yap" ayri satirda;
  * sol menude gecerli sayfa vurgulu, Profilim yalnizca /hesabim'de.
  */
 
@@ -81,12 +81,13 @@ afterEach(() => {
 });
 
 describe('hesap menusu (T11.16)', () => {
-  it('tek liste: Profilim, Adreslerim, Favori İşletmeler, Geçmiş Siparişlerim', () => {
+  it('tek liste: Profilim, Adreslerim, Favori İşletmeler, Geçmiş Siparişlerim, Ödeme Yöntemlerim', () => {
     expect(accountMenuLinks(TEXTS).map((link) => [link.href, link.label])).toEqual([
       ['/hesabim', 'Profilim'],
       ['/hesabim/adreslerim', 'Adreslerim'],
       ['/hesabim/favoriler', 'Favori İşletmeler'],
       ['/hesabim/siparislerim', 'Geçmiş Siparişlerim'],
+      ['/hesabim/odeme-yontemlerim', 'Ödeme Yöntemlerim'],
     ]);
   });
 
@@ -117,6 +118,9 @@ describe('hesap menusu (T11.16)', () => {
     expect(active(sideMenu('/hesabim'))).toEqual([TEXTS.profileLabel]);
     expect(active(sideMenu('/hesabim/adreslerim'))).toEqual([TEXTS.addressesLabel]);
     expect(active(sideMenu('/hesabim/siparislerim/ord_1'))).toEqual([TEXTS.ordersLabel]);
+    expect(active(sideMenu('/hesabim/odeme-yontemlerim/ekle'))).toEqual([
+      TEXTS.paymentMethodsLabel,
+    ]);
   });
 
   it('sol menunun erisilebilir adi icerikten', () => {

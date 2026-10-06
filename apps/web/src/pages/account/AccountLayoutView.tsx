@@ -10,8 +10,11 @@ import styles from './AccountLayout.module.css';
  *   home    - /hesabim: solda yalnizca menu, sagda profil karti
  *   section - alt sekme (Favori Isletmeler; T11.15-17'de Adreslerim, Gecmis
  *             Siparislerim, Odeme Yontemlerim): solda kart ve menu, sagda sekme
+ *   nested  - sekmenin alt sayfasi (siparis detayi, kart ekle; T11.17): section
+ *             gibi, ama telefonda "‹ Hesabım" yok; sayfa kendi ust sayfasina
+ *             doner ("‹ Ödeme Yöntemlerim"), iki geri baglantisi ust uste binmez
  */
-export type AccountLayoutVariant = 'home' | 'section';
+export type AccountLayoutVariant = 'home' | 'section' | 'nested';
 
 export interface AccountLayoutViewProps {
   readonly variant: AccountLayoutVariant;
@@ -40,14 +43,14 @@ export function AccountLayoutView({
   menu,
   children,
 }: AccountLayoutViewProps) {
-  const block =
-    variant === 'section'
-      ? `${styles['c-account-layout']} ${styles['c-account-layout--section']}`
-      : styles['c-account-layout'];
+  const section = variant !== 'home';
+  const block = section
+    ? `${styles['c-account-layout']} ${styles['c-account-layout--section']}`
+    : styles['c-account-layout'];
   return (
     <div className={block}>
       <aside className={styles['c-account-layout__side']}>
-        {variant === 'section' && card}
+        {section && card}
         {menu}
       </aside>
       <div className={styles['c-account-layout__main']}>

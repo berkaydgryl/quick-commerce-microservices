@@ -1,6 +1,7 @@
 import type {
   AccountMenuContent,
   AddressesContent,
+  PaymentMethodsContent,
   FavoritesContent,
   MarketListContent,
   OrdersContent,
@@ -83,6 +84,51 @@ const ACCOUNT_MENU_FALLBACK: AccountMenuContent = {
   addressesLabel: 'Adreslerim',
   favoritesLabel: 'Favori İşletmeler',
   ordersLabel: 'Geçmiş Siparişlerim',
+  paymentMethodsLabel: 'Ödeme Yöntemlerim',
+};
+
+/**
+ * Odeme Yontemlerim'in yedegi (T11.17): icerik gelmese de kartlar listelenir,
+ * eklenir ve silinir. Kural cumleleri sozlesmede (CARD_FIELD_MESSAGES).
+ */
+const PAYMENT_METHODS_FALLBACK: PaymentMethodsContent = {
+  title: 'Ödeme Yöntemlerim',
+  loadingLabel: 'Kartların yükleniyor…',
+  emptyNotice: 'Kayıtlı kartın yok.',
+  addLabel: 'Kart ekle',
+  expiredLabel: 'Süresi doldu',
+  deleteSuffix: 'kartını sil',
+  confirmTitle: 'Kartı sil',
+  confirmQuestionSuffix: 'kartını silmek istiyor musun?',
+  confirmHint: 'Geçmiş siparişlerin bundan etkilenmez.',
+  confirmLabel: 'Sil',
+  deletingLabel: 'Siliniyor…',
+  cancelLabel: 'Vazgeç',
+  deletedToastSuffix: 'kartı silindi.',
+  addTitle: 'Kart ekle',
+  brandsLabel: 'Desteklenen kartlar',
+  numberLabel: 'Kart numarası',
+  numberValidLabel: 'Geçerli kart numarası',
+  holderNameLabel: 'Kart üzerindeki isim',
+  expiryLabel: 'SKT (AA/YY)',
+  expiryFormatNotice: 'Son kullanma tarihini AA/YY olarak gir',
+  cvvLabel: 'CVV',
+  nicknameLabel: 'Kartına bir ad ver (isteğe bağlı)',
+  saveLabel: 'Kartı kaydet',
+  savingLabel: 'Kaydediliyor…',
+  retryWaitLabel: 'Yeniden deneyebilmen için',
+  addedToastPrefix: 'Kart eklendi:',
+  privacyNote:
+    "Kart numaranın tamamını ve CVV'ni saklamıyoruz; kayıtlı kartlarında yalnızca ilk 4 ve son 4 hane görünür.",
+  holderCaption: 'KART SAHİBİ',
+  expiryCaption: 'SKT',
+  holderPlaceholder: 'AD SOYAD',
+  expiryPlaceholder: 'AA/YY',
+  nicknamePlaceholder: 'Kartım',
+  cvvCaption: 'CVV',
+  cvvNote: 'CVV yalnızca doğrulama için kullanılır, saklanmaz.',
+  brandLabels: { VISA: 'Visa', MASTERCARD: 'Mastercard', AMEX: 'Amex', TROY: 'Troy' },
+  brandMarks: { VISA: 'VISA', MASTERCARD: 'MC', AMEX: 'AMEX', TROY: 'troy' },
 };
 
 /** Profil kartinin ve pencerelerinin yedegi (T11.14): icerik gelmese de profil duzenlenebilir. */
@@ -236,6 +282,8 @@ export const CONTENT_FALLBACK = {
   addresses: ADDRESSES_FALLBACK,
   /** orders: bloğun tamami (T11.16). */
   orders: ORDERS_FALLBACK,
+  /** paymentMethods: bloğun tamami (T11.17). */
+  paymentMethods: PAYMENT_METHODS_FALLBACK,
 } as const;
 
 export type ContentFallback = typeof CONTENT_FALLBACK;

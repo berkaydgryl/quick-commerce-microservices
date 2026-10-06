@@ -1,0 +1,89 @@
+/*
+ * Odeme kartinin kabugu (T11.17, tasarim B "Markanin rengi"). Kart ISO
+ * oraninda ve kabinin genisligini alir (en fazla --size-payment-card); icindeki
+ * her olcu kartin genisligine oranlidir (cqi = kartin yuzde biri): telefonda
+ * kart kuculur, yazilar ve konumlar birlikte kuculur. Burada boy, egim,
+ * donme ve yuzler; renk CardLayers, yuzlerin icerigi CardFront ve CardBack.
+ */
+.c-payment-card {
+  container-type: inline-size;
+  inline-size: 100%;
+  max-inline-size: var(--size-payment-card);
+  aspect-ratio: var(--ratio-payment-card);
+  color: var(--text-on-card);
+}
+
+.c-payment-card__tilt {
+  inline-size: 100%;
+  block-size: 100%;
+  transform-style: preserve-3d;
+}
+
+.c-payment-card--large .c-payment-card__tilt {
+  transform: perspective(var(--size-card-tilt-depth)) rotateX(calc(var(--tilt-y, 0) * -10deg))
+    rotateY(calc(var(--tilt-x, 0) * 14deg));
+  transition: transform var(--duration-card-tilt) ease-out;
+}
+
+.c-payment-card__flip {
+  position: relative;
+  inline-size: 100%;
+  block-size: 100%;
+  transform-style: preserve-3d;
+  transition: transform var(--duration-card-flip) var(--easing-card-flip);
+}
+
+.c-payment-card.is-flipped .c-payment-card__flip {
+  transform: rotateY(180deg);
+}
+
+.c-payment-card__face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 5.3cqi;
+  box-shadow: var(--shadow-payment-card);
+  backface-visibility: hidden;
+}
+
+.c-payment-card--small .c-payment-card__face {
+  box-shadow: var(--shadow-payment-card-small);
+}
+
+.c-payment-card__face--front {
+  --card-angle: 135deg;
+}
+
+.c-payment-card__face--back {
+  --card-angle: 225deg;
+
+  transform: rotateY(180deg);
+}
+
+/* Hareket azaltma: donme yerine yuzler arasinda yumusak gecis; egim yok. */
+@media (prefers-reduced-motion: reduce) {
+  .c-payment-card__flip,
+  .c-payment-card--large .c-payment-card__tilt,
+  .c-payment-card.is-flipped .c-payment-card__flip {
+    transform: none;
+    transition: none;
+  }
+
+  .c-payment-card__face--back {
+    opacity: 0;
+    transform: none;
+    transition: opacity var(--duration-fast) ease;
+  }
+
+  .c-payment-card__face--front {
+    transition: opacity var(--duration-fast) ease;
+  }
+
+  .c-payment-card.is-flipped .c-payment-card__face--back {
+    opacity: 1;
+  }
+
+  .c-payment-card.is-flipped .c-payment-card__face--front {
+    opacity: 0;
+  }
+}

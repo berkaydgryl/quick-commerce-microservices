@@ -1,0 +1,271 @@
+/*
+ * Kartin on yuzu (T11.17, tasarim B): isik seridi, soluk isaret, kart adi,
+ * rozet, cip, temassiz isareti, numara, sahibi ve son kullanma, odak
+ * cercevesi ve parlama. Olculer kartin genisligine oranli (cqi; kap CardVisual).
+ */
+
+/* Isik seridi: yalnizca buyuk kartta, yavas ve araliklarla. */
+.c-payment-card__streak {
+  position: absolute;
+  inset-block-start: -40%;
+  inset-inline-start: -60%;
+  inline-size: 38%;
+  block-size: 180%;
+  background: linear-gradient(90deg, transparent, var(--card-streak), transparent);
+  rotate: 20deg;
+  animation: c-payment-card-streak var(--duration-card-streak) ease-in-out infinite;
+}
+
+@keyframes c-payment-card-streak {
+  0%,
+  70% {
+    translate: 0 0;
+  }
+
+  100% {
+    translate: 500% 0;
+  }
+}
+
+/* Soluk buyuk marka yazisi, sag altta tasarak. */
+.c-payment-card__mark {
+  position: absolute;
+  inset-inline-end: -1.6cqi;
+  inset-block-end: -6.3cqi;
+  font-size: 27.4cqi;
+  font-weight: var(--font-weight-extrabold);
+  line-height: 1;
+  color: var(--card-mark);
+  letter-spacing: -0.8cqi;
+  white-space: nowrap;
+}
+
+.c-payment-card__nickname {
+  position: absolute;
+  inset-block-start: 5.8cqi;
+  inset-inline-start: 6.3cqi;
+  max-inline-size: 55cqi;
+  overflow: hidden;
+  font-size: 3.4cqi;
+  font-weight: var(--font-weight-extrabold);
+  color: var(--text-on-card-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Marka rozeti (D3: kendimiz ciziyoruz): yazi ve hap. */
+.c-payment-card__badge {
+  position: absolute;
+  inset-block-start: 4.2cqi;
+  inset-inline-end: 5.3cqi;
+  padding: 1cqi 2.9cqi;
+  font-size: 3.9cqi;
+  font-weight: var(--font-weight-extrabold);
+  line-height: var(--line-height-tight);
+  background: var(--card-badge-bg);
+  border: 0.26cqi solid var(--card-badge-border);
+  border-radius: var(--radius-pill);
+}
+
+.c-payment-card__badge--visa {
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: 0.26cqi;
+}
+
+.c-payment-card__badge--mastercard,
+.c-payment-card__badge--troy {
+  text-transform: lowercase;
+}
+
+.c-payment-card__badge--amex {
+  text-transform: uppercase;
+  letter-spacing: 0.4cqi;
+}
+
+/* Gumus cip: iki yonde ince cizgiler. */
+.c-payment-card__chip {
+  position: absolute;
+  inset-block-start: 16.3cqi;
+  inset-inline-start: 6.3cqi;
+  inline-size: 12.1cqi;
+  block-size: 8.9cqi;
+  background-image:
+    linear-gradient(
+      90deg,
+      transparent 28%,
+      var(--card-chip-line) 28% 30.5%,
+      transparent 30.5% 67%,
+      var(--card-chip-line) 67% 69.5%,
+      transparent 69.5%
+    ),
+    linear-gradient(
+      0deg,
+      transparent 32%,
+      var(--card-chip-line) 32% 35%,
+      transparent 35% 65%,
+      var(--card-chip-line) 65% 68%,
+      transparent 68%
+    ),
+    linear-gradient(135deg, var(--card-chip-light), var(--card-chip-mid) 50%, var(--card-chip-end));
+  border-radius: 1.8cqi;
+}
+
+.c-payment-card__contactless {
+  position: absolute;
+  inset-block-start: 17.9cqi;
+  inset-inline-start: 21.6cqi;
+  inline-size: 5.8cqi;
+  color: var(--text-on-card-muted);
+}
+
+.c-payment-card__number {
+  position: absolute;
+  inset-block-start: 31cqi;
+  inset-inline-start: 6.3cqi;
+  display: flex;
+  gap: 3.7cqi;
+  font-size: 6cqi;
+  font-weight: var(--font-weight-extrabold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.26cqi;
+  text-shadow: 0 0.26cqi 0.8cqi var(--card-text-shadow);
+}
+
+.c-payment-card__group {
+  display: inline-flex;
+}
+
+.c-payment-card__char {
+  display: inline-block;
+  min-inline-size: 3.4cqi;
+  text-align: center;
+}
+
+.c-payment-card__char--empty {
+  opacity: 0.45;
+}
+
+/* Yazilan hane yukaridan duser (yalnizca buyuk kartta: --animated). */
+.c-payment-card__char--animated {
+  animation: c-payment-card-digit var(--duration-card-digit) ease-out;
+}
+
+@keyframes c-payment-card-digit {
+  0% {
+    opacity: 0;
+    translate: 0 -1.8cqi;
+  }
+
+  100% {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+.c-payment-card__holder,
+.c-payment-card__expiry {
+  position: absolute;
+  inset-block-start: 45.3cqi;
+  display: grid;
+  gap: 1cqi;
+}
+
+.c-payment-card__holder {
+  inset-inline-start: 6.3cqi;
+  inline-size: 58cqi;
+}
+
+.c-payment-card__expiry {
+  inset-inline-end: 6.3cqi;
+  text-align: end;
+}
+
+.c-payment-card__caption {
+  font-size: 2.5cqi;
+  font-weight: var(--font-weight-extrabold);
+  color: var(--text-on-card-muted);
+  letter-spacing: 0.3cqi;
+}
+
+.c-payment-card__value {
+  overflow: hidden;
+  font-size: 3.9cqi;
+  font-weight: var(--font-weight-extrabold);
+  text-overflow: ellipsis;
+  text-shadow: 0 0.26cqi 0.5cqi var(--card-text-shadow);
+  letter-spacing: 0.13cqi;
+  white-space: nowrap;
+}
+
+/* Odaktaki alanin cercevesi: alanlar arasinda kayar. */
+.c-payment-card__frame {
+  position: absolute;
+  inset-block-start: 29cqi;
+  inset-inline-start: 3.7cqi;
+  inline-size: 92.6cqi;
+  block-size: 12.1cqi;
+  pointer-events: none;
+  border: 0.4cqi solid var(--card-focus-frame);
+  border-radius: 2.6cqi;
+  box-shadow: 0 0 4.7cqi var(--card-focus-glow);
+  opacity: 0;
+  transition:
+    inset-block-start var(--duration-card-frame) ease,
+    inset-inline-start var(--duration-card-frame) ease,
+    inline-size var(--duration-card-frame) ease,
+    block-size var(--duration-card-frame) ease,
+    opacity var(--duration-card-frame) ease;
+}
+
+.c-payment-card__frame.is-visible {
+  opacity: 1;
+}
+
+/* Cercevenin yerleri: numara (varsayilan konum), ad, son kullanma. */
+.c-payment-card__frame--number {
+  inset-block-start: 29cqi;
+  inset-inline-start: 3.7cqi;
+  inline-size: 92.6cqi;
+  block-size: 12.1cqi;
+}
+
+.c-payment-card__frame--holder {
+  inset-block-start: 43.2cqi;
+  inline-size: 62.1cqi;
+  block-size: 14.2cqi;
+}
+
+.c-payment-card__frame--expiry {
+  inset-block-start: 43.2cqi;
+  inset-inline-start: 74.7cqi;
+  inline-size: 21.6cqi;
+  block-size: 14.2cqi;
+}
+
+/* Parlama: imlecin oldugu yerde. */
+.c-payment-card__glare {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at calc(50% + var(--tilt-x, 0) * 100%) calc(50% + var(--tilt-y, 0) * 100%),
+    var(--card-glare),
+    transparent 52%
+  );
+}
+
+/* Hareket azaltma: isik seridi, hane dusmesi ve cerceve kaymasi yok. */
+@media (prefers-reduced-motion: reduce) {
+  .c-payment-card__streak {
+    display: none;
+  }
+
+  .c-payment-card__char--animated {
+    animation: none;
+  }
+
+  .c-payment-card__frame {
+    transition: none;
+  }
+}

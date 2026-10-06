@@ -16,6 +16,9 @@ import { z } from 'zod';
 import { addressKindSchema } from './cart.js';
 import { storeTypeSchema } from './catalog.js';
 import { geoPointSchema } from './common.js';
+import { accountMenuContentSchema } from './content/account-menu.js';
+import { contentTextSchema } from './content/content-text.js';
+import { paymentMethodsContentSchema } from './content/payment-methods.js';
 
 import {
   CONTENT_BANNER_SOURCES_MAX,
@@ -24,13 +27,9 @@ import {
   CONTENT_MAP_ZOOM_MIN,
   CONTENT_PHONE_COUNTRIES_MAX,
   CONTENT_STORE_LINKS_MAX,
-  CONTENT_TEXT_MAX_LENGTH,
   COUNTRY_CODE_PATTERN,
   DIAL_CODE_PATTERN,
 } from './constants.js';
-
-/** Ekranda gorunen bir metin; bos olamaz. */
-const contentTextSchema = z.string().min(1).max(CONTENT_TEXT_MAX_LENGTH);
 
 /** Mutlak gorsel adresi; veri goreli yol saklar, gateway ASSET_BASE_URL ile kurar. */
 const contentImageUrlSchema = z.string().url();
@@ -397,22 +396,6 @@ export const favoritesContentSchema = z.object({
 });
 
 /**
- * Hesap menusu (T11.16; kullanici istegi): profil sayfasinin sol menusu ve ust
- * barin Profil acilir menusu AYNI maddeleri ayni sirayla gosterir. Sira ve
- * adresler web'dedir (accountMenuItems), burada yalnizca etiketler: Profilim,
- * Adreslerim, Favori İşletmeler, Geçmiş Siparişlerim; T11.17'de Ödeme
- * Yöntemlerim eklenir.
- */
-export const accountMenuContentSchema = z.object({
-  /** Sol menunun erisilebilir adi: "Hesap menüsü". */
-  label: contentTextSchema,
-  profileLabel: contentTextSchema,
-  addressesLabel: contentTextSchema,
-  favoritesLabel: contentTextSchema,
-  ordersLabel: contentTextSchema,
-});
-
-/**
  * Gecmis Siparislerim (T11.16; /hesabim/siparislerim): liste satiri
  * ("X Market · 500,00 TL · Tamamlandı"), durum gruplari, bos not, "Daha fazla
  * göster" ve detay sayfasinin etiketleri. Durum gruplari: Tamamlandı
@@ -618,6 +601,8 @@ export const welcomeContentSchema = z.object({
   /** Hesap menusu (T11.16): sol menu ve Profil acilir menusu. */
   accountMenu: accountMenuContentSchema,
   profile: profileContentSchema,
+  /** Odeme Yontemlerim (T11.17). */
+  paymentMethods: paymentMethodsContentSchema,
   /** Adreslerim sekmesi (T11.15). */
   addresses: addressesContentSchema,
   /** Gecmis Siparislerim (T11.16). */
@@ -644,7 +629,6 @@ export type StoreTypeGroup = z.infer<typeof storeTypeGroupSchema>;
 export type MarketListCartContent = z.infer<typeof marketListCartContentSchema>;
 export type MarketListContent = z.infer<typeof marketListContentSchema>;
 export type FavoritesContent = z.infer<typeof favoritesContentSchema>;
-export type AccountMenuContent = z.infer<typeof accountMenuContentSchema>;
 export type AddressesContent = z.infer<typeof addressesContentSchema>;
 export type OrdersContent = z.infer<typeof ordersContentSchema>;
 export type AddressAddOption = z.infer<typeof addressAddOptionSchema>;
@@ -653,3 +637,8 @@ export type EditProfileDialogContent = z.infer<typeof editProfileDialogContentSc
 export type PhoneDialogContent = z.infer<typeof phoneDialogContentSchema>;
 export type ProfileContent = z.infer<typeof profileContentSchema>;
 export type WelcomeContent = z.infer<typeof welcomeContentSchema>;
+
+// Ekran bloklari kendi dosyalarinda (T11.17; proje kurali "Tek sorumluluk":
+// content.ts buyumez, R1'de kalan bloklar da ayrilir).
+export * from './content/account-menu.js';
+export * from './content/payment-methods.js';
