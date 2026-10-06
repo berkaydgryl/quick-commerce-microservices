@@ -25,6 +25,7 @@ import {
   addItem,
   decrementItem,
   EMPTY_CART,
+  incrementItem,
   removeItem,
   startNewCart,
 } from '../services/cart-state';
@@ -40,6 +41,8 @@ export interface CartActions {
   readonly add: (product: Product, market: CartMarket) => AddOutcome;
   /** Kullanici market degisimini onayladi: sepet bosaltilir, urun eklenir. */
   readonly startNewCart: (product: Product, market: CartMarket) => void;
+  /** Sepetteki kalemi bir artirir (panel; sinir kalemdeki maxQuantity). */
+  readonly increment: (offerId: string) => void;
   /** Kalem teklif kimligiyle (offerId) tanınır; bkz. cart-state.ts. */
   readonly decrement: (offerId: string) => void;
   readonly remove: (offerId: string) => void;
@@ -67,6 +70,7 @@ export function createCartStore(deps: CartStoreDeps) {
           return outcome;
         },
         startNewCart: (product, market) => set(startNewCart(product, market)),
+        increment: (offerId) => set(incrementItem(get(), offerId)),
         decrement: (offerId) => set(decrementItem(get(), offerId)),
         remove: (offerId) => set(removeItem(get(), offerId)),
         clear: () => set(EMPTY_CART),

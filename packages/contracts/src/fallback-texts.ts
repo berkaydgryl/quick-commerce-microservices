@@ -57,6 +57,15 @@ const MARKET_LIST_FALLBACK: MarketListContent = {
     minBasketRemainingLabel: 'Minimum sepet tutarına kalan',
     goToCartLabel: 'Sepete git',
     clearLabel: 'Sepeti boşalt',
+    clearConfirmQuestion: 'Sepeti boşaltmak istediğine emin misin?',
+    clearConfirmHint: 'Sepetteki bütün ürünler kaldırılır.',
+    clearConfirmLabel: 'Boşalt',
+    cancelLabel: 'Vazgeç',
+    closeLabel: 'Kapat',
+    decreaseSuffix: 'adedini azalt',
+    increaseSuffix: 'adedini artır',
+    removeSuffix: 'sepetten çıkar',
+    quantitySuffix: 'adedi',
   },
 };
 

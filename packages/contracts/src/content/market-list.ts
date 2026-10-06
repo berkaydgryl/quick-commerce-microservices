@@ -42,6 +42,17 @@ export const marketListCartContentSchema = z.object({
   minBasketRemainingLabel: contentTextSchema,
   goToCartLabel: contentTextSchema,
   clearLabel: contentTextSchema,
+  /** Sepeti bosaltma onayi (T16.3): soru, alt not ve dugmeler; pencerenin basligi clearLabel. */
+  clearConfirmQuestion: contentTextSchema,
+  clearConfirmHint: contentTextSchema,
+  clearConfirmLabel: contentTextSchema,
+  cancelLabel: contentTextSchema,
+  closeLabel: contentTextSchema,
+  /** Adet dugmelerinin adi, urun adinin arkasina: "Saksıda Küçük Ağaç adedini azalt" (T16.3). */
+  decreaseSuffix: contentTextSchema,
+  increaseSuffix: contentTextSchema,
+  removeSuffix: contentTextSchema,
+  quantitySuffix: contentTextSchema,
 });
 
 /** Her tur tam bir kez: liste sozlesmedeki turlerle birebir. */

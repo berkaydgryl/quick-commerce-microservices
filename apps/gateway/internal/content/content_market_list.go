@@ -49,4 +49,15 @@ type MarketListCart struct {
 	MinBasketRemainingLabel string `json:"minBasketRemainingLabel"`
 	GoToCartLabel           string `json:"goToCartLabel"`
 	ClearLabel              string `json:"clearLabel"`
+	// ClearConfirmQuestion, Sepeti bosaltma onayi (T16.3): soru, alt not ve dugmeler; pencerenin basligi clearLabel.
+	ClearConfirmQuestion string `json:"clearConfirmQuestion"`
+	ClearConfirmHint     string `json:"clearConfirmHint"`
+	ClearConfirmLabel    string `json:"clearConfirmLabel"`
+	CancelLabel          string `json:"cancelLabel"`
+	CloseLabel           string `json:"closeLabel"`
+	// DecreaseSuffix, Adet dugmelerinin adi, urun adinin arkasina: "Saksıda Küçük Ağaç adedini azalt" (T16.3).
+	DecreaseSuffix string `json:"decreaseSuffix"`
+	IncreaseSuffix string `json:"increaseSuffix"`
+	RemoveSuffix   string `json:"removeSuffix"`
+	QuantitySuffix string `json:"quantitySuffix"`
 }
