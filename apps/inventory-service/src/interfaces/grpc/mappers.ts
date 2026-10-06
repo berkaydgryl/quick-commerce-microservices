@@ -46,8 +46,7 @@ export function toExtendResponse(
     expiresAt: result.expiresAt,
     alreadyExtended: result.alreadyExtended,
     extensionCount: result.extensionCount,
-    // Beklenen bitis denetimi (T15.3; bekleyen is 117) inventory'de henuz yok.
-    expiryMismatch: false,
+    expiryMismatch: result.expiryMismatch,
   };
 }
 

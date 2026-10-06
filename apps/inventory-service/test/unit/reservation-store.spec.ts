@@ -4,6 +4,8 @@
  */
 
 import { createInMemoryStock } from '../../src/infrastructure/memory/in-memory-stock.js';
+import { describeExtendExpectedContract } from '../support/reservation-extend-expected-contract.js';
 import { describeReservationStoreContract } from '../support/reservation-store-contract.js';
 
 describeReservationStoreContract('bellek', () => Promise.resolve(createInMemoryStock([])));
+describeExtendExpectedContract('bellek', () => Promise.resolve(createInMemoryStock([])));

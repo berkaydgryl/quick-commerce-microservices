@@ -343,9 +343,9 @@ message ExtendReservationRequest {
   // Cagiranin bildigi bitis ani (T15.3; bekleyen is 117; istege bagli): doluysa
   // uzatma yalnizca kilidin guncel bitisi buna esitse yapilir (RPC yorumu).
   // Cagiran bu alani inventory'nin daha once dondurdugu expires_at'ten doldurur;
-  // milisaniye hassasiyetinde karsilastirilir. Alan GONDERILMEZSE denetim yok
-  // (eski davranis). Gonderilen deger gecerli bir an olmalidir: nanos aralik
-  // disi, milisaniye alti kesirli ya da 1970'ten once ise VALIDATION_FAILED.
+  // milisaniye hassasiyetinde karsilastirilir (milisaniye alti kesilir). Alan
+  // GONDERILMEZSE denetim yok (eski davranis). Gonderilen an gecerli ve 1970'ten
+  // sonra olmalidir, degilse VALIDATION_FAILED.
   google.protobuf.Timestamp expected_expires_at = 5;
 }
 

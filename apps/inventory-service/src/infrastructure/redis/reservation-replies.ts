@@ -80,6 +80,8 @@ const inactiveReplies = [
 export const extendReplySchema = z.union([
   z.tuple([z.literal('extended'), integerReply, integerReply]).rest(pairsReply),
   z.tuple([z.literal('limit'), integerReply, integerReply]),
+  /** Beklenen bitis tutmadi (T15.3): guncel bitis, sayi, kalemler. */
+  z.tuple([z.literal('mismatch'), integerReply, integerReply]).rest(pairsReply),
   ...inactiveReplies,
 ]);
 
