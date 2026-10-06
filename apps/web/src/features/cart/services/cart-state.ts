@@ -15,7 +15,9 @@
  *  - Satista olmayan teklif (isActive false) EKLENMEZ (T7.6). Baglayici karar
  *    yine rezervasyondadir; bu kural kullaniciyi bosuna ugrastirmamak icindir.
  *  - "Eklenebilir mi" sorusunun TEK cevabi canAdd'dir: arayuz dugmeyi buna gore
- *    acar, siniri kendisi hesaplamaz (D11).
+ *    acar, siniri kendisi hesaplamaz (D11). Sepet panelinde urun nesnesi
+ *    yoktur: kalem eklenirken urunun adet siniri (maxQuantity) kaleme yazilir,
+ *    panelin "+"si incrementItem ve canIncrement ile bu siniri uygular (T16.3).
  *  - Fiyat eklendigi andaki teklif fiyatidir: BILGI amaclidir, baglayici kontrol
  *    rezervasyonda yapilir (ADR-13).
  *  - Kalem TEKLIF KIMLIGIYLE (offerId) taninir, urun kimligiyle degil: ayni
@@ -35,6 +37,8 @@ export interface CartItem {
   readonly name: string;
   readonly unitPriceMinor: number;
   readonly quantity: number;
+  /** Eklendigi andaki adet siniri: stok ya da platform siniri (T16.3; panelin "+"si). */
+  readonly maxQuantity: number;
 }
 
 /** Sepetin ait oldugu market; onay metni icin adi da tutulur. */
@@ -71,6 +75,7 @@ function toItem(product: Product): CartItem {
     name: product.name,
     unitPriceMinor: product.price.amountMinor,
     quantity: 1,
+    maxQuantity: quantityLimitOf(product).max,
   };
 }
 
@@ -143,8 +148,10 @@ export function addItem(state: CartState, product: Product, market: CartMarket):
 
   const existing = state.items.find((item) => item.offerId === product.offerId);
   if (existing !== undefined) {
+    // Sinir her eklemede urunun guncel stokuyla tazelenir (panel bu siniri kullanir).
+    const refreshed = withMaxQuantity(state, product.offerId, quantityLimitOf(product).max);
     return {
-      state: withQuantity({ ...state, market }, product.offerId, existing.quantity + 1),
+      state: withQuantity({ ...refreshed, market }, product.offerId, existing.quantity + 1),
       outcome: { status: 'added' },
     };
   }
@@ -157,6 +164,21 @@ export function addItem(state: CartState, product: Product, market: CartMarket):
 /** Onaylanan market degisimi: eski sepet bosaltilir, urun yeni marketle eklenir. */
 export function startNewCart(product: Product, market: CartMarket): CartState {
   return addItem(EMPTY_CART, product, market).state;
+}
+
+/** Sepetteki kalemden bir adet daha eklenebilir mi (panelin "+"si; sinir kalemdeki maxQuantity)? */
+export function canIncrement(state: CartState, offerId: string): boolean {
+  const existing = state.items.find((item) => item.offerId === offerId);
+  return existing !== undefined && existing.quantity < existing.maxQuantity;
+}
+
+/** Sepetteki kalemi bir artirir (urun nesnesi gerekmez); sinirdaysa ya da kalem yoksa durum aynen kalir. */
+export function incrementItem(state: CartState, offerId: string): CartState {
+  const existing = state.items.find((item) => item.offerId === offerId);
+  if (existing === undefined || !canIncrement(state, offerId)) {
+    return state;
+  }
+  return withQuantity(state, offerId, existing.quantity + 1);
 }
 
 /** Bir adet azaltir; son adet dusunce kalem kalkar, son kalem kalkinca sepet bosalir. */
@@ -187,6 +209,13 @@ export function itemCount(state: CartState): number {
 /** Kalemin tutari (birim fiyat x adet), KURUS; gosterim icindir, toplam @getir/pricing'tedir. */
 export function lineTotalMinor(item: CartItem): number {
   return item.unitPriceMinor * item.quantity;
+}
+
+function withMaxQuantity(state: CartState, offerId: string, maxQuantity: number): CartState {
+  return {
+    ...state,
+    items: state.items.map((item) => (item.offerId === offerId ? { ...item, maxQuantity } : item)),
+  };
 }
 
 function withQuantity(state: CartState, offerId: string, quantity: number): CartState {

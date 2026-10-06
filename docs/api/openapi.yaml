@@ -4294,6 +4294,15 @@ components:
               minBasketRemainingLabel,
               goToCartLabel,
               clearLabel,
+              clearConfirmQuestion,
+              clearConfirmHint,
+              clearConfirmLabel,
+              cancelLabel,
+              closeLabel,
+              decreaseSuffix,
+              increaseSuffix,
+              removeSuffix,
+              quantitySuffix,
             ]
           properties:
             title: { $ref: "#/components/schemas/ContentText" }
@@ -4307,6 +4316,15 @@ components:
             minBasketRemainingLabel: { $ref: "#/components/schemas/ContentText" }
             goToCartLabel: { $ref: "#/components/schemas/ContentText" }
             clearLabel: { $ref: "#/components/schemas/ContentText" }
+            clearConfirmQuestion: { $ref: "#/components/schemas/ContentText" }
+            clearConfirmHint: { $ref: "#/components/schemas/ContentText" }
+            clearConfirmLabel: { $ref: "#/components/schemas/ContentText" }
+            cancelLabel: { $ref: "#/components/schemas/ContentText" }
+            closeLabel: { $ref: "#/components/schemas/ContentText" }
+            decreaseSuffix: { $ref: "#/components/schemas/ContentText" }
+            increaseSuffix: { $ref: "#/components/schemas/ContentText" }
+            removeSuffix: { $ref: "#/components/schemas/ContentText" }
+            quantitySuffix: { $ref: "#/components/schemas/ContentText" }
 
     ContentImage:
       type: object

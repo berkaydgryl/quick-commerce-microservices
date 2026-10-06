@@ -30,6 +30,7 @@ const item = (quantity: number, unitPriceMinor: number): CartItem => ({
   name: 'urun',
   unitPriceMinor,
   quantity,
+  maxQuantity: 20,
 });
 
 describe('calculateCartTotals', () => {
