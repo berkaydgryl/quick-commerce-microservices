@@ -27,6 +27,23 @@ const appErrorPayloadSchema = z.object({
   requestId: z.string().optional(),
 });
 
+/**
+ * gRPC metadata degeri yalnizca yazdirilabilir ASCII tasir: Turkce cumle
+ * (kart kasasinin alan cumleleri, T11.17) dogrudan yazilinca Metadata.set
+ * hata firlatir ve cevap hic gitmez. ASCII disi her karakter JSON'un kendi
+ * \uXXXX kacisiyla yazilir; JSON.parse (fromServiceError) ve Go'nun
+ * json.Unmarshal'i (gateway apperror) ayni metni cozer. ASCII yukte cikti
+ * JSON.stringify ile bayt bayt aynidir.
+ */
+const NON_ASCII = /[\u007f-\uffff]/g;
+
+function toAsciiJson(value: unknown): string {
+  return JSON.stringify(value).replace(
+    NON_ASCII,
+    (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`,
+  );
+}
+
 /** Hatanin uretildigi cagriya ait baglam. */
 export interface ErrorContext {
   readonly requestId?: string;
@@ -52,7 +69,7 @@ export function toServiceError(error: unknown, context: ErrorContext = {}): Serv
   }
 
   const metadata = new Metadata();
-  metadata.set(ERROR_METADATA_KEY, JSON.stringify(payload));
+  metadata.set(ERROR_METADATA_KEY, toAsciiJson(payload));
   if (payload.requestId !== undefined) {
     metadata.set(REQUEST_ID_METADATA_KEY, payload.requestId);
   }

@@ -11,7 +11,8 @@ import { z } from 'zod';
 import { PAYMENT_METHOD } from '../../domain/payment.js';
 import type { PaymentMethod } from '../../domain/payment.js';
 
-const requiredText = (field: string) => z.string().trim().min(1, `${field} zorunlu`);
+/** Bos olamayan metin alani; kart kasasinin semalari da kullanir. */
+export const requiredText = (field: string) => z.string().trim().min(1, `${field} zorunlu`);
 
 /**
  * Proto yontemi -> domain. Record TUM enum degerlerini ister: proto'ya yeni bir

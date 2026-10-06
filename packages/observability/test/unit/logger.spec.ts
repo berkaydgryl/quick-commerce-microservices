@@ -10,12 +10,14 @@ import type { ChildProcessByStdio } from 'node:child_process';
 import type { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { withoutRandomNoise } from '@getir/core/testing';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { STDOUT_LOST_MESSAGE } from '../../src/log-destination.js';
 
 const CHILD = fileURLToPath(new URL('./fixtures/logger-child.mjs', import.meta.url));
 const TRACE_CHILD = fileURLToPath(new URL('./fixtures/logger-trace-child.mjs', import.meta.url));
+const REDACT_CHILD = fileURLToPath(new URL('./fixtures/logger-redact-child.mjs', import.meta.url));
 /** Cikis icin beklenen en uzun sure; takilan surec bu surede cikmaz (#56). */
 const EXIT_WAIT_MS = 5_000;
 
@@ -124,6 +126,68 @@ describe('iz baglami (D15)', () => {
     expect(inside?.['traceId']).toMatch(/^[0-9a-f]{32}$/);
     expect(outside).not.toHaveProperty('traceId');
     expect(outside).not.toHaveProperty('spanId');
+  });
+});
+
+describe('kart verisi gizleme (T11.17)', () => {
+  // Alt surec BIR KEZ baslatilir; testler ayni ciktiyi okur (CI'da daha az surec).
+  let exit: Exit | 'cikmadi';
+  let lines: Record<string, Record<string, unknown>>;
+
+  beforeAll(async () => {
+    const child = spawn(process.execPath, [REDACT_CHILD], { stdio: ['ignore', 'pipe', 'pipe'] });
+    running.push(child);
+    let stdout = '';
+    child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
+    exit = await within(
+      new Promise<Exit>((resolve) =>
+        child.once('exit', (code, signal) => resolve({ code, signal })),
+      ),
+    );
+    lines = Object.fromEntries(
+      stdout
+        .trim()
+        .split('\n')
+        .filter((line) => line !== '')
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .map((line) => [String(line['msg']), line]),
+    );
+  });
+
+  it('kart numarasi ve CVV ust duzeyde, kasa girdisinde, gRPC isteginde ve cocuk gunlukcude gizlenir', () => {
+    expect(exit).toEqual({ code: 0, signal: null });
+    expect(lines['ust duzey']).toMatchObject({ number: '[gizli]', cvv: '[gizli]' });
+    expect(lines['istek']?.['input']).toEqual({
+      number: '[gizli]',
+      cvv: '[gizli]',
+      holderName: 'Ayse',
+    });
+    expect(lines['grpc istegi']?.['request']).toEqual({ number: '[gizli]', cvv: '[gizli]' });
+    expect(lines['cocuk']).toMatchObject({ rpc: 'AddCard', card: { number: '[gizli]' } });
+    // Zaman, pid ve makine adi rastgele: kisa sir onlarin icinde tesadufen gecebilir.
+    const all = withoutRandomNoise(JSON.stringify(Object.values(lines)));
+    for (const secret of ['4242', '5555', '378282246310005', '9792000000000003', '9876', '765']) {
+      expect(all).not.toContain(secret);
+    }
+  });
+
+  it('DAR: kart numarasina benzemeyen number alanlari (siparis, kapi, sayi, telefon) oldugu gibi kalir', () => {
+    expect(lines['kart degil']).toMatchObject({
+      order: { number: 'SIP-1042', total: 12990 },
+      address: { number: '12/3' },
+      number: 42,
+      phone: { number: '0532 123 45 67' },
+    });
+  });
+
+  it('URL, Buffer ve err disindaki hata satiri bozulmaz ve cagriyi firlatmaz (QA O1)', () => {
+    expect(exit).toEqual({ code: 0, signal: null });
+    expect(lines['url']?.['target']).toBe('https://example.com/kart?adim=1');
+    expect(lines['buffer']?.['buf']).toEqual({ type: 'Buffer', data: [97, 98, 99] });
+    expect(lines['hata alani']?.['error']).toMatchObject({
+      code: 'NOT_FOUND',
+      message: 'Kart bulunamadi',
+    });
   });
 });
 

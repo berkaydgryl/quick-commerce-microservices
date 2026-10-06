@@ -24,10 +24,10 @@
  * okunabilir kalmasi.
  */
 
-import { ERROR_CODES, ERROR_SEVERITY, errorSeverityFor, isAppError } from '@getir/core';
+import { AppError, ERROR_CODES, ERROR_SEVERITY, errorSeverityFor, isAppError } from '@getir/core';
 import type { ErrorSeverity, LogFields } from '@getir/core';
 import { status as GrpcStatus } from '@grpc/grpc-js';
-import type { handleUnaryCall, sendUnaryData, ServerUnaryCall } from '@grpc/grpc-js';
+import type { handleUnaryCall, sendUnaryData, ServerUnaryCall, ServiceError } from '@grpc/grpc-js';
 
 import type { Logger } from '../logger.js';
 import { silentLogger } from '../logger.js';
@@ -107,8 +107,8 @@ export function unaryHandler<TInput, TResponse>(
         endRpcSpan(server.span, GrpcStatus.OK);
         logger.debug({ durationMs }, 'rpc tamamlandi');
         callback(null, response);
-      } catch (error: unknown) {
-        const serviceError = toServiceError(error, { requestId });
+      } catch (thrown: unknown) {
+        const { error, serviceError } = responseErrorFor(thrown, requestId, logger);
         const code = isAppError(error) ? error.code : ERROR_CODES.INTERNAL;
         const durationMs = elapsedMs(startedAt);
         recordRpc(options.name, code, durationMs / MS_PER_SECOND);
@@ -123,6 +123,29 @@ export function unaryHandler<TInput, TResponse>(
       }
     });
   };
+}
+
+/**
+ * Hatanin gRPC cevabi. Cevap kurulamazsa (ayrinti serilestirilemiyor: dongusel
+ * nesne, BigInt; metadata degeri reddedildi) cagri ASKIDA KALMAZ: INTERNAL
+ * doner ve kurulamama gunluge yazilir. Korumasiz halde callback hic cagrilmaz,
+ * istemci son tarihine kadar bekler (T11.17'de Turkce ayrintiyla bulundu).
+ */
+function responseErrorFor(
+  thrown: unknown,
+  requestId: string,
+  logger: Logger,
+): { readonly error: unknown; readonly serviceError: ServiceError } {
+  try {
+    return { error: thrown, serviceError: toServiceError(thrown, { requestId }) };
+  } catch (encodingError: unknown) {
+    logger.error(
+      { err: encodingError, code: isAppError(thrown) ? thrown.code : ERROR_CODES.INTERNAL },
+      'rpc hata cevabi kurulamadi, INTERNAL donuluyor',
+    );
+    const fallback = AppError.internal('Hata cevabi kurulamadi');
+    return { error: fallback, serviceError: toServiceError(fallback, { requestId }) };
+  }
 }
 
 /** hrtime araligini milisaniyeye cevirir (gunluk alani: durationMs). */

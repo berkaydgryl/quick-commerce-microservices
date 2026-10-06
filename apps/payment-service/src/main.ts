@@ -32,7 +32,7 @@ import {
   startOrExit,
 } from '@getir/service-kit';
 
-import { buildPaymentService, subscribePaymentEvents } from './bootstrap.js';
+import { buildCardVaultService, buildPaymentService, subscribePaymentEvents } from './bootstrap.js';
 import { SERVICE_NAME } from './config/constants.js';
 import { loadServiceEnv } from './config/env.js';
 import type { PaymentRepository } from './domain/payment-repository.js';
@@ -99,7 +99,11 @@ const { handle, store, events } = await startOrExit(
       // Izler (D15): adres yoksa olusur ve tasinir, disari gonderilmez.
       otlpEndpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
       logger,
-      services: [buildPaymentService({ logger, repository: opened.repository })],
+      // Kart kasasi (T11.17) ayni sunucuda; saglayici ikisinde de mock.
+      services: [
+        buildPaymentService({ logger, repository: opened.repository }),
+        buildCardVaultService({ logger, repository: opened.cards }),
+      ],
       // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti kesilmesin.
       // Once olay dinleme (suren iade biter, Redis kapanir), veritabani EN SON.
       onShutdown: async () => {

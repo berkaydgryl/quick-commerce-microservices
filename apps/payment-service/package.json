@@ -30,6 +30,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@getir/observability": "workspace:*",
     "@testcontainers/mongodb": "^12.1.0",
     "@testcontainers/redis": "^12.1.0"
   }

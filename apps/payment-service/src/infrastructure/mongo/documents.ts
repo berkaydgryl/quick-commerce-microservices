@@ -6,9 +6,11 @@
  * roadmap "MongoDB Veri Modeli" tablosuyla ayni (threeDS, attempts[]).
  */
 
+import type { CardBrand } from '@getir/contracts';
 import type { ErrorCode } from '@getir/core';
 import type { BaseDocument } from '@getir/mongo-kit';
 
+import type { CardStatus } from '../../domain/card.js';
 import type {
   AttemptKind,
   AttemptOutcome,
@@ -19,6 +21,10 @@ import type {
 
 export const COLLECTIONS = {
   PAYMENTS: 'payments',
+  /** Kart kasasi (T11.17): maskeli kayitli kartlar. */
+  CARDS: 'cards',
+  /** Kart kasasi: kullanici basina kart sayaci (kasa siniri, transaction). */
+  CARD_WALLETS: 'card_wallets',
 } as const;
 
 export interface ThreeDsDocument {
@@ -54,4 +60,36 @@ export interface PaymentDocument extends BaseDocument {
   version: number;
   createdAt: Date;
   updatedAt: Date;
+}
+
+/**
+ * Kayitli kart (T11.17). _id kart kimligidir (crd_...). TAM KART NUMARASI VE
+ * CVV BU BELGEDE YOKTUR: yalnizca ilk 4 ve son 4 hane.
+ */
+export interface CardDocument extends BaseDocument {
+  userId: string;
+  brand: CardBrand;
+  first4: string;
+  last4: string;
+  expiryMonth: number;
+  expiryYear: number;
+  holderName: string;
+  /** Kart adi verilmediyse alan HIC yazilmaz. */
+  nickname?: string;
+  /** Saglayicinin jetonu: yalnizca ACTIVE kartta; silmede alan kaldirilir. */
+  providerToken?: string;
+  status: CardStatus;
+  createdAt: Date;
+  /** Yalnizca silinmis kartta. */
+  deletedAt?: Date;
+}
+
+/**
+ * Kullanicinin kart sayaci (T11.17): _id kullanici kimligidir. `count` silinmemis
+ * kart sayisidir; ekleme ve silme kartla AYNI transaction'da degistirir. Sayac
+ * es zamanli eklemeleri ayni belgede carpistirir: "say, sonra ekle" anlik goruntu
+ * yalitiminda ikisini birden gecirirdi (write skew) ve sinir asilirdi.
+ */
+export interface CardWalletDocument extends BaseDocument {
+  count: number;
 }

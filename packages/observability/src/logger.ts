@@ -22,6 +22,7 @@ import { pino } from 'pino';
 import type { Logger } from '@getir/core';
 
 import { stdoutDestination } from './log-destination.js';
+import { censorCardData, LOG_REDACT_PATHS } from './redact.js';
 
 export interface CreateLoggerOptions {
   /** Servis adi; her kayitta `name` alani olarak gorunur. */
@@ -44,11 +45,15 @@ export function createLogger(options: CreateLoggerOptions): Logger {
       // arama motorlari tarafindan da dogrudan okunur.
       timestamp: pino.stdTimeFunctions.isoTime,
       // Hata nesneleri `err` alaninda serilestirilir (mesaj + stack + code).
-      // AppError'in `cause` alani enumerable olmadigi icin disari sizmaz.
+      // DIKKAT (T11.17'de dogrulandi): `cause` enumerable olmasa da YAZILIR -
+      // pino-std-serializers mesaja ": <cause mesaji>", yigina "caused by: ..."
+      // ekler. Gizli veri tasiyabilecek hata (kart saglayicisi) cause'a konmaz.
       formatters: {
         level: (label) => ({ level: label }),
       },
       mixin: traceFields,
+      // Kart numarasi ve CVV (T11.17): ikinci emniyet, dar yollar (redact.ts).
+      redact: { paths: [...LOG_REDACT_PATHS], censor: censorCardData },
     },
     stdoutDestination(options.name),
   );

@@ -89,6 +89,23 @@ func TestFromGRPCKeepsDetailValuesAsSent(t *testing.T) {
 	}
 }
 
+func TestFromGRPCDecodesEscapedTurkishDetails(t *testing.T) {
+	// T11.17: gRPC metadata degeri yalnizca ASCII tasir; service-kit Turkce
+	// cumleyi \uXXXX kacisiyla yazar. Gateway ayni cumleyi REST'e aynen vermeli.
+	trailer := metadata.Pairs(MetadataKey, `{"code":"VALIDATION_FAILED","message":"Ge\u00e7ersiz istek","details":{"number":"Kart numaras\u0131 ge\u00e7ersiz","nickname":"Kart ad\u0131 \ud83d\udcb3"}}`)
+	err := FromGRPC(status.Error(codes.InvalidArgument, "x"), trailer)
+
+	if err.Code != CodeValidationFailed {
+		t.Fatalf("VALIDATION_FAILED bekleniyordu, %s geldi", err.Code)
+	}
+	if got := err.Details["number"]; got != "Kart numarası geçersiz" {
+		t.Errorf("number: %#v", got)
+	}
+	if got := err.Details["nickname"]; got != "Kart adı 💳" {
+		t.Errorf("nickname: %#v", got)
+	}
+}
+
 func TestNewKeepsTextDetails(t *testing.T) {
 	if err := New(CodeValidationFailed, map[string]string{"lat": "zorunlu"}); err.Details["lat"] != "zorunlu" {
 		t.Errorf("gateway'in kendi ayrintisi metin kalmali: %v", err.Details)

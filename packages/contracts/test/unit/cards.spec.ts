@@ -8,8 +8,10 @@ import { describe, expect, it } from 'vitest';
 import {
   addCardRequestSchema,
   CARD_FIELD_MESSAGES,
+  CARD_EXPIRY_MAX_YEARS_AHEAD,
   CARD_NICKNAME_MAX_LENGTH,
   cardBrandOf,
+  cardExpiryProblem,
   cardHolderNameProblem,
   cardIdSchema,
   cardNicknameProblem,
@@ -106,6 +108,25 @@ describe('kart kurallari', () => {
     expect(isCardExpired(9, 2026, now)).toBe(true);
     expect(isCardExpired(1, 2027, now)).toBe(false);
     expect(isCardExpired(12, 2025, now)).toBe(true);
+  });
+
+  it('son kullanma sorunu: gecmis kart ay alaninda, cok ileri yil yil alaninda (Turkiye saatiyle)', () => {
+    const now = new Date('2026-10-05T12:00:00Z');
+
+    expect(cardExpiryProblem(10, 2026, now)).toBeNull();
+    expect(cardExpiryProblem(9, 2026, now)).toEqual({
+      field: 'expiryMonth',
+      message: CARD_FIELD_MESSAGES.expired,
+    });
+    expect(cardExpiryProblem(12, 2026 + CARD_EXPIRY_MAX_YEARS_AHEAD, now)).toBeNull();
+    expect(cardExpiryProblem(1, 2026 + CARD_EXPIRY_MAX_YEARS_AHEAD + 1, now)).toEqual({
+      field: 'expiryYear',
+      message: CARD_FIELD_MESSAGES.expiryYear,
+    });
+    // 31 Aralik 21.00 UTC Istanbul da yeni yil: ust sinir bir yil kayar.
+    expect(
+      cardExpiryProblem(1, 2027 + CARD_EXPIRY_MAX_YEARS_AHEAD, new Date('2026-12-31T21:00:00Z')),
+    ).toBeNull();
   });
 
   it('ay Turkiye saatiyle doner: UTC 21.00 Istanbul da ertesi ayin ilk dakikasidir', () => {
