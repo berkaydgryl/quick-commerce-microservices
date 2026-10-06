@@ -62,11 +62,13 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Mock {
 		t.Error("MOCK varsayilani false olmaliydi")
 	}
-	// Gateway'in dogrudan konustugu uc servis; /healthz de bu listeyi yoklar.
+	// Gateway'in dogrudan konustugu servisler; /healthz de bu listeyi yoklar.
+	// Kart kasasi (payment, T11.17) production disinda listededir (cards_test.go).
 	wantServices := []ServiceTarget{
 		{Name: CatalogService, Address: defaultCatalogAddress},
 		{Name: InventoryService, Address: "localhost:50052"},
 		{Name: OrderService, Address: defaultOrderAddress},
+		{Name: PaymentService, Address: defaultPaymentAddress},
 	}
 	if !slices.Equal(cfg.Services, wantServices) {
 		t.Errorf("servisler: %+v, beklenen %+v", cfg.Services, wantServices)

@@ -292,6 +292,8 @@ type Deps struct {
 	Favorites       FavoriteLister
 	FavoriteAdder   FavoriteAdder
 	FavoriteRemover FavoriteRemover
+	// Cards, kart kasasi uclari (T11.17, cards.go); bos ise uclar baglanmaz.
+	Cards           CardRoutes
 	CheckoutSignals CheckoutSignalReader
 	// Harita adres uclari (T11.8); bugun ikisini geo.Service karsilar.
 	GeoReverser GeoReverser
@@ -414,6 +416,8 @@ func New(deps Deps) *fiber.App {
 	v1.Get("/me/favorites", user, generalByUser, favoritesHandler(deps.Favorites))
 	v1.Put("/me/favorites/:"+marketIDParam, user, generalByUser, mutation, addFavoriteHandler(deps.FavoriteAdder))
 	v1.Delete("/me/favorites/:"+marketIDParam, user, generalByUser, mutation, removeFavoriteHandler(deps.FavoriteRemover))
+	registerCardRoutes(v1, deps.Cards, cardRouteDeps{user: user, general: generalByUser,
+		idempotency: deps.Idempotency, limits: limits, logger: deps.Logger, recorder: recorder})
 	v1.Get("/geo/reverse", user, generalByUser, reverseGeocodeHandler(deps.GeoReverser))
 	v1.Get("/geo/search", user, generalByUser, searchPlacesHandler(deps.GeoSearcher))
 	v1.Post("/cart/reserve", user, orderByUser, mutation, reserveCartHandler(deps.CartReserver))

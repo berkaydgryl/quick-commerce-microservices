@@ -312,6 +312,7 @@ func Load(getenv Getenv) (Config, error) {
 		{Name: InventoryService, Address: readString(getenv, "INVENTORY_GRPC_ADDR", defaultInventoryAddress)},
 		{Name: OrderService, Address: readString(getenv, "ORDER_GRPC_ADDR", defaultOrderAddress)},
 	}
+	services = append(services, cardVaultTargets(getenv, nodeEnv)...) // T11.17, cards.go
 
 	if len(problems) > 0 {
 		return Config{}, fmt.Errorf("ortam degiskenleri gecersiz: %w", errors.Join(problems...))

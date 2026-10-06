@@ -180,6 +180,13 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 		passwordResetter = identity.service
 	}
 
+	rateLimit := buildRateLimit(cfg, shared.client)
+	cardRoutes, err := buildCardRoutes(cfg, pool, rateLimit)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+
 	app := httpapi.New(httpapi.Deps{
 		Health:              health.New(healthClients, mergePingers(identity.pingers, shared.pingers), cfg.RequestTimeout, cfg.Mock, logger),
 		Categories:          catalogService,
@@ -216,13 +223,14 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 		Favorites:         favoriteService,
 		FavoriteAdder:     favoriteService,
 		FavoriteRemover:   favoriteService,
+		Cards:             cardRoutes,
 		CheckoutSignals:   identity.service,
 		AccessTokens:      identity.tokens,
 		GeoReverser:       places,
 		GeoSearcher:       places,
 		// Tekrar korumasi ve hiz siniri (T8.2): Redis ya da MOCK'ta bellek.
 		Idempotency: buildIdempotency(cfg, shared.client),
-		RateLimit:   buildRateLimit(cfg, shared.client),
+		RateLimit:   rateLimit,
 		// Cihaz cerezi yalnizca production'da Secure: gelistirme http://localhost.
 		SecureCookies: cfg.NodeEnv == config.EnvProduction,
 		Logger:        logger,

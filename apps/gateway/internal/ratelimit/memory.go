@@ -19,6 +19,8 @@ type Memory struct {
 	now      func() time.Time
 	counters map[string]*memoryCounter
 	calls    int
+	// locks, tek isteklik kilitler (inflight.go); kendi kilidiyle korunur.
+	locks inflight
 }
 
 type memoryCounter struct {

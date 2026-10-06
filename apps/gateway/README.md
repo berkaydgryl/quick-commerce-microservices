@@ -42,6 +42,7 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `GET /v1/me/addresses` | ✅ Adres defteri (T9.5): kayıtlı adresler, kayıt sırasında; en fazla 10 (sınırlı liste); önbelleğe alınmaz |
 | `POST /v1/me/addresses` | ✅ Adres ekleme (T11.8): tür, bina/kat/daire, tarif; aynı ad ve 11. adres tek atomik Mongo yazımında reddedilir; `Idempotency-Key` ister, cevap güncel defter |
 | `PUT`, `DELETE /v1/me/addresses/{addressId}` | ✅ Adres düzenleme ve silme (T11.15): kalıcı kimlik `adr_…` (eski adreslere göç 0001); düzenleme tam gövde, aynı ad başka adreste olamaz (birebir karşılaştırma: "Ev" ile "ev" farklı), tek atomik Mongo yazımı; yok olan adres 404; `Idempotency-Key` ister, cevap güncel defter |
+| `GET`, `POST /v1/me/cards`, `DELETE /v1/me/cards/{cardId}` | ✅ Kart kasası (T11.17, `internal/cards`, `httpapi/cards.go`): kasa payment'ta (`CardVaultService`); gateway numarayı ve CVV'yi yalnızca iletir. Production'da KAPALI (404; sağlayıcı mock). Ayrıntı: "Kart uçları" bölümü |
 | `GET /v1/geo/reverse?lat&lng`, `GET /v1/geo/search?q` | ✅ Harita adres servisi (T11.8, `internal/geo`): OpenStreetMap Nominatim'e **tek sıra** (saniyede en fazla bir istek, kullanım koşulu) ve 24 saat önbellekle; sıra `GEO_TIMEOUT_MS` içinde ilerlemezse 503, adres yoksa 404. Oturum ister |
 | Kullanıcı kimliği    | ✅ `Authorization: Bearer` JWT (HS256); `X-User-Id` kalktı (T8.1) |
 | Kimlik deposu        | ✅ Mongo `users` + `sessions` (TTL indeksi); MOCK'ta bellek |
@@ -343,6 +344,7 @@ bellek içi sayaç sınırı örnek sayısı kadar gevşetirdi (proje kuralları
 | Katalog, market ve genel arama uçları                     | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
 | `GET /v1/me`, `/v1/me/addresses`, `GET /v1/orders` (T11.16), `GET /v1/orders/{id}` (`/token` dahil) | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
 | `POST`/`PUT`/`DELETE /v1/me/addresses…`, `/v1/geo/*` (T11.8, T11.15) | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
+| `/v1/me/cards…` (T11.17); `POST`'a ek deneme sınırı: "Kart uçları" | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
 | `/healthz`                                                | sınırsız                         | —           |
 
 - **Anahtar:** `rate:{ozne}:POST_/v1/orders/id/3ds` (`@getir/redis-kit` `rateLimitKey`;
@@ -377,6 +379,38 @@ for i in $(seq 1 11); do curl -s -o /dev/null -w '%{http_code} ' localhost:8080/
 curl -s -i localhost:8080/v1/auth/login -H 'Content-Type: application/json' \
   -d '{"phone":"+905321234567","password":"yanlis-sifre"}' | grep -iE '^retry-after|RATE_LIMITED'
 ```
+
+## Kart uçları (T11.17)
+
+Kasa payment-svc'dedir (`getir/cardvault/v1`, `CardVaultService`); kart kuralları ve cümleleri
+`@getir/contracts` `card-rules.ts`'te, karar kasada. Gateway (`internal/cards`, `httpapi/cards.go`,
+`httpapi/card_attempts.go`):
+
+- **Production'da kapalı (K1):** `config.CardVaultEnabled()` = `NODE_ENV != production`. Uçlar
+  bağlanmaz (404), payment havuza ve `/healthz` listesine girmez. Sağlayıcı bugün mock'tur; gerçek
+  sağlayıcı gelince açılır (bekleyen iş).
+- **Kimlik yalnızca jetondan (QA G6):** gövdede ya da sorguda kullanıcı alanı yoktur; bilinmeyen alan 400.
+  Biçimsiz `cardId` kasaya gitmeden 404; başkasının, olmayan ve silinmiş kart kasadan 404.
+- **Deneme sınırı (K2, QA S1):** kullanıcı başına BAŞARISIZ doğrulama (`PAYMENT_DECLINED`; numara, CVV
+  ya da son kullanma hatası) saatte 5, günde 20 (`ratelimit.FailureCounter`: bakmak yazmaz, yalnızca
+  sonuç yazılır); IP başına her deneme saatte 30. Eşikte kasaya gidilmeden 429 + `Retry-After`.
+  Başarı, aynı kart ve dolu kasa sayılmaz. Bir kullanıcının **aynı anda tek doğrulaması** işlenir
+  (`ratelimit.InflightLock`, `rate:{usr_…}:POST_/v1/me/cards/inflight`, SET NX PX 30 sn; sahibi
+  bırakır): eş zamanlı ikinci istek 429 + `Retry-After: 1`. Kilit olmasa eş zamanlı istekler bakma
+  adımında boş sayaç görür ve sınır bir patlamada aşılırdı (güvenlik incelemesi). Anahtarlar `rate:{usr_…}:POST_/v1/me/cards/fail-1h|fail-1d`
+  ve `rate:{ip}:POST_/v1/me/cards/ip-1h` (TTL pencere kadar). Hız sınırı kapalıysa
+  (`RATE_LIMIT_ENABLED=false`) deneme sınırı da kapalıdır. Metrik `card_verifications_total{result}`
+  (`approved`, `declined`, `invalid`, `limited`, `other`; `service="gateway"`): ret oranı buradan.
+- **Tekrar koruması (K3, QA S3):** parmak izi gövdenin MASKELİ hâlinden (`cards.FingerprintBody`:
+  numara → ilk 4 + son 4 + hane sayısı, CVV yok, bilinmeyen alan yok); kayıt 15 dk. Redis'teki kayıt
+  numaranın ve CVV'nin hiçbir türevini taşımaz; saklanan cevap maskeli karttır. Silme cevabının (maskeli liste)
+  kaydı da 15 dk (QA L3).
+- **Günlük ve iz (QA G3):** istek satırı yalnızca yöntem, yol, durum, süre ve `requestId` yazar; gövde
+  hiçbir yere yazılmaz. Gövde çözme hatası girilen değeri ne günlüğe ne cevaba yazar (yalnızca alan adı ve
+  beklenen tip; `encoding/json` tip hatası değeri mesaja koyar, QA L4). Bütün kart cevapları (hata dahil)
+  `Cache-Control: no-store` (QA G7).
+- **Testlerde kısa sır:** CVV gibi kısa sırlar aranmadan önce `testkit.WithoutRandomNoise`'dan geçer
+  (rastgele `req_…` kimliğinde tesadüfen geçebilir); kart numarası gibi rakam dizileri maskelenmez.
 
 ## Sipariş risk sinyalleri (T8.1)
 
@@ -515,6 +549,7 @@ curl -s "localhost:8080/v1/search?lat=40.9885&lng=29.0262&q=s%C3%BCt" \
 | `CATALOG_GRPC_ADDR`          | `localhost:50051` | catalog-service adresi (`host:port`)            |
 | `INVENTORY_GRPC_ADDR`        | `localhost:50052` | inventory-service adresi (ürün listesi ve genel aramadaki stok, T8.4, T9.6) |
 | `ORDER_GRPC_ADDR`            | `localhost:50053` | order-service adresi                            |
+| `PAYMENT_GRPC_ADDR`          | `localhost:50054` | payment-service (kart kasası, T11.17); production'da okunmaz |
 | `GATEWAY_REQUEST_TIMEOUT_MS` | `5000`            | Tek bir servis çağrısının üst sınırı            |
 | `GATEWAY_STOCK_TIMEOUT_MS`   | `300`             | Stok sorgusunun üst sınırı (genel aramada market başına, paralel); aşılırsa ürünler stoksuz döner (T8.4, T9.6) |
 | `GRPC_SHUTDOWN_TIMEOUT_MS`   | `10000`           | Kapanışta devam eden istekler için bekleme      |

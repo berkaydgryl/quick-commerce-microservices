@@ -85,6 +85,11 @@ type idempotencyPolicy struct {
 	replay bool
 	// checkout, basarili cevabin kaydi kisa omurlu mu (siparis, 3DS)?
 	checkout bool
+	// fingerprintBody, parmak izine giren govde; nil ise govdenin kendisi. Kart
+	// ekleme (T11.17, K3) numara ve CVV tasir: kayit onlarin turevini tutmasin.
+	fingerprintBody func(body []byte) []byte
+	// ttl, bitmis kaydin omru; sifirsa Idempotency.TTL (kart ekleme 15 dk, K3).
+	ttl time.Duration
 }
 
 var (
@@ -130,7 +135,7 @@ func idempotent(settings Idempotency, policy idempotencyPolicy, logger *slog.Log
 		}
 
 		key := idempotency.Key(idempotencyScope(c), raw)
-		fingerprint := requestFingerprint(settings.FingerprintKey, c)
+		fingerprint := requestFingerprint(settings.FingerprintKey, c, policy)
 		token := hex.EncodeToString(ids.RandomBytes(16))
 		claimed, existing, err := settings.Store.Claim(c.Context(), key,
 			idempotency.Record{State: idempotency.StateInProgress, Token: token, Fingerprint: fingerprint}, idempotencyInProgressTTL)
@@ -185,6 +190,9 @@ func finish(c fiber.Ctx, settings Idempotency, policy idempotencyPolicy, key, to
 		}
 	}
 	ttl := settings.TTL
+	if policy.ttl > 0 {
+		ttl = policy.ttl
+	}
 	if policy.checkout && status < http.StatusMultipleChoices {
 		ttl = idempotencyCheckoutTTL
 	}
@@ -274,14 +282,18 @@ func validIdempotencyKey(key string) bool {
 	return len(key) >= idempotencyKeyMinLength && len(key) <= idempotencyKeyMaxLength && idempotencyKeyPattern.MatchString(key)
 }
 
-// requestFingerprint, istegin parmak izi: yontem, yol ve govde, sunucu
-// sirriyla HMAC-SHA256. Ayni anahtarla farkli istek bundan ayirt edilir.
-func requestFingerprint(secret []byte, c fiber.Ctx) string {
+// requestFingerprint, istegin parmak izi: yontem, yol ve govde (ucun
+// politikasi verdiyse govdenin maskeli hali), sunucu sirriyla HMAC-SHA256.
+func requestFingerprint(secret []byte, c fiber.Ctx, policy idempotencyPolicy) string {
+	body := c.Body()
+	if policy.fingerprintBody != nil {
+		body = policy.fingerprintBody(body)
+	}
 	mac := hmac.New(sha256.New, secret)
 	mac.Write([]byte(c.Method()))
 	mac.Write([]byte{0})
 	mac.Write([]byte(c.Path()))
 	mac.Write([]byte{0})
-	mac.Write(c.Body())
+	mac.Write(body)
 	return hex.EncodeToString(mac.Sum(nil))
 }

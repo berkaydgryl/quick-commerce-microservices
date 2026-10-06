@@ -201,3 +201,27 @@ func TestRedisCounterStaysWithinLimitAndExpires(t *testing.T) {
 		t.Errorf("anahtar en fazla pencere kadar yasamali: %v", ttl)
 	}
 }
+
+func TestRedisFailureCounterContract(t *testing.T) {
+	failureCounterContract(t, func() FailureCounter { return NewRedis(client) }, testWindow, func(d time.Duration) { time.Sleep(d) })
+}
+
+func TestRedisFailureKeyExpiresWithItsWindow(t *testing.T) {
+	// K2: basarisizlik sayacinin anahtari TTL'lidir (proje kurali): pencere kadar.
+	ctx := context.Background()
+	key := Key("usr_5123456789abcdef0123456789abcdef", "POST_/v1/me/cards/fail-1d")
+	if err := NewRedis(client).Record(ctx, key, testWindow); err != nil {
+		t.Fatalf("kayit: %v", err)
+	}
+	ttl, err := client.PTTL(ctx, key).Result()
+	if err != nil {
+		t.Fatalf("PTTL: %v", err)
+	}
+	if ttl <= 0 || ttl > testWindow {
+		t.Errorf("anahtarin omru (0, pencere] olmali: %v", ttl)
+	}
+}
+
+func TestRedisInflightContract(t *testing.T) {
+	inflightContract(t, func() InflightLock { return NewRedis(client) }, testWindow, func(d time.Duration) { time.Sleep(d) })
+}
