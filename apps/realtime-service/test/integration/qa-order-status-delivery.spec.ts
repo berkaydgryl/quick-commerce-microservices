@@ -11,6 +11,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { EVENTS, ID_PREFIX, newId } from '@getir/core';
+import { withoutRandomNoise } from '@getir/core/testing';
 import { EVENTS_DEAD_LETTER_STREAM_KEY, EVENTS_STREAM_KEY, realtimeSeqKey } from '@getir/redis-kit';
 import type { Socket } from 'socket.io-client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -138,10 +139,15 @@ describe('QA T12.3: teslim, uretim ayarlari, tek kopya', () => {
       'seq',
       'status',
     ]);
-    const wire = JSON.stringify(arrivals);
-    for (const secret of [USER_ID, MARKET_ID, internalNote, '4599', '+905551112233']) {
+    // Yalnizca tel uzerindeki olaylar: kaydin varis ani (Date.now(), 13 hane) tele ait degil
+    // ve kisa tutari tesadufen icerebilir.
+    const wire = JSON.stringify(arrivals.map((arrival) => arrival.payload));
+    // Uzun sirlar ham metinde (USER_ID kendisi onekli kimlik: maskelenirse gorunmez olur).
+    for (const secret of [USER_ID, MARKET_ID, internalNote, '+905551112233']) {
       expect(wire).not.toContain(secret);
     }
+    // Kisa tutar siparis kimliginin (ord_ + 32 onaltilik) icinde tesadufen gecebilir.
+    expect(withoutRandomNoise(wire)).not.toContain('4599');
   });
 
   it("QA-RT3-04: at, zarfin occurredAt'i (gecisin ani); realtime'in yayin ani degil", async () => {

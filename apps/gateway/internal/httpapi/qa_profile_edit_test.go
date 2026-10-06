@@ -13,7 +13,8 @@
 //     diger cihazin ERISIM jetonu JWT_TTL'e kadar gecer (G1 (a), ADR-12 Ek 2).
 //  5. PATCH /v1/me: ad sinirlari, HTML ham saklanir, fazladan alan reddi,
 //     tekrar korumasi.
-//  6. Gunluk: butun akista kod, numara, sifre, ad ve e-posta gunluge dusmez.
+//  6. Gunluk: butun akista kod, numara, sifre, ad ve e-posta gunluge dusmez
+//     (qa_profile_logs_test.go).
 //
 // 3 (ayni numaraya eszamanli iki hesap, Mongo) authstore'da, 7 (kanal ayrimi,
 // Redis) verification'da, 8 (production'da telefon uclari yok) cmd/gateway'de.
@@ -547,50 +548,5 @@ func TestQAUpdateProfileRules(t *testing.T) {
 	}
 	if got := qaData[auth.Profile](t, w.me(t, device)).FullName; got != "Ayse Kaya" {
 		t.Errorf("409 sonrasi ad degismemeli: %q", got)
-	}
-}
-
-// 6. Gunluk: kod, numara, sifre, ad ve e-posta hicbir satirda yok.
-func TestQAProfileFlowLogsNoSecrets(t *testing.T) {
-	w := newQAWorld(t)
-	oldPhone, newPhone := "+905321110051", "+905551110051"
-	oldName, newName := "Gizlikalmali Birinci", "Gizlikalmali Ikinci"
-	email := "gizli.adres@example.com"
-	w.setPhoneCode("913577")
-	w.setEmailCode("642086")
-
-	first := w.register(t, oldPhone, oldName)
-	_, second := w.login(t, oldPhone)
-	w.login(t, oldPhone)
-	w.do(t, qaCall{method: http.MethodPost, path: "/v1/auth/login", body: qaJSON(t, map[string]string{"phone": oldPhone, "password": "Yanlis-Parola-2026"})})
-	w.do(t, qaCall{method: http.MethodPatch, path: "/v1/me", auth: first.access, key: qaKey("profil"), body: qaJSON(t, map[string]string{"fullName": newName})})
-	w.phoneCode(t, first, newPhone, "Yanlis-Parola-2026")
-	w.phoneCode(t, first, newPhone, qaPassword)
-	w.phoneVerify(t, first, newPhone, "135799")
-	if r := w.phoneVerify(t, first, newPhone, "913577"); r.status != http.StatusOK {
-		t.Fatalf("akis tamamlanmali: %d %+v", r.status, r.body.Error)
-	}
-	w.refresh(t, second)
-	w.do(t, qaCall{method: http.MethodPost, path: "/v1/me/email/code", auth: first.access, key: qaKey("eposta"), body: qaJSON(t, map[string]string{"email": email})})
-	w.do(t, qaCall{method: http.MethodPost, path: "/v1/me/email/verify", auth: first.access, key: qaKey("eposta"), body: qaJSON(t, map[string]string{"email": email, "code": "111111"})})
-	if r := w.do(t, qaCall{method: http.MethodPost, path: "/v1/me/email/verify", auth: first.access, key: qaKey("eposta"), body: qaJSON(t, map[string]string{"email": email, "code": "642086"})}); r.status != http.StatusOK {
-		t.Fatalf("e-posta dogrulamasi: %d %+v", r.status, r.body.Error)
-	}
-
-	logs := w.logs.String()
-	if strings.Count(logs, "\n") < 10 {
-		t.Fatalf("gunluk bos gorunuyor (kaydedici bagli mi?): %q", logs)
-	}
-	secrets := []string{
-		qaPassword, "Yanlis-Parola-2026",
-		oldPhone, newPhone, strings.TrimPrefix(oldPhone, "+90"), strings.TrimPrefix(newPhone, "+90"),
-		oldName, newName, "Gizlikalmali",
-		"913577", "135799", "642086", "111111",
-		email, "gizli.adres",
-	}
-	for _, secret := range secrets {
-		if strings.Contains(logs, secret) {
-			t.Errorf("gunlukte %q var", secret)
-		}
 	}
 }

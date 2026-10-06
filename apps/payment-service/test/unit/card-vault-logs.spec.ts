@@ -23,6 +23,11 @@ const USER = 'usr_gunluk';
 const HOLDER = 'Zeynep Kılıçarslan';
 const NICKNAME = 'Gizli Maaş';
 const CVV = '9183';
+/** Mock'un tanimadigi (reddettigi) Luhn'u gecerli Amex: CVV'si de 4 hanedir. */
+const DECLINED_NUMBER = '3714 496353 98431';
+/** Saglayicinin acikca reddettigi Visa test karti ve 3 haneli CVV'si (QA M5). */
+const DECLINED_VISA = '4000 0000 0000 0002';
+const SHORT_CVV = '918';
 
 const lines: LogLine[] = [];
 let vault: RunningCardVault;
@@ -78,7 +83,10 @@ describe('kart kasasi gunlugu (QA P1)', () => {
     const cardId = added.response?.card?.id ?? '';
     const paths = [
       request({ number: '3782 822463 10006' }), // Luhn
-      request({ number: '4000 0000 0000 0002', cvv: '918' }), // saglayici reddi
+      // Saglayici reddi iki yoldan (QA M5): acik ret karti 3 haneli CVV'yle ve
+      // taninmayan kart (Amex) 4 haneli CVV'yle. Eskiden retteki CVV hic aranmiyordu.
+      request({ number: DECLINED_VISA, cvv: SHORT_CVV }),
+      request({ number: DECLINED_NUMBER }),
       request({}), // ayni kart (CONFLICT)
       request({ nickname: '3782 8224 6310 005' }), // kart adinda numara
     ];
@@ -102,6 +110,10 @@ describe('kart kasasi gunlugu (QA P1)', () => {
       '3782 822463 10005',
       '378282',
       '822463',
+      DECLINED_NUMBER.replace(/\s/g, ''),
+      DECLINED_NUMBER,
+      '371449',
+      '496353',
       CVV,
       HOLDER,
       'Kılıçarslan',
@@ -110,6 +122,10 @@ describe('kart kasasi gunlugu (QA P1)', () => {
     ]) {
       expect(text, `gunlukte: ${secret.length} karakter`).not.toContain(secret);
     }
+    // 3 haneli CVV: maskeli metinde, daha uzun bir sayinin parcasi sayilmadan aranir.
+    expect(text, 'gunlukte: 3 haneli CVV').not.toMatch(
+      new RegExp(`(?<![0-9])${SHORT_CVV}(?![0-9])`),
+    );
     // Satirlar gercekten yazildi: her yol gunlukte, yalnizca kimlik ve marka ile.
     const messages = lines.map((line) => line.message);
     expect(messages).toEqual(
