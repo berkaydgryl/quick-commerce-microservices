@@ -19,6 +19,8 @@ export interface CardFaceChar {
 export type CardFaceGroups = readonly (readonly CardFaceChar[])[];
 
 const MASK = '•';
+/** Liste satirinda gizli hane (referans: yildiz). */
+const LIST_MASK = '*';
 const EMPTY = '#';
 /** Numaranin bastan ve sondan gorunen hane sayisi. */
 const VISIBLE_EDGE = 4;
@@ -75,9 +77,35 @@ export function cardShortName(
   return `${labels[card.brand]} ${MASK.repeat(VISIBLE_EDGE)} ${card.last4}`;
 }
 
-/** Son kullanma: 8, 2029 -> "08/29". */
-export function formatCardExpiry(month: number, year: number): string {
-  return `${String(month).padStart(2, '0')}/${String(year % 100).padStart(2, '0')}`;
+/**
+ * Ekran okuyucunun kart adi (QA D6): "Visa, son dört hane 4242". Maskeli
+ * numara ("4242 **** **** 4242") yildiz yildiz okunurdu; marka da soylenir.
+ */
+export function cardSpokenName(
+  card: Pick<SavedCard, 'brand' | 'last4'>,
+  labels: CardBrandLabels,
+  lastFourLabel: string,
+): string {
+  return `${labels[card.brand]}, ${lastFourLabel} ${card.last4}`;
+}
+
+/**
+ * Liste satirinin numarasi (referans getircarsi): ilk 4 ve son 4 hane,
+ * arasi yildizla: "4242 **** **** 4242"; Amex "3782 ****** *0005".
+ */
+export function maskedCardNumber(card: Pick<SavedCard, 'brand' | 'first4' | 'last4'>): string {
+  return savedCardFace(card)
+    .map((group) => group.map((char) => (char.kind === 'masked' ? LIST_MASK : char.char)).join(''))
+    .join(' ');
+}
+
+/**
+ * Kartin yuzundeki son kullanma, secimlerden: ay ve yil secildikce yer
+ * tutucunun ("AA/YY") yerine gecer: "08/YY", "08/29".
+ */
+export function faceExpiry(month: string, year: string, placeholder: string): string {
+  const [monthHolder = '', yearHolder = ''] = placeholder.split('/');
+  return `${month === '' ? monthHolder : month}/${year === '' ? yearHolder : year.slice(-2)}`;
 }
 
 /** Kartin uzerindeki ad: buyuk harf (Turkce kurallariyla); bossa yer tutucu. */

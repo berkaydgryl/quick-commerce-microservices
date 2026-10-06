@@ -4024,17 +4024,18 @@ components:
     PaymentMethodsContent:
       type: object
       description: |
-        Ödeme Yöntemlerim (T11.17; `/hesabim/odeme-yontemlerim`): kayıtlı kartlar,
-        "Kart ekle" sayfası (tasarım B "Markanın rengi") ve silme onayı. Kural
-        cümleleri içerikte değil, sözleşmede (`CARD_FIELD_MESSAGES`); kasa aynı
-        cümleleri döner. `*Suffix` metinleri kartın adının arkasına eklenir.
+        Ödeme Yöntemlerim (T11.17; `/hesabim/odeme-yontemlerim`; düzen kullanıcının
+        referansı getirçarşı): kayıtlı kartlar satır satır, "Kart Ekle" sayfası
+        (Güvenlik kutusu, Ay/Yıl, zorunlu koşul onayı, Devam; yanında tasarım B'nin
+        kart animasyonu) ve silme onayı. Kural cümleleri içerikte değil, sözleşmede
+        (`CARD_FIELD_MESSAGES`); kasa aynı cümleleri döner.
       required:
         [
           title,
           loadingLabel,
-          emptyNotice,
           addLabel,
           expiredLabel,
+          lastFourLabel,
           deleteSuffix,
           confirmTitle,
           confirmQuestionSuffix,
@@ -4043,20 +4044,31 @@ components:
           deletingLabel,
           cancelLabel,
           deletedToastSuffix,
+          closeLabel,
+          backToListLabel,
           addTitle,
-          brandsLabel,
+          securityTitle,
+          securityText,
+          nicknameLabel,
           numberLabel,
           numberValidLabel,
           holderNameLabel,
-          expiryLabel,
-          expiryFormatNotice,
+          expiryLegend,
+          monthLabel,
+          yearLabel,
+          expiryRequiredNotice,
           cvvLabel,
-          nicknameLabel,
+          termsLinkLabel,
+          termsSuffix,
+          termsRequiredNotice,
+          termsTitle,
+          termsParagraphs,
           saveLabel,
           savingLabel,
           retryWaitLabel,
+          duplicateCardNotice,
           addedToastPrefix,
-          privacyNote,
+          acceptedBrandsLabel,
           holderCaption,
           expiryCaption,
           holderPlaceholder,
@@ -4070,9 +4082,9 @@ components:
       properties:
         title: { $ref: "#/components/schemas/ContentText" }
         loadingLabel: { $ref: "#/components/schemas/ContentText" }
-        emptyNotice: { $ref: "#/components/schemas/ContentText" }
         addLabel: { $ref: "#/components/schemas/ContentText" }
         expiredLabel: { $ref: "#/components/schemas/ContentText" }
+        lastFourLabel: { $ref: "#/components/schemas/ContentText" }
         deleteSuffix: { $ref: "#/components/schemas/ContentText" }
         confirmTitle: { $ref: "#/components/schemas/ContentText" }
         confirmQuestionSuffix: { $ref: "#/components/schemas/ContentText" }
@@ -4081,22 +4093,34 @@ components:
         deletingLabel: { $ref: "#/components/schemas/ContentText" }
         cancelLabel: { $ref: "#/components/schemas/ContentText" }
         deletedToastSuffix: { $ref: "#/components/schemas/ContentText" }
+        closeLabel: { $ref: "#/components/schemas/ContentText" }
+        backToListLabel: { $ref: "#/components/schemas/ContentText" }
         addTitle: { $ref: "#/components/schemas/ContentText" }
-        brandsLabel: { $ref: "#/components/schemas/ContentText" }
+        securityTitle: { $ref: "#/components/schemas/ContentText" }
+        securityText: { $ref: "#/components/schemas/ContentText" }
+        nicknameLabel: { $ref: "#/components/schemas/ContentText" }
         numberLabel: { $ref: "#/components/schemas/ContentText" }
         numberValidLabel: { $ref: "#/components/schemas/ContentText" }
         holderNameLabel: { $ref: "#/components/schemas/ContentText" }
-        expiryLabel: { $ref: "#/components/schemas/ContentText" }
-        expiryFormatNotice: { $ref: "#/components/schemas/ContentText" }
+        expiryLegend: { $ref: "#/components/schemas/ContentText" }
+        monthLabel: { $ref: "#/components/schemas/ContentText" }
+        yearLabel: { $ref: "#/components/schemas/ContentText" }
+        expiryRequiredNotice: { $ref: "#/components/schemas/ContentText" }
         cvvLabel: { $ref: "#/components/schemas/ContentText" }
-        nicknameLabel: { $ref: "#/components/schemas/ContentText" }
+        termsLinkLabel: { $ref: "#/components/schemas/ContentText" }
+        termsSuffix: { $ref: "#/components/schemas/ContentText" }
+        termsRequiredNotice: { $ref: "#/components/schemas/ContentText" }
+        termsTitle: { $ref: "#/components/schemas/ContentText" }
+        termsParagraphs:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/ContentText" }
         saveLabel: { $ref: "#/components/schemas/ContentText" }
         savingLabel: { $ref: "#/components/schemas/ContentText" }
-        retryWaitLabel:
-          $ref: "#/components/schemas/ContentText"
-          description: 'Çok fazla başarısız doğrulamada (429) geri sayımın başı: "Yeniden deneyebilmen için 4:59".'
+        retryWaitLabel: { $ref: "#/components/schemas/ContentText" }
+        duplicateCardNotice: { $ref: "#/components/schemas/ContentText" }
         addedToastPrefix: { $ref: "#/components/schemas/ContentText" }
-        privacyNote: { $ref: "#/components/schemas/ContentText" }
+        acceptedBrandsLabel: { $ref: "#/components/schemas/ContentText" }
         holderCaption: { $ref: "#/components/schemas/ContentText" }
         expiryCaption: { $ref: "#/components/schemas/ContentText" }
         holderPlaceholder: { $ref: "#/components/schemas/ContentText" }
@@ -4105,9 +4129,7 @@ components:
         cvvCaption: { $ref: "#/components/schemas/ContentText" }
         cvvNote: { $ref: "#/components/schemas/ContentText" }
         brandLabels: { $ref: "#/components/schemas/CardBrandLabels" }
-        brandMarks:
-          $ref: "#/components/schemas/CardBrandLabels"
-          description: Kartın üstündeki soluk büyük marka işareti (kısa; "MC").
+        brandMarks: { $ref: "#/components/schemas/CardBrandLabels" }
 
     CardBrandLabels:
       type: object

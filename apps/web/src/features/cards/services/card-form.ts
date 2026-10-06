@@ -1,95 +1,74 @@
 /**
- * Kart ekleme formu (T11.17): alanlar, istemci kurallari ve istek. Kural
- * fonksiyonlari ve cumleleri SOZLESMEDEN (@getir/contracts cards.ts; kasa ayni
+ * Kart ekleme formu (T11.17; duzen kullanicinin referansi getircarsi "Kart
+ * Ekle"): alanlar, istemci kurallari ve istek. Kural fonksiyonlari ve
+ * cumleleri SOZLESMEDEN (@getir/contracts card-rules.ts; kasa ayni
  * fonksiyonlarla yeniden denetler, karar sunucudadir). Icerikten yalnizca
- * son kullanma bicim uyarisi gelir.
+ * secim ve onay uyarilari gelir.
  *
  * Numara ve CVV yalnizca form durumunda yasar (M7): istek bir kez gonderilir,
  * form kapaninca gider.
  */
 
 import {
-  CARD_EXPIRY_MAX_YEARS_AHEAD,
   CARD_FIELD_MESSAGES,
+  cardExpiryProblem,
   cardHolderNameProblem,
   cardNicknameProblem,
   cardNumberProblem,
   cvvLengthOf,
-  isCardExpired,
   normalizeCardText,
 } from '@getir/contracts';
 import type { AddCardRequest } from '@getir/contracts';
 import { AppError, ERROR_CODES } from '@getir/core';
 import { z } from 'zod';
 
-import { formFeedback } from '../../auth/services/server-errors';
+import { fieldReasons, formFeedback, retryAfterSeconds } from '../../auth/services/server-errors';
 import type { FormFeedback } from '../../auth/services/server-errors';
 
 import { typingBrand } from './card-input';
 
 export interface CardFormValues {
+  /** Istege bagli; bos = kart adi yok. */
+  readonly nickname: string;
   /** Yalnizca rakamlar (gosterimde gruplanir). */
   readonly number: string;
   readonly holderName: string;
-  /** "AA/YY". */
-  readonly expiry: string;
+  /** "01".."12"; secilmediyse bos. */
+  readonly expiryMonth: string;
+  /** "2026".."2046" (sozlesmeden); secilmediyse bos. */
+  readonly expiryYear: string;
   readonly cvv: string;
-  /** Istege bagli; bos = kart adi yok. */
-  readonly nickname: string;
+  /** Kullanim kosullari kabul edildi (zorunlu). */
+  readonly terms: boolean;
 }
 
 export type CardFormField = keyof CardFormValues;
 
 /** Alanlar, ekrandaki sirayla (ilk hatali alana odak bu sirayla). */
 export const CARD_FORM_FIELDS: readonly CardFormField[] = [
+  'nickname',
   'number',
   'holderName',
-  'expiry',
+  'expiryMonth',
+  'expiryYear',
   'cvv',
-  'nickname',
+  'terms',
 ];
 
 export const EMPTY_CARD_FORM: CardFormValues = {
+  nickname: '',
   number: '',
   holderName: '',
-  expiry: '',
+  expiryMonth: '',
+  expiryYear: '',
   cvv: '',
-  nickname: '',
+  terms: false,
 };
 
-const EXPIRY_PATTERN = /^(\d{2})\/(\d{2})$/;
-const CENTURY = 2000;
-
-/** "08/29" -> { month: 8, year: 2029 }; bicim eksikse null. */
-export function parseExpiry(
-  value: string,
-): { readonly month: number; readonly year: number } | null {
-  const match = EXPIRY_PATTERN.exec(value);
-  if (match === null) {
-    return null;
-  }
-  return { month: Number(match[1]), year: CENTURY + Number(match[2]) };
-}
-
-/**
- * Son kullanma kurali: bicim (icerikteki uyari), ay 1-12, gecmemis (Turkiye
- * saatiyle, sozlesme) ve en fazla CARD_EXPIRY_MAX_YEARS_AHEAD yil ileri.
- */
-export function expiryProblem(value: string, now: Date, formatNotice: string): string | null {
-  const parsed = parseExpiry(value);
-  if (parsed === null) {
-    return formatNotice;
-  }
-  if (parsed.month < 1 || parsed.month > 12) {
-    return CARD_FIELD_MESSAGES.expiryMonth;
-  }
-  if (isCardExpired(parsed.month, parsed.year, now)) {
-    return CARD_FIELD_MESSAGES.expired;
-  }
-  if (parsed.year > now.getFullYear() + CARD_EXPIRY_MAX_YEARS_AHEAD) {
-    return CARD_FIELD_MESSAGES.expiryYear;
-  }
-  return null;
+/** Formun icerikten gelen uyarilari (kural cumleleri degil). */
+export interface CardFormNotices {
+  readonly expiryRequiredNotice: string;
+  readonly termsRequiredNotice: string;
 }
 
 /** CVV kurali: rakam ve markanin uzunlugu (marka belli degilse 3 ya da 4). */
@@ -108,9 +87,19 @@ function addProblem(context: z.RefinementCtx, problem: string | null): void {
 }
 
 /** Formun istemci semasi; `now` son kullanma denetiminin ani (testte sabit). */
-export function cardFormSchema(formatNotice: string, now: () => Date = () => new Date()) {
+export function cardFormSchema(notices: CardFormNotices, now: () => Date = () => new Date()) {
+  const chosen = (value: string, context: z.RefinementCtx) => {
+    if (value === '') {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: notices.expiryRequiredNotice });
+    }
+  };
   return z
     .object({
+      nickname: z
+        .string()
+        .superRefine((value, context) =>
+          addProblem(context, cardNicknameProblem(normalizeCardText(value))),
+        ),
       number: z
         .string()
         .superRefine((value, context) => addProblem(context, cardNumberProblem(value))),
@@ -119,89 +108,89 @@ export function cardFormSchema(formatNotice: string, now: () => Date = () => new
         .superRefine((value, context) =>
           addProblem(context, cardHolderNameProblem(normalizeCardText(value))),
         ),
-      expiry: z
-        .string()
-        .superRefine((value, context) =>
-          addProblem(context, expiryProblem(value, now(), formatNotice)),
-        ),
+      expiryMonth: z.string().superRefine(chosen),
+      expiryYear: z.string().superRefine(chosen),
       cvv: z.string(),
-      nickname: z
-        .string()
-        .superRefine((value, context) =>
-          addProblem(context, cardNicknameProblem(normalizeCardText(value))),
-        ),
+      terms: z.boolean().refine((accepted) => accepted, notices.termsRequiredNotice),
     })
-    .superRefine(({ number, cvv }, context) => {
-      const problem = cvvProblem(cvv, number);
-      if (problem !== null) {
-        context.addIssue({ code: z.ZodIssueCode.custom, path: ['cvv'], message: problem });
+    .superRefine(({ number, cvv, expiryMonth, expiryYear }, context) => {
+      const cvvIssue = cvvProblem(cvv, number);
+      if (cvvIssue !== null) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ['cvv'], message: cvvIssue });
+      }
+      if (expiryMonth === '' || expiryYear === '') {
+        return;
+      }
+      const expiry = cardExpiryProblem(Number(expiryMonth), Number(expiryYear), now());
+      if (expiry !== null) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [expiry.field],
+          message: expiry.message,
+        });
       }
     });
 }
 
 /**
- * Formdan istek: numara rakamlari, ay ve yil, CVV, ad (NFC + kirpilmis); bos
- * kart adi gonderilmez. Sema gectikten sonra cagrilir.
+ * Formdan istek: numara rakamlari, ay ve yil sayi, CVV, ad (NFC + kirpilmis);
+ * bos kart adi gonderilmez. Kosul onayi istemcidedir, govdeye girmez. Sema
+ * gectikten sonra cagrilir.
  */
 export function toAddCardRequest(values: CardFormValues): AddCardRequest {
-  const expiry = parseExpiry(values.expiry) ?? { month: 0, year: 0 };
   const nickname = normalizeCardText(values.nickname);
   return {
     number: values.number,
-    expiryMonth: expiry.month,
-    expiryYear: expiry.year,
+    expiryMonth: Number(values.expiryMonth),
+    expiryYear: Number(values.expiryYear),
     cvv: values.cvv,
     holderName: normalizeCardText(values.holderName),
     ...(nickname === '' ? {} : { nickname }),
   };
 }
 
-/** Istegin alanlari formdaki alanlara: son kullanma ayi ve yili tek alanda. */
-const REQUEST_FIELD: Readonly<Record<string, CardFormField>> = {
-  number: 'number',
-  holderName: 'holderName',
-  expiryMonth: 'expiry',
-  expiryYear: 'expiry',
-  cvv: 'cvv',
-  nickname: 'nickname',
-};
+/** Istegin alanlari formdaki alanlara (ayni adlar; kosul onayi istekte yok). */
+const REQUEST_FIELDS: readonly CardFormField[] = [
+  'number',
+  'holderName',
+  'expiryMonth',
+  'expiryYear',
+  'cvv',
+  'nickname',
+];
 
-const fieldReasonsSchema = z.record(z.string(), z.string());
-
-/** RATE_LIMITED ayrintisi: tekrar denemeye kalan saniye (gateway; Retry-After ile ayni). */
-const retryAfterSchema = z.object({ retryAfterSeconds: z.number().int().positive() });
-
-/**
- * Cok fazla basarisiz dogrulama (T11.17 K2: 429 + Retry-After): tekrar
- * denemeye kalan saniye; hata baska turdeyse ya da sure yoksa null. Form bu
- * sure boyunca kaydet dugmesini kapatir ve geri sayar.
- */
-export function retryWaitSeconds(error: unknown): number | null {
-  if (!(error instanceof AppError) || error.code !== ERROR_CODES.RATE_LIMITED) {
-    return null;
-  }
-  const details = retryAfterSchema.safeParse(error.details);
-  return details.success ? details.data.retryAfterSeconds : null;
+/** Alan istegin govdesine girer mi (kosul onayi girmez; deneme anahtari yalniz bunlarla degisir, QA D2). */
+export function isRequestField(name: string): name is CardFormField {
+  return REQUEST_FIELDS.some((field) => field === name);
 }
 
+/** CONFLICT ayrintisi: ayni kart kullanicinin kasasinda var (kartin kimligi). */
+const duplicateCardSchema = z.object({ cardId: z.string().min(1) });
+
 /**
- * Sunucu hatasi -> form. Alan cumleleri alanlarin altina (ay ve yil "Son
- * kullanma" alanina); alani olmayan cumle (dolu kasa: "En fazla 10 kart
- * kaydedebilirsin") formun ustune, oldugu gibi. Ayni kart (CONFLICT) ve
- * saglayici reddi (PAYMENT_DECLINED) sozlugun cumlesiyle ustte.
+ * Sunucu hatasi -> form. Alan cumleleri alanlarin altina; alani olmayan cumle
+ * (dolu kasa: "En fazla 10 kart kaydedebilirsin") formun ustune, oldugu gibi.
+ * Ayni kart (CONFLICT + cardId, QA C4) icerigin cumlesiyle; diger CONFLICT,
+ * saglayici reddi (PAYMENT_DECLINED) ve gerisi sozlugun cumlesiyle ustte.
  */
-export function cardFormFeedback(error: unknown): FormFeedback<CardFormField> {
-  if (!(error instanceof AppError) || error.code !== ERROR_CODES.VALIDATION_FAILED) {
+export function cardFormFeedback(
+  error: unknown,
+  duplicateNotice: string,
+): FormFeedback<CardFormField> {
+  if (!(error instanceof AppError)) {
     return formFeedback(error, CARD_FORM_FIELDS);
   }
-  const reasons = fieldReasonsSchema.safeParse(error.details);
-  if (!reasons.success) {
+  if (error.code === ERROR_CODES.CONFLICT && duplicateCardSchema.safeParse(error.details).success) {
+    return { fields: {}, message: duplicateNotice };
+  }
+  const reasons = error.code === ERROR_CODES.VALIDATION_FAILED ? fieldReasons(error.details) : null;
+  if (reasons === null) {
     return formFeedback(error, CARD_FORM_FIELDS);
   }
   const fields: Partial<Record<CardFormField, string>> = {};
   let message: string | null = null;
-  for (const [name, reason] of Object.entries(reasons.data)) {
-    const field = REQUEST_FIELD[name];
+  for (const [name, reason] of Object.entries(reasons)) {
+    const field = REQUEST_FIELDS.find((candidate) => candidate === name);
     if (field === undefined) {
       message ??= reason;
     } else {
@@ -209,4 +198,16 @@ export function cardFormFeedback(error: unknown): FormFeedback<CardFormField> {
     }
   }
   return { fields, message };
+}
+
+/**
+ * Cok fazla basarisiz dogrulama (K2: 429 + Retry-After): tekrar denemeye
+ * kalan saniye; hata baska turdeyse ya da sure yoksa null. Form bu sure
+ * boyunca Devam'i kapatir ve geri sayar.
+ */
+export function retryWaitSeconds(error: unknown): number | null {
+  if (!(error instanceof AppError) || error.code !== ERROR_CODES.RATE_LIMITED) {
+    return null;
+  }
+  return retryAfterSeconds(error.details);
 }

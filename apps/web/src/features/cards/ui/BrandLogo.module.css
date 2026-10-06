@@ -1,0 +1,49 @@
+/*
+ * Kart markasinin kucuk logosu (T11.17, D3): Mastercard iki daire, Visa egik
+ * kalin yazi, Amex mavi kutuda beyaz yazi, Troy kucuk harf yazi. Renkler
+ * markalarin (payment-card/tokens.css).
+ */
+.c-brand-logo {
+  display: inline-grid;
+  place-items: center;
+  block-size: var(--size-card-logo);
+  font-weight: var(--font-weight-extrabold);
+  line-height: 1;
+}
+
+svg.c-brand-logo {
+  inline-size: var(--size-card-logo-wide);
+}
+
+.c-brand-logo__red {
+  fill: var(--card-logo-mastercard-red);
+}
+
+.c-brand-logo__yellow {
+  fill: var(--card-logo-mastercard-yellow);
+}
+
+.c-brand-logo__overlap {
+  fill: var(--card-logo-mastercard-overlap);
+}
+
+.c-brand-logo--visa {
+  font-size: var(--font-size-md);
+  font-style: italic;
+  color: var(--card-logo-visa);
+  letter-spacing: var(--letter-spacing-logo);
+}
+
+.c-brand-logo--amex {
+  padding-inline: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--text-on-brand);
+  background: var(--card-logo-amex);
+  border-radius: var(--radius-sm);
+}
+
+.c-brand-logo--troy {
+  font-size: var(--font-size-md);
+  font-style: italic;
+  color: var(--card-logo-troy);
+}

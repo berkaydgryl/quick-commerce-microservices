@@ -1,0 +1,7 @@
+/* Kart saklama kosullari paneli (T11.17): kisa paragraflar, okunur satir araligi. */
+.c-terms-dialog {
+  display: grid;
+  gap: var(--space-3);
+  line-height: var(--line-height-base);
+  color: var(--text-default);
+}

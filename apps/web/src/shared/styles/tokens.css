@@ -153,10 +153,11 @@
   --size-header-menu-min: 12rem;
   --size-header-menu-item: 2.75rem;
 
-  /* Adres ekleme penceresi (T11.8): harita icin giris penceresinden genis;
-     1. adimin haritasi ekran yuksekligiyle olceklenir, 2. adimda kucuk
-     onizleme. Pin haritanin ortasindadir (harita altinda kayar). */
-  --container-max-address-dialog: 36rem;
+  /* Ortak pencere kabugu (T11.8 adres ekleme; T11.17'de shared/ui/dialog):
+     harita icin giris penceresinden genis; 1. adimin haritasi ekran
+     yuksekligiyle olceklenir, 2. adimda kucuk onizleme. Pin haritanin
+     ortasindadir (harita altinda kayar). */
+  --container-max-modal: 36rem;
   --size-address-map: clamp(15rem, 45dvh, 24rem);
   --size-address-map-preview: 7.5rem;
   --size-map-pin: 2.75rem;

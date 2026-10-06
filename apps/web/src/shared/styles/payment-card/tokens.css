@@ -43,7 +43,6 @@
   --card-signature-dark: #e2e2e8;
   --card-text-shadow: rgb(0 0 0 / 30%);
   --shadow-payment-card: 0 1.5rem 3rem rgb(20 20 40 / 30%);
-  --shadow-payment-card-small: 0 0.5rem 1.25rem rgb(20 20 40 / 22%);
   --size-payment-card: 23.75rem;
   --ratio-payment-card: 85.6 / 53.98;
   --size-card-tilt-depth: 68.75rem;
@@ -55,9 +54,99 @@
   --duration-card-streak: 6s;
   --easing-card-flip: cubic-bezier(0.2, 0.75, 0.25, 1);
 
-  /* Kayitli kartlar (T11.17, M4): kucuk kart gorselleri iki sutun; cop
-     kutusu ve "Kart ekle" en az 44 px dokunma alani. */
-  --size-card-tile-min: 15rem;
+  /* Kart yuzunun olcegi (QA: ciplak olcu yok). Hepsi kartin genisligine
+     oranli (cqi = kartin yuzde biri): kart buyuyup kuculdukce birlikte. */
+  --card-radius: 5.3cqi;
+  --card-edge: 6.3cqi;
+  --card-row-top: 5.8cqi;
+  --card-row-chip: 16.3cqi;
+  --card-row-number: 31cqi;
+  --card-row-holder: 45.3cqi;
+  --card-gap-group: 3.7cqi;
+  --card-gap-value: 1cqi;
+  --card-font-number: 6cqi;
+  --card-font-value: 3.9cqi;
+  --card-font-caption: 2.5cqi;
+  --card-font-nickname: 3.4cqi;
+  --card-font-mark: 27.4cqi;
+  --card-font-mark-back: 19cqi;
+  --card-font-cvv: 4.7cqi;
+  --card-font-note: 2.9cqi;
+  --card-tracking-number: 0.26cqi;
+  --card-tracking-caption: 0.3cqi;
+  --card-tracking-value: 0.13cqi;
+  --card-tracking-mark: -0.8cqi;
+  --card-tracking-wide: 0.4cqi;
+  --card-line: 0.26cqi;
+  --card-radius-small: 1.8cqi;
+  --card-radius-frame: 2.6cqi;
+  --card-frame-border: 0.4cqi;
+  --card-frame-glow: 0 0 4.7cqi var(--card-focus-glow);
+  --card-shadow-number: 0 0.26cqi 0.8cqi var(--card-text-shadow);
+  --card-shadow-value: 0 0.26cqi 0.5cqi var(--card-text-shadow);
+  --card-badge-padding: 1cqi 2.9cqi;
+  --card-digit-drop: -1.8cqi;
+  --card-empty-digit-opacity: 0.45;
+
+  /* Ogelerin yeri ve boyu (QA D7): her oge kendi adli token'ini kullanir;
+     baska isin token'i ya da sihirli carpan yok. Degerler cqi (kartla olcekli). */
+  --card-mark-inset-end: -1.6cqi;
+  --card-mark-overflow: -6.3cqi;
+  --card-back-mark-overflow: -3.7cqi;
+  --card-badge-top: 4.2cqi;
+  --card-badge-end: 5.3cqi;
+  --card-chip-width: 12.1cqi;
+  --ratio-card-chip: 46 / 34;
+  --card-contactless-top: 17.9cqi;
+  --card-contactless-start: 21.6cqi;
+  --card-contactless-size: 6cqi;
+  --card-char-width: 3.4cqi;
+  --card-frame-inset: 3.7cqi;
+  --card-frame-number-top: 29cqi;
+  --card-frame-number-height: 12cqi;
+  --card-frame-value-top: 43.3cqi;
+  --card-frame-value-height: 14.2cqi;
+  --card-stripe-top: 7.4cqi;
+  --card-stripe-height: 12cqi;
+  --card-signature-top: 27.3cqi;
+  --card-signature-height: 10.5cqi;
+  --card-signature-band: 1.8cqi;
+  --card-cvv-caption-top: 23.6cqi;
+  --card-note-bottom: 5.8cqi;
+
+  /* Imlecle egim: imlec kartin kenarindayken en fazla donus (yatay, dikey). */
+  --card-tilt-turn: 14deg;
+  --card-tilt-pitch: -10deg;
+
+  /* Kayitli kartlar (T11.17, referans getircarsi): satirin marka logosu ve
+     kutusu; cop kutusu ve "Kredi/Banka Kartı" en az 44 px dokunma alani.
+     Logolar kendi cizimimiz (D3); renkleri markalarinki. */
   --size-card-action: 2.75rem;
   --size-card-action-icon: 1.25rem;
+  --size-card-logo: 1.5rem;
+  --size-card-logo-wide: 2.4rem;
+  --size-card-logo-tile: 2.75rem;
+  --card-logo-visa: #1a1f71;
+  --card-logo-mastercard-red: #eb001b;
+  --card-logo-mastercard-yellow: #f79e1b;
+  --card-logo-mastercard-overlap: #ff5f00;
+  --card-logo-amex: #016fd0;
+  --card-logo-troy: #0e5482;
+
+  /* Kart Ekle (referans getircarsi): Guvenlik kutusunun ikonu; genis ekranda
+     kutunun sagindaki kart sutunu (kutu ortak icerik kabinda kalir). Sutun,
+     --bp-xl'de sayfa kabinin icerik kabindan sonra kalan boslugudur: kap
+     (80rem, iki yanda --space-gutter) - menu - menu boslugu - icerik kabi -
+     kartin boslugu. Kartin sag kenari kabin sag kenarina (ust barin
+     "Profil"i hizasina) denk gelir; kabi asmaz. */
+  --size-card-security-icon: 3.5rem;
+  --size-card-aside: calc(
+    var(--container-max-xl) - var(--space-gutter) * 2 - var(--size-account-side) -
+      var(--size-account-content) - var(--space-5) * 2
+  );
+
+  /* Zorunlu kosul onayi: satir en az 44 px dokunma alani, kutu ve hata cercevesinin araligi. */
+  --size-card-terms-touch: 2.75rem;
+  --size-card-terms-box: 1.25rem;
+  --size-card-terms-error-offset: 0.125rem;
 }

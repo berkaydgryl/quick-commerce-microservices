@@ -13,6 +13,16 @@
   font-weight: var(--font-weight-bold);
 }
 
+/* Konunun okunan hali (gorunen konu aria-hidden). */
+.c-confirm-panel__spoken {
+  position: absolute;
+  width: var(--size-visually-hidden);
+  height: var(--size-visually-hidden);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .c-confirm-panel__hint {
   font-size: var(--font-size-sm);
   color: var(--text-muted);

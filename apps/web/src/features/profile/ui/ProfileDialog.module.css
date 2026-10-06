@@ -1,7 +1,7 @@
 /*
  * "Profili düzenle" penceresi (T11.14; PR 3'te genisledi): genel gorunum (ad,
  * e-posta ve telefon satirlari) ve adimlar (e-posta, telefon, kod). Pencerenin
- * kendisi adres penceresidir (AddressDialog: karartmaya tiklamak kapatmaz, kod
+ * kendisi ortak pencere kabugudur (shared/ui/dialog: karartmaya tiklamak kapatmaz, kod
  * yazarken kaza olmasin); bu blok icindeki formlar ve satirlardir. Ana dugme
  * kimlik formlarindaki gibi sari zemin, mor yazi.
  */

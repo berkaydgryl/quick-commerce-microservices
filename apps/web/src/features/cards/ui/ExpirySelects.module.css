@@ -1,0 +1,71 @@
+/*
+ * Son kullanma secimleri (T11.17, referans): ust satirda etiket, altinda iki
+ * secim yan yana. Kutu kimlik alanlariyla ayni (cerceve, yukseklik, kavis);
+ * sagda ok (ChevronDownIcon; tiklama secime gecer). Odak halkasi global
+ * :focus-visible (kaldirilmaz). Telefonda dar: sag bosluk yalnizca ok kadar.
+ */
+.c-expiry {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: none;
+}
+
+.c-expiry__selects {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.c-expiry__control {
+  position: relative;
+  display: grid;
+  min-width: 0;
+}
+
+.c-expiry__select {
+  inline-size: 100%;
+  min-height: var(--size-field-min-height);
+
+  /* Dar telefonda (360 px) "2029" sigsin: solda kucuk bosluk, sagda yalnizca ok ve iki yanindaki bosluk. */
+  padding-inline: var(--space-2) calc(var(--space-2) + var(--size-field-icon) + var(--space-1));
+  font: inherit;
+  font-size: var(--font-size-md);
+  color: var(--text-default);
+  appearance: none;
+  cursor: pointer;
+  background: var(--bg-surface);
+  border: var(--border-width-thin) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+/* Secilmemis: yer tutucu ("Ay", "Yıl") soluk. */
+.c-expiry__select.is-empty {
+  color: var(--text-muted);
+}
+
+.c-expiry__select[aria-invalid='true'] {
+  border-color: var(--border-danger);
+}
+
+.c-expiry__select:focus {
+  border-color: var(--color-brand-primary);
+}
+
+.c-expiry__chevron {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: var(--space-2);
+  display: flex;
+  align-items: center;
+  inline-size: var(--size-field-icon);
+  color: var(--color-brand-primary);
+  pointer-events: none;
+}
+
+.c-expiry__error {
+  font-size: var(--font-size-xs);
+  color: var(--text-danger);
+}

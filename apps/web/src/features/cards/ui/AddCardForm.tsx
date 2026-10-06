@@ -1,48 +1,37 @@
 import {
   CARD_HOLDER_NAME_MAX_LENGTH,
   CARD_NICKNAME_MAX_LENGTH,
+  cardExpiryYears,
   cardNumberProblem,
   cvvLengthOf,
   normalizeCardText,
 } from '@getir/contracts';
-import { errorMessage } from '@getir/contracts';
 import type { AddCardRequest, PaymentMethodsContent, SavedCard } from '@getir/contracts';
-import { ERROR_CODES } from '@getir/core';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useId, useMemo, useState } from 'react';
-import { Controller, useForm, useWatch } from 'react-hook-form';
+import { useMemo, useState } from 'react';
+import { Controller } from 'react-hook-form';
 
-import { focusFirstInvalid, showServerErrors } from '../../auth/ui/form-errors';
 import { AuthField } from '../../auth/ui/AuthField';
-import { useNow } from '../../profile/hooks/useNow';
-import { formatCountdown, secondsUntil } from '../../profile/services/code-window';
-import { faceHolderName, typedCardFace } from '../services/card-face';
-import {
-  CARD_FORM_FIELDS,
-  EMPTY_CARD_FORM,
-  cardFormFeedback,
-  cardFormSchema,
-  retryWaitSeconds,
-  toAddCardRequest,
-} from '../services/card-form';
-import type { CardFormValues } from '../services/card-form';
-import {
-  cardNumberDigits,
-  cvvDigits,
-  formatCardNumber,
-  formatExpiryInput,
-  typingBrand,
-} from '../services/card-input';
+import { useCardForm } from '../hooks/useCardForm';
+import { faceExpiry, faceHolderName, typedCardFace } from '../services/card-face';
+import { cvvDigits, typingBrand } from '../services/card-input';
 
+import { AcceptedBrands } from './AcceptedBrands';
 import styles from './AddCardForm.module.css';
-import { BrandPills } from './BrandPills';
+import { CardNumberField } from './CardNumberField';
 import { CardVisual } from './CardVisual';
 import type { CardFocus } from './CardVisual';
+import { ExpirySelects } from './ExpirySelects';
+import { FormAlert } from './FormAlert';
+import { SecurityNotice } from './SecurityNotice';
+import { TermsDialog } from './TermsDialog';
+import { TermsField } from './TermsField';
 
 interface AddCardFormProps {
   readonly texts: PaymentMethodsContent;
   /** Karti kaydeder (useAddCard); hata verirse firlatir. */
   readonly onSave: (request: AddCardRequest) => Promise<SavedCard>;
+  /** Formun bir alani degisti (QA C3). */
+  readonly onChanged: () => void;
   /** Kayit bitti: sayfa listeye doner ve bildirim gosterir. */
   readonly onSaved: (card: SavedCard) => void;
 }
@@ -52,128 +41,94 @@ type FormFocus = CardFocus | 'cvv';
 
 const MASK = '•';
 const DEFAULT_CVV_LENGTH = 3;
-const MS_PER_SECOND = 1000;
 
 /**
- * Kart ekle (T11.17, tasarim B "Markanin rengi"; M5): baslikta desteklenen
- * markalar, gri sahnede canli kart, altinda form. Numara yazildikca kart o
- * markanin rengine gecer; odaktaki alan kartta cercevelenir; CVV alaninda
- * kart doner. Alanlar butun formlardaki ortak alan (yuzen etiket).
+ * Kart Ekle formu (T11.17; duzen kullanicinin referansi getircarsi "Kart
+ * Ekle"; mantik useCardForm'da). Beyaz kutuda sirayla: Guvenlik kutusu, kart
+ * adi, numara, kart uzerindeki isim, son kullanma (Ay, Yil) ve CVV, zorunlu
+ * kosul onayi, Devam ve kabul edilen kartlar. Bizim ekstramiz tasarim B'nin
+ * kart animasyonu: dar ekranda Guvenlik kutusunun altinda, genis ekranda
+ * kutunun saginda yapiskan; canli guncellenir, CVV'de doner.
  *
- * Kurallar ve cumleler sozlesmeden (services/card-form.ts); karar sunucuda.
  * Numara ve CVV YALNIZCA bu formun durumunda yasar (M7): kart gorseline
  * maskeli gider, onbellege yazilmaz; form kapaninca gider.
  */
-export function AddCardForm({ texts, onSave, onSaved }: AddCardFormProps) {
-  const titleId = useId();
-  const [focus, setFocus] = useState<FormFocus>(null);
-  const [formMessage, setFormMessage] = useState<string | null>(null);
-  /** Cok fazla deneme (429): tekrar denenebilecek an (ms); yoksa null. */
-  const [retryAt, setRetryAt] = useState<number | null>(null);
-  const now = useNow(retryAt !== null);
-  const waitSeconds = retryAt === null ? 0 : secondsUntil(retryAt, now);
-  const schema = useMemo(() => cardFormSchema(texts.expiryFormatNotice), [texts]);
-  const {
-    control,
-    handleSubmit,
-    setError,
-    setFocus: focusField,
-    formState: { isSubmitting },
-  } = useForm<CardFormValues>({
-    resolver: zodResolver(schema),
-    defaultValues: EMPTY_CARD_FORM,
-    mode: 'onTouched',
+export function AddCardForm({ texts, onSave, onChanged, onSaved }: AddCardFormProps) {
+  const { form, values, formMessage, waitSeconds, submit } = useCardForm({
+    texts,
+    save: onSave,
+    changed: onChanged,
+    onSaved,
   });
-  const values = useWatch({ control }) as CardFormValues;
+  const { control, formState } = form;
+  const [focus, setFocus] = useState<FormFocus>(null);
+  const [termsOpen, setTermsOpen] = useState(false);
+  const years = useMemo(() => cardExpiryYears(new Date()), []);
   const brand = typingBrand(values.number);
   const nickname = normalizeCardText(values.nickname);
   const cvvLength = brand === null ? DEFAULT_CVV_LENGTH : cvvLengthOf(brand);
-
-  // Bekleme bitti: uyari kalkar, kaydet acilir.
-  useEffect(() => {
-    if (retryAt !== null && waitSeconds === 0) {
-      setRetryAt(null);
-      setFormMessage(null);
-    }
-  }, [retryAt, waitSeconds]);
-
-  const submit = handleSubmit(
-    async (form) => {
-      setFormMessage(null);
-      try {
-        onSaved(await onSave(toAddCardRequest(form)));
-      } catch (error) {
-        const wait = retryWaitSeconds(error);
-        if (wait !== null) {
-          setRetryAt(Date.now() + wait * MS_PER_SECOND);
-          setFormMessage(errorMessage(ERROR_CODES.RATE_LIMITED));
-          return;
-        }
-        const feedback = cardFormFeedback(error);
-        showServerErrors(CARD_FORM_FIELDS, feedback.fields, setError);
-        setFormMessage(feedback.message);
-      }
-    },
-    (errors) => focusFirstInvalid(CARD_FORM_FIELDS, errors, focusField),
-  );
-
   const leave = (onBlur: () => void) => () => {
     onBlur();
     setFocus(null);
   };
 
   return (
-    <section className={styles['c-add-card']} aria-labelledby={titleId}>
-      <header className={styles['c-add-card__head']}>
-        <h1 id={titleId} className={styles['c-add-card__title']}>
-          {texts.addTitle}
-        </h1>
-        <BrandPills labels={texts.brandLabels} label={texts.brandsLabel} active={brand} />
-      </header>
-      <div className={styles['c-add-card__stage']}>
-        <CardVisual
-          size="large"
-          brand={brand}
-          groups={typedCardFace(values.number, brand)}
-          holderName={faceHolderName(values.holderName, texts.holderPlaceholder)}
-          expiry={values.expiry === '' ? texts.expiryPlaceholder : values.expiry}
-          nickname={nickname === '' ? texts.nicknamePlaceholder : nickname}
-          cvvMask={MASK.repeat(values.cvv === '' ? cvvLength : values.cvv.length)}
-          texts={texts}
-          flipped={focus === 'cvv'}
-          focus={focus === 'cvv' ? null : focus}
-        />
-      </div>
-      <form
-        className={styles['c-add-card__form']}
-        noValidate
-        onSubmit={(event) => void submit(event)}
-      >
-        {formMessage !== null && (
-          <div className={styles['c-add-card__alert']} role="alert">
-            <p>{formMessage}</p>
-            {waitSeconds > 0 && (
-              <p className={styles['c-add-card__wait']}>
-                {texts.retryWaitLabel} <time>{formatCountdown(waitSeconds)}</time>
-              </p>
-            )}
+    <>
+      <form className={styles['c-add-card']} noValidate onSubmit={(event) => void submit(event)}>
+        <SecurityNotice title={texts.securityTitle} text={texts.securityText} />
+        <div className={styles['c-add-card__stage']}>
+          <div className={styles['c-add-card__card']}>
+            <CardVisual
+              brand={brand}
+              groups={typedCardFace(values.number, brand)}
+              holderName={faceHolderName(values.holderName, texts.holderPlaceholder)}
+              expiry={faceExpiry(values.expiryMonth, values.expiryYear, texts.expiryPlaceholder)}
+              nickname={nickname === '' ? texts.nicknamePlaceholder : nickname}
+              cvvMask={MASK.repeat(values.cvv === '' ? cvvLength : values.cvv.length)}
+              texts={texts}
+              flipped={focus === 'cvv'}
+              focus={focus === 'cvv' ? null : focus}
+            />
           </div>
+        </div>
+        {formMessage !== null && (
+          <FormAlert
+            message={formMessage}
+            waitLabel={texts.retryWaitLabel}
+            waitSeconds={waitSeconds}
+          />
         )}
+        <Controller
+          name="nickname"
+          control={control}
+          render={({ field, fieldState }) => (
+            <AuthField
+              ref={field.ref}
+              id="kart-takma-ad"
+              name={field.name}
+              label={texts.nicknameLabel}
+              floatingLabel
+              autoComplete="off"
+              maxLength={CARD_NICKNAME_MAX_LENGTH}
+              value={field.value}
+              onChange={field.onChange}
+              onBlur={field.onBlur}
+              error={fieldState.error?.message}
+            />
+          )}
+        />
         <Controller
           name="number"
           control={control}
           render={({ field, fieldState }) => (
             <div className={styles['c-add-card__number']}>
-              <AuthField
-                ref={field.ref}
+              <CardNumberField
+                fieldRef={field.ref}
                 id="kart-numara"
                 name={field.name}
                 label={texts.numberLabel}
-                floatingLabel
-                inputMode="numeric"
-                autoComplete="cc-number"
-                value={formatCardNumber(field.value)}
-                onChange={(event) => field.onChange(cardNumberDigits(event.target.value))}
+                value={field.value}
+                onChange={field.onChange}
                 onFocus={() => setFocus('number')}
                 onBlur={leave(field.onBlur)}
                 error={fieldState.error?.message}
@@ -204,24 +159,40 @@ export function AddCardForm({ texts, onSave, onSaved }: AddCardFormProps) {
             />
           )}
         />
-        <div className={styles['c-add-card__pair']}>
+        <div className={styles['c-add-card__expiry-row']}>
+          <p id="kart-skt-baslik" className={styles['c-add-card__expiry-title']}>
+            {texts.expiryLegend}
+          </p>
           <Controller
-            name="expiry"
+            name="expiryMonth"
             control={control}
-            render={({ field, fieldState }) => (
-              <AuthField
-                ref={field.ref}
-                id="kart-skt"
-                name={field.name}
-                label={texts.expiryLabel}
-                floatingLabel
-                inputMode="numeric"
-                autoComplete="cc-exp"
-                value={field.value}
-                onChange={(event) => field.onChange(formatExpiryInput(event.target.value))}
-                onFocus={() => setFocus('expiry')}
-                onBlur={leave(field.onBlur)}
-                error={fieldState.error?.message}
+            render={({ field: month, fieldState: monthState }) => (
+              <Controller
+                name="expiryYear"
+                control={control}
+                render={({ field: year, fieldState: yearState }) => (
+                  <ExpirySelects
+                    labelledBy="kart-skt-baslik"
+                    monthLabel={texts.monthLabel}
+                    yearLabel={texts.yearLabel}
+                    years={years}
+                    month={{
+                      ...month,
+                      id: 'kart-skt-ay',
+                      onFocus: () => setFocus('expiry'),
+                      onBlur: leave(month.onBlur),
+                      invalid: monthState.error !== undefined,
+                    }}
+                    year={{
+                      ...year,
+                      id: 'kart-skt-yil',
+                      onFocus: () => setFocus('expiry'),
+                      onBlur: leave(year.onBlur),
+                      invalid: yearState.error !== undefined,
+                    }}
+                    error={monthState.error?.message ?? yearState.error?.message}
+                  />
+                )}
               />
             )}
           />
@@ -247,20 +218,19 @@ export function AddCardForm({ texts, onSave, onSaved }: AddCardFormProps) {
           />
         </div>
         <Controller
-          name="nickname"
+          name="terms"
           control={control}
           render={({ field, fieldState }) => (
-            <AuthField
-              ref={field.ref}
-              id="kart-takma-ad"
+            <TermsField
+              id="kart-kosullar"
+              inputRef={field.ref}
               name={field.name}
-              label={texts.nicknameLabel}
-              floatingLabel
-              autoComplete="off"
-              maxLength={CARD_NICKNAME_MAX_LENGTH}
-              value={field.value}
+              checked={field.value}
               onChange={field.onChange}
               onBlur={field.onBlur}
+              linkLabel={texts.termsLinkLabel}
+              suffix={texts.termsSuffix}
+              onOpenTerms={() => setTermsOpen(true)}
               error={fieldState.error?.message}
             />
           )}
@@ -268,13 +238,26 @@ export function AddCardForm({ texts, onSave, onSaved }: AddCardFormProps) {
         <button
           type="submit"
           className={styles['c-add-card__submit']}
-          disabled={isSubmitting || waitSeconds > 0}
-          aria-busy={isSubmitting}
+          disabled={formState.isSubmitting || waitSeconds > 0}
+          aria-busy={formState.isSubmitting}
         >
-          {isSubmitting ? texts.savingLabel : texts.saveLabel}
+          {formState.isSubmitting ? texts.savingLabel : texts.saveLabel}
         </button>
-        <p className={styles['c-add-card__note']}>{texts.privacyNote}</p>
+        <AcceptedBrands
+          label={texts.acceptedBrandsLabel}
+          labels={texts.brandLabels}
+          marks={texts.brandMarks}
+          active={brand}
+        />
       </form>
-    </section>
+      {termsOpen && (
+        <TermsDialog
+          title={texts.termsTitle}
+          paragraphs={texts.termsParagraphs}
+          closeLabel={texts.closeLabel}
+          onClose={() => setTermsOpen(false)}
+        />
+      )}
+    </>
   );
 }

@@ -9,8 +9,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   cardShortName,
+  cardSpokenName,
+  faceExpiry,
   faceHolderName,
-  formatCardExpiry,
+  maskedCardNumber,
   savedCardFace,
   typedCardFace,
 } from '../../src/features/cards/services/card-face';
@@ -45,11 +47,26 @@ describe('card-face (T11.17)', () => {
     expect(text(savedCardFace(EXPIRED_AMEX))).toBe('3782 •••••• •0005');
   });
 
-  it('kisa ad, son kullanma, kart uzerindeki ad', () => {
+  it('liste satirinin numarasi: ilk 4 ve son 4, arasi yildiz (referans getircarsi)', () => {
+    expect(maskedCardNumber(VISA_CARD)).toBe('4242 **** **** 4242');
+    expect(maskedCardNumber(EXPIRED_AMEX)).toBe('3782 ****** *0005');
+  });
+
+  it('kartin yuzundeki son kullanma secimlerden: secilmeyen yer tutucuda kalir', () => {
+    expect(faceExpiry('', '', 'AA/YY')).toBe('AA/YY');
+    expect(faceExpiry('08', '', 'AA/YY')).toBe('08/YY');
+    expect(faceExpiry('', '2029', 'AA/YY')).toBe('AA/29');
+    expect(faceExpiry('08', '2029', 'AA/YY')).toBe('08/29');
+  });
+
+  it('QA D6: okunan ad markayla ve son dort haneyle, maske yok', () => {
+    expect(cardSpokenName(VISA_CARD, LABELS, 'son dört hane')).toBe('Visa, son dört hane 4242');
+    expect(cardSpokenName(EXPIRED_AMEX, LABELS, 'son dört hane')).not.toContain('•');
+  });
+
+  it('kisa ad ve kart uzerindeki ad', () => {
     expect(cardShortName(VISA_CARD, LABELS)).toBe('Visa •••• 4242');
     expect(cardShortName(EXPIRED_AMEX, LABELS)).toBe('Amex •••• 0005');
-    expect(formatCardExpiry(8, 2029)).toBe('08/29');
-    expect(formatCardExpiry(12, 2030)).toBe('12/30');
     expect(faceHolderName(' ayşe yılmaz ', 'AD SOYAD')).toBe('AYŞE YILMAZ');
     expect(faceHolderName('  ', 'AD SOYAD')).toBe('AD SOYAD');
   });

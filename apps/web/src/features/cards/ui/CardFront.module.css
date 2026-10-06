@@ -1,7 +1,8 @@
 /*
  * Kartin on yuzu (T11.17, tasarim B): isik seridi, soluk isaret, kart adi,
  * rozet, cip, temassiz isareti, numara, sahibi ve son kullanma, odak
- * cercevesi ve parlama. Olculer kartin genisligine oranli (cqi; kap CardVisual).
+ * cercevesi ve parlama. Olculer kart token'larindan (payment-card/tokens.css;
+ * kartin genisligine oranli); buradaki yuzdeler yalnizca susleme ici oranlar.
  */
 
 /* Isik seridi: yalnizca buyuk kartta, yavas ve araliklarla. */
@@ -27,26 +28,26 @@
   }
 }
 
-/* Soluk buyuk marka yazisi, sag altta tasarak. */
+/* Soluk kisa isaret, sag altta tasarak. */
 .c-payment-card__mark {
   position: absolute;
-  inset-inline-end: -1.6cqi;
-  inset-block-end: -6.3cqi;
-  font-size: 27.4cqi;
+  inset-inline-end: var(--card-mark-inset-end);
+  inset-block-end: var(--card-mark-overflow);
+  font-size: var(--card-font-mark);
   font-weight: var(--font-weight-extrabold);
   line-height: 1;
   color: var(--card-mark);
-  letter-spacing: -0.8cqi;
+  letter-spacing: var(--card-tracking-mark);
   white-space: nowrap;
 }
 
 .c-payment-card__nickname {
   position: absolute;
-  inset-block-start: 5.8cqi;
-  inset-inline-start: 6.3cqi;
-  max-inline-size: 55cqi;
+  inset-block-start: var(--card-row-top);
+  inset-inline-start: var(--card-edge);
+  max-inline-size: 55%;
   overflow: hidden;
-  font-size: 3.4cqi;
+  font-size: var(--card-font-nickname);
   font-weight: var(--font-weight-extrabold);
   color: var(--text-on-card-muted);
   text-overflow: ellipsis;
@@ -56,21 +57,21 @@
 /* Marka rozeti (D3: kendimiz ciziyoruz): yazi ve hap. */
 .c-payment-card__badge {
   position: absolute;
-  inset-block-start: 4.2cqi;
-  inset-inline-end: 5.3cqi;
-  padding: 1cqi 2.9cqi;
-  font-size: 3.9cqi;
+  inset-block-start: var(--card-badge-top);
+  inset-inline-end: var(--card-badge-end);
+  padding: var(--card-badge-padding);
+  font-size: var(--card-font-value);
   font-weight: var(--font-weight-extrabold);
   line-height: var(--line-height-tight);
   background: var(--card-badge-bg);
-  border: 0.26cqi solid var(--card-badge-border);
+  border: var(--card-line) solid var(--card-badge-border);
   border-radius: var(--radius-pill);
 }
 
 .c-payment-card__badge--visa {
   font-style: italic;
   text-transform: uppercase;
-  letter-spacing: 0.26cqi;
+  letter-spacing: var(--card-tracking-number);
 }
 
 .c-payment-card__badge--mastercard,
@@ -80,16 +81,16 @@
 
 .c-payment-card__badge--amex {
   text-transform: uppercase;
-  letter-spacing: 0.4cqi;
+  letter-spacing: var(--card-tracking-wide);
 }
 
-/* Gumus cip: iki yonde ince cizgiler. */
+/* Gumus cip: iki yonde ince cizgiler (yuzdeler cipin kendi oranlari). */
 .c-payment-card__chip {
   position: absolute;
-  inset-block-start: 16.3cqi;
-  inset-inline-start: 6.3cqi;
-  inline-size: 12.1cqi;
-  block-size: 8.9cqi;
+  inset-block-start: var(--card-row-chip);
+  inset-inline-start: var(--card-edge);
+  inline-size: var(--card-chip-width);
+  aspect-ratio: var(--ratio-card-chip);
   background-image:
     linear-gradient(
       90deg,
@@ -108,28 +109,28 @@
       transparent 68%
     ),
     linear-gradient(135deg, var(--card-chip-light), var(--card-chip-mid) 50%, var(--card-chip-end));
-  border-radius: 1.8cqi;
+  border-radius: var(--card-radius-small);
 }
 
 .c-payment-card__contactless {
   position: absolute;
-  inset-block-start: 17.9cqi;
-  inset-inline-start: 21.6cqi;
-  inline-size: 5.8cqi;
+  inset-block-start: var(--card-contactless-top);
+  inset-inline-start: var(--card-contactless-start);
+  inline-size: var(--card-contactless-size);
   color: var(--text-on-card-muted);
 }
 
 .c-payment-card__number {
   position: absolute;
-  inset-block-start: 31cqi;
-  inset-inline-start: 6.3cqi;
+  inset-block-start: var(--card-row-number);
+  inset-inline-start: var(--card-edge);
   display: flex;
-  gap: 3.7cqi;
-  font-size: 6cqi;
+  gap: var(--card-gap-group);
+  font-size: var(--card-font-number);
   font-weight: var(--font-weight-extrabold);
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.26cqi;
-  text-shadow: 0 0.26cqi 0.8cqi var(--card-text-shadow);
+  letter-spacing: var(--card-tracking-number);
+  text-shadow: var(--card-shadow-number);
 }
 
 .c-payment-card__group {
@@ -138,12 +139,12 @@
 
 .c-payment-card__char {
   display: inline-block;
-  min-inline-size: 3.4cqi;
+  min-inline-size: var(--card-char-width);
   text-align: center;
 }
 
 .c-payment-card__char--empty {
-  opacity: 0.45;
+  opacity: var(--card-empty-digit-opacity);
 }
 
 /* Yazilan hane yukaridan duser (yalnizca buyuk kartta: --animated). */
@@ -154,7 +155,7 @@
 @keyframes c-payment-card-digit {
   0% {
     opacity: 0;
-    translate: 0 -1.8cqi;
+    translate: 0 var(--card-digit-drop);
   }
 
   100% {
@@ -166,49 +167,49 @@
 .c-payment-card__holder,
 .c-payment-card__expiry {
   position: absolute;
-  inset-block-start: 45.3cqi;
+  inset-block-start: var(--card-row-holder);
   display: grid;
-  gap: 1cqi;
+  gap: var(--card-gap-value);
 }
 
 .c-payment-card__holder {
-  inset-inline-start: 6.3cqi;
-  inline-size: 58cqi;
+  inset-inline-start: var(--card-edge);
+  inline-size: 58%;
 }
 
 .c-payment-card__expiry {
-  inset-inline-end: 6.3cqi;
+  inset-inline-end: var(--card-edge);
   text-align: end;
 }
 
 .c-payment-card__caption {
-  font-size: 2.5cqi;
+  font-size: var(--card-font-caption);
   font-weight: var(--font-weight-extrabold);
   color: var(--text-on-card-muted);
-  letter-spacing: 0.3cqi;
+  letter-spacing: var(--card-tracking-caption);
 }
 
 .c-payment-card__value {
   overflow: hidden;
-  font-size: 3.9cqi;
+  font-size: var(--card-font-value);
   font-weight: var(--font-weight-extrabold);
   text-overflow: ellipsis;
-  text-shadow: 0 0.26cqi 0.5cqi var(--card-text-shadow);
-  letter-spacing: 0.13cqi;
+  text-shadow: var(--card-shadow-value);
+  letter-spacing: var(--card-tracking-value);
   white-space: nowrap;
 }
 
-/* Odaktaki alanin cercevesi: alanlar arasinda kayar. */
+/* Odaktaki alanin cercevesi: satirlarin cevresinde, alanlar arasinda kayar. */
 .c-payment-card__frame {
   position: absolute;
-  inset-block-start: 29cqi;
-  inset-inline-start: 3.7cqi;
-  inline-size: 92.6cqi;
-  block-size: 12.1cqi;
+  inset-block-start: var(--card-frame-number-top);
+  inset-inline-start: var(--card-frame-inset);
+  inline-size: calc(100% - var(--card-frame-inset) * 2);
+  block-size: var(--card-frame-number-height);
   pointer-events: none;
-  border: 0.4cqi solid var(--card-focus-frame);
-  border-radius: 2.6cqi;
-  box-shadow: 0 0 4.7cqi var(--card-focus-glow);
+  border: var(--card-frame-border) solid var(--card-focus-frame);
+  border-radius: var(--card-radius-frame);
+  box-shadow: var(--card-frame-glow);
   opacity: 0;
   transition:
     inset-block-start var(--duration-card-frame) ease,
@@ -222,28 +223,25 @@
   opacity: 1;
 }
 
-/* Cercevenin yerleri: numara (varsayilan konum), ad, son kullanma. */
+/* Cercevenin yerleri: numara (varsayilan), ad, son kullanma. */
 .c-payment-card__frame--number {
-  inset-block-start: 29cqi;
-  inset-inline-start: 3.7cqi;
-  inline-size: 92.6cqi;
-  block-size: 12.1cqi;
+  inset-block-start: var(--card-frame-number-top);
 }
 
 .c-payment-card__frame--holder {
-  inset-block-start: 43.2cqi;
-  inline-size: 62.1cqi;
-  block-size: 14.2cqi;
+  inset-block-start: var(--card-frame-value-top);
+  inline-size: 62%;
+  block-size: var(--card-frame-value-height);
 }
 
 .c-payment-card__frame--expiry {
-  inset-block-start: 43.2cqi;
-  inset-inline-start: 74.7cqi;
-  inline-size: 21.6cqi;
-  block-size: 14.2cqi;
+  inset-block-start: var(--card-frame-value-top);
+  inset-inline-start: 74.7%;
+  inline-size: 21.6%;
+  block-size: var(--card-frame-value-height);
 }
 
-/* Parlama: imlecin oldugu yerde. */
+/* Parlama: imlecin oldugu yerde (hareket azaltmada ortada sabit, QA C8). */
 .c-payment-card__glare {
   position: absolute;
   inset: 0;
@@ -255,7 +253,7 @@
   );
 }
 
-/* Hareket azaltma: isik seridi, hane dusmesi ve cerceve kaymasi yok. */
+/* Hareket azaltma: isik seridi, hane dusmesi ve cerceve kaymasi yok; parlama sabit. */
 @media (prefers-reduced-motion: reduce) {
   .c-payment-card__streak {
     display: none;
@@ -267,5 +265,9 @@
 
   .c-payment-card__frame {
     transition: none;
+  }
+
+  .c-payment-card__glare {
+    background: radial-gradient(circle at 50% 50%, var(--card-glare), transparent 52%);
   }
 }

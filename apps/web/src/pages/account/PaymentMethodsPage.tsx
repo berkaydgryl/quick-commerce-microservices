@@ -6,10 +6,9 @@ import { RequireAuth } from '../../features/auth/ui/RequireAuth';
 import { useDeleteCard } from '../../features/cards/hooks/useDeleteCard';
 import { useSavedCards } from '../../features/cards/hooks/useSavedCards';
 import { ADD_CARD_PATH } from '../../features/cards/routes';
-import { cardShortName } from '../../features/cards/services/card-face';
+import { cardShortName, cardSpokenName } from '../../features/cards/services/card-face';
 import { DeleteCardDialog } from '../../features/cards/ui/DeleteCardDialog';
 import { usePaymentMethodsContent } from '../../features/content/hooks/usePaymentMethodsContent';
-import { useWelcomeContent } from '../../features/content/hooks/useWelcomeContent';
 import { useSessionStore } from '../../shared/session/session-store';
 import { useToastStore } from '../../shared/toast/toast-store';
 import { PageLayout } from '../../shared/ui/page-layout/PageLayout';
@@ -36,11 +35,12 @@ function SignedInPaymentMethods() {
 /**
  * Sayfa BIRLESTIRIR: liste (PaymentMethodsView, durumsuz) ve silme onayi.
  * Silinince guncel liste onbellege yazilir ve bildirim cikar ("Visa •••• 4242
- * kartı silindi.").
+ * kartı silindi."); baska cihazda silinmis kart da (404) silinmis sayilir
+ * (QA C6). Pencerenin metinleri, "Kapat" dahil, kart blogundan: icerik ucu
+ * dusse de yedekle calisir (QA C5).
  */
 function PaymentMethodsSection({ userId }: { readonly userId: string }) {
   const texts = usePaymentMethodsContent();
-  const { data: content } = useWelcomeContent();
   const cards = useSavedCards(userId);
   const removing = useDeleteCard(userId);
   const show = useToastStore((state) => state.show);
@@ -57,7 +57,10 @@ function PaymentMethodsSection({ userId }: { readonly userId: string }) {
     try {
       await removing.mutateAsync(card.id);
       if (texts !== undefined) {
-        show(`${cardShortName(card, texts.brandLabels)} ${texts.deletedToastSuffix}`);
+        show(
+          `${cardShortName(card, texts.brandLabels)} ${texts.deletedToastSuffix}`,
+          `${cardSpokenName(card, texts.brandLabels, texts.lastFourLabel)} ${texts.deletedToastSuffix}`,
+        );
       }
       close();
     } catch (error) {
@@ -74,14 +77,13 @@ function PaymentMethodsSection({ userId }: { readonly userId: string }) {
           error={cards.error}
           onRetry={() => void cards.refetch()}
           addHref={ADD_CARD_PATH}
-          actionsDisabled={content === undefined}
           onDelete={(card) => setDeleting(card)}
         />
       )}
-      {texts !== undefined && content !== undefined && deleting !== undefined && (
+      {texts !== undefined && deleting !== undefined && (
         <DeleteCardDialog
           texts={texts}
-          closeLabel={content.loginCard.closeLabel}
+          closeLabel={texts.closeLabel}
           card={deleting}
           pending={removing.isPending}
           error={deleteError}

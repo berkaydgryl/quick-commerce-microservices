@@ -4,73 +4,74 @@
  */
 .c-payment-card__stripe {
   position: absolute;
-  inset-block-start: 7.4cqi;
+  inset-block-start: var(--card-stripe-top);
   inset-inline: 0;
-  block-size: 12.1cqi;
+  block-size: var(--card-stripe-height);
   background: var(--card-stripe);
 }
 
 .c-payment-card__signature {
   position: absolute;
-  inset-block-start: 27.4cqi;
-  inset-inline-start: 6.3cqi;
-  inline-size: 64.2cqi;
-  block-size: 10.5cqi;
+  inset-block-start: var(--card-signature-top);
+  inset-inline-start: var(--card-edge);
+  inline-size: 64%;
+  block-size: var(--card-signature-height);
   background: repeating-linear-gradient(
     135deg,
-    var(--card-signature-light) 0 1.6cqi,
-    var(--card-signature-dark) 1.6cqi 3.2cqi
+    var(--card-signature-light) 0 var(--card-signature-band),
+    var(--card-signature-dark) var(--card-signature-band) calc(var(--card-signature-band) * 2)
   );
-  border-radius: 1.6cqi;
+  border-radius: var(--card-radius-small);
 }
 
 .c-payment-card__cvv-caption {
   position: absolute;
-  inset-block-start: 23.7cqi;
-  inset-inline-start: 73.7cqi;
-  font-size: 2.5cqi;
+  inset-block-start: var(--card-cvv-caption-top);
+  inset-inline-start: 73.7%;
+  font-size: var(--card-font-caption);
   font-weight: var(--font-weight-extrabold);
   color: var(--text-on-card-muted);
-  letter-spacing: 0.3cqi;
+  letter-spacing: var(--card-tracking-caption);
 }
 
+/* CVV kutusu imza bandiyla ayni satir ve boyda. */
 .c-payment-card__cvv {
   position: absolute;
-  inset-block-start: 27.4cqi;
-  inset-inline-start: 73.7cqi;
+  inset-block-start: var(--card-signature-top);
+  inset-inline-start: 73.7%;
   display: flex;
   align-items: center;
   justify-content: center;
-  inline-size: 20cqi;
-  block-size: 10.5cqi;
-  font-size: 4.7cqi;
+  inline-size: 20%;
+  block-size: var(--card-signature-height);
+  font-size: var(--card-font-cvv);
   font-weight: var(--font-weight-extrabold);
   color: var(--text-default);
-  letter-spacing: 0.5cqi;
+  letter-spacing: var(--card-tracking-wide);
   background: var(--bg-surface);
-  border-radius: 2.1cqi;
+  border-radius: var(--card-radius-small);
 }
 
 .c-payment-card__cvv-note {
   position: absolute;
-  inset-block-end: 5.8cqi;
-  inset-inline-start: 6.3cqi;
-  inline-size: 58cqi;
-  font-size: 2.9cqi;
+  inset-block-end: var(--card-note-bottom);
+  inset-inline-start: var(--card-edge);
+  inline-size: 58%;
+  font-size: var(--card-font-note);
   font-weight: var(--font-weight-bold);
-  line-height: 1.4;
+  line-height: var(--line-height-base);
   color: var(--text-on-card-muted);
 }
 
 /* Soluk kisa isaret: on yuzdekinden kucuk, sag altta tasarak. */
 .c-payment-card__back-mark {
   position: absolute;
-  inset-inline-end: -1.6cqi;
-  inset-block-end: -3.7cqi;
-  font-size: 19cqi;
+  inset-inline-end: var(--card-mark-inset-end);
+  inset-block-end: var(--card-back-mark-overflow);
+  font-size: var(--card-font-mark-back);
   font-weight: var(--font-weight-extrabold);
   line-height: 1;
   color: var(--card-mark);
-  letter-spacing: -0.8cqi;
+  letter-spacing: var(--card-tracking-mark);
   white-space: nowrap;
 }

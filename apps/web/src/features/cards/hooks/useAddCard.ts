@@ -31,7 +31,7 @@ export async function saveCard({
   request,
 }: SaveCardInput): Promise<SavedCard> {
   try {
-    const card = await addCard(client, request, attempts.current());
+    const card = await addCard(client, request, attempts.start());
     attempts.settle();
     queryClient.setQueryData<SavedCardList>(cardKeys.list(userId), (list) =>
       list === undefined ? undefined : { items: [card, ...list.items] },
@@ -47,14 +47,18 @@ export async function saveCard({
 /**
  * Kart ekleme (T11.17): POST /v1/me/cards. Anahtar rastgele ve denemeye
  * bagli (services/attempt-key.ts): sonucu belirsiz deneme ayni anahtarla
- * tekrarlanir. Bekleme durumunu form tutar (isSubmitting).
+ * tekrarlanir; sonra form degisirse yeni anahtar (changed). Bekleme durumunu
+ * form tutar (isSubmitting).
  */
 export function useAddCard(userId: string) {
   const queryClient = useQueryClient();
   const [attempts] = useState(() => createAttemptKeys());
-  return useCallback(
+  const save = useCallback(
     (request: AddCardRequest) =>
       saveCard({ client: authorizedClient, queryClient, userId, attempts, request }),
     [attempts, queryClient, userId],
   );
+  /** Formun bir alani degisti: belirsiz denemeden korunan anahtar birakilir (QA C3). */
+  const changed = useCallback(() => attempts.changed(), [attempts]);
+  return { save, changed };
 }
