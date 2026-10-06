@@ -3,6 +3,8 @@ import type { FocusEventHandler, Ref } from 'react';
 
 import { ChevronDownIcon } from '../../address/ui/icons';
 
+import { onlyWhenChanged } from '../services/changed-only';
+
 import styles from './ExpirySelects.module.css';
 
 /** Bir secim: deger, degisim ve odak (react-hook-form alani). */
@@ -67,7 +69,7 @@ export function ExpirySelects({
             : styles['c-expiry__select']
         }
         value={field.value}
-        onChange={(event) => field.onChange(event.target.value)}
+        onChange={(event) => onlyWhenChanged(field.value, field.onChange)(event.target.value)}
         onFocus={field.onFocus}
         onBlur={field.onBlur}
       >

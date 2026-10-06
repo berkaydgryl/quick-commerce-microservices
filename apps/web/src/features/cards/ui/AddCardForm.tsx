@@ -14,6 +14,7 @@ import { AuthField } from '../../auth/ui/AuthField';
 import { useCardForm } from '../hooks/useCardForm';
 import { faceExpiry, faceHolderName, typedCardFace } from '../services/card-face';
 import { cvvDigits, typingBrand } from '../services/card-input';
+import { onlyWhenChanged } from '../services/changed-only';
 
 import { AcceptedBrands } from './AcceptedBrands';
 import styles from './AddCardForm.module.css';
@@ -209,7 +210,9 @@ export function AddCardForm({ texts, onSave, onChanged, onSaved }: AddCardFormPr
                 inputMode="numeric"
                 autoComplete="cc-csc"
                 value={field.value}
-                onChange={(event) => field.onChange(cvvDigits(event.target.value, brand))}
+                onChange={(event) =>
+                  onlyWhenChanged(field.value, field.onChange)(cvvDigits(event.target.value, brand))
+                }
                 onFocus={() => setFocus('cvv')}
                 onBlur={leave(field.onBlur)}
                 error={fieldState.error?.message}
