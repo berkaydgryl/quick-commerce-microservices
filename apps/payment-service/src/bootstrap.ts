@@ -2,28 +2,37 @@
  * Bagimlilik kurulumu - elle (DI framework yok).
  */
 
+import { SAVED_CARDS_MAX } from '@getir/contracts';
 import { EVENTS, systemClock } from '@getir/core';
 import type { Clock, Logger } from '@getir/core';
 import type { EventSubscriber } from '@getir/event-bus';
-import { paymentV1 } from '@getir/proto';
+import { cardvaultV1, paymentV1 } from '@getir/proto';
 import type { GrpcServiceRegistration } from '@getir/service-kit';
 
+import { createAddCard } from './application/add-card.js';
 import { createCancelPayment } from './application/cancel-payment.js';
 import { createCharge } from './application/charge.js';
 import { createConfirm3Ds } from './application/confirm-3ds.js';
+import { createDeleteCard } from './application/delete-card.js';
 import { createGetPayment } from './application/get-payment.js';
+import { createListCards } from './application/list-cards.js';
 import { createRefund } from './application/refund.js';
 import {
+  CARD_VAULT_SERVICE_FULL_NAME,
   CONFIRM_3DS_MAX_WRITE_RETRIES,
   EVENT_CONSUMER_GROUP,
   PAYMENT_SERVICE_FULL_NAME,
   THREEDS_CHALLENGE_TTL_MS,
   THREEDS_MAX_ATTEMPTS,
 } from './config/constants.js';
+import type { CardRepository } from './domain/card-repository.js';
+import type { CardVerifier } from './domain/card-verifier.js';
 import type { PaymentProvider } from './domain/payment-provider.js';
 import type { PaymentRepository } from './domain/payment-repository.js';
+import { InMemoryCardStore } from './infrastructure/memory/in-memory-card-store.js';
 import { InMemoryPaymentStore } from './infrastructure/memory/in-memory-payment-store.js';
 import { MockPaymentProvider } from './infrastructure/mock-provider/mock-payment-provider.js';
+import { createCardVaultImplementation } from './interfaces/grpc/card-vault-handlers.js';
 import { createPaymentImplementation } from './interfaces/grpc/payment-handlers.js';
 import { createCancelRequestedHandler } from './interfaces/workers/cancel-requested.js';
 import { createRefundRequestedHandler } from './interfaces/workers/refund-requested.js';
@@ -71,6 +80,37 @@ export function buildPaymentService(options: BootstrapOptions = {}): GrpcService
       refund: createRefund({ repository, clock }),
       getPayment: createGetPayment({ repository }),
       ...(logger === undefined ? {} : { logger }),
+    }),
+  };
+}
+
+export interface CardVaultOptions {
+  readonly logger?: Logger;
+  /** Kart kasasinin deposu; main.ts openPaymentStore'dan verir. Verilmezse bellek (testler). */
+  readonly repository?: CardRepository;
+  /** Verilmezse mock saglayici (test kartlari). */
+  readonly verifier?: CardVerifier;
+  readonly clock?: Clock;
+}
+
+/**
+ * Kart kasasi (T11.17): odeme servisiyle ayni sunucuda ikinci gRPC servisi.
+ * Kart numarasi yalnizca AddCard'da ve saglayicinin dogrulamasina kadar yasar.
+ */
+export function buildCardVaultService(options: CardVaultOptions = {}): GrpcServiceRegistration {
+  const repository = options.repository ?? new InMemoryCardStore();
+  const verifier = options.verifier ?? new MockPaymentProvider();
+  const clock = options.clock ?? systemClock;
+
+  return {
+    name: CARD_VAULT_SERVICE_FULL_NAME,
+    definition: cardvaultV1.CardVaultServiceService,
+    implementation: createCardVaultImplementation({
+      addCard: createAddCard({ repository, verifier, clock, maxCards: SAVED_CARDS_MAX }),
+      listCards: createListCards({ repository }),
+      deleteCard: createDeleteCard({ repository, clock }),
+      clock,
+      ...(options.logger === undefined ? {} : { logger: options.logger }),
     }),
   };
 }

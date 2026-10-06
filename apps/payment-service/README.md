@@ -2,7 +2,8 @@
 
 Ödeme servisi (gRPC, :50054). Gerçek banka yok: çekim ve 3DS **mock**'tur. Buna rağmen sözleşme
 gerçek bir sağlayıcı takılabilecek biçimde kuruldu: sağlayıcı bir port (`PaymentProvider`),
-idempotency ve durum makinesi baştan yerinde.
+idempotency ve durum makinesi baştan yerinde. Aynı sunucuda ikinci servis **kart kasasıdır**
+(`getir.cardvault.v1.CardVaultService`, T11.17): kullanıcının kayıtlı kartları, maskeli.
 
 ## Bugünkü durum (T7.4 — iade komutu tüketicisi)
 
@@ -15,18 +16,24 @@ idempotency ve durum makinesi baştan yerinde.
 | `payment.refund_requested` | ✅ Olay tüketicisi (T7.4): saga'nın kalıcı iade komutu `stream:events`'ten, grup `payment`                       |
 | `payment.cancel_requested` | ✅ Olay tüketicisi (T11.2 PR 3): iptal edilen siparişin tahsil edilmemiş ödemesi `CANCELLED`                     |
 | `GetPayment`               | ✅ Siparişin ödeme kaydı (yöntem, durum); kayıt yoksa `NOT_FOUND`. Çağıran order: iptal ve süpürücü (T11.2 PR 2) |
+| `CardVaultService`         | ✅ Kart kasası (T11.17): `AddCard` (0 TL doğrulama), `ListCards`, `DeleteCard`; maskeli, en çok 10 kart          |
 
 ## Test kartları
 
-Servise kart numarası **gelmez**, yalnızca jeton gelir (`payment.proto`: "kart verisi bu
-sözleşmeden geçmez"). İstemcideki demo sağlayıcı numarayı jetona çevirir (T12.4).
+Çekime (`Charge`) kart numarası **gelmez**, yalnızca jeton gelir (`payment.proto`: "kart verisi
+bu sözleşmeden geçmez"). Numara yalnızca kart kasasının `AddCard`'ında bir kez geçer: mock
+sağlayıcı numarayı bu tablodan tanır ve kasaya karşılığı olan jeton yazılır (T11.17). Tanınmayan
+numara (Luhn'dan geçse bile) doğrulamada reddedilir.
 
-| Jeton           | Kart                  | Sonuç                                            |
-| --------------- | --------------------- | ------------------------------------------------ |
-| `tok_test_4242` | `4242 4242 4242 4242` | `SUCCEEDED`                                      |
-| `tok_test_0002` | `4000 0000 0000 0002` | `FAILED` + `PAYMENT_DECLINED`                    |
-| `tok_test_3184` | `4000 0027 6000 3184` | `REQUIRES_3DS` + `challenge_id` (`tds_…`, 60 sn) |
-| başka her jeton | —                     | `FAILED` + `PAYMENT_DECLINED`                    |
+| Jeton           | Kart                  | `Charge` sonucu                                  | Kasa (`AddCard`)         |
+| --------------- | --------------------- | ------------------------------------------------ | ------------------------ |
+| `tok_test_4242` | `4242 4242 4242 4242` | `SUCCEEDED`                                      | kaydedilir (Visa)        |
+| `tok_test_0002` | `4000 0000 0000 0002` | `FAILED` + `PAYMENT_DECLINED`                    | `PAYMENT_DECLINED`       |
+| `tok_test_3184` | `4000 0027 6000 3184` | `REQUIRES_3DS` + `challenge_id` (`tds_…`, 60 sn) | kaydedilir (3DS ödemede) |
+| `tok_test_4444` | `5555 5555 5555 4444` | `SUCCEEDED`                                      | kaydedilir (Mastercard)  |
+| `tok_test_0005` | `3782 822463 10005`   | `SUCCEEDED`                                      | kaydedilir (Amex, CVV 4) |
+| `tok_test_0003` | `9792 0000 0000 0003` | `SUCCEEDED`                                      | kaydedilir (Troy)        |
+| başka her jeton | —                     | `FAILED` + `PAYMENT_DECLINED`                    | `PAYMENT_DECLINED`       |
 
 **Risk 3DS isteyebilir (T7.1):** `require_three_ds = true` gelirse (order-svc orta risk bandında
 doldurur) bankanın onaylayacağı kart da `REQUIRES_3DS` döner; reddedilecek kart yine reddedilir.
@@ -36,6 +43,49 @@ kayda yazılmaz, etkisi karar ve `attempts[]` geçmişinde görünür. Kapıda �
 
 **Kart reddi gRPC hatası değildir.** Cevap `status=FAILED`, `failure_code=PAYMENT_DECLINED` taşır:
 red normal bir iş sonucudur, saga onu okuyup rezervasyonu bırakır.
+
+## Kart kasası (CardVaultService, T11.17)
+
+Sözleşme `packages/proto/proto/getir/cardvault/v1/card_vault.proto`; kart kuralları (Luhn, marka,
+CVV, son kullanma, ad ve kart adı) `@getir/contracts` `cards.ts`'te — web ile kasa **aynı
+fonksiyonları** kullanır. `user_id` gateway'den gelir (erişim jetonunun `sub`'ı).
+
+**`AddCard` akışı:** (1) şema: biçim, Luhn, marka, CVV uzunluğu, ad ve kart adı (NFC, kırpılmış);
+(2) son kullanma: geçmemiş ve en çok 20 yıl ileri (Türkiye saatiyle); (3) kasa dolu mu, aynı kart
+var mı — **sağlayıcıya gitmeden**; (4) sağlayıcının 0 TL doğrulaması (`CardVerifier.verifyCard`):
+`APPROVED` ve `CHALLENGE_REQUIRED` kaydedilir, `DECLINED` kaydedilmez; (5) maskeli kart depoya,
+depo (3)'ü **atomik** olarak yeniden denetler.
+
+| Durum                                    | Cevap                                                                |
+| ---------------------------------------- | -------------------------------------------------------------------- |
+| Biçim, Luhn, marka, CVV, ad, kart adı    | `VALIDATION_FAILED`, alan → cümle (`CARD_FIELD_MESSAGES`, değer yok) |
+| Son kullanma geçmiş / çok ileri          | `VALIDATION_FAILED`, `expiryMonth` / `expiryYear`                    |
+| Kasa dolu (10 kart)                      | `VALIDATION_FAILED`, `details.cards`                                 |
+| Aynı kart (ilk 4 + son 4 + son kullanma) | `CONFLICT`, `details.cardId` kullanıcının kendi kartı                |
+| Sağlayıcı reddetti                       | `PAYMENT_DECLINED`, `details.reason = verification_declined`         |
+| Sağlayıcıya ulaşılamadı                  | `SERVICE_UNAVAILABLE` (asıl hatanın yalnızca türü günlükte)          |
+| `DeleteCard`: yok, başkasının, silinmiş  | `NOT_FOUND` (üçü dışarıdan ayırt edilemez)                           |
+
+**Mongo:** `cards` (`_id` `crd_…`; `userId`, `brand`, `first4`, `last4`, son kullanma, ad, kart adı,
+`providerToken`, `status` `ACTIVE|DELETED`, `createdAt`, `deletedAt`) ve `card_wallets` (kullanıcı
+başına `count`). Tam numara ve CVV **hiçbir alanda yok**. İndeksler: liste için
+`{ userId, status, createdAt: -1, _id: -1 }`; aynı kart için `{ userId, first4, last4, expiryMonth,
+expiryYear }` **kısmi unique** (`status: ACTIVE`; silinen kart yeniden eklenebilir).
+
+**Neden sayaç (`card_wallets`):** transaction içinde "aktif kartları say, sonra ekle" yetmez. Anlık
+görüntü yalıtımında eşzamanlı iki ekleme ikisi de 9 sayar ve farklı belgeler yazar; çakışma olmaz,
+kasa 11 olur (write skew). Ekleme tek transaction'da: aynı kart var mı → sayacı hazırla
+(`$setOnInsert`) → `count < 10` ise `$inc` → kart. İki ekleme aynı sayaç belgesine yazınca yazma
+çakışması doğar, sürücü kaybedeni yeniden dener ve kazananın kartını görür. Silme: `DELETED`,
+`deletedAt`, `providerToken` alanı **kaldırılır**, sayaç `-1`. `card_wallets` açılışta yoksa
+oluşturulur (transaction içinde örtük oluşturmaya bırakılmaz). Göç yok: yeni koleksiyonlar.
+
+**Günlük ve iz:** handler istek nesnesini günlüğe **hiç vermez**; satırlar yalnızca `userId`,
+`cardId` ve `brand` taşır (ad ve kart adı da yok). İkinci emniyet ortak günlükçüde
+(`@getir/observability` `redact.ts`): `cvv` her zaman, `number` yalnızca kart numarasına
+benziyorsa gizlenir. Sağlayıcı hatası `cause`'a konmaz: pino `cause` mesajını satıra yazar.
+Sunucu span'inde yalnızca rpc nitelikleri vardır (testli: `card-vault-logs.spec.ts`,
+`card-vault-tracing.spec.ts`).
 
 ## Charge akışı ve çift çekim koruması
 
@@ -120,10 +170,10 @@ Grup ve teslim kuralları iade komutuyla aynı (`payment` grubu, en az bir kez).
 
 ## Veri kaynağı: Mongo ya da MOCK
 
-| `MOCK` | Depo                                            | Mongo / Redis gerekir mi                                                                                     |
-| ------ | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `true` | Bellek (`infrastructure/memory`)                | Hayır; yeniden başlayınca unutur, olay dinleme kapalı                                                        |
-| değil  | `payments` koleksiyonu (`infrastructure/mongo`) | Evet: `PAYMENT_MONGO_URI` (kendi veritabanı `getir_payment`, D14) ve `REDIS_URL` (iade komutu, T7.4) zorunlu |
+| `MOCK` | Depo                                                         | Mongo / Redis gerekir mi                                                                                     |
+| ------ | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `true` | Bellek (`infrastructure/memory`)                             | Hayır; yeniden başlayınca unutur, olay dinleme kapalı                                                        |
+| değil  | `payments`, `cards`, `card_wallets` (`infrastructure/mongo`) | Evet: `PAYMENT_MONGO_URI` (kendi veritabanı `getir_payment`, D14) ve `REDIS_URL` (iade komutu, T7.4) zorunlu |
 
 İki depo **aynı sözleşme testinden** geçer (`test/support/payment-store-contract.ts`): birim testinde
 bellek, entegrasyon testinde gerçek Mongo. Depoyu seçip açan tek yer `infrastructure/payment-store.ts`.
@@ -170,7 +220,8 @@ değildir.
 ```text
 src/
   domain/          payment.ts (sözlük + Payment + withAttempt), charge.ts (çekim), three-ds.ts (3DS), refund.ts (iade), portlar
-  application/     charge.ts, confirm-3ds.ts, refund.ts
+                   card.ts (maskeli kart), card-errors.ts, card-repository.ts ve card-verifier.ts (kart kasası portları)
+  application/     charge.ts, confirm-3ds.ts, refund.ts; add-card.ts, list-cards.ts, delete-card.ts
   infrastructure/  memory/ ve mongo/ (depo), payment-store.ts (mod seçimi), mock-provider/
   interfaces/grpc/ şema (Zod), eşleme (Record), handler
   interfaces/workers/ refund-requested.ts (iade komutu işleyicisi, T7.4); kayıt bootstrap.ts subscribePaymentEvents
@@ -190,6 +241,11 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/payment/v1/pay
   -d '{"orderId":"ord_a","userId":"usr_1","amount":{"amountMinor":12990,"currency":"TRY"},
        "method":"PAYMENT_METHOD_CARD","cardToken":"tok_test_4242","idempotencyKey":"anahtar-ord_a"}' \
   localhost:50054 getir.payment.v1.PaymentService/Charge
+
+grpcurl -plaintext -import-path packages/proto/proto -proto getir/cardvault/v1/card_vault.proto \
+  -d '{"userId":"usr_1","number":"5555 5555 5555 4444","expiryMonth":12,"expiryYear":2031,
+       "cvv":"123","holderName":"Ayse Yilmaz","nickname":"Maas karti"}' \
+  localhost:50054 getir.cardvault.v1.CardVaultService/AddCard
 ```
 
 ## Docker

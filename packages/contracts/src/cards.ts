@@ -24,6 +24,7 @@ import { z } from 'zod';
 
 import { cardIdSchema, isoDateTimeSchema } from './common.js';
 import {
+  CARD_EXPIRY_MAX_YEARS_AHEAD,
   CARD_EXPIRY_TIME_ZONE,
   CARD_HOLDER_NAME_MAX_LENGTH,
   CARD_HOLDER_NAME_MIN_LENGTH,
@@ -157,6 +158,32 @@ function calendarMonthOf(now: Date): { readonly year: number; readonly month: nu
 export function isCardExpired(expiryMonth: number, expiryYear: number, now: Date): boolean {
   const current = calendarMonthOf(now);
   return expiryYear < current.year || (expiryYear === current.year && expiryMonth < current.month);
+}
+
+/** Son kullanma sorunu: hangi alanda, hangi cumle. */
+export interface CardExpiryProblem {
+  readonly field: 'expiryMonth' | 'expiryYear';
+  readonly message: string;
+}
+
+/**
+ * Son kullanma kurali (zamana bagli, bu yuzden semada degil): kart gecmemis ve
+ * Turkiye saatiyle bu yildan en fazla CARD_EXPIRY_MAX_YEARS_AHEAD yil ileri.
+ * Kasa eklemede denetler; web yazarken ayni fonksiyonla gosterebilir. Sorun
+ * yoksa null.
+ */
+export function cardExpiryProblem(
+  expiryMonth: number,
+  expiryYear: number,
+  now: Date,
+): CardExpiryProblem | null {
+  if (isCardExpired(expiryMonth, expiryYear, now)) {
+    return { field: 'expiryMonth', message: CARD_FIELD_MESSAGES.expired };
+  }
+  if (expiryYear > calendarMonthOf(now).year + CARD_EXPIRY_MAX_YEARS_AHEAD) {
+    return { field: 'expiryYear', message: CARD_FIELD_MESSAGES.expiryYear };
+  }
+  return null;
 }
 
 /**

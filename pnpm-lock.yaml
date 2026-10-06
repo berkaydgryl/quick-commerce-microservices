@@ -235,6 +235,9 @@ importers:
         specifier: ^3.23.8
         version: 3.25.76
     devDependencies:
+      '@getir/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@testcontainers/mongodb':
         specifier: ^12.1.0
         version: 12.1.0

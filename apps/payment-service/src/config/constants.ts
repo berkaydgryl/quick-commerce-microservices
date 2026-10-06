@@ -5,6 +5,9 @@ export const SERVICE_NAME = 'payment';
 /** Proto'daki tam servis adi; saglik kaydi ve gunluk bunu kullanir. */
 export const PAYMENT_SERVICE_FULL_NAME = 'getir.payment.v1.PaymentService';
 
+/** Kart kasasi (T11.17): ayni sunucuda ikinci servis; saglik kaydi bu adla. */
+export const CARD_VAULT_SERVICE_FULL_NAME = 'getir.cardvault.v1.CardVaultService';
+
 /** Roadmap'teki port haritasindan: payment 50054. */
 export const DEFAULT_PAYMENT_GRPC_PORT = 50_054;
 

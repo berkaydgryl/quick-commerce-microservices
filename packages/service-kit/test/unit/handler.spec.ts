@@ -127,6 +127,65 @@ describe('unaryHandler', () => {
   });
 });
 
+describe('unaryHandler: hata cevabi her zaman gider (T11.17)', () => {
+  /** Cevap bu surede gelmezse cagri askida kalmistir. */
+  const HANG_MS = 1_000;
+
+  function withinHang<T>(promise: Promise<T>): Promise<T | 'askida'> {
+    return Promise.race([
+      promise,
+      new Promise<'askida'>((resolve) => setTimeout(() => resolve('askida'), HANG_MS)),
+    ]);
+  }
+
+  it('Turkce ayrintili hata istemciye kodu ve cumlesiyle ulasir', async () => {
+    const handler = unaryHandler({
+      name: 'Reserve',
+      schema,
+      handle: () => {
+        throw AppError.validation('Geçersiz istek', {
+          details: { number: 'Kart numarası geçersiz' },
+        });
+      },
+    });
+
+    const result = await withinHang(invoke(handler, { sku: 'SUT-1L', quantity: 2 }));
+
+    expect(result).not.toBe('askida');
+    const { error } = result as HandlerResult<unknown>;
+    expect(error?.code).toBe(GRPC_STATUS.INVALID_ARGUMENT);
+    expect(appErrorOf(error)?.details).toEqual({ number: 'Kart numarası geçersiz' });
+  });
+
+  it('hata cevabi kurulamazsa (dongusel ayrinti) cagri askida kalmaz: INTERNAL doner, gunluge yazilir', async () => {
+    const lines: LogLine[] = [];
+    const circular: Record<string, unknown> = { alan: 'deger' };
+    circular['kendisi'] = circular;
+    const handler = unaryHandler({
+      name: 'Reserve',
+      schema,
+      logger: recordingLogger(lines),
+      handle: () => {
+        throw AppError.validation('Gecersiz istek', { details: circular });
+      },
+    });
+
+    const result = await withinHang(invoke(handler, { sku: 'SUT-1L', quantity: 2 }));
+
+    expect(result).not.toBe('askida');
+    const { error } = result as HandlerResult<unknown>;
+    expect(error?.code).toBe(GRPC_STATUS.INTERNAL);
+    expect(appErrorOf(error)?.code).toBe(ERROR_CODES.INTERNAL);
+    expect(lines).toContainEqual(
+      expect.objectContaining({
+        level: 'error',
+        message: 'rpc hata cevabi kurulamadi, INTERNAL donuluyor',
+        fields: expect.objectContaining({ code: ERROR_CODES.VALIDATION_FAILED }) as unknown,
+      }),
+    );
+  });
+});
+
 describe('unaryHandler: gunluk seviyesi kodun agirligindan (#49)', () => {
   it.each<[string, () => Error, RecordedLevel, string]>([
     [

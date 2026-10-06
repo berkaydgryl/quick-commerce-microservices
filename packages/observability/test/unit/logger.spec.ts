@@ -16,6 +16,7 @@ import { STDOUT_LOST_MESSAGE } from '../../src/log-destination.js';
 
 const CHILD = fileURLToPath(new URL('./fixtures/logger-child.mjs', import.meta.url));
 const TRACE_CHILD = fileURLToPath(new URL('./fixtures/logger-trace-child.mjs', import.meta.url));
+const REDACT_CHILD = fileURLToPath(new URL('./fixtures/logger-redact-child.mjs', import.meta.url));
 /** Cikis icin beklenen en uzun sure; takilan surec bu surede cikmaz (#56). */
 const EXIT_WAIT_MS = 5_000;
 
@@ -124,6 +125,55 @@ describe('iz baglami (D15)', () => {
     expect(inside?.['traceId']).toMatch(/^[0-9a-f]{32}$/);
     expect(outside).not.toHaveProperty('traceId');
     expect(outside).not.toHaveProperty('spanId');
+  });
+});
+
+describe('kart verisi gizleme (T11.17)', () => {
+  async function redactLines(): Promise<Record<string, Record<string, unknown>>> {
+    const child = spawn(process.execPath, [REDACT_CHILD], { stdio: ['ignore', 'pipe', 'pipe'] });
+    running.push(child);
+    let stdout = '';
+    child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString()));
+    const exited = new Promise<Exit>((resolve) =>
+      child.once('exit', (code, signal) => resolve({ code, signal })),
+    );
+    expect(await within(exited)).toEqual({ code: 0, signal: null });
+    const lines = stdout
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    return Object.fromEntries(lines.map((line) => [String(line['msg']), line]));
+  }
+
+  it('kart numarasi ve CVV ust duzeyde, bir ve iki kat altinda ve cocuk gunlukcude gizlenir', async () => {
+    const lines = await redactLines();
+
+    expect(lines['ust duzey']).toMatchObject({ number: '[gizli]', cvv: '[gizli]' });
+    expect(lines['istek']?.['input']).toEqual({
+      number: '[gizli]',
+      cvv: '[gizli]',
+      holderName: 'Ayse',
+    });
+    expect(lines['iki kat']?.['call']).toEqual({ request: { number: '[gizli]', cvv: '[gizli]' } });
+    expect(lines['cocuk']).toMatchObject({ rpc: 'AddCard', card: { number: '[gizli]' } });
+    // Zaman, pid ve makine adi rastlantiyla rakam dizisi tasiyabilir: taranmaz.
+    const all = JSON.stringify(
+      Object.values(lines).map(({ time: _time, pid: _pid, hostname: _host, ...fields }) => fields),
+    );
+    for (const secret of ['4242', '5555', '378282246310005', '9792000000000003', '9876', '765']) {
+      expect(all).not.toContain(secret);
+    }
+  });
+
+  it('DAR: kart numarasina benzemeyen number alanlari (siparis, kapi, sayi, telefon) oldugu gibi kalir', async () => {
+    const lines = await redactLines();
+
+    expect(lines['kart degil']).toMatchObject({
+      order: { number: 'SIP-1042', total: 12990 },
+      address: { number: '12/3' },
+      number: 42,
+      phone: { number: '0532 123 45 67' },
+    });
   });
 });
 

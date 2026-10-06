@@ -133,6 +133,12 @@ Gateway REST zarfını (`{ success: false, error: { ... } }`) doğrudan bu yükt
 Beklenmeyen hatalar `INTERNAL`'a düşer ve **özgün mesajları dışarı çıkmaz** — yalnızca
 sunucu günlüğüne yazılır.
 
+**Yük ASCII-güvenlidir (T11.17):** gRPC metadata değeri yalnızca yazdırılabilir ASCII taşır.
+Türkçe cümle (`"Kart numarası geçersiz"`) JSON'un kendi `\uXXXX` kaçışıyla yazılır; `JSON.parse`
+ve gateway'in `json.Unmarshal`'ı aynı metni çözer, ASCII yük eskisiyle bayt bayt aynıdır. Hata
+cevabı yine de kurulamazsa (döngüsel ya da BigInt ayrıntı) `unaryHandler` çağrıyı **askıda
+bırakmaz**: `INTERNAL` döner, kurulamama günlüğe yazılır.
+
 Karşı servisten gelen yük **dış veridir**: `fromServiceError` onu Zod şemasından geçirir
 (D5); bilinmeyen kod ya da eksik mesaj yükü geçersiz kılar ve gRPC durum kodundan en yakın
 koda düşülür. Durum → kod eşlemesi gateway'deki kopyasıyla (`apps/gateway/internal/apperror/grpc.go`)

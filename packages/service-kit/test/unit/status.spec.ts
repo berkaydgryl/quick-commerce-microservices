@@ -53,6 +53,34 @@ describe('toServiceError', () => {
     expect(payloadOf(error)?.requestId).toBe(REQUEST_ID);
   });
 
+  it('Turkce ayrinti x-app-error yukunde yalnizca yazdirilabilir ASCII: \\u kacisiyla (T11.17)', () => {
+    const error = toServiceError(
+      AppError.validation('Geçersiz istek', {
+        details: { number: 'Kart numarası geçersiz', nickname: 'Kart adı 💳' },
+      }),
+    );
+
+    const raw = String(error.metadata.get(ERROR_METADATA_KEY)[0]);
+    expect(raw).toMatch(/^[\x20-\x7e]+$/);
+    expect(raw).toContain('Kart numaras\\u0131 ge\\u00e7ersiz');
+    expect(payloadOf(error)).toEqual({
+      code: ERROR_CODES.VALIDATION_FAILED,
+      message: 'Geçersiz istek',
+      details: { number: 'Kart numarası geçersiz', nickname: 'Kart adı 💳' },
+    });
+  });
+
+  it('ASCII yuk eskisiyle bayt bayt ayni (kacis yalnizca ASCII disinda)', () => {
+    const original = new AppError(ERROR_CODES.STOCK_INSUFFICIENT, 'Stok yetersiz', {
+      details: { sku: 'SUT-1L', available: 1, note: 'tirnak " ve \\ ters bolu' },
+      requestId: REQUEST_ID,
+    });
+
+    const raw = toServiceError(original).metadata.get(ERROR_METADATA_KEY)[0];
+
+    expect(raw).toBe(JSON.stringify(original.toJSON()));
+  });
+
   it('gercek bir Error uretir; yigin izi korunur', () => {
     const error = toServiceError(AppError.forbidden('Yetki yok'));
 
@@ -75,6 +103,19 @@ describe('fromServiceError', () => {
     expect(restored.message).toBe('Rezervasyon dustu');
     expect(restored.details).toEqual({ reservationId: 'rsv_1' });
     expect(restored.requestId).toBe(REQUEST_ID);
+  });
+
+  it('Turkce ayrintiyi (\\u kacisli yuk) aynen geri kurar', () => {
+    const restored = fromServiceError(
+      toServiceError(
+        AppError.validation('Geçersiz istek', {
+          details: { expiryMonth: 'Kartın son kullanma tarihi geçmiş' },
+        }),
+      ),
+    );
+
+    expect(restored.message).toBe('Geçersiz istek');
+    expect(restored.details).toEqual({ expiryMonth: 'Kartın son kullanma tarihi geçmiş' });
   });
 
   it('metadata yoksa status kodundan en yakin hata koduna duser', () => {
