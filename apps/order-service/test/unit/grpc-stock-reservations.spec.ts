@@ -169,6 +169,7 @@ const implementation = {
       expiresAt: EXPIRES_AT,
       alreadyExtended: unchanged,
       extensionCount: unchanged ? 3 : 1,
+      expiryMismatch: false,
     });
   },
   shortenReservation: (
