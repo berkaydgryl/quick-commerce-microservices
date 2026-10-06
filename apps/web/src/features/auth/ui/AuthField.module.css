@@ -46,8 +46,13 @@
   pointer-events: none;
 }
 
-/* Yuzen etiketin kaymasi (T11.16; durum kurallari dosyanin sonunda); hareket azaltmada aninda. */
+/* Yuzen etiketin kaymasi (T11.16; durum kurallari dosyanin sonunda); hareket azaltmada aninda.
+   Etiket tek satir: dar alanda (yan yana iki alan) tasmaz, sonu "…" olur. */
 .c-auth-field--floating .c-auth-field__label {
+  inset-inline-end: var(--space-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   transition:
     inset-block-start var(--duration-fast) var(--easing-standard),
     font-size var(--duration-fast) var(--easing-standard),

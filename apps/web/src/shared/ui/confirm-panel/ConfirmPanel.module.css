@@ -1,24 +1,24 @@
-/* Adres silme onayi (T11.15, T5): soru, ipucu, hata ve iki dugme yan yana. */
-.c-delete-address {
+/* Onay govdesi (T11.15 adres silme; T11.17de ortak, M6): soru, not, hata ve iki dugme yan yana. */
+.c-confirm-panel {
   display: grid;
   gap: var(--space-3);
 }
 
-.c-delete-address__question {
+.c-confirm-panel__question {
   font-size: var(--font-size-md);
   overflow-wrap: anywhere;
 }
 
-.c-delete-address__name {
+.c-confirm-panel__subject {
   font-weight: var(--font-weight-bold);
 }
 
-.c-delete-address__hint {
+.c-confirm-panel__hint {
   font-size: var(--font-size-sm);
   color: var(--text-muted);
 }
 
-.c-delete-address__alert {
+.c-confirm-panel__alert {
   padding: var(--space-3);
   font-size: var(--font-size-sm);
   color: var(--text-danger);
@@ -26,15 +26,15 @@
   border-radius: var(--radius-md);
 }
 
-.c-delete-address__actions {
+.c-confirm-panel__actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-2);
   margin-block-start: var(--space-2);
 }
 
-.c-delete-address__cancel,
-.c-delete-address__confirm {
+.c-confirm-panel__cancel,
+.c-confirm-panel__confirm {
   min-height: var(--size-field-min-height);
   padding: var(--space-3) var(--space-4);
   font: inherit;
@@ -43,20 +43,20 @@
   border-radius: var(--radius-md);
 }
 
-.c-delete-address__cancel {
+.c-confirm-panel__cancel {
   color: var(--color-brand-primary);
   background: var(--bg-surface);
   border: var(--border-width-thin) solid var(--color-brand-primary);
 }
 
-.c-delete-address__confirm {
+.c-confirm-panel__confirm {
   color: var(--text-on-brand);
   background: var(--bg-danger);
   border: none;
 }
 
-.c-delete-address__cancel:disabled,
-.c-delete-address__confirm:disabled {
+.c-confirm-panel__cancel:disabled,
+.c-confirm-panel__confirm:disabled {
   cursor: progress;
   opacity: var(--opacity-disabled);
 }

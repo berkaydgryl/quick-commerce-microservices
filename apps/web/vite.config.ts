@@ -37,6 +37,9 @@ export default defineConfig(({ mode }) => {
       __DEMO_PERSONAS__: JSON.stringify(demoPersonasEnabled(mode, env)),
       // Kodsuz sifre yenileme (T11.9): production derlemesinde HER ZAMAN kapali.
       __DEMO_PASSWORD_RESET__: JSON.stringify(mode !== 'production'),
+      // Odeme Yontemlerim (T11.17, K1 (a)): kart uclari production'da kapali (404);
+      // production derlemesinde menu maddesi ve iki rota HIC yok.
+      __CARD_VAULT__: JSON.stringify(mode !== 'production'),
     },
     resolve: {
       // @getir/core'daki node:crypto importu icin tarayici karsiligi (dosyadaki aciklama).

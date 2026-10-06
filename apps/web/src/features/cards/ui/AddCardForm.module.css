@@ -1,0 +1,107 @@
+/*
+ * Kart ekle (T11.17, tasarim B): beyaz panelde baslik ve marka haplari, gri
+ * sahnede kart, altinda tek sutun form (son kullanma ve CVV yan yana).
+ * Paylasilan kap kurali: sekme hesap sayfalarinin icerik kabina cizer.
+ */
+.c-add-card {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-add-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.c-add-card__title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-extrabold);
+}
+
+/* Kartin sahnesi: sayfa zemininde, kart ortada; egim icin derinlik payi. */
+.c-add-card__stage {
+  display: grid;
+  place-items: center;
+  padding: var(--space-6) var(--space-4);
+  background: var(--bg-page);
+  border-radius: var(--radius-lg);
+}
+
+.c-add-card__form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.c-add-card__alert {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-danger);
+  border: var(--border-width-thin) solid var(--border-danger);
+  border-radius: var(--radius-md);
+}
+
+.c-add-card__wait {
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.c-add-card__number {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.c-add-card__valid {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-success);
+}
+
+.c-add-card__pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.c-add-card__submit {
+  min-height: var(--size-field-min-height);
+  padding: var(--space-3) var(--space-4);
+  font: inherit;
+  font-weight: var(--font-weight-extrabold);
+  color: var(--text-on-brand);
+  cursor: pointer;
+  background: var(--color-brand-primary);
+  border: none;
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast) var(--easing-standard);
+}
+
+.c-add-card__submit:disabled {
+  cursor: progress;
+  opacity: var(--opacity-disabled);
+}
+
+.c-add-card__submit:hover:not(:disabled) {
+  background: var(--color-brand-primary-strong);
+}
+
+.c-add-card__note {
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-base);
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-add-card__submit {
+    transition: none;
+  }
+}

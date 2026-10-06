@@ -18,6 +18,10 @@
  * dogrudan import ederse bilinen sifreli hesaplar herkese acik pakete sizar; bu,
  * derlemeden sonra ancak paketin kendisine bakilarak gorulur.
  *
+ * T11.17'den beri production'da KAPALI ozellikler de aranir (GATED_NEEDLES):
+ * Odeme Yontemlerim (__CARD_VAULT__) yalnizca gelistirme paketinde derlenir;
+ * kart kasasinin ucu ve sayfanin adresi production paketinde gecmemeli.
+ *
  * Bos ya da eksik paket BASARISIZDIR: taranacak dosya yoksa "temiz" denmez.
  * Bagimliliksiz duz Node.
  */
@@ -123,6 +127,17 @@ export function findLeaks(files, needles) {
 }
 
 /**
+ * Production'da kapali ozelliklerin izleri (derleme bayragi false). Bayrak
+ * yanlis kurulursa ya da bir dosya ozelligi bayraksiz import ederse kapali
+ * sayfa ve ucu herkese acik pakete girer. Ozellik production'da acilinca
+ * satiri buradan silinir.
+ */
+export const GATED_NEEDLES = [
+  { needle: '/v1/me/cards', label: 'kart kasasi ucu (T11.17, __CARD_VAULT__)' },
+  { needle: 'odeme-yontemlerim', label: 'Odeme Yontemlerim adresi (T11.17, __CARD_VAULT__)' },
+];
+
+/**
  * @param {string} distDir
  * @returns {{ ok: boolean, lines: string[] }}
  */
@@ -135,20 +150,22 @@ export function checkBundle(distDir, personas) {
     };
   }
   const needles = personaNeedles(personas);
-  const leaks = findLeaks(files, needles);
+  const leaks = findLeaks(files, [...needles, ...GATED_NEEDLES]);
   if (leaks.length > 0) {
     return {
       ok: false,
       lines: [
-        'production paketinde demo persona bilgisi var:',
+        'production paketinde olmamasi gereken deger var:',
         ...leaks.map((leak) => `  - ${leak}`),
-        'persona secici yalnizca gelistirmede derlenir (vite.config.ts __DEMO_PERSONAS__).',
+        'persona secici ve kapali ozellikler yalnizca gelistirmede derlenir (vite.config.ts define).',
       ],
     };
   }
   return {
     ok: true,
-    lines: [`paket temiz: ${files.length} dosya, ${needles.length} persona degeri arandi`],
+    lines: [
+      `paket temiz: ${files.length} dosya, ${needles.length} persona degeri ve ${GATED_NEEDLES.length} kapali ozellik izi arandi`,
+    ],
   };
 }
 

@@ -1,0 +1,63 @@
+/*
+ * Odeme kartinin token'lari (T11.17). Ana token dosyasindan ayri: tokens.css
+ * buyumesin diye (proje kurali "Tek sorumluluk", 300 satir). Ayni kurallar
+ * gecerli: bilesen ciplak renk ve olcu yazmaz, buradaki degiskeni kullanir.
+ * Yukleme sirasi main.tsx'te: tokens.css -> bu dosya -> breakpoints.css.
+ */
+
+:root {
+  /* Tasarim B "Markanin rengi": numara yazildikca kart o markanin gradyanina
+     gecer (ucer durak: baslangic, %55, bitis). Bunlar kartlarin KENDI renkleri ve yalnizca kart
+     gorselinde kullanilir. Kart ISO oraninda; ic yazilar ve konumlar kartin
+     genisligine oranla (cqi, %), bu yuzden burada yalnizca en fazla genislik. */
+  --card-brand-default-start: #6a4bd0;
+  --card-brand-default-mid: #523ab0;
+  --card-brand-default-end: #3a2589;
+  --card-brand-visa-start: #14237a;
+  --card-brand-visa-mid: #2944c8;
+  --card-brand-visa-end: #5e7cf5;
+  --card-brand-mastercard-start: #17171b;
+  --card-brand-mastercard-mid: #3b1e16;
+  --card-brand-mastercard-end: #d9481f;
+  --card-brand-amex-start: #0a4a4e;
+  --card-brand-amex-mid: #137f7b;
+  --card-brand-amex-end: #3fb3aa;
+  --card-brand-troy-start: #0a2645;
+  --card-brand-troy-mid: #0e5482;
+  --card-brand-troy-end: #1597b0;
+  --text-on-card: var(--palette-white);
+  --text-on-card-muted: rgb(255 255 255 / 80%);
+  --card-mark: rgb(255 255 255 / 11%);
+  --card-streak: rgb(255 255 255 / 20%);
+  --card-glare: rgb(255 255 255 / 28%);
+  --card-badge-bg: rgb(0 0 0 / 18%);
+  --card-badge-border: rgb(255 255 255 / 30%);
+  --card-focus-frame: rgb(255 255 255 / 95%);
+  --card-focus-glow: rgb(255 255 255 / 25%);
+  --card-chip-light: #f2f2f2;
+  --card-chip-mid: #b9b9c2;
+  --card-chip-end: #ededf2;
+  --card-chip-line: rgb(90 60 0 / 35%);
+  --card-stripe: #0b0b10;
+  --card-signature-light: #f4f4f6;
+  --card-signature-dark: #e2e2e8;
+  --card-text-shadow: rgb(0 0 0 / 30%);
+  --shadow-payment-card: 0 1.5rem 3rem rgb(20 20 40 / 30%);
+  --shadow-payment-card-small: 0 0.5rem 1.25rem rgb(20 20 40 / 22%);
+  --size-payment-card: 23.75rem;
+  --ratio-payment-card: 85.6 / 53.98;
+  --size-card-tilt-depth: 68.75rem;
+  --duration-card-flip: 800ms;
+  --duration-card-color: 600ms;
+  --duration-card-frame: 350ms;
+  --duration-card-tilt: 250ms;
+  --duration-card-digit: 280ms;
+  --duration-card-streak: 6s;
+  --easing-card-flip: cubic-bezier(0.2, 0.75, 0.25, 1);
+
+  /* Kayitli kartlar (T11.17, M4): kucuk kart gorselleri iki sutun; cop
+     kutusu ve "Kart ekle" en az 44 px dokunma alani. */
+  --size-card-tile-min: 15rem;
+  --size-card-action: 2.75rem;
+  --size-card-action-icon: 1.25rem;
+}

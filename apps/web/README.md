@@ -423,7 +423,8 @@ o değişiklik platform alanında ayrı bir PR'dır ve yapıldığında takma ad
 ## Hesap menüsü (T11.16)
 
 Kullanıcı isteği: profil sayfasının sol menüsü ve üst barın Profil açılır menüsü AYNI başlıkları aynı sırayla
-gösterir: Profilim, Adreslerim, Favori İşletmeler, Geçmiş Siparişlerim (T11.17'de Ödeme Yöntemlerim).
+gösterir: Profilim, Adreslerim, Favori İşletmeler, Geçmiş Siparişlerim, Ödeme Yöntemlerim (T11.17; yalnızca
+geliştirme paketinde, aşağıda).
 
 | Parça       | Dosya                                 | Not                                                                                                                 |
 | ----------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
@@ -435,6 +436,37 @@ gösterir: Profilim, Adreslerim, Favori İşletmeler, Geçmiş Siparişlerim (T1
   `favorites.profileMenuLabel/addressesLabel/favoritesMenuLabel` ve `appHeader.favoritesLabel` kalktı.
 - **Test:** `account-menu.spec.ts` iki menünün aynı maddeleri aynı sırayla çizdiğini uygulamanın bağlantısıyla
   (`AppHeaderAccount`) doğrular.
+- **Alt sayfalar** (sipariş detayı, kart ekle) `AccountLayout variant="nested"`: telefonda "‹ Hesabım" yok, sayfa kendi
+  üst sayfasına döner; iki geri bağlantısı üst üste binmez.
+
+## Ödeme Yöntemlerim (T11.17)
+
+`/hesabim/odeme-yontemlerim` (kayıtlı kartlar) ve `/hesabim/odeme-yontemlerim/ekle` (kart ekle), korumalı. Kart tasarımı
+kullanıcının seçtiği **B "Markanın rengi"**: numara yazıldıkça kart o markanın gradyanına geçer, sağ üstte kendi
+çizdiğimiz rozet (D3), arkada soluk kısa işaret ("VISA", "MC"), ışık şeridi, imleçle eğim ve parlama, odaktaki alanın
+çerçevesi, CVV'de arka yüze dönme. Hareket azaltma açıkken dönme yerine solma; eğim, ışık ve hane düşmesi yok.
+
+| Parça     | Dosya                                                                      | Not                                                                                                  |
+| --------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Kart      | `features/cards/ui/CardVisual.tsx`                                         | Büyük (kart ekle) ve küçük (liste); iç ölçüler kartın genişliğine oranlı (`cqi`), renkler `--card-*` |
+| Kart yüzü | `features/cards/services/card-face.ts`                                     | Yalnızca ilk 4 ve son 4 hane, aradakiler "•"; kısa ad "Visa •••• 4242"                               |
+| Form      | `features/cards/ui/AddCardForm.tsx`, `services/card-form.ts`               | Ortak alan (yüzen etiket); kurallar ve cümleler sözleşmeden (`cards.ts`); 429'da geri sayım          |
+| Liste     | `pages/account/PaymentMethodsView.tsx`                                     | Küçük kartlar, kısa ad, "Süresi doldu", çöp kutusu (44 px); kasa doluysa "Kart ekle" yerine cümle    |
+| Veri      | `features/cards/api`, `hooks/useSavedCards`, `useAddCard`, `useDeleteCard` | `GET`/`POST`/`DELETE /v1/me/cards`; anahtarlar kullanıcıya bağlı                                     |
+| Silme     | `features/cards/ui/DeleteCardDialog.tsx`                                   | Ortak onay gövdesi `shared/ui/confirm-panel/ConfirmPanel.tsx` (M6; adres silme de kullanır)          |
+
+- **Numara ve CVV yalnızca form durumunda (M7):** kart görseline maskeli gider; sorgu ve mutasyon önbelleğine, tarayıcı
+  deposuna, adrese ve Idempotency-Key'e girmez. Kaydetme bu yüzden `useMutation` değil (`saveCard`): mutasyon önbelleği
+  isteği saklardı. Anahtar rastgele ve denemeye bağlı (`services/attempt-key.ts`): sonucu belirsiz deneme (ağ, 503) aynı
+  anahtarla tekrarlanır, sunucu cevap verince yenisi. Formun niyet anahtarı (`createIntentKeys`) gövdenin JSON'unu tuttuğu
+  için burada kullanılmaz. Testli (`card-save.spec.ts`).
+- **Production'da yok (K1 (a)):** kart uçları production'da kapalı; menü maddesi ve iki rota `__CARD_VAULT__` bayrağıyla
+  yalnızca geliştirme paketinde. `scripts/check-web-bundle.mjs` production paketinde `/v1/me/cards` ve
+  `odeme-yontemlerim` arar (`pnpm verify` ve CI). İçerik yedeğindeki metinler (veri) pakette kalır.
+- **Çok fazla deneme (K2):** 429 + `retryAfterSeconds` gelince formun üstünde sözlüğün cümlesi ve geri sayım
+  ("Yeniden deneyebilmen için 4:59"); süre bitene kadar Kaydet pasif.
+- **Metinler içerikten** (`paymentMethods` bloğu; içerik gelmezse yedek). Kural cümleleri içerikte değil, sözleşmede
+  (`CARD_FIELD_MESSAGES`): kasa aynı cümleleri döner.
 
 ## Geçmiş Siparişlerim (T11.16)
 

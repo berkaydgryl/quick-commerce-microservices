@@ -1,0 +1,21 @@
+/* Kart ekle sayfasi (T11.17): ustte listeye donus, altinda form paneli. */
+.c-add-card-page {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.c-add-card-page__back {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+  justify-self: start;
+  min-height: var(--size-card-action);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-brand-primary);
+  text-decoration: none;
+}
+
+.c-add-card-page__back-icon {
+  display: grid;
+  width: var(--size-card-action-icon);
+}

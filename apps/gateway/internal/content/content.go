@@ -62,6 +62,8 @@ type Welcome struct {
 	Addresses Addresses `json:"addresses"`
 	// Orders, Gecmis Siparislerim (T11.16).
 	Orders Orders `json:"orders"`
+	// PaymentMethods, Odeme Yontemlerim (T11.17).
+	PaymentMethods PaymentMethods `json:"paymentMethods"`
 }
 
 // Header, ust bar: logonun iki parcasi ve iki dugme.
@@ -278,19 +280,6 @@ type Favorites struct {
 	UpdateFailedToast string `json:"updateFailedToast"`
 	ListFullToast     string `json:"listFullToast"`
 	ToastDismissLabel string `json:"toastDismissLabel"`
-}
-
-// AccountMenu, hesap menusunun metinleri (T11.16; kullanici istegi): profil
-// sayfasinin sol menusu ve ust barin Profil acilir menusu AYNI maddeleri ayni
-// sirayla gosterir; sira ve adresler web'de (accountMenuItems), burada
-// yalnizca etiketler. T11.17'de Odeme Yontemlerim eklenir.
-type AccountMenu struct {
-	// Label, sol menunun erisilebilir adi.
-	Label          string `json:"label"`
-	ProfileLabel   string `json:"profileLabel"`
-	AddressesLabel string `json:"addressesLabel"`
-	FavoritesLabel string `json:"favoritesLabel"`
-	OrdersLabel    string `json:"ordersLabel"`
 }
 
 // Profile, profil kartinin metinleri (T11.14; PR 2'de Hesabim paneli kalkti,

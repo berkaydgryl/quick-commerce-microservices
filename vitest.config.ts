@@ -10,6 +10,12 @@ const UNIT_TEST_TIMEOUT_MS = 10_000;
 const UNIT_HOOK_TIMEOUT_MS = 10_000;
 
 export default defineConfig({
+  // Web'in derleme bayraklari (apps/web/vite.config.ts `define`): birim testleri
+  // gelistirme paketini temsil eder. Production paketinde kapali olanlar paket
+  // taramasiyla denetlenir (scripts/check-web-bundle.mjs).
+  define: {
+    __CARD_VAULT__: 'true',
+  },
   test: {
     name: 'unit',
     environment: 'node',

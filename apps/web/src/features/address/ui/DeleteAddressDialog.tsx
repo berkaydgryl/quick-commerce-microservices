@@ -1,7 +1,8 @@
 import type { AddressesContent, SavedAddress } from '@getir/contracts';
 
+import { ConfirmPanel } from '../../../shared/ui/confirm-panel/ConfirmPanel';
+
 import { AddressDialog } from './AddressDialog';
-import styles from './DeleteAddressDialog.module.css';
 
 interface DeleteAddressDialogProps {
   readonly texts: AddressesContent;
@@ -19,7 +20,8 @@ interface DeleteAddressDialogProps {
 /**
  * Silme onayi (T11.15, T5): kucuk pencere. "<ad> adresini silmek istiyor
  * musun?", altinda siparislerin etkilenmedigi; "Vazgeç" ve "Sil". X ve Esc
- * vazgecer. Durumsuz: silmeyi sayfa yapar.
+ * vazgecer. Govde ortak (ConfirmPanel, T11.17'de kart silme de kullanir).
+ * Durumsuz: silmeyi sayfa yapar.
  */
 export function DeleteAddressDialog({
   texts,
@@ -35,37 +37,18 @@ export function DeleteAddressDialog({
       title={texts.confirmTitle}
       close={{ label: closeLabel, onAction: onCancel, disabled: pending }}
     >
-      <div className={styles['c-delete-address']}>
-        <p className={styles['c-delete-address__question']}>
-          <strong className={styles['c-delete-address__name']}>{address.title}</strong>{' '}
-          {texts.confirmQuestionSuffix}
-        </p>
-        <p className={styles['c-delete-address__hint']}>{texts.confirmHint}</p>
-        {error !== null && (
-          <p className={styles['c-delete-address__alert']} role="alert">
-            {error}
-          </p>
-        )}
-        <div className={styles['c-delete-address__actions']}>
-          <button
-            type="button"
-            className={styles['c-delete-address__cancel']}
-            disabled={pending}
-            onClick={onCancel}
-          >
-            {texts.cancelLabel}
-          </button>
-          <button
-            type="button"
-            className={styles['c-delete-address__confirm']}
-            disabled={pending}
-            aria-busy={pending}
-            onClick={onConfirm}
-          >
-            {pending ? texts.deletingLabel : texts.confirmLabel}
-          </button>
-        </div>
-      </div>
+      <ConfirmPanel
+        subject={address.title}
+        questionSuffix={texts.confirmQuestionSuffix}
+        hint={texts.confirmHint}
+        error={error}
+        pending={pending}
+        confirmLabel={texts.confirmLabel}
+        pendingLabel={texts.deletingLabel}
+        cancelLabel={texts.cancelLabel}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />
     </AddressDialog>
   );
 }

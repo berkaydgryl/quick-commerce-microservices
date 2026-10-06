@@ -63,6 +63,16 @@ describe('AccountLayoutView', () => {
     expect(main).not.toContain('<h1');
   });
 
+  it('alt sayfa (nested): alt sekme duzeni, ama "Hesabım" geri baglantisi yok (T11.17)', () => {
+    const markup = layout('nested');
+    const { side, main } = parts(markup);
+
+    expect(markup).toContain('c-account-layout--section');
+    expect(side).toContain('KART');
+    expect(main).not.toContain('href="/hesabim"');
+    expect(main).toContain('ICERIK');
+  });
+
   it('kap genisligi tek token: duzen iki sutunu yalnizca hesap tokenlariyla kurar', () => {
     const css = readFileSync(
       fileURLToPath(new URL('../../src/pages/account/AccountLayout.module.css', import.meta.url)),

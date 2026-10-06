@@ -101,8 +101,10 @@ const validJSON = `{
   },
   "accountMenu": {
     "label": "Hesap menüsü", "profileLabel": "Profilim", "addressesLabel": "Adreslerim",
-    "favoritesLabel": "Favori İşletmeler", "ordersLabel": "Geçmiş Siparişlerim"
+    "favoritesLabel": "Favori İşletmeler", "ordersLabel": "Geçmiş Siparişlerim",
+    "paymentMethodsLabel": "Ödeme Yöntemlerim"
   },
+  "paymentMethods": {"title": "Ödeme Yöntemlerim", "loadingLabel": "Kartların yükleniyor…", "emptyNotice": "Kayıtlı kartın yok.", "addLabel": "Kart ekle", "expiredLabel": "Süresi doldu", "deleteSuffix": "kartını sil", "confirmTitle": "Kartı sil", "confirmQuestionSuffix": "kartını silmek istiyor musun?", "confirmHint": "Geçmiş siparişlerin bundan etkilenmez.", "confirmLabel": "Sil", "deletingLabel": "Siliniyor…", "cancelLabel": "Vazgeç", "deletedToastSuffix": "kartı silindi.", "addTitle": "Kart ekle", "brandsLabel": "Desteklenen kartlar", "numberLabel": "Kart numarası", "numberValidLabel": "Geçerli kart numarası", "holderNameLabel": "Kart üzerindeki isim", "expiryLabel": "SKT (AA/YY)", "expiryFormatNotice": "Son kullanma tarihini AA/YY olarak gir", "cvvLabel": "CVV", "nicknameLabel": "Kartına bir ad ver (isteğe bağlı)", "saveLabel": "Kartı kaydet", "savingLabel": "Kaydediliyor…", "retryWaitLabel": "Yeniden deneyebilmen için", "addedToastPrefix": "Kart eklendi:", "privacyNote": "Kart numaranın tamamını ve CVV'ni saklamıyoruz; kayıtlı kartlarında yalnızca ilk 4 ve son 4 hane görünür.", "holderCaption": "KART SAHİBİ", "expiryCaption": "SKT", "holderPlaceholder": "AD SOYAD", "expiryPlaceholder": "AA/YY", "nicknamePlaceholder": "Kartım", "cvvCaption": "CVV", "cvvNote": "CVV yalnızca doğrulama için kullanılır, saklanmaz.", "brandLabels": {"VISA": "Visa", "MASTERCARD": "Mastercard", "AMEX": "Amex", "TROY": "Troy"}, "brandMarks": {"VISA": "VISA", "MASTERCARD": "MC", "AMEX": "AMEX", "TROY": "troy"}},
   "profile": {
     "phoneLabel": "Telefon", "emailLabel": "E-posta", "addEmailLabel": "E-posta ekle",
     "editProfileLabel": "Profili düzenle", "verifiedLabel": "Doğrulandı", "verifyPhoneLabel": "Doğrula", "loadingLabel": "Yükleniyor",
