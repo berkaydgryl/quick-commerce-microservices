@@ -1,57 +1,33 @@
 /*
- * Kart ekle (T11.17, tasarim B): beyaz panelde baslik ve marka haplari, gri
- * sahnede kart, altinda tek sutun form (son kullanma ve CVV yan yana).
- * Paylasilan kap kurali: sekme hesap sayfalarinin icerik kabina cizer.
+ * Kart Ekle formu (T11.17; referans getircarsi): beyaz kutuda tek sutun.
+ * Kartin sahnesi dar ekranda Guvenlik kutusunun altinda (gri zemin); genis
+ * ekranda (--bp-xl) kutunun SAGINDA, sayfa kabinin kalan boslugunda
+ * (--size-card-aside: kabi asmaz), kutu ortak icerik kabinda kalir ve kart
+ * yapiskan kalir (ust barin altinda). Daha darda (1280, 1024) yan yana
+ * sigmaz: telefondaki gibi alanlarin ustunde.
  */
 .c-add-card {
+  position: relative;
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-4);
   padding: var(--space-5);
   background: var(--bg-surface);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-surface);
 }
 
-.c-add-card__head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  align-items: center;
-  justify-content: space-between;
-}
-
-.c-add-card__title {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-extrabold);
-}
-
-/* Kartin sahnesi: sayfa zemininde, kart ortada; egim icin derinlik payi. */
 .c-add-card__stage {
   display: grid;
   place-items: center;
-  padding: var(--space-6) var(--space-4);
+  padding: var(--space-5) var(--space-4);
   background: var(--bg-page);
   border-radius: var(--radius-lg);
 }
 
-.c-add-card__form {
+.c-add-card__card {
   display: grid;
-  gap: var(--space-4);
-}
-
-.c-add-card__alert {
-  display: grid;
-  gap: var(--space-1);
-  padding: var(--space-3);
-  font-size: var(--font-size-sm);
-  color: var(--text-danger);
-  border: var(--border-width-thin) solid var(--border-danger);
-  border-radius: var(--radius-md);
-}
-
-.c-add-card__wait {
-  font-weight: var(--font-weight-bold);
-  font-variant-numeric: tabular-nums;
+  justify-items: center;
+  inline-size: 100%;
 }
 
 .c-add-card__number {
@@ -65,11 +41,23 @@
   color: var(--text-success);
 }
 
-.c-add-card__pair {
+/*
+ * Son kullanma (Ay, Yil) ve yaninda CVV. Baslik iki sutunun USTUNDE kendi
+ * satirinda: telefonda iki satira kirilsa da secimler ve CVV ayni hizadan
+ * baslar (QA K3; sabit yukseklik yok). Sutunlar ustten hizali: hata satiri
+ * (secimlerin ya da CVV'nin altinda) cikinca obur sutun kaymaz (QA D8).
+ */
+.c-add-card__expiry-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-3);
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: var(--space-2) var(--space-3);
   align-items: start;
+}
+
+.c-add-card__expiry-title {
+  grid-column: 1 / -1;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
 }
 
 .c-add-card__submit {
@@ -94,10 +82,22 @@
   background: var(--color-brand-primary-strong);
 }
 
-.c-add-card__note {
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-base);
-  color: var(--text-muted);
+@media (--bp-xl) {
+  .c-add-card__stage {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: calc(100% + var(--space-5));
+    display: block;
+    inline-size: var(--size-card-aside);
+    padding: 0;
+    background: none;
+  }
+
+  /* Ust barin (arama kutusu + iki bosluk) altinda yapiskan. */
+  .c-add-card__card {
+    position: sticky;
+    inset-block-start: calc(var(--size-header-search) + var(--space-3) * 2 + var(--space-5));
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

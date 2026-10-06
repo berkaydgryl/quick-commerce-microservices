@@ -1,8 +1,10 @@
 /**
  * Kart kaydetme (T11.17, M7): numara ve CVV HICBIR onbellege girmez (sorgu
  * ve mutasyon onbellegi); listeye yalnizca maskeli cevap yazilir. Deneme
- * anahtari rastgele: sonucu belirsiz deneme (ag, 503) ayni anahtarla
- * tekrarlanir, cevap gelince yenisi.
+ * anahtari rastgele: sonucu belirsiz deneme (ag, 503; ilk istek suruyor 409
+ * REQUEST_IN_PROGRESS, QA C1) ayni anahtarla tekrarlanir, cevap gelince
+ * yenisi; belirsiz denemeden sonra ya da istek surerken form degisirse
+ * yenisi (QA C3, D2).
  */
 
 import { QueryClient } from '@tanstack/react-query';
@@ -47,7 +49,7 @@ function setup(responses: (() => Promise<Response>)[]) {
     fetchMock.mock.calls
       .filter(([, init]) => init?.method === 'POST')
       .map(([, init]) => new Headers(init?.headers).get('Idempotency-Key'));
-  return { queryClient, save, keys };
+  return { queryClient, save, keys, attempts };
 }
 
 /** Onbelleklerin tamami metin olarak: sorgular ve mutasyonlar. */
@@ -103,9 +105,61 @@ describe('kart kaydetme (T11.17, M7)', () => {
     expect(keys()).toEqual(['anahtar-1', 'anahtar-2']);
   });
 
+  it('QA C1: ilk istek suruyor (409 REQUEST_IN_PROGRESS) -> tekrar AYNI anahtarla', async () => {
+    const { save, keys } = setup([
+      () => Promise.resolve(failure(ERROR_CODES.REQUEST_IN_PROGRESS, 409)),
+      () => Promise.resolve(success(VISA_CARD)),
+    ]);
+
+    await expect(save()).rejects.toMatchObject({ code: ERROR_CODES.REQUEST_IN_PROGRESS });
+    await save();
+
+    expect(keys()).toEqual(['anahtar-1', 'anahtar-1']);
+  });
+
+  it('QA C3: belirsiz denemeden sonra form degisti -> YENI anahtar', async () => {
+    const { save, keys, attempts } = setup([
+      () => Promise.reject(new TypeError('Failed to fetch')),
+      () => Promise.resolve(success(VISA_CARD)),
+    ]);
+
+    await expect(save()).rejects.toMatchObject({ code: ERROR_CODES.SERVICE_UNAVAILABLE });
+    attempts.changed();
+    await save();
+
+    expect(keys()).toEqual(['anahtar-1', 'anahtar-2']);
+  });
+
+  it('form degisikligi korunan anahtar yokken anahtari degistirmez', () => {
+    let next = 0;
+    const attempts = createAttemptKeys(() => `anahtar-${(next += 1)}`);
+
+    attempts.changed();
+    attempts.changed();
+
+    expect(attempts.start()).toBe('anahtar-1');
+  });
+
+  it('QA D2: istek surerken alan degisti, sonuc belirsiz -> sonraki deneme YENI anahtar', async () => {
+    let edit = () => undefined as void;
+    const { save, keys, attempts } = setup([
+      () => {
+        edit();
+        return Promise.reject(new TypeError('Failed to fetch'));
+      },
+      () => Promise.resolve(success(VISA_CARD)),
+    ]);
+    edit = () => attempts.changed();
+
+    await expect(save()).rejects.toMatchObject({ code: ERROR_CODES.SERVICE_UNAVAILABLE });
+    await save();
+
+    expect(keys()).toEqual(['anahtar-1', 'anahtar-2']);
+  });
+
   it('anahtar govdeden turetilmez: numaradan ve CVV den bagimsiz', () => {
     const attempts = createAttemptKeys();
-    const key = attempts.current();
+    const key = attempts.start();
 
     expect(key).not.toContain(VISA_NUMBER.slice(-4));
     expect(key).toMatch(/^[0-9A-Za-z_-]{8,128}$/);

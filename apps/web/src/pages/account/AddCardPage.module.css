@@ -1,4 +1,4 @@
-/* Kart ekle sayfasi (T11.17): ustte listeye donus, altinda form paneli. */
+/* Kart Ekle sayfasi (T11.17, referans): ustte listeye donus, baslik, altinda form kutusu. */
 .c-add-card-page {
   display: grid;
   gap: var(--space-4);
@@ -18,4 +18,8 @@
 .c-add-card-page__back-icon {
   display: grid;
   width: var(--size-card-action-icon);
+}
+
+.c-add-card-page__title {
+  font-size: var(--font-size-lg);
 }

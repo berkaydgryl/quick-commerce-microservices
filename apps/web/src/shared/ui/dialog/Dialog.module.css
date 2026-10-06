@@ -1,10 +1,10 @@
 /*
- * Adres pencereleri (T11.8 ekleme, T11.10 Adreslerim): giris penceresiyle ayni kabuk (beyaz, kavisli,
+ * Ortak pencere kabugu (T11.8 adres ekleme, T11.10 Adreslerim; T11.17'de shared'a tasindi): giris penceresiyle ayni kabuk (beyaz, kavisli,
  * ortada; mobilde ekran genisliginde, uzun icerikte kendi icinde kayar) ama
  * harita icin daha genis. margin: auto tarayicinin ortalamasidir; global.css'teki
  * sifirlama (* { margin: 0 }) onu ezerdi.
  */
-.c-address-dialog {
+.c-dialog {
   /* Pencere ust barin icinde cizilir ve barin beyaz halka rengini kalitirdi;
      beyaz zeminde halka gorunmezdi (QA B1). Halka kalir, rengi mor olur. */
   --focus-ring-color: var(--color-brand-primary);
@@ -12,7 +12,7 @@
   /* Pencere DOM'da arama kutusunun icinde: kutunun "icine cizen" mesafesi kalitilmasin. */
   --focus-ring-offset: var(--focus-ring-offset-base);
 
-  width: min(100% - var(--space-gutter) * 2, var(--container-max-address-dialog));
+  width: min(100% - var(--space-gutter) * 2, var(--container-max-modal));
   max-width: none;
   margin: auto;
   max-height: calc(100dvh - var(--space-gutter) * 2);
@@ -25,21 +25,21 @@
   box-shadow: var(--shadow-raised);
 }
 
-.c-address-dialog::backdrop {
+.c-dialog::backdrop {
   background: var(--bg-overlay);
 }
 
-.c-address-dialog[open] {
+.c-dialog[open] {
   animation: address-dialog-in var(--duration-fast) var(--easing-standard);
 }
 
 /* Pencere acikken arkadaki sayfa kaymaz. */
-html:has(.c-address-dialog[open]) {
+html:has(.c-dialog[open]) {
   overflow: hidden;
 }
 
 /* Baslik ortada; dugme bir yanda, obur yanda ayni genislikte bos sutun. */
-.c-address-dialog__header {
+.c-dialog__header {
   display: grid;
   grid-template-columns: var(--size-dialog-close) 1fr var(--size-dialog-close);
   gap: var(--space-2);
@@ -47,7 +47,7 @@ html:has(.c-address-dialog[open]) {
   padding: var(--space-5) var(--space-5) 0;
 }
 
-.c-address-dialog__title {
+.c-dialog__title {
   grid-row: 1;
   grid-column: 2;
   font-size: var(--font-size-lg);
@@ -56,7 +56,7 @@ html:has(.c-address-dialog[open]) {
   text-align: center;
 }
 
-.c-address-dialog__action {
+.c-dialog__action {
   display: grid;
   grid-row: 1;
   place-items: center;
@@ -71,32 +71,32 @@ html:has(.c-address-dialog[open]) {
   transition: background var(--duration-fast) var(--easing-standard);
 }
 
-.c-address-dialog__action:disabled {
+.c-dialog__action:disabled {
   cursor: progress;
   opacity: var(--opacity-disabled);
 }
 
-.c-address-dialog__action:hover:not(:disabled) {
+.c-dialog__action:hover:not(:disabled) {
   background: var(--border-subtle);
 }
 
-.c-address-dialog__action--close {
+.c-dialog__action--close {
   grid-column: 3;
 }
 
-.c-address-dialog__action--back {
+.c-dialog__action--back {
   grid-column: 1;
   color: var(--color-brand-primary);
 }
 
-.c-address-dialog__body {
+.c-dialog__body {
   display: grid;
   gap: var(--space-4);
   padding: var(--space-5);
 }
 
 /* Alttaki gri bant: baska bir isleme gecis ("Adres Ekle"). */
-.c-address-dialog__footer {
+.c-dialog__footer {
   padding: var(--space-4) var(--space-5);
   font-size: var(--font-size-sm);
   color: var(--text-default);

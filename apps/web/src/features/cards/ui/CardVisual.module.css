@@ -17,11 +17,9 @@
   inline-size: 100%;
   block-size: 100%;
   transform-style: preserve-3d;
-}
-
-.c-payment-card--large .c-payment-card__tilt {
-  transform: perspective(var(--size-card-tilt-depth)) rotateX(calc(var(--tilt-y, 0) * -10deg))
-    rotateY(calc(var(--tilt-x, 0) * 14deg));
+  transform: perspective(var(--size-card-tilt-depth))
+    rotateX(calc(var(--tilt-y, 0) * var(--card-tilt-pitch)))
+    rotateY(calc(var(--tilt-x, 0) * var(--card-tilt-turn)));
   transition: transform var(--duration-card-tilt) ease-out;
 }
 
@@ -41,13 +39,9 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
-  border-radius: 5.3cqi;
+  border-radius: var(--card-radius);
   box-shadow: var(--shadow-payment-card);
   backface-visibility: hidden;
-}
-
-.c-payment-card--small .c-payment-card__face {
-  box-shadow: var(--shadow-payment-card-small);
 }
 
 .c-payment-card__face--front {
@@ -63,7 +57,7 @@
 /* Hareket azaltma: donme yerine yuzler arasinda yumusak gecis; egim yok. */
 @media (prefers-reduced-motion: reduce) {
   .c-payment-card__flip,
-  .c-payment-card--large .c-payment-card__tilt,
+  .c-payment-card__tilt,
   .c-payment-card.is-flipped .c-payment-card__flip {
     transform: none;
     transition: none;

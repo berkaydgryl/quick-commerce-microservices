@@ -1,0 +1,33 @@
+/* Kabul edilen kartlar (T11.17): formun altinda sagda logolar; yazilan markadan baskasi soluk. */
+.c-accepted-brands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.c-accepted-brands__item {
+  display: flex;
+  transition: opacity var(--duration-fast) var(--easing-standard);
+}
+
+.c-accepted-brands__item.is-dimmed {
+  opacity: var(--opacity-disabled);
+}
+
+/* Markanin adi ekran okuyucuya; gorunen logo. */
+.c-accepted-brands__name {
+  position: absolute;
+  width: var(--size-visually-hidden);
+  height: var(--size-visually-hidden);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-accepted-brands__item {
+    transition: none;
+  }
+}

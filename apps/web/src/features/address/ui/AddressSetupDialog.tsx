@@ -7,7 +7,7 @@ import { resolvedLine } from '../services/line-notice';
 import type { ResolvedLine } from '../services/line-notice';
 
 import { AddressDetailsForm } from './AddressDetailsForm';
-import { AddressDialog } from './AddressDialog';
+import { Dialog } from '../../../shared/ui/dialog/Dialog';
 import { AddressMapStep } from './AddressMapStep';
 import styles from './AddressSetupDialog.module.css';
 
@@ -104,7 +104,7 @@ export function AddressSetupDialog({
   const onDetails = step.name === 'details';
 
   return (
-    <AddressDialog
+    <Dialog
       title={editing?.title ?? content.title}
       back={
         onDetails
@@ -141,6 +141,6 @@ export function AddressSetupDialog({
           editing={editing}
         />
       )}
-    </AddressDialog>
+    </Dialog>
   );
 }

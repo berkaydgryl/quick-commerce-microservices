@@ -3,8 +3,9 @@ import { z } from 'zod';
 import { contentTextSchema } from './content-text.js';
 
 /**
- * Kart markalarinin gorunen adlari (T11.17): baslik hapi, liste satiri ve
- * bildirim ("Kart eklendi: Visa •••• 4242"). Anahtarlar sozlesmedeki marka.
+ * Kart markalarinin gorunen adlari (T11.17): liste satiri, bildirim ("Kart
+ * eklendi: Visa •••• 4242") ve kartin ustundeki isaret. Anahtarlar
+ * sozlesmedeki marka.
  */
 export const cardBrandLabelsSchema = z.object({
   VISA: contentTextSchema,
@@ -14,20 +15,24 @@ export const cardBrandLabelsSchema = z.object({
 });
 
 /**
- * Odeme Yontemlerim (T11.17; /hesabim/odeme-yontemlerim): kayitli kartlar
- * (kucuk kart gorselleri, cop kutusu), "Kart ekle" sayfasi (tasarim B
- * "Markanin rengi": kart numarasi yazildikca marka rengine gecen kart, CVV'de
- * donme) ve silme onayi. Kural cumleleri (numara, son kullanma, CVV, ad, kart
- * adi) icerikte DEGIL, sozlesmede (CARD_FIELD_MESSAGES). Bazi metinler kartin
- * adinin ARKASINA eklenir: "Visa •••• 4242" + " " + deleteSuffix.
+ * Odeme Yontemlerim (T11.17; /hesabim/odeme-yontemlerim; duzen kullanicinin
+ * referansi getircarsi): kayitli kartlar satir satir (marka logosu, ad,
+ * maskeli numara, cop kutusu, sonda "Kredi/Banka Kartı"), "Kart Ekle"
+ * sayfasi (Guvenlik kutusu, alanlar, Ay/Yil, zorunlu kosul onayi, Devam;
+ * yaninda tasarim B'nin kart animasyonu) ve silme onayi. Kural cumleleri
+ * (numara, son kullanma, CVV, ad, kart adi) icerikte DEGIL, sozlesmede
+ * (CARD_FIELD_MESSAGES). `*Suffix` metinleri kartin adinin arkasina eklenir.
  */
 export const paymentMethodsContentSchema = z.object({
   title: contentTextSchema,
   loadingLabel: contentTextSchema,
-  emptyNotice: contentTextSchema,
+  /** Listenin son satiri: kart ekle baglantisi. */
   addLabel: contentTextSchema,
-  /** Suresi gecen kartin rozeti. */
+  /** Suresi gecen kartin etiketi. */
   expiredLabel: contentTextSchema,
+  /** Ekran okuyucunun kart adi: "Visa, son dört hane 4242" (maske okunmaz; QA D6). */
+  lastFourLabel: contentTextSchema,
+  /** Cop kutusunun adi, kartin okunan adinin arkasina: "Visa, son dört hane 4242 kartını sil". */
   deleteSuffix: contentTextSchema,
   /** Silme onayi. */
   confirmTitle: contentTextSchema,
@@ -37,28 +42,41 @@ export const paymentMethodsContentSchema = z.object({
   deletingLabel: contentTextSchema,
   cancelLabel: contentTextSchema,
   deletedToastSuffix: contentTextSchema,
-  /** Kart ekle sayfasi: alanlar, olumlu ipucu, bicim uyarisi, kaydet. */
+  /** Pencerelerin X dugmesi (silme onayi, kosullar); icerik gelmese de yedekten (QA C5). */
+  closeLabel: contentTextSchema,
+  /** Kart ekle sayfasi (referans getircarsi "Kart Ekle"). */
+  backToListLabel: contentTextSchema,
   addTitle: contentTextSchema,
-  brandsLabel: contentTextSchema,
+  /** Guvenlik kutusu: kendi metnimiz (Masterpass yok). */
+  securityTitle: contentTextSchema,
+  securityText: contentTextSchema,
+  nicknameLabel: contentTextSchema,
   numberLabel: contentTextSchema,
   numberValidLabel: contentTextSchema,
   holderNameLabel: contentTextSchema,
-  expiryLabel: contentTextSchema,
-  /** "AA/YY" eksik yazildiginda (kural cumlesi degil, bicim uyarisi). */
-  expiryFormatNotice: contentTextSchema,
+  /** Son kullanma: Ay ve Yil secimleri; yillar sozlesmeden (cardExpiryYears). */
+  expiryLegend: contentTextSchema,
+  monthLabel: contentTextSchema,
+  yearLabel: contentTextSchema,
+  expiryRequiredNotice: contentTextSchema,
   cvvLabel: contentTextSchema,
-  nicknameLabel: contentTextSchema,
+  /** Zorunlu onay: baglanti + arkasindaki metin; baglanti kosullar penceresini acar. */
+  termsLinkLabel: contentTextSchema,
+  termsSuffix: contentTextSchema,
+  termsRequiredNotice: contentTextSchema,
+  termsTitle: contentTextSchema,
+  termsParagraphs: z.array(contentTextSchema).min(1),
   saveLabel: contentTextSchema,
   savingLabel: contentTextSchema,
-  /**
-   * Cok fazla basarisiz dogrulama (429): geri sayimin basi, "Yeniden
-   * deneyebilmen için" + " 4:59"; sure bitene kadar kaydet pasif.
-   */
+  /** Cok fazla basarisiz dogrulama (429): geri sayimin basi, "Yeniden deneyebilmen için 4:59". */
   retryWaitLabel: contentTextSchema,
+  /** Ayni kart (CONFLICT, details.cardId; QA C4). */
+  duplicateCardNotice: contentTextSchema,
   /** Basarida bildirimin basi: "Kart eklendi:" + " Visa •••• 4242". */
   addedToastPrefix: contentTextSchema,
-  privacyNote: contentTextSchema,
-  /** Kartin yuzu: basliklar ve bos alanlarin yer tutuculari, arka yuz notu. */
+  /** Formun altindaki marka logolarinin erisilebilir adi. */
+  acceptedBrandsLabel: contentTextSchema,
+  /** Kartin yuzu (tasarim B): basliklar, bos alan yer tutuculari, arka yuz notu. */
   holderCaption: contentTextSchema,
   expiryCaption: contentTextSchema,
   holderPlaceholder: contentTextSchema,
@@ -66,8 +84,8 @@ export const paymentMethodsContentSchema = z.object({
   nicknamePlaceholder: contentTextSchema,
   cvvCaption: contentTextSchema,
   cvvNote: contentTextSchema,
+  /** Marka adlari ve soluk kisa isaret. */
   brandLabels: cardBrandLabelsSchema,
-  /** Kartin ustundeki soluk buyuk marka isareti (kisa: "VISA", "MC"). */
   brandMarks: cardBrandLabelsSchema,
 });
 

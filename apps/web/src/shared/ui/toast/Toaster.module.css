@@ -36,6 +36,16 @@
   font-weight: var(--font-weight-semibold);
 }
 
+/* Ekran okuyucunun okudugu metin (gorunen metin aria-hidden). */
+.c-toaster__spoken {
+  position: absolute;
+  width: var(--size-visually-hidden);
+  height: var(--size-visually-hidden);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .c-toaster__dismiss {
   display: grid;
   flex-shrink: 0;

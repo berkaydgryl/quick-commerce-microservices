@@ -34,7 +34,7 @@ describe('ust bar icindeki beyaz yuzeylerde odak halkasi', () => {
   });
 
   it('adres pencereleri: mor halka, taban mesafe (kutunun "icine cizen" ayari kalitilmaz)', () => {
-    const dialog = block(css('features/address/ui/AddressDialog.module.css'), '.c-address-dialog');
+    const dialog = block(css('shared/ui/dialog/Dialog.module.css'), '.c-dialog');
     expect(dialog).toContain('--focus-ring-color: var(--color-brand-primary)');
     expect(dialog).toContain('--focus-ring-offset: var(--focus-ring-offset-base)');
   });

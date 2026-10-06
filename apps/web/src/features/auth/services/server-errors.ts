@@ -21,6 +21,21 @@ const fieldReasonsSchema = z.record(z.string(), z.string());
 /** RATE_LIMITED ayrintisi: tekrar denemeye kalan saniye (T8.2; Retry-After ile ayni). */
 const retryAfterSchema = z.object({ retryAfterSeconds: z.number().int().positive() });
 
+/**
+ * VALIDATION_FAILED ayrintisi alan -> sebep olarak; okunamazsa null. Ayrintiyi
+ * kendi alanlarina eslemesi gereken formlar (kart formu, T11.17) da bunu kullanir.
+ */
+export function fieldReasons(details: unknown): Readonly<Record<string, string>> | null {
+  const reasons = fieldReasonsSchema.safeParse(details);
+  return reasons.success ? reasons.data : null;
+}
+
+/** RATE_LIMITED ayrintisindaki kalan saniye; yoksa null (geri sayan formlar, T11.17). */
+export function retryAfterSeconds(details: unknown): number | null {
+  const retry = retryAfterSchema.safeParse(details);
+  return retry.success ? retry.data.retryAfterSeconds : null;
+}
+
 export function formFeedback<F extends string>(
   error: unknown,
   fields: readonly F[],
@@ -67,13 +82,13 @@ function validationFeedback<F extends string>(
   details: unknown,
   fields: readonly F[],
 ): FormFeedback<F> {
-  const reasons = fieldReasonsSchema.safeParse(details);
-  if (!reasons.success) {
+  const reasons = fieldReasons(details);
+  if (reasons === null) {
     return formMessage(errorMessage(ERROR_CODES.VALIDATION_FAILED));
   }
   const fieldMessages: Partial<Record<F, string>> = {};
   let unmatched = false;
-  for (const [name, reason] of Object.entries(reasons.data)) {
+  for (const [name, reason] of Object.entries(reasons)) {
     const field = fields.find((candidate) => candidate === name);
     if (field === undefined) {
       unmatched = true;
@@ -91,6 +106,6 @@ function validationFeedback<F extends string>(
 /** "Cok fazla deneme yaptin. Kisa bir sure sonra tekrar dene. (42 sn)" */
 function rateLimitedMessage(details: unknown): string {
   const base = errorMessage(ERROR_CODES.RATE_LIMITED);
-  const retry = retryAfterSchema.safeParse(details);
-  return retry.success ? `${base} (${retry.data.retryAfterSeconds} sn)` : base;
+  const seconds = retryAfterSeconds(details);
+  return seconds === null ? base : `${base} (${seconds} sn)`;
 }

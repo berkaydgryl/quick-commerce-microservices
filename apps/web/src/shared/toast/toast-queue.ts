@@ -13,6 +13,8 @@ export const TOAST_DURATION_MS = 5000;
 export interface Toast {
   readonly id: number;
   readonly message: string;
+  /** Ekran okuyucunun okudugu metin (or. maske yerine "son dört hane"); yoksa message okunur. */
+  readonly spoken?: string;
 }
 
 /** Yeni bildirimi sona ekler; sinir asilirsa en eskiler duser. */

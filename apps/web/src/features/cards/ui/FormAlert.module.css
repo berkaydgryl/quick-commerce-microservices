@@ -1,0 +1,15 @@
+/* Kart formunun ustundeki uyari (T11.17): kirmizi cerceve; geri sayim kalin ve sabit genislikli rakamlarla. */
+.c-form-alert {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-danger);
+  border: var(--border-width-thin) solid var(--border-danger);
+  border-radius: var(--radius-md);
+}
+
+.c-form-alert__wait {
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+}

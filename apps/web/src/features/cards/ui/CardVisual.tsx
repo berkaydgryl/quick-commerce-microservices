@@ -33,8 +33,6 @@ export interface CardVisualProps {
   /** Arka yuzdeki CVV: yalnizca "•". */
   readonly cvvMask: string;
   readonly texts: CardFaceTexts;
-  /** large: kart ekle sayfasi (egim, isik, donme); small: kayitli kart listesi. */
-  readonly size: 'large' | 'small';
   /** CVV alaninda: kart arka yuzune doner. */
   readonly flipped?: boolean;
   readonly focus?: CardFocus;
@@ -47,13 +45,16 @@ const COLOR: Readonly<Record<CardBrand, CardColor>> = {
   TROY: 'troy',
 };
 
+/** Hareket azaltma sorgusu (egim ve parlama imleci izlemez, QA C8). */
+const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
+
 const join = (...names: readonly (string | false | undefined)[]) =>
   names.filter((name): name is string => typeof name === 'string' && name !== '').join(' ');
 
 /**
- * Odeme karti gorseli (T11.17, tasarim B "Markanin rengi"; M3): kabuk. Kartin
- * boyu ve orani, imlecle egim (buyuk kartta), CVV'de arka yuze donme ve iki
- * yuz; renk katmanlari CardLayers, yuzler CardFront ve CardBack. Hareket
+ * Odeme karti gorseli (T11.17, tasarim B "Markanin rengi"; M3; Kart Ekle
+ * sayfasinda): kabuk. Kartin boyu ve orani, imlecle egim, CVV'de arka yuze
+ * donme ve iki yuz; renk katmanlari CardLayers, yuzler CardFront ve CardBack. Hareket
  * azaltma acikken donme yerine yumusak gecis, egim yok.
  *
  * Suslemedir (aria-hidden): bilgi formda ve listede metin olarak var. Tam
@@ -67,19 +68,26 @@ export function CardVisual({
   nickname,
   cvvMask,
   texts,
-  size,
   flipped = false,
   focus = null,
 }: CardVisualProps) {
   const tilt = useRef<HTMLDivElement>(null);
-  const large = size === 'large';
+  /** Sorgu bir kez kurulur, durumu canli okunur (her imlec hareketinde yeni sorgu yok; QA D8). */
+  const reducedMotion = useRef<MediaQueryList | null>(null);
+  const prefersReducedMotion = () => {
+    if (typeof window.matchMedia !== 'function') {
+      return false;
+    }
+    reducedMotion.current ??= window.matchMedia(REDUCED_MOTION);
+    return reducedMotion.current.matches;
+  };
   const color: CardColor = brand === null ? 'default' : COLOR[brand];
   const brandLabel = brand === null ? '' : texts.brandLabels[brand];
   const brandMark = brand === null ? '' : texts.brandMarks[brand];
 
   const lean = (event: PointerEvent<HTMLDivElement>) => {
     const element = tilt.current;
-    if (element === null) {
+    if (element === null || prefersReducedMotion()) {
       return;
     }
     const box = element.getBoundingClientRect();
@@ -93,18 +101,14 @@ export function CardVisual({
 
   return (
     <div
-      className={join(
-        styles['c-payment-card'],
-        large ? styles['c-payment-card--large'] : styles['c-payment-card--small'],
-        flipped && styles['is-flipped'],
-      )}
+      className={join(styles['c-payment-card'], flipped && styles['is-flipped'])}
       aria-hidden="true"
     >
       <div
         ref={tilt}
         className={styles['c-payment-card__tilt']}
-        onPointerMove={large ? lean : undefined}
-        onPointerLeave={large ? rest : undefined}
+        onPointerMove={lean}
+        onPointerLeave={rest}
       >
         <div className={styles['c-payment-card__flip']}>
           <div
@@ -121,23 +125,20 @@ export function CardVisual({
               nickname={nickname}
               holderCaption={texts.holderCaption}
               expiryCaption={texts.expiryCaption}
-              large={large}
               focus={focus}
             />
           </div>
-          {large && (
-            <div
-              className={join(styles['c-payment-card__face'], styles['c-payment-card__face--back'])}
-            >
-              <CardLayers active={color} />
-              <CardBack
-                cvvMask={cvvMask}
-                brandMark={brandMark}
-                cvvCaption={texts.cvvCaption}
-                cvvNote={texts.cvvNote}
-              />
-            </div>
-          )}
+          <div
+            className={join(styles['c-payment-card__face'], styles['c-payment-card__face--back'])}
+          >
+            <CardLayers active={color} />
+            <CardBack
+              cvvMask={cvvMask}
+              brandMark={brandMark}
+              cvvCaption={texts.cvvCaption}
+              cvvNote={texts.cvvNote}
+            />
+          </div>
         </div>
       </div>
     </div>

@@ -10,7 +10,8 @@ import type { Toast } from './toast-queue';
  */
 interface ToastState {
   readonly toasts: readonly Toast[];
-  readonly show: (message: string) => void;
+  /** Bildirim; `spoken` verilirse ekran okuyucu onu okur, gorunen metin gizlenir (T11.17 K4). */
+  readonly show: (message: string, spoken?: string) => void;
   readonly dismiss: (id: number) => void;
 }
 
@@ -18,9 +19,10 @@ export const useToastStore = create<ToastState>()((set) => {
   let nextId = 0;
   return {
     toasts: [],
-    show: (message) => {
+    show: (message, spoken) => {
       nextId += 1;
-      const toast = { id: nextId, message };
+      const toast =
+        spoken === undefined ? { id: nextId, message } : { id: nextId, message, spoken };
       set((state) => ({ toasts: pushToast(state.toasts, toast) }));
     },
     dismiss: (id) => set((state) => ({ toasts: removeToast(state.toasts, id) })),

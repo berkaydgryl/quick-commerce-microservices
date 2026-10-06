@@ -18,8 +18,6 @@ interface CardFrontProps {
   readonly nickname: string;
   readonly holderCaption: string;
   readonly expiryCaption: string;
-  /** Buyuk kart: isik seridi, hane dusmesi, odak cercevesi ve parlama. */
-  readonly large: boolean;
   readonly focus: CardFocus;
 }
 
@@ -42,8 +40,8 @@ const join = (...names: readonly (string | false | undefined)[]) =>
 /**
  * Kartin on yuzu (T11.17, tasarim B): kart adi, rozet (D3: kendimiz ciziyoruz),
  * cip, temassiz isareti, numara (yalnizca ilk 4 ve son 4 hane, M7), kart
- * sahibi ve son kullanma, soluk kisa isaret. Buyuk kartta ayrica isik seridi,
- * yazilan hanenin dusmesi, odak cercevesi ve parlama.
+ * sahibi ve son kullanma, soluk kisa isaret, isik seridi, yazilan hanenin
+ * dusmesi, odak cercevesi ve parlama.
  */
 export function CardFront({
   brand,
@@ -55,12 +53,11 @@ export function CardFront({
   nickname,
   holderCaption,
   expiryCaption,
-  large,
   focus,
 }: CardFrontProps) {
   return (
     <>
-      {large && <span className={styles['c-payment-card__streak']} />}
+      <span className={styles['c-payment-card__streak']} />
       <span className={styles['c-payment-card__mark']}>{brandMark}</span>
       <span className={styles['c-payment-card__nickname']}>{nickname}</span>
       {brand !== null && (
@@ -91,7 +88,7 @@ export function CardFront({
                 className={join(
                   styles['c-payment-card__char'],
                   char.kind === 'empty' && styles['c-payment-card__char--empty'],
-                  large && char.kind !== 'empty' && styles['c-payment-card__char--animated'],
+                  char.kind !== 'empty' && styles['c-payment-card__char--animated'],
                 )}
               >
                 {char.char}
@@ -108,16 +105,14 @@ export function CardFront({
         <span className={styles['c-payment-card__caption']}>{expiryCaption}</span>
         <span className={styles['c-payment-card__value']}>{expiry}</span>
       </span>
-      {large && (
-        <span
-          className={join(
-            styles['c-payment-card__frame'],
-            focus !== null && FRAME_CLASS[focus],
-            focus !== null && styles['is-visible'],
-          )}
-        />
-      )}
-      {large && <span className={styles['c-payment-card__glare']} />}
+      <span
+        className={join(
+          styles['c-payment-card__frame'],
+          focus !== null && FRAME_CLASS[focus],
+          focus !== null && styles['is-visible'],
+        )}
+      />
+      <span className={styles['c-payment-card__glare']} />
     </>
   );
 }

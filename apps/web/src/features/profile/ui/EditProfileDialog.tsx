@@ -2,7 +2,7 @@ import type { ProfileContent, UserProfile } from '@getir/contracts';
 import { useState } from 'react';
 
 import { useToastStore } from '../../../shared/toast/toast-store';
-import { AddressDialog } from '../../address/ui/AddressDialog';
+import { Dialog } from '../../../shared/ui/dialog/Dialog';
 import { formatPhone, fromE164 } from '../../auth/services/phone';
 import { formFeedback } from '../../auth/services/server-errors';
 import { useSendEmailCode } from '../hooks/useSendEmailCode';
@@ -80,11 +80,7 @@ export function EditProfileDialog({
   const phoneWindow = windows.phone;
 
   return (
-    <AddressDialog
-      title={title}
-      back={back}
-      close={{ label: editDialog.closeLabel, onAction: onClose }}
-    >
+    <Dialog title={title} back={back} close={{ label: editDialog.closeLabel, onAction: onClose }}>
       {step === 'overview' && (
         <div className={styles['c-profile-dialog']}>
           <NameForm
@@ -201,6 +197,6 @@ export function EditProfileDialog({
           }}
         />
       )}
-    </AddressDialog>
+    </Dialog>
   );
 }

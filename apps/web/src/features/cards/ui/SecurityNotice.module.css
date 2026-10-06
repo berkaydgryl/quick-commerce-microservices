@@ -1,0 +1,33 @@
+/* Guvenlik kutusu (T11.17, referans): solda golgeli kutuda kasa ikonu, sagda mor baslik ve metin. */
+.c-security-notice {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+}
+
+.c-security-notice__icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  inline-size: var(--size-card-security-icon);
+  aspect-ratio: 1;
+  padding: var(--space-3);
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-security-notice__text {
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-base);
+  color: var(--text-default);
+}
+
+.c-security-notice__title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+}

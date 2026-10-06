@@ -1,0 +1,54 @@
+/*
+ * Kosul onayi (T11.17, referans): onay kutusu, mor "Kullanım Koşulları"
+ * baglantisi (dugme) ve arkasindaki metin; kutu ve dugme en az 44 px
+ * dokunma alani icinde (satir yuksekligi).
+ */
+.c-terms {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.c-terms__row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: var(--size-card-terms-touch);
+}
+
+.c-terms__box {
+  flex-shrink: 0;
+  inline-size: var(--size-card-terms-box);
+  block-size: var(--size-card-terms-box);
+  margin: 0;
+  accent-color: var(--color-brand-primary);
+  cursor: pointer;
+}
+
+/* Hata cercevesi odak halkasinin YERINI almaz: klavyeyle odakta global :focus-visible halkasi kalir. */
+.c-terms__box[aria-invalid='true']:not(:focus-visible) {
+  outline: var(--border-width-thin) solid var(--border-danger);
+  outline-offset: var(--size-card-terms-error-offset);
+}
+
+.c-terms__text {
+  font-weight: var(--font-weight-semibold);
+}
+
+.c-terms__link {
+  padding: 0;
+  font: inherit;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.c-terms__link:hover {
+  text-decoration: underline;
+}
+
+.c-terms__error {
+  font-size: var(--font-size-xs);
+  color: var(--text-danger);
+}

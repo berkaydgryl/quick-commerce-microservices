@@ -1,7 +1,10 @@
 /*
- * Odeme Yontemlerim (T11.17, M4): kucuk kart gorselleri iki sutunda (dar
- * ekranda tek); kartin altinda kisa adi, suresi gectiyse rozet ve cop kutusu.
- * Sondaki "Kart ekle" kart biciminde kesikli kutu: ayni ritimde durur.
+ * Odeme Yontemlerim (T11.17; referans getircarsi): beyaz kutuda ince lavanta
+ * ayiricili satirlar. Logo kucuk golgeli kutuda; ad kalin, numara soluk; cop
+ * kutusu ve "Kredi/Banka Kartı" en az 44 px.
+ *
+ * Kutunun ic boslugu satirlarda (margin): global sifirlama ul[role='list']
+ * { padding: 0 } bu siniftan ozgul; listeye verilen padding ezilirdi.
  */
 .c-payment-methods {
   display: grid;
@@ -12,43 +15,70 @@
   font-size: var(--font-size-lg);
 }
 
-.c-payment-methods__empty {
-  color: var(--text-muted);
-}
-
-.c-payment-methods__grid {
+.c-payment-methods__list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--size-card-tile-min)), 1fr));
-  gap: var(--space-5) var(--space-4);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-surface);
 }
 
-.c-payment-methods__tile {
-  display: grid;
-  gap: var(--space-2);
-  align-content: start;
-}
-
-.c-payment-methods__visual {
-  display: grid;
-}
-
-/* Suresi gecen kart solgun; rozet nedenini soyler. */
-.c-payment-methods__tile.is-expired .c-payment-methods__visual {
-  opacity: var(--opacity-disabled);
-  filter: grayscale(1);
-}
-
-.c-payment-methods__meta {
+.c-payment-methods__row {
   display: flex;
-  gap: var(--space-2);
+  gap: var(--space-3);
   align-items: center;
+  min-height: calc(var(--size-card-logo-tile) + var(--space-4) * 2);
+  padding-block: var(--space-4);
+  margin-inline: var(--space-5);
+}
+
+.c-payment-methods__row + .c-payment-methods__row {
+  border-block-start: var(--border-width-thin) solid var(--border-faint);
+}
+
+.c-payment-methods__logo {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  inline-size: var(--size-card-logo-tile);
+  aspect-ratio: 1;
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-payment-methods__text {
+  display: grid;
+  flex: 1;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* Ekran okuyucunun okudugu satir metni (QA D6); gorunen ad ve maske gizli. */
+.c-payment-methods__spoken {
+  position: absolute;
+  width: var(--size-visually-hidden);
+  height: var(--size-visually-hidden);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .c-payment-methods__name {
-  flex: 1;
-  min-width: 0;
   font-weight: var(--font-weight-bold);
   overflow-wrap: anywhere;
+}
+
+.c-payment-methods__number {
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  letter-spacing: var(--letter-spacing-logo);
+}
+
+/* Suresi gecen kart: logo ve yazi soluk, etiket nedenini soyler. */
+.c-payment-methods__row.is-expired .c-payment-methods__logo,
+.c-payment-methods__row.is-expired .c-payment-methods__text {
+  opacity: var(--opacity-disabled);
 }
 
 .c-payment-methods__expired {
@@ -63,11 +93,12 @@
 
 .c-payment-methods__delete {
   display: grid;
+  flex-shrink: 0;
   place-items: center;
   inline-size: var(--size-card-action);
   block-size: var(--size-card-action);
   padding: 0;
-  color: var(--color-brand-primary-soft);
+  color: var(--color-brand-primary);
   cursor: pointer;
   background: none;
   border: none;
@@ -78,63 +109,41 @@
   inline-size: var(--size-card-action-icon);
 }
 
-.c-payment-methods__delete:disabled {
-  cursor: progress;
-  opacity: var(--opacity-disabled);
-}
-
-.c-payment-methods__delete:hover:not(:disabled) {
+.c-payment-methods__delete:hover {
   color: var(--text-danger);
 }
 
-/* Kasa dolu: "Kart ekle" yerine sozlesmenin cumlesi, ayni kutuda. */
-.c-payment-methods__full {
-  display: grid;
-  place-content: center;
-  max-inline-size: var(--size-payment-card);
-  aspect-ratio: var(--ratio-payment-card);
-  padding: var(--space-4);
-  color: var(--text-muted);
-  text-align: center;
-  border: var(--border-width-thin) dashed var(--border-subtle);
-  border-radius: var(--radius-lg);
-}
-
-/* Kart ekle: kart oraninda kesikli kutu, ortada arti ve yazi. */
+/* Son satir: kare icinde arti ve mor baglanti; kasa doluysa cumle. */
 .c-payment-methods__add {
-  display: grid;
-  gap: var(--space-2);
-  place-content: center;
-  justify-items: center;
-  max-inline-size: var(--size-payment-card);
-  aspect-ratio: var(--ratio-payment-card);
-  font-weight: var(--font-weight-extrabold);
+  display: flex;
+  flex: 1;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: var(--size-card-action);
+  font-weight: var(--font-weight-bold);
   color: var(--color-brand-primary);
   text-decoration: none;
-  border: var(--border-width-thin) dashed var(--color-brand-primary-soft);
-  border-radius: var(--radius-lg);
-  transition: background var(--duration-fast) var(--easing-standard);
 }
 
 .c-payment-methods__add:hover {
-  background: var(--color-brand-primary-subtle);
+  text-decoration: underline;
 }
 
 .c-payment-methods__add-icon {
   display: grid;
-  inline-size: var(--size-card-action);
-  aspect-ratio: 1;
+  flex-shrink: 0;
   place-items: center;
-  background: var(--color-brand-primary-subtle);
-  border-radius: var(--radius-pill);
+  inline-size: var(--size-card-logo-tile);
+  aspect-ratio: 1;
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-surface);
 }
 
 .c-payment-methods__add-icon svg {
   inline-size: var(--size-card-action-icon);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .c-payment-methods__add {
-    transition: none;
-  }
+.c-payment-methods__full {
+  color: var(--text-muted);
 }

@@ -41,6 +41,7 @@ func validateWelcome(welcome Welcome) error {
 		checkFeatures(welcome.Features),
 		checkAddressSetup(welcome.AddressSetup),
 		checkMarketList(welcome.MarketList),
+		checkPaymentMethods(welcome.PaymentMethods),
 	)
 }
 

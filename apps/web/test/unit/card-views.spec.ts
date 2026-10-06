@@ -1,8 +1,9 @@
 /**
- * Kart gorunumleri (T11.17, tasarim B; M3, M4): kart gorseli (markanin
- * katmani, rozet, cerceve, donme; kucukte arka yuz yok), kayitli kartlar
- * (kisa ad, cop kutusu, suresi gecen, bos, "Kart ekle") ve form (ilk hal).
- * Metinler icerik yedeginden.
+ * Kart gorunumleri (T11.17, tasarim B; M3): kart gorseli (markanin katmani,
+ * rozet, cerceve, donme) ve Odeme Yontemlerim listesi
+ * (referans getircarsi: logo, kart adi ya da marka, maskeli numara, suresi
+ * gecen etiketi, cop kutusu; son satir "+ Kredi/Banka Kartı" ya da dolu
+ * kasanin cumlesi). Metinler icerik yedeginden. Form: add-card-form.spec.ts.
  */
 
 import { CARD_FIELD_MESSAGES, CONTENT_FALLBACK, SAVED_CARDS_MAX } from '@getir/contracts';
@@ -14,7 +15,6 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 
 import { savedCardFace, typedCardFace } from '../../src/features/cards/services/card-face';
-import { AddCardForm } from '../../src/features/cards/ui/AddCardForm';
 import { CardVisual } from '../../src/features/cards/ui/CardVisual';
 import type { CardVisualProps } from '../../src/features/cards/ui/CardVisual';
 import { PaymentMethodsView } from '../../src/pages/account/PaymentMethodsView';
@@ -37,7 +37,6 @@ const visual = (props: Partial<CardVisualProps>) =>
       nickname: 'Maaş kartım',
       cvvMask: '•••',
       texts: TEXTS,
-      size: 'large',
       ...props,
     }),
   );
@@ -54,12 +53,11 @@ const view = (props: Partial<PaymentMethodsViewProps>) =>
       error: null,
       onRetry: noop,
       addHref: '/hesabim/odeme-yontemlerim/ekle',
-      actionsDisabled: false,
       onDelete: noop,
       ...props,
     }),
   );
-const tiles = (html: string) => html.split('<li').slice(1);
+const rows = (html: string) => html.split('<li').slice(1);
 
 describe('CardVisual (T11.17)', () => {
   it('markanin katmani gorunur, digerleri saydam; marka yoksa varsayilan mor', () => {
@@ -84,52 +82,57 @@ describe('CardVisual (T11.17)', () => {
     expect(visual({ focus: 'expiry' })).toMatch(/c-payment-card__frame--expiry[^"]*is-visible/);
     expect(visual({ focus: null })).not.toContain('is-visible');
   });
-
-  it('kucuk kart (liste): arka yuz, isik, cerceve ve parlama yok', () => {
-    const html = visual({ size: 'small' });
-
-    expect(html).toContain('c-payment-card--small');
-    expect(html).not.toContain('c-payment-card__face--back');
-    expect(html).not.toContain('c-payment-card__streak');
-    expect(html).not.toContain('c-payment-card__frame');
-    expect(html).not.toContain('c-payment-card__glare');
-  });
 });
 
-describe('PaymentMethodsView (T11.17, M4)', () => {
-  it('kartlar kisa adiyla; cop kutusunun adi karttan', () => {
-    const [visa, amex] = tiles(view({}));
+describe('PaymentMethodsView (T11.17, referans getircarsi)', () => {
+  it('satir: marka logosu, kart adi, maskeli numara; cop kutusunun adi karttan', () => {
+    const [visa, amex] = rows(view({}));
 
-    expect(visa).toContain('>Visa •••• 4242<');
-    expect(visa).toContain(`aria-label="Visa •••• 4242 ${TEXTS.deleteSuffix}"`);
-    expect(amex).toContain(`aria-label="Amex •••• 0005 ${TEXTS.deleteSuffix}"`);
+    expect(visa).toContain('c-brand-logo');
+    expect(visa).toContain(`>${VISA_CARD.nickname ?? ''}<`);
+    expect(visa).toContain('>4242 **** **** 4242<');
+    expect(visa).toContain(`aria-label="Visa, son dört hane 4242 ${TEXTS.deleteSuffix}"`);
+    expect(amex).toContain('>3782 ****** *0005<');
+    expect(amex).toContain(`aria-label="Amex, son dört hane 0005 ${TEXTS.deleteSuffix}"`);
   });
 
-  it('suresi gecen kart: rozet ve soluk gorsel; digerinde rozet yok', () => {
-    const [visa, amex] = tiles(view({}));
+  it('QA D6: ekran okuyucu kart adi + marka + son dort haneyi okur; gorunen ad ve maske gizli', () => {
+    const [visa, amex] = rows(view({}));
+    const spoken = (row = '') => /__spoken[^>]*>([^<]+)</.exec(row)?.[1];
+
+    expect(spoken(visa)).toBe(`${VISA_CARD.nickname ?? ''}, Visa, ${TEXTS.lastFourLabel} 4242`);
+    expect(spoken(amex)).toBe(`Amex, ${TEXTS.lastFourLabel} 0005`);
+    expect(visa).toMatch(/__name[^"]*" aria-hidden="true"/);
+    expect(visa).toMatch(/__number[^"]*" aria-hidden="true"/);
+  });
+
+  it('kart adi yoksa markanin adi', () => {
+    const [amex] = rows(view({ cards: [EXPIRED_AMEX] }));
+
+    expect(EXPIRED_AMEX.nickname).toBeUndefined();
+    expect(amex).toContain(`>${TEXTS.brandLabels.AMEX}<`);
+  });
+
+  it('suresi gecen kart: etiket ve soluk satir; digerinde etiket yok', () => {
+    const [visa, amex] = rows(view({}));
 
     expect(amex).toContain(TEXTS.expiredLabel);
     expect(amex).toContain('is-expired');
     expect(visa).not.toContain(TEXTS.expiredLabel);
   });
 
-  it('sonda "Kart ekle" baglantisi; karti olmayan hesapta bos not', () => {
-    const html = view({});
-    const last = tiles(html).at(-1) ?? '';
-    expect(last).toMatch(/<a[^>]*href="\/hesabim\/odeme-yontemlerim\/ekle"[^>]*>.*Kart ekle<\/a>/s);
+  it('son satir "+ Kredi/Banka Kartı" baglantisi; karti olmayan hesapta yalnizca bu satir', () => {
+    const last = rows(view({})).at(-1) ?? '';
+    expect(last).toMatch(
+      new RegExp(`<a[^>]*href="/hesabim/odeme-yontemlerim/ekle"[^>]*>.*${TEXTS.addLabel}</a>`, 's'),
+    );
 
-    const empty = view({ cards: [] as SavedCard[] });
-    expect(empty).toContain(TEXTS.emptyNotice);
-    expect(tiles(empty)).toHaveLength(1);
+    const empty = rows(view({ cards: [] as SavedCard[] }));
+    expect(empty).toHaveLength(1);
+    expect(empty[0]).toContain(TEXTS.addLabel);
   });
 
-  it('pencere metinleri yuklenmediyse cop kutulari bekler (pasif)', () => {
-    const buttons = view({ actionsDisabled: true }).match(/<button[^>]*disabled=""/g) ?? [];
-
-    expect(buttons).toHaveLength(2);
-  });
-
-  it('kasa dolu (10 kart): "Kart ekle" yerine sozlesmenin cumlesi', () => {
+  it('kasa dolu (10 kart): ekleme satiri yerine sozlesmenin cumlesi', () => {
     const full = Array.from({ length: SAVED_CARDS_MAX }, (_, index) => ({
       ...VISA_CARD,
       id: `crd_${String(index).padStart(32, '0')}`,
@@ -137,7 +140,7 @@ describe('PaymentMethodsView (T11.17, M4)', () => {
     const html = view({ cards: full });
 
     expect(html).not.toContain('/hesabim/odeme-yontemlerim/ekle');
-    expect(html).toContain(CARD_FIELD_MESSAGES.cards);
+    expect(rows(html).at(-1)).toContain(CARD_FIELD_MESSAGES.cards);
   });
 
   it('yuklenirken not; hata gelince tekrar dene', () => {
@@ -145,50 +148,5 @@ describe('PaymentMethodsView (T11.17, M4)', () => {
     const failed = view({ cards: undefined, error: new Error('ag') });
     expect(failed).not.toContain(TEXTS.loadingLabel);
     expect(failed).toContain('<button');
-  });
-});
-
-describe('AddCardForm (T11.17, M5)', () => {
-  const form = () =>
-    render(
-      createElement(AddCardForm, {
-        texts: TEXTS,
-        onSave: () => Promise.resolve(VISA_CARD),
-        onSaved: noop,
-      }),
-    );
-
-  it('baslik, desteklenen markalar, buyuk kart (varsayilan renk, yer tutucular)', () => {
-    const html = form();
-
-    expect(html).toMatch(/<h1[^>]*>Kart ekle<\/h1>/);
-    expect(html).toContain(`aria-label="${TEXTS.brandsLabel}"`);
-    for (const label of Object.values(TEXTS.brandLabels)) {
-      expect(html).toContain(`>${label}</li>`);
-    }
-    expect(html).toContain('c-payment-card--large');
-    expect(activeLayer(html)).toBe('default');
-    expect(html).toContain(TEXTS.holderPlaceholder);
-    expect(html).toContain(TEXTS.nicknamePlaceholder);
-  });
-
-  it('bes alan yuzen etiketle, kart otomatik doldurma adlariyla; kaydet ve gizlilik notu', () => {
-    const html = form();
-
-    for (const [id, label, autocomplete] of [
-      ['kart-numara', TEXTS.numberLabel, 'cc-number'],
-      ['kart-ad', TEXTS.holderNameLabel, 'cc-name'],
-      ['kart-skt', TEXTS.expiryLabel, 'cc-exp'],
-      ['kart-cvv', TEXTS.cvvLabel, 'cc-csc'],
-      ['kart-takma-ad', TEXTS.nicknameLabel, 'off'],
-    ] as const) {
-      expect(html).toMatch(new RegExp(`<input[^>]*id="${id}"[^>]*autoComplete="${autocomplete}"`));
-      expect(html).toContain(`<label for="${id}"`);
-      expect(html).toContain(`>${label}</label>`);
-    }
-    expect(html).toContain('c-auth-field--floating');
-    expect(html).toMatch(/<button type="submit"[^>]*>Kartı kaydet<\/button>/);
-    expect(html).toContain(TEXTS.privacyNote.replace(/'/g, '&#x27;'));
-    expect(html).not.toContain(TEXTS.numberValidLabel);
   });
 });

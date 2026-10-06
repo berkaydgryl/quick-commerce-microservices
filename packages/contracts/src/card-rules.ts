@@ -78,8 +78,11 @@ export function isLuhnValid(digits: string): boolean {
   return sum % 10 === 0;
 }
 
-/** Marka basina gecerli uzunluklar. */
-const BRAND_LENGTHS: Readonly<Record<CardBrand, readonly number[]>> = {
+/**
+ * Marka basina gecerli uzunluklar. Web yazarken numarayi markanin en uzun
+ * haliyle sinirlar (T11.17); kopyasi tutulmaz.
+ */
+export const BRAND_LENGTHS: Readonly<Record<CardBrand, readonly number[]>> = {
   VISA: [13, 16, 19],
   MASTERCARD: [16],
   AMEX: [15],
@@ -150,6 +153,16 @@ function calendarMonthOf(now: Date): { readonly year: number; readonly month: nu
 export function isCardExpired(expiryMonth: number, expiryYear: number, now: Date): boolean {
   const current = calendarMonthOf(now);
   return expiryYear < current.year || (expiryYear === current.year && expiryMonth < current.month);
+}
+
+/**
+ * Son kullanma yili secenekleri (T11.17 web, "Yıl" secimi; QA C9): Turkiye
+ * saatiyle bu yil ve CARD_EXPIRY_MAX_YEARS_AHEAD yil ilerisi. Kasanin kabul
+ * ettigi aralikla ayni takvimden: ilk ve son secenek cardExpiryProblem'den gecer.
+ */
+export function cardExpiryYears(now: Date): readonly number[] {
+  const { year } = calendarMonthOf(now);
+  return Array.from({ length: CARD_EXPIRY_MAX_YEARS_AHEAD + 1 }, (_, index) => year + index);
 }
 
 /** Son kullanma sorunu: hangi alanda, hangi cumle. */

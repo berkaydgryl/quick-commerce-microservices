@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import { AddressButton } from './AddressButton';
 import styles from './AddressBookDialog.module.css';
-import { AddressDialog } from './AddressDialog';
+import { Dialog } from '../../../shared/ui/dialog/Dialog';
 import { kindIcon } from './kind-icon';
 import { PinIcon } from './icons';
 
@@ -50,7 +50,7 @@ export function AddressBookDialog({
   const pickedAddress = addresses[picked];
 
   return (
-    <AddressDialog
+    <Dialog
       title={content.addressBookTitle}
       close={{ label: closeLabel, onAction: onClose }}
       footer={
@@ -97,6 +97,6 @@ export function AddressBookDialog({
           </AddressButton>
         </>
       )}
-    </AddressDialog>
+    </Dialog>
   );
 }

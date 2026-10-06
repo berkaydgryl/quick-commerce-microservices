@@ -2,7 +2,7 @@ import type { AddressesContent, SavedAddress } from '@getir/contracts';
 
 import { ConfirmPanel } from '../../../shared/ui/confirm-panel/ConfirmPanel';
 
-import { AddressDialog } from './AddressDialog';
+import { Dialog } from '../../../shared/ui/dialog/Dialog';
 
 interface DeleteAddressDialogProps {
   readonly texts: AddressesContent;
@@ -33,7 +33,7 @@ export function DeleteAddressDialog({
   onCancel,
 }: DeleteAddressDialogProps) {
   return (
-    <AddressDialog
+    <Dialog
       title={texts.confirmTitle}
       close={{ label: closeLabel, onAction: onCancel, disabled: pending }}
     >
@@ -49,6 +49,6 @@ export function DeleteAddressDialog({
         onConfirm={onConfirm}
         onCancel={onCancel}
       />
-    </AddressDialog>
+    </Dialog>
   );
 }

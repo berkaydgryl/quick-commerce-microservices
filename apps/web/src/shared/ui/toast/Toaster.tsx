@@ -55,7 +55,16 @@ function ToastItem({ toast, dismissLabel, onDismiss }: ToastItemProps) {
 
   return (
     <div className={styles['c-toaster__toast']}>
-      <p className={styles['c-toaster__message']}>{toast.message}</p>
+      <p className={styles['c-toaster__message']}>
+        {toast.spoken === undefined ? (
+          toast.message
+        ) : (
+          <>
+            <span aria-hidden="true">{toast.message}</span>
+            <span className={styles['c-toaster__spoken']}>{toast.spoken}</span>
+          </>
+        )}
+      </p>
       <button
         type="button"
         className={styles['c-toaster__dismiss']}
