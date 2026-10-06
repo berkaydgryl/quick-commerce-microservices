@@ -18,6 +18,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { OrderRiskContext } from '../../src/domain/checkout-risk.js';
 import { GrpcRiskAssessment } from '../../src/infrastructure/risk/grpc-risk-assessment.js';
+import { cutAfterReach, HeldReplies } from '../support/held-replies.js';
 
 /**
  * Islevsel testlerin suresi COMERT (D17): ilk cagri kanal kurulumunu da oder ve
@@ -28,11 +29,8 @@ import { GrpcRiskAssessment } from '../../src/infrastructure/risk/grpc-risk-asse
 const FUNCTIONAL_TIMEOUT_MS = 5_000;
 /** Yalnizca sure siniri testinin kisa siniri; yavas kullanicinin cevabi HIC gelmez. */
 const DEADLINE_TIMEOUT_MS = 200;
-/**
- * Sure testinin deneme siniri: yuklu makinede ilk deneme kanal kurulumunda
- * kesilebilir (istek sunucuya ulasmaz); istek ULASANA kadar tekrarlanir.
- */
-const REACH_ATTEMPTS = 20;
+/** Sure testinin zaman butcesi: istek sunucuya ulasana kadar tekrar (testTimeout'un altinda). */
+const REACH_BUDGET_MS = 5_000;
 const scope = { requestId: 'req_risk_1', logger: silentLogger };
 
 /** Sunucunun gordugu istekler ve x-request-id degerleri. */
@@ -43,8 +41,8 @@ const BANDSIZ_USER = 'usr_bantsiz';
 const KESIK_USER = 'usr_kesik';
 let kesikCalls = 0;
 const YAVAS_USER = 'usr_yavas';
-/** Yavas kullanicinin bekletilen cevaplari: sunucu cevap VERMEZ, istek gelmis olur. */
-const heldSlowReplies: (() => void)[] = [];
+/** Yavas kullanicinin bekletilen istekleri (cevap verilmez; kimlik ve kalan sure kaydedilir). */
+const held = new HeldReplies();
 
 const implementation = {
   evaluate: (
@@ -73,7 +71,7 @@ const implementation = {
       callback(null, {
         evaluation: riskV1.RiskEvaluation.fromPartial({ score: 35, band }),
       });
-    if (userId === YAVAS_USER) heldSlowReplies.push(respond);
+    if (userId === YAVAS_USER) held.hold(call);
     else respond();
   },
 };
@@ -96,7 +94,6 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const respond of heldSlowReplies.splice(0)) respond();
   risk?.close();
   shortDeadline?.close();
   await handle?.shutdown('test bitti');
@@ -202,17 +199,20 @@ describe('GrpcRiskAssessment', () => {
   });
 
   it('sure siniri dolarsa SERVICE_UNAVAILABLE', async () => {
-    for (let attempt = 1; ; attempt += 1) {
-      const before = heldSlowReplies.length;
-      const error = await rejectionOf(
-        shortDeadline.evaluate(context({ userId: YAVAS_USER }), scope),
-      );
+    const { error, reply } = await cutAfterReach(
+      (requestId) =>
+        shortDeadline.evaluate(context({ userId: YAVAS_USER }), {
+          requestId,
+          logger: silentLogger,
+        }),
+      held,
+      REACH_BUDGET_MS,
+    );
 
-      expect(error.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
-      // Istek sunucuya ULASTI: kesilen, baglanti kurulumu degil bekleyen cevaptir.
-      if (heldSlowReplies.length > before) return;
-      if (attempt === REACH_ATTEMPTS) throw new Error('yavas istek sunucuya hic ulasmadi');
-    }
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+    // Istemci KENDI kisa sinirini gonderdi: sinirini yok sayan istemci burada duser.
+    expect(reply.remainingMs).toBeLessThanOrEqual(DEADLINE_TIMEOUT_MS);
   });
 });
 
