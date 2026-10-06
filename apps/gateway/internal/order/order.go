@@ -36,6 +36,7 @@ type RPC interface {
 	ConfirmPayment(ctx context.Context, in *orderv1.ConfirmPaymentRequest, opts ...grpc.CallOption) (*orderv1.ConfirmPaymentResponse, error)
 	GetOrder(ctx context.Context, in *orderv1.GetOrderRequest, opts ...grpc.CallOption) (*orderv1.GetOrderResponse, error)
 	CancelOrder(ctx context.Context, in *orderv1.CancelOrderRequest, opts ...grpc.CallOption) (*orderv1.CancelOrderResponse, error)
+	ListMyOrders(ctx context.Context, in *orderv1.ListMyOrdersRequest, opts ...grpc.CallOption) (*orderv1.ListMyOrdersResponse, error)
 }
 
 // cancelledStatus, order'in ORDER_STATE_INVALID ayrintisindaki "zaten iptal"
@@ -189,6 +190,38 @@ func (s *Service) Get(ctx context.Context, userID, orderID string) (Order, error
 		return Order{}, rpc.RenameFields(err, getFieldNames)
 	}
 	return toOrder(response.GetOrder(), s.now())
+}
+
+// OrderPage, kullanicinin siparislerinin bir sayfasi, yeniden eskiye (ham:
+// taslaklar dahil). Gecmis Siparislerim'in suzmesi orderhistory'dedir.
+type OrderPage struct {
+	Orders []Order
+	// Bos ise liste bitmistir.
+	NextPageToken string
+}
+
+// Page, kullanicinin siparislerinin bir sayfasi (T11.16; ListMyOrders).
+// pageSize 0 ise order varsayilani; ust sinir order'dadir. Cozulemeyen
+// jeton VALIDATION_FAILED (pageToken).
+func (s *Service) Page(ctx context.Context, userID string, pageSize int32, pageToken string) (OrderPage, error) {
+	request := &orderv1.ListMyOrdersRequest{
+		UserId: userID,
+		Page:   &commonv1.PageRequest{PageSize: pageSize, PageToken: pageToken},
+	}
+	response, err := rpc.Invoke(ctx, s.timeout, service, "ListMyOrders", s.rpc.ListMyOrders, request)
+	if err != nil {
+		return OrderPage{}, rpc.RenameFields(err, listFieldNames)
+	}
+	now := s.now()
+	orders := make([]Order, 0, len(response.GetOrders()))
+	for _, raw := range response.GetOrders() {
+		mapped, err := toOrder(raw, now)
+		if err != nil {
+			return OrderPage{}, err
+		}
+		orders = append(orders, mapped)
+	}
+	return OrderPage{Orders: orders, NextPageToken: response.GetPage().GetNextPageToken()}, nil
 }
 
 // toProtoSignals, sinyalleri proto'ya cevirir. Bilinmeyen konum ve hesap yasi

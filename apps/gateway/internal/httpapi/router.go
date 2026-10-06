@@ -50,6 +50,7 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/geo"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/health"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/orderhistory"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/phoneverify"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/roomtoken"
 )
@@ -115,6 +116,11 @@ type OrderPlacer interface {
 // ThreeDSConfirmer, POST /v1/orders/{id}/3ds.
 type ThreeDSConfirmer interface {
 	ConfirmThreeDS(ctx context.Context, input order.ConfirmInput) (order.Placement, error)
+}
+
+// OrderLister, GET /v1/orders (Gecmis Siparislerim, T11.16).
+type OrderLister interface {
+	List(ctx context.Context, userID string, pageSize int32, pageToken string) (orderhistory.List, error)
 }
 
 // OrderGetter, GET /v1/orders/{id}.
@@ -256,6 +262,7 @@ type Deps struct {
 	OrderPlacer         OrderPlacer
 	ThreeDSConfirmer    ThreeDSConfirmer
 	OrderGetter         OrderGetter
+	OrderLister         OrderLister
 	// OrderRoomTokens, siparis odasi jetonu (T12.2); bugun roomtoken.Service.
 	OrderRoomTokens OrderRoomTokenIssuer
 	// Kimlik uclari (T8.1); bugun hepsini auth.Service karsilar.
@@ -413,6 +420,7 @@ func New(deps Deps) *fiber.App {
 	v1.Delete("/cart/reserve/:"+reservationIDParam, user, orderByUser, mutation, releaseReservationHandler(deps.ReservationReleaser))
 	v1.Post("/orders", user, orderByUser, checkout, placeOrderHandler(deps.OrderPlacer, deps.CheckoutSignals))
 	v1.Post("/orders/:"+orderIDParam+"/3ds", user, orderByUser, checkout, confirmThreeDSHandler(deps.ThreeDSConfirmer))
+	v1.Get("/orders", user, generalByUser, listOrdersHandler(deps.OrderLister))
 	v1.Get("/orders/:"+orderIDParam, user, generalByUser, getOrderHandler(deps.OrderGetter))
 	v1.Get("/orders/:"+orderIDParam+"/token", user, generalByUser, orderRoomTokenHandler(deps.OrderRoomTokens))
 

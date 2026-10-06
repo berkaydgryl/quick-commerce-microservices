@@ -1,6 +1,8 @@
 /*
  * Ust barin hesap alani (T11.10): mor zeminde beyaz yazi; Profil menusu
  * dugmenin altinda saga yasli beyaz panel (panelde odak halkasi yine mor).
+ * T11.16: hesap sayfalari ustte, "Cikis yap" altta ince cizgiyle ayri satirda;
+ * her madde en az 44 px dokunma alani.
  */
 .c-header-account {
   display: inline-flex;
@@ -68,8 +70,10 @@
 }
 
 .c-header-account__item {
-  display: block;
+  display: flex;
+  align-items: center;
   width: 100%;
+  min-block-size: var(--size-header-menu-item);
   padding: var(--space-3) var(--space-4);
   font-size: var(--font-size-md);
   font-weight: var(--font-weight-semibold);
@@ -79,6 +83,10 @@
   cursor: pointer;
   background: none;
   border: none;
+}
+
+.c-header-account__logout {
+  border-block-start: var(--border-width-thin) solid var(--border-faint);
 }
 
 .c-header-account__item:hover {

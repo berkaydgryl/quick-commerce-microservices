@@ -192,6 +192,15 @@ export const PAGE_SIZE_DEFAULT = 20;
 export const PAGE_SIZE_MIN = 1;
 export const PAGE_SIZE_MAX = 100;
 
+/**
+ * Gecmis Siparislerim (T11.16; GET /v1/orders): varsayilan ve en buyuk sayfa.
+ * Ust sinir katalogun BatchGetMarkets siniridir (50): sayfanin market adlari
+ * tek cagriya sigar. Gateway'deki karsiliklari orderhistory paketindedir
+ * (contract_test.go).
+ */
+export const ORDER_HISTORY_PAGE_SIZE_DEFAULT = 20;
+export const ORDER_HISTORY_PAGE_SIZE_MAX = 50;
+
 /** Socket oda adi onekleri (docs/api/socket-events.md). */
 export const ROOM_PREFIX = {
   /** Yalnizca siparis sahibi girebilir; oda jetonu sarttir. */

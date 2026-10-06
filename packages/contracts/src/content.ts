@@ -123,13 +123,20 @@ export const loginCardContentSchema = z.object({
   title: contentTextSchema,
   /** Ulke kodu secicisinin erisilebilir adi. */
   countryLabel: contentTextSchema,
+  /**
+   * Telefon alaninin etiketi: bos alanda kutunun icinde, deger girilince uste
+   * kayar ("Telefon Numarası"; T11.16'dan beri ipucu "5XX ..." yok).
+   */
   phoneLabel: contentTextSchema,
-  phonePlaceholder: contentTextSchema,
   continueLabel: contentTextSchema,
   /** Giris ve kayit penceresinin kapat (X) dugmesinin erisilebilir adi. */
   closeLabel: contentTextSchema,
-  /** Sifre alanindaki goster/gizle dugmesinin erisilebilir adi (aria-pressed ile). */
+  /**
+   * Sifre alanindaki goz dugmesinin erisilebilir adi, duruma gore: sifre
+   * gizliyken "Şifreyi göster", gorunurken "Şifreyi gizle" (T11.16 duzeltmesi).
+   */
   showPasswordLabel: contentTextSchema,
+  hidePasswordLabel: contentTextSchema,
   countries: z
     .array(phoneCountrySchema)
     .min(1)
@@ -273,8 +280,6 @@ export const appHeaderContentSchema = z.object({
   addressLoadingLabel: contentTextSchema,
   profileLabel: contentTextSchema,
   accountLabel: contentTextSchema,
-  /** Profil menusunun favori sayfasi baglantisi (T11.13). */
-  favoritesLabel: contentTextSchema,
   logoutLabel: contentTextSchema,
   logoutPendingLabel: contentTextSchema,
 });
@@ -389,10 +394,54 @@ export const favoritesContentSchema = z.object({
   /** Liste FAVORITE_MARKETS_MAX'a ulasti. */
   listFullToast: contentTextSchema,
   toastDismissLabel: contentTextSchema,
-  /** Profil sayfasinin sol menusu: erisilebilir adi ve maddeleri (D4: calisanlar). */
-  profileMenuLabel: contentTextSchema,
+});
+
+/**
+ * Hesap menusu (T11.16; kullanici istegi): profil sayfasinin sol menusu ve ust
+ * barin Profil acilir menusu AYNI maddeleri ayni sirayla gosterir. Sira ve
+ * adresler web'dedir (accountMenuItems), burada yalnizca etiketler: Profilim,
+ * Adreslerim, Favori İşletmeler, Geçmiş Siparişlerim; T11.17'de Ödeme
+ * Yöntemlerim eklenir.
+ */
+export const accountMenuContentSchema = z.object({
+  /** Sol menunun erisilebilir adi: "Hesap menüsü". */
+  label: contentTextSchema,
+  profileLabel: contentTextSchema,
   addressesLabel: contentTextSchema,
-  favoritesMenuLabel: contentTextSchema,
+  favoritesLabel: contentTextSchema,
+  ordersLabel: contentTextSchema,
+});
+
+/**
+ * Gecmis Siparislerim (T11.16; /hesabim/siparislerim): liste satiri
+ * ("X Market · 500,00 TL · Tamamlandı"), durum gruplari, bos not, "Daha fazla
+ * göster" ve detay sayfasinin etiketleri. Durum gruplari: Tamamlandı
+ * (DELIVERED), Devam ediyor (rozet), İptal edildi (ucret alinmissa
+ * "Ücret iade edildi" ile). Iptal edilen sipariste butun urunler "Teslim
+ * edilmedi" (siparis duzeyi, #91).
+ */
+export const ordersContentSchema = z.object({
+  title: contentTextSchema,
+  loadingLabel: contentTextSchema,
+  emptyNotice: contentTextSchema,
+  /** Katalogda adi bulunamayan market. */
+  unknownMarketLabel: contentTextSchema,
+  completedLabel: contentTextSchema,
+  inProgressLabel: contentTextSchema,
+  cancelledLabel: contentTextSchema,
+  refundedLabel: contentTextSchema,
+  notDeliveredLabel: contentTextSchema,
+  moreLabel: contentTextSchema,
+  loadingMoreLabel: contentTextSchema,
+  /** Detay sayfasi. */
+  dateLabel: contentTextSchema,
+  addressLabel: contentTextSchema,
+  itemsTitle: contentTextSchema,
+  subtotalLabel: contentTextSchema,
+  deliveryFeeLabel: contentTextSchema,
+  freeDeliveryLabel: contentTextSchema,
+  discountLabel: contentTextSchema,
+  totalLabel: contentTextSchema,
 });
 
 /** Adreslerim'in ekleme satiri (T11.15): turu secili acilan ekleme penceresi. */
@@ -500,6 +549,7 @@ export const phoneDialogContentSchema = z.object({
   phoneFieldLabel: contentTextSchema,
   passwordLabel: contentTextSchema,
   showPasswordLabel: contentTextSchema,
+  hidePasswordLabel: contentTextSchema,
   sendLabel: contentTextSchema,
   sendingLabel: contentTextSchema,
   codeSentToLabel: contentTextSchema,
@@ -565,9 +615,13 @@ export const welcomeContentSchema = z.object({
   appHeader: appHeaderContentSchema,
   marketList: marketListContentSchema,
   favorites: favoritesContentSchema,
+  /** Hesap menusu (T11.16): sol menu ve Profil acilir menusu. */
+  accountMenu: accountMenuContentSchema,
   profile: profileContentSchema,
   /** Adreslerim sekmesi (T11.15). */
   addresses: addressesContentSchema,
+  /** Gecmis Siparislerim (T11.16). */
+  orders: ordersContentSchema,
 });
 
 export type BannerSource = z.infer<typeof bannerSourceSchema>;
@@ -590,7 +644,9 @@ export type StoreTypeGroup = z.infer<typeof storeTypeGroupSchema>;
 export type MarketListCartContent = z.infer<typeof marketListCartContentSchema>;
 export type MarketListContent = z.infer<typeof marketListContentSchema>;
 export type FavoritesContent = z.infer<typeof favoritesContentSchema>;
+export type AccountMenuContent = z.infer<typeof accountMenuContentSchema>;
 export type AddressesContent = z.infer<typeof addressesContentSchema>;
+export type OrdersContent = z.infer<typeof ordersContentSchema>;
 export type AddressAddOption = z.infer<typeof addressAddOptionSchema>;
 export type EmailDialogContent = z.infer<typeof emailDialogContentSchema>;
 export type EditProfileDialogContent = z.infer<typeof editProfileDialogContentSchema>;

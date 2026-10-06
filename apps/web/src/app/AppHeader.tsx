@@ -5,13 +5,14 @@ import { HeaderAddressPicker } from '../features/address/ui/HeaderAddressPicker'
 import { loginPathFor } from '../features/auth/services/next-path';
 import { HeaderAccount } from '../features/auth/ui/HeaderAccount';
 import type { HeaderAccountTexts } from '../features/auth/ui/HeaderAccount';
+import { useAccountMenuContent } from '../features/content/hooks/useAccountMenuContent';
 import { useWelcomeContent } from '../features/content/hooks/useWelcomeContent';
-import { FAVORITES_PATH } from '../features/favorites/routes';
 import {
   HeaderSearch,
   HeaderSearchFallback,
   HeaderSearchPlaceholder,
 } from '../features/search/ui/HeaderSearch';
+import { accountMenuLinks } from '../pages/account/account-menu';
 import { useSessionStore } from '../shared/session/session-store';
 import { Logo } from '../shared/ui/logo/Logo';
 
@@ -73,9 +74,19 @@ export function AppHeaderSearch() {
   );
 }
 
+/**
+ * Profil menusu: maddeler hesap sayfalarinin sol menusuyle AYNI listeden
+ * (T11.16, accountMenuItems); burada yalnizca baglanir.
+ */
 export function AppHeaderAccount() {
   const { data: content, error } = useWelcomeContent();
-  return <HeaderAccount texts={accountTexts(content, error)} favoritesHref={FAVORITES_PATH} />;
+  const menu = useAccountMenuContent();
+  return (
+    <HeaderAccount
+      texts={accountTexts(content, error)}
+      menu={menu === undefined ? undefined : accountMenuLinks(menu)}
+    />
+  );
 }
 
 function accountTexts(

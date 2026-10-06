@@ -60,6 +60,7 @@ func protectedApp(orders *fakeOrders, profiles *fakeProfiles, logger *slog.Logge
 		OrderPlacer:      orders,
 		ThreeDSConfirmer: orders,
 		OrderGetter:      orders,
+		OrderLister:      orders,
 		ProfileGetter:    profiles,
 		AddressBook:      profiles,
 		AddressAdder:     profiles,
@@ -87,6 +88,7 @@ var protectedRoutes = []struct{ method, path, body string }{
 	{http.MethodPost, "/v1/orders", validPlaceBody},
 	{http.MethodPost, "/v1/orders/" + testOrderID + "/3ds", `{"challengeId":"tds_1","otp":"123456"}`},
 	{http.MethodGet, "/v1/orders/" + testOrderID, ""},
+	{http.MethodGet, "/v1/orders", ""},
 }
 
 func TestProtectedRoutesRequireToken(t *testing.T) {

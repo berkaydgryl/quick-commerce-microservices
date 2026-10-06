@@ -97,6 +97,11 @@ Durum kodu taşıma katmanını, `error.code` iş anlamını anlatır. İstemci 
   yenilenince `/v1/auth/refresh` ile yeniden alır. Yanlış şifre ile kayıtsız numara aynı cevabı alır
   (`INVALID_CREDENTIALS`). Katalog uçları herkese açıktır. T7.5'teki
   `X-User-Id` geliştirme başlığı kaldırıldı.
+- **Geçmiş siparişler** (T11.16): `GET /v1/orders` kullanıcının siparişlerini yeniden
+  eskiye, imleçle sayfalı özet olarak döner (`items` + `page`; `page.totalSize` 0: süzme
+  yüzünden sayılmaz). Sepet taslakları (`DRAFT`, hiç ilerlemeden süresi dolan `EXPIRED`)
+  listede yoktur. Market adı katalogdan; gelmezse alan yoktur. Ücreti alınmış iptalde
+  `refunded: true`. Liste ve `GET /v1/orders/{id}` `Cache-Control: no-store` ile gelir.
 - **Oda jetonu** (T12.2): `GET /v1/orders/{id}/token` siparişin sahibine,
   `order:{orderId}` odasına katılmak için 60 sn'lik jeton verir; başkasının
   siparişi `404`. Jeton erişim jetonundan ayrı bir sırla imzalanır ve yalnızca

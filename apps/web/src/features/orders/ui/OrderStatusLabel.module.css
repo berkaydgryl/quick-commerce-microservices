@@ -1,0 +1,25 @@
+/*
+ * Siparis durumu (T11.16): Tamamlandı yesil yazi, Devam ediyor sari rozet
+ * (mor yazi), İptal edildi gri yazi.
+ */
+.c-order-status {
+  font-weight: var(--font-weight-semibold);
+}
+
+.c-order-status--completed {
+  color: var(--text-success);
+}
+
+.c-order-status--in-progress {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-on-accent);
+  white-space: nowrap;
+  background: var(--color-brand-accent);
+  border-radius: var(--radius-pill);
+}
+
+.c-order-status--cancelled {
+  color: var(--text-muted);
+}

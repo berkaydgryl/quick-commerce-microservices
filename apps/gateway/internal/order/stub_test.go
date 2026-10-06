@@ -25,6 +25,8 @@ type stubServer struct {
 	confirmRequest *orderv1.ConfirmPaymentRequest
 	getRequest     *orderv1.GetOrderRequest
 	cancelRequest  *orderv1.CancelOrderRequest
+	listRequest    *orderv1.ListMyOrdersRequest
+	listResponse   *orderv1.ListMyOrdersResponse
 
 	draftResponse *orderv1.CreateDraftOrderResponse
 	placeResponse *orderv1.CreateOrderResponse
@@ -91,6 +93,14 @@ func (s *stubServer) GetOrder(ctx context.Context, in *orderv1.GetOrderRequest) 
 		return nil, s.fail(ctx)
 	}
 	return &orderv1.GetOrderResponse{Order: s.order}, nil
+}
+
+func (s *stubServer) ListMyOrders(ctx context.Context, in *orderv1.ListMyOrdersRequest) (*orderv1.ListMyOrdersResponse, error) {
+	s.listRequest = in
+	if s.err != nil {
+		return nil, s.fail(ctx)
+	}
+	return s.listResponse, nil
 }
 
 const (

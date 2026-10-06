@@ -23,8 +23,10 @@ const WELCOME = JSON.parse(
   appHeader: Record<string, string>;
   marketList: unknown;
   favorites: unknown;
+  accountMenu: unknown;
   profile: unknown;
   addresses: unknown;
+  orders: unknown;
 };
 
 /** Yapidaki butun metinler (dizi ve ic nesneler dahil). */
@@ -46,7 +48,6 @@ describe('CONTENT_FALLBACK', () => {
     for (const key of [
       'profileLabel',
       'accountLabel',
-      'favoritesLabel',
       'logoutLabel',
       'logoutPendingLabel',
     ] as const) {
@@ -62,12 +63,20 @@ describe('CONTENT_FALLBACK', () => {
     expect(CONTENT_FALLBACK.favorites).toEqual(WELCOME.favorites);
   });
 
+  it('hesap menusu (T11.16) welcome.json accountMenu ile birebir: Profilim dahil', () => {
+    expect(CONTENT_FALLBACK.accountMenu).toEqual(WELCOME.accountMenu);
+  });
+
   it('profil metinleri (T11.14) welcome.json profile ile birebir', () => {
     expect(CONTENT_FALLBACK.profile).toEqual(WELCOME.profile);
   });
 
   it('Adreslerim metinleri (T11.15) welcome.json addresses ile birebir', () => {
     expect(CONTENT_FALLBACK.addresses).toEqual(WELCOME.addresses);
+  });
+
+  it('Gecmis Siparislerim metinleri (T11.16) welcome.json orders ile birebir', () => {
+    expect(CONTENT_FALLBACK.orders).toEqual(WELCOME.orders);
   });
 
   it('yedegin market listesi sozlesmeden gecer (gorseller mutlak adrese cevrilince)', () => {

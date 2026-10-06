@@ -99,20 +99,21 @@ Giriş (`/giris`) ve kayıt (`/kayit`) T11.6'dan beri karşılama ekranının ü
 girişler yok. Diğer sayfaların başlığında oturumsuzken "Giriş yap" (dönüş adresiyle), oturumdayken "Hesabım"
 (dar ekranda yalnızca ikon).
 
-| Katman          | Dosya                                                               | İş                                                                                                                                                        |
-| --------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Oturum deposu   | `shared/session/session-store.ts`                                   | `unknown` / `anonymous` / `authenticated`; erişim jetonu **yalnızca bellekte**                                                                            |
-| Kilit           | `shared/session/session-lock.ts`                                    | Yenileme, giriş, kayıt, çıkış bütün sekmelerde sırayla (Web Locks, `getir-oturum`)                                                                        |
-| Yenileyici      | `shared/session/session-refresher.ts`                               | Sekme içinde tek uçuş; 401 → oturumsuz; geçici hata fırlatılır, oturum yerinde kalır                                                                      |
-| Yetkili istek   | `shared/session/authorized-client.ts`                               | `Bearer` ekler; 401'de **bir kez** yeniler ve **bir kez** tekrarlar (döngü yok)                                                                           |
-| Açılış          | `shared/session/restore-session.ts` (`main.tsx`)                    | Sayfa yenilenince bir kez sessiz yenileme; herkese açık sayfa beklemez                                                                                    |
-| Formlar         | `features/auth/services/form-schemas.ts`, `ui/*Form.tsx`            | react-hook-form + zodResolver; kurallar ve alan mesajları `@getir/contracts`'tan                                                                          |
-| Sunucu hatası   | `features/auth/services/server-errors.ts`                           | Alan altına / form üstüne; metin sözlükten; 429'da kalan saniye                                                                                           |
-| Numara kontrolü | `features/auth/hooks/usePhoneRegistration.ts`, `ui/PhoneNotice.tsx` | Numara tamamlanınca (300 ms sonra, iptal edilebilir) `POST /v1/auth/phone-check`; kayıtta "hesap var → Giriş yap", girişte "hesap yok → Kayıt ol" (T11.7) |
-| Cep numarası    | `features/auth/services/form-schemas.ts` (`earlyPhoneProblem`)      | Türkiye cep numarası 5 ile başlar (BTK: 5XX + 7 rakam); ilk rakam yanlışsa numara bitmeden sözleşmenin cümlesi, eksiklik gönderimde (T11.9)               |
-| Şifremi unuttum | `pages/forgot-password`, `ui/ResetPasswordForm.tsx`                 | **Yalnızca geliştirmede** (`__DEMO_PASSWORD_RESET__`): telefon + yeni şifre, kod yok; yenileme oturum açar, eski oturumlar kapanır (T11.9)                |
-| Dönüş adresi    | `features/auth/services/next-path.ts`                               | `?next=` yalnızca uygulama içi yol (`//site`, `/\site`, mutlak adres → ana sayfa)                                                                         |
-| Koruma          | `features/auth/ui/RequireAuth.tsx`                                  | Oturum yoksa `/giris?next=...`; girişle geri döner                                                                                                        |
+| Katman          | Dosya                                                                   | İş                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| --------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Oturum deposu   | `shared/session/session-store.ts`                                       | `unknown` / `anonymous` / `authenticated`; erişim jetonu **yalnızca bellekte**                                                                                                                                                                                                                                                                                                                                      |
+| Kilit           | `shared/session/session-lock.ts`                                        | Yenileme, giriş, kayıt, çıkış bütün sekmelerde sırayla (Web Locks, `getir-oturum`)                                                                                                                                                                                                                                                                                                                                  |
+| Yenileyici      | `shared/session/session-refresher.ts`                                   | Sekme içinde tek uçuş; 401 → oturumsuz; geçici hata fırlatılır, oturum yerinde kalır                                                                                                                                                                                                                                                                                                                                |
+| Yetkili istek   | `shared/session/authorized-client.ts`                                   | `Bearer` ekler; 401'de **bir kez** yeniler ve **bir kez** tekrarlar (döngü yok)                                                                                                                                                                                                                                                                                                                                     |
+| Açılış          | `shared/session/restore-session.ts` (`main.tsx`)                        | Sayfa yenilenince bir kez sessiz yenileme; herkese açık sayfa beklemez                                                                                                                                                                                                                                                                                                                                              |
+| Formlar         | `features/auth/services/form-schemas.ts`, `ui/*Form.tsx`                | react-hook-form + zodResolver; kurallar ve alan mesajları `@getir/contracts`'tan                                                                                                                                                                                                                                                                                                                                    |
+| Sunucu hatası   | `features/auth/services/server-errors.ts`                               | Alan altına / form üstüne; metin sözlükten; 429'da kalan saniye                                                                                                                                                                                                                                                                                                                                                     |
+| Numara kontrolü | `features/auth/hooks/usePhoneRegistration.ts`, `ui/PhoneNotice.tsx`     | Numara tamamlanınca (300 ms sonra, iptal edilebilir) `POST /v1/auth/phone-check`; kayıtta "hesap var → Giriş yap", girişte "hesap yok → Kayıt ol" (T11.7)                                                                                                                                                                                                                                                           |
+| Alanlar         | `features/auth/ui/PhoneField.tsx`, `PasswordField.tsx`, `AuthField.tsx` | Bütün telefon ve şifre alanları bunlardan (giriş, kayıt, şifremi unuttum, profilde numara değiştirme). T11.16: telefonda ipucu yok, boş alanda etiket ("Telefon Numarası") kutunun içinde, değer girilince üste kayar (`floatingLabel`, `:placeholder-shown`); göz simgesi durumu gösterir (görünürken açık, gizliyken üstü çizili), adı bir sonraki eylem ("Şifreyi göster" / "Şifreyi gizle"), `aria-pressed` yok |
+| Cep numarası    | `features/auth/services/form-schemas.ts` (`earlyPhoneProblem`)          | Türkiye cep numarası 5 ile başlar (BTK: 5XX + 7 rakam); ilk rakam yanlışsa numara bitmeden sözleşmenin cümlesi, eksiklik gönderimde (T11.9)                                                                                                                                                                                                                                                                         |
+| Şifremi unuttum | `pages/forgot-password`, `ui/ResetPasswordForm.tsx`                     | **Yalnızca geliştirmede** (`__DEMO_PASSWORD_RESET__`): telefon + yeni şifre, kod yok; yenileme oturum açar, eski oturumlar kapanır (T11.9)                                                                                                                                                                                                                                                                          |
+| Dönüş adresi    | `features/auth/services/next-path.ts`                                   | `?next=` yalnızca uygulama içi yol (`//site`, `/\site`, mutlak adres → ana sayfa)                                                                                                                                                                                                                                                                                                                                   |
+| Koruma          | `features/auth/ui/RequireAuth.tsx`                                      | Oturum yoksa `/giris?next=...`; girişle geri döner                                                                                                                                                                                                                                                                                                                                                                  |
 
 - **Neden kilit:** yenileme jetonu her kullanımda değişir; kullanılmış jetonu gönderen istek 401 alır
   ve gateway çerezi siler. İki sekme aynı anda yenilese ikisi birden oturumu kaybederdi. Kilitle ikinci
@@ -181,7 +182,7 @@ getirçarşı. Karşılama ekranının barıyla aynı renk; logo sarı "getir" +
 | Birleştirme     | `app/AppHeader.tsx`, `app/AppShell.tsx`                                | Yuvaları doldurur: arama adresi tanımaz, adres giriş yolunu tanımaz                                                                                                                                                        |
 | Arama           | `features/search/ui/HeaderSearch.tsx`, `services/search-route`         | Ana sayfada yazdıkça `?ara=`; başka sayfada Enter ana sayfadaki sonuçlara götürür                                                                                                                                          |
 | Adres           | `features/address/ui/HeaderAddressPicker.tsx`, `AddressBookDialog.tsx` | Kutunun sağ ucunda "🏠 Ev ›" (teslimat süresi yok); tıklayınca "Adreslerim" penceresi (radyo + "Adresi Onayla"); alt banttaki "Adres Ekle" T11.8'in harita + detay penceresini açar (X yalnızca kapatır, detayda geri + X) |
-| Profil          | `features/auth/ui/HeaderAccount.tsx`                                   | Menü: "Hesabım", "Çıkış yap"; oturumsuzken "Giriş yap"                                                                                                                                                                     |
+| Profil          | `features/auth/ui/HeaderAccount.tsx`                                   | Menü: hesap sayfaları (sol menüyle aynı liste, T11.16) ve altta ayrı satırda "Çıkış yap"; oturumsuzken "Giriş yap"                                                                                                         |
 | Açılır listeler | `shared/ui/disclosure/useDisclosure.ts`                                | Esc, dışarı tıklama ve seçim kapatır; odak düğmeye döner                                                                                                                                                                   |
 
 - **Neden başka sayfada Enter:** yazarken ana sayfaya geçilseydi bar yeniden kurulur, klavye odağı kaybolurdu.
@@ -231,10 +232,10 @@ cihazda da aynı favoriler.
 | Veri             | `features/favorites/api`, `hooks/useFavorites.ts`         | `GET /v1/me/favorites` (TanStack Query, kullanıcı kimliğiyle anahtarlı); kalpler ve sayfa aynı sorgu |
 | Tıklama          | `hooks/useToggleFavorite.ts`, `services/favorite-list.ts` | İyimser: liste hemen değişir; sunucu reddederse eski hali geri yazılır ve bildirim çıkar             |
 | Bildirim (toast) | `shared/toast/`, `shared/ui/toast/Toaster.tsx`            | Zustand kuyruğu (en fazla 3, 5 sn), `aria-live`; roadmap T15.4'ten öne alındı                        |
-| Profil sayfası   | `pages/account/AccountLayout.tsx`, `FavoritesPage.tsx`    | Solda profil kartı ve menü (Adreslerim, Favori İşletmeler); `/hesabim/favoriler`                     |
+| Profil sayfası   | `pages/account/AccountLayout.tsx`, `FavoritesPage.tsx`    | Solda profil kartı ve hesap menüsü (aşağıda "Hesap menüsü"); `/hesabim/favoriler`                    |
 | Kart             | `features/markets/ui/MarketCard.tsx`                      | Bağlantı market adında, katmanı kartı kaplar; kalp bağlantının dışında (iç içe etkileşim geçersizdi) |
 
-- **Metinler içerikten** (`favorites` bloğu, `appHeader.favoritesLabel`); içerik gelmezse yedekle.
+- **Metinler içerikten** (`favorites` bloğu; menü etiketleri T11.16'dan beri `accountMenu`); içerik gelmezse yedekle.
 - **"Adreslerim"** profil menüsünde `/hesabim/adreslerim` sekmesine gider (T11.15; aşağıda "Adreslerim sekmesi").
   Üst bardaki adres seçici kendi penceresini açmaya devam eder (`features/address/ui/AddressDialogs.tsx`).
 - Açılış saati verisi yok: kapalı market yalnızca "Kapalı" etiketiyle görünür.
@@ -418,6 +419,41 @@ o da core'u import ettiği için bu satır tarayıcı paketine girer ve Rollup �
 `vite.config.ts` bu importu `src/shared/shims/node-crypto.ts`'e (Web Crypto) yönlendirir.
 Kalıcı çözüm core'un `globalThis.crypto.randomUUID()` kullanmasıdır (Node 22'de de global);
 o değişiklik platform alanında ayrı bir PR'dır ve yapıldığında takma ad silinir.
+
+## Hesap menüsü (T11.16)
+
+Kullanıcı isteği: profil sayfasının sol menüsü ve üst barın Profil açılır menüsü AYNI başlıkları aynı sırayla
+gösterir: Profilim, Adreslerim, Favori İşletmeler, Geçmiş Siparişlerim (T11.17'de Ödeme Yöntemlerim).
+
+| Parça       | Dosya                                 | Not                                                                                                                 |
+| ----------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Tek liste   | `pages/account/account-menu.ts`       | `accountMenuItems`: rota + içerikteki etiket anahtarı; madde eklemek = satır + etiket                               |
+| Sol menü    | `pages/account/AccountMenu.tsx`       | Geçerli sayfa vurgulu; Profilim yalnızca `/hesabim`'de (`end`), sipariş detayı da Geçmiş Siparişlerim'i seçer       |
+| Profil menü | `app/AppHeader.tsx` → `HeaderAccount` | Maddeler aynı listeden; altta ince çizgiyle ayrı satırda "Çıkış yap"; madde en az 44 px (`--size-header-menu-item`) |
+
+- **Metinler içerikten** (`accountMenu` bloğu; `useAccountMenuContent`, içerik gelmezse yedek). Eski
+  `favorites.profileMenuLabel/addressesLabel/favoritesMenuLabel` ve `appHeader.favoritesLabel` kalktı.
+- **Test:** `account-menu.spec.ts` iki menünün aynı maddeleri aynı sırayla çizdiğini uygulamanın bağlantısıyla
+  (`AppHeaderAccount`) doğrular.
+
+## Geçmiş Siparişlerim (T11.16)
+
+`/hesabim/siparislerim` ve detay `/hesabim/siparislerim/:orderId` (korumalı), hesap sayfalarının ortak içerik
+kabında; görsel dil Adreslerim'in.
+
+| Parça | Dosya                                                                  | Not                                                                                                                                                |
+| ----- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Liste | `pages/account/OrdersPage.tsx`, `OrdersView.tsx`                       | Satır "Market · 500,00 TL · Tamamlandı", altında tarih, sağda ok; satırın tamamı detay bağlantısı                                                  |
+| Detay | `pages/account/OrderDetailPage.tsx`, `OrderDetailView.tsx`             | Listeye dönüş, market adı ve durum, tarih ve adres, ürünler, tutar dökümü (ücretsiz teslimat, indirim)                                             |
+| Veri  | `features/orders/api`, `hooks/useOrderHistory.ts`, `useOrderDetail.ts` | `GET /v1/orders` (imleç, "Daha fazla göster" = sonraki sayfa), `GET /v1/orders/{id}`; anahtarlar kullanıcıya bağlı; market adı detayda `useMarket` |
+| Durum | `features/orders/services/order-status.ts`, `ui/OrderStatusLabel.tsx`  | 13 durum 3 gruba: Tamamlandı (yeşil), Devam ediyor (sarı rozet), İptal edildi (gri; ücret alınmışsa "· Ücret iade edildi")                         |
+
+- **Kararlar (L1-L8, 5 Ekim):** sepet taslakları listede yok (gateway süzer); market adı gelmezse "Market";
+  iptal edilen siparişte her ürün "Teslim edilmedi" (sipariş düzeyi, #91); iade = `CANCELLED` + geçmişte
+  `PAID` (listede sunucunun `refunded`'ı, detayda `wasRefunded`, aynı kural). Sonraki sayfa hata verirse liste
+  yerinde kalır, altında "Tekrar dene".
+- **Metinler içerikten** (`orders` bloğu; içerik gelmezse yedek). Satır ve "Daha fazla göster" en az 44 px
+  (`--size-order-row`). Tarih `formatDateTime` (tr-TR, tarayıcının saat dilimi).
 
 ## Adreslerim sekmesi (T11.15)
 
