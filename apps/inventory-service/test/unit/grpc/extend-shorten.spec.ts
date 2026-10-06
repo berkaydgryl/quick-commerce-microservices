@@ -73,16 +73,19 @@ describe('ExtendReservation (T11.3)', () => {
       expiresAt: at(TTL_SECONDS + 60),
       alreadyExtended: false,
       extensionCount: 1,
+      expiryMismatch: false,
     });
     expect((await extend(1)).response).toEqual({
       expiresAt: at(TTL_SECONDS + 120),
       alreadyExtended: false,
       extensionCount: 2,
+      expiryMismatch: false,
     });
     expect((await extend(1)).response).toEqual({
       expiresAt: at(TTL_SECONDS + 120),
       alreadyExtended: true,
       extensionCount: 2,
+      expiryMismatch: false,
     });
   });
 
