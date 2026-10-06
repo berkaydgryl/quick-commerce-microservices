@@ -239,6 +239,18 @@ export class InMemoryReservationStore implements ReservationStore {
     if (inactive !== undefined || existing === undefined) {
       return inactive ?? { status: 'inactive', reason: 'absent' };
     }
+    // Beklenen bitis (T15.3): extend.lua ile ayni sira, aktiflikten sonra hak sinirindan once.
+    if (
+      command.expectedExpiresAt !== undefined &&
+      command.expectedExpiresAt !== existing.expiresAt
+    ) {
+      return {
+        status: 'expiry-mismatch',
+        expiresAt: existing.expiresAt,
+        extensionCount: existing.extensionCount,
+        lines: sortedLines(existing.lines),
+      };
+    }
     if (existing.extensionCount >= maxExtensions) {
       return {
         status: 'limit-reached',

@@ -35,7 +35,7 @@ export async function extendOnce(
   command: ExtendCommand,
   hash: ReservationHash | undefined,
 ): Promise<ExtendOutcome | 'stale'> {
-  const { orderId, marketId, nowMs, additionalMs, maxExtensions } = command;
+  const { orderId, marketId, nowMs, additionalMs, maxExtensions, expectedExpiresAt } = command;
   const args = [
     orderId,
     hash?.userId ?? '',
@@ -43,6 +43,7 @@ export async function extendOnce(
     additionalMs,
     options.holdAfterExpiryMs,
     maxExtensions,
+    expectedExpiresAt ?? '',
   ];
 
   const parsed = extendReplySchema.safeParse(await script.run(timingKeys(command, hash), args));
@@ -61,6 +62,15 @@ export async function extendOnce(
     }
     case 'limit':
       return { status: 'limit-reached', expiresAt: reply[1], extensionCount: reply[2] };
+    case 'mismatch': {
+      const [, expiresAt, extensionCount, ...pairs] = reply;
+      return {
+        status: 'expiry-mismatch',
+        expiresAt,
+        extensionCount,
+        lines: linesOf(pairs, command),
+      };
+    }
     case 'stale':
       return 'stale';
     default:

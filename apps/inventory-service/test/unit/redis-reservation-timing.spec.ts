@@ -84,8 +84,21 @@ describe('RedisReservationStore.extend', () => {
       ],
     });
     expect(calls).toEqual([
-      { keys: KEYS, args: [ORDER, USER, 1_000, 60_000, OPTIONS.holdAfterExpiryMs, 3] },
+      // 7. arguman beklenen bitis (T15.3): verilmezse bos (denetim yok).
+      { keys: KEYS, args: [ORDER, USER, 1_000, 60_000, OPTIONS.holdAfterExpiryMs, 3, ''] },
     ]);
+  });
+
+  it('beklenen bitis (T15.3) 7. arguman olarak gider; mismatch cevabi guncel hal ve kalemler', async () => {
+    const { extending, calls } = storeWith(HASH, ['mismatch', '61000', '1', 'SUT-1L', '2']);
+
+    expect(await extending.extend({ ...EXTEND, expectedExpiresAt: 1_000 })).toEqual({
+      status: 'expiry-mismatch',
+      expiresAt: 61_000,
+      extensionCount: 1,
+      lines: [{ sku: 'SUT-1L', quantity: 2 }],
+    });
+    expect(calls[0]?.args.at(-1)).toBe(1_000);
   });
 
   it('hash yoksa kullanici kilidi bildirilmez; aktif olmayan cevaplar inactive', async () => {

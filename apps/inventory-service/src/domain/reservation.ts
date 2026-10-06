@@ -160,6 +160,12 @@ export type ExpireOutcome =
 export interface ExtendCommand extends CommitCommand {
   readonly additionalMs: number;
   readonly maxExtensions: number;
+  /**
+   * Cagiranin bildigi bitis (ms; T15.3, bekleyen is 117): verilirse uzatma
+   * yalnizca guncel bitis buna esitse yapilir. Denetim uzatmayla ayni atomik
+   * adimdadir (Redis'te extend.lua). Verilmezse denetim yok.
+   */
+  readonly expectedExpiresAt?: number;
 }
 
 /** Kisaltma komutu (T11.3): kalan sure en cok `maxRemainingMs` olsun. */
@@ -195,6 +201,16 @@ export type ExtendOutcome =
       readonly status: 'limit-reached';
       readonly expiresAt: number;
       readonly extensionCount: number;
+    }
+  /**
+   * Beklenen bitis tutmadi (T15.3): sure DEGISMEDI, hak harcanmadi; guncel bitis
+   * ve sayi. Kalemler eksik defter kaydini tamamlamak icindir.
+   */
+  | {
+      readonly status: 'expiry-mismatch';
+      readonly expiresAt: number;
+      readonly extensionCount: number;
+      readonly lines: readonly ReservationLine[];
     }
   | InactiveReservation;
 
