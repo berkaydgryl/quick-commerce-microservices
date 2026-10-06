@@ -2,7 +2,8 @@
  * QA kara kutu (T13.1 PR 2): order'in kurye iscisi GERCEK courier-svc'ye gercek
  * gRPC ile (uretimdeki istemci ayarlari: 1 sn sure, D17 devre ve yeniden deneme).
  * Iki taraf da bellekte (MOCK depolari); Mongo'lu senaryolar
- * test/integration/qa-courier-dispatch.spec.ts'te.
+ * test/integration/qa-courier-dispatch.spec.ts'te (hata ve toparlanma: 7, 8, 9 ve 13
+ * qa-courier-dispatch-failures.spec.ts'te).
  *
  * Bu dosya DAVRANISI dogrular, gunluk metnini ve sirayi DEGIL. Sira (#92), hata
  * kaynagi (D1), gunluk (D2) ve geri cekilme (D3) T13.2 PR 2'nin QA testlerinde:
