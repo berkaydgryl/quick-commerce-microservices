@@ -24,7 +24,11 @@ export interface VerifyCardInput {
  */
 export interface CardVerification {
   readonly decision: ProviderDecision;
-  /** Saglayicinin kart jetonu; kayitli kartla odeme (T12.4) bununla yapilir. */
+  /**
+   * Saglayicinin kart jetonu; kayitli kart onun karsiligidir (T12.4 odemeyi kart
+   * kimligiyle yapar). Yalnizca APPROVED ve CHALLENGE_REQUIRED'da anlamli;
+   * DECLINED'da bos olabilir.
+   */
   readonly providerToken: string;
 }
 

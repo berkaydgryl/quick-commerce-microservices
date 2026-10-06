@@ -49,3 +49,12 @@ export function cardVerificationDeclined(): AppError {
 export function cardVerifierUnavailable(): AppError {
   return new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'Kart dogrulayicisina ulasilamadi');
 }
+
+/**
+ * Kart yazimi es zamanli bir yazimla cakisti ve sonuc okunamadi (QA D1).
+ * Yeniden denenebilir; ayrinti tasimaz (depo hatasinin koleksiyon ve alan adlari
+ * disari cikmaz).
+ */
+export function cardWriteContended(): AppError {
+  return new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'Kart kaydi su an tamamlanamadi');
+}

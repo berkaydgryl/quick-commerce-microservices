@@ -8,8 +8,6 @@
  * olarak akmasini (FAILED + PAYMENT_DECLINED) korur.
  */
 
-import { randomUUID } from 'node:crypto';
-
 import { MOCK_THREEDS_CODE } from '@getir/core';
 
 import type {
@@ -25,10 +23,16 @@ import type {
 } from '../../domain/payment-provider.js';
 import { TEST_CARDS } from './test-cards.js';
 
-/** Test numarasi (yalnizca rakamlar) -> jetonu. */
-const TOKEN_BY_NUMBER: ReadonlyMap<string, string> = new Map(
-  Object.entries(TEST_CARDS).map(([token, card]) => [card.number.replace(/\D/g, ''), token]),
+/** Test numarasi (yalnizca rakamlar) -> jetonu ve karari. */
+const CARD_BY_NUMBER: ReadonlyMap<string, CardVerification> = new Map(
+  Object.entries(TEST_CARDS).map(([token, card]) => [
+    card.number.replace(/\D/g, ''),
+    { decision: card.decision, providerToken: token },
+  ]),
 );
+
+/** Taninmayan kart: red; jeton yok (reddedilen kart kaydedilmez). */
+const UNKNOWN_CARD: CardVerification = { decision: 'DECLINED', providerToken: '' };
 
 export class MockPaymentProvider implements PaymentProvider, CardVerifier {
   authorize({ cardToken }: AuthorizeInput): Promise<ProviderDecision> {
@@ -41,18 +45,10 @@ export class MockPaymentProvider implements PaymentProvider, CardVerifier {
   }
 
   /**
-   * Test kartinin karari ve jetonu; bilinmeyen numaraya rastgele jeton ve red.
-   * Son kullanma ve CVV'ye bakmaz (kurallari kasa denetler).
+   * Test kartinin karari ve jetonu; bilinmeyen numaraya red. Son kullanma ve
+   * CVV'ye bakmaz (kurallari kasa denetler).
    */
   verifyCard({ number }: VerifyCardInput): Promise<CardVerification> {
-    const token = TOKEN_BY_NUMBER.get(number);
-    const decision = token === undefined ? undefined : TEST_CARDS[token]?.decision;
-    if (token === undefined || decision === undefined) {
-      return Promise.resolve({
-        decision: 'DECLINED',
-        providerToken: `tok_${randomUUID().replace(/-/g, '')}`,
-      });
-    }
-    return Promise.resolve({ decision, providerToken: token });
+    return Promise.resolve(CARD_BY_NUMBER.get(number) ?? UNKNOWN_CARD);
   }
 }

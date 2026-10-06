@@ -86,8 +86,10 @@ export function isSameCard(left: CardKey, right: CardKey): boolean {
 }
 
 /**
- * Silinmis kart: DELETED, silme ani; saglayici jetonu kayitta KALMAZ (karta
- * artik odeme yapilamaz, jeton sizarsa da ise yaramaz).
+ * Silinmis kart: DELETED, silme ani; saglayici jetonu kayitta KALMAZ. Kayitli
+ * kartla odeme (T12.4) kart kimligi ve ACTIVE durumuyla yapilir, ham jetonla
+ * degil; silinen karta bu yoldan odeme yapilamaz. Jetonun kendisi saglayicida
+ * hala gecerlidir: gercek saglayicida silmede iptal edilmeli (bekleyen is #103).
  */
 export function deletedCard(card: Card, at: Date): Card {
   const { providerToken: _providerToken, ...rest } = card;

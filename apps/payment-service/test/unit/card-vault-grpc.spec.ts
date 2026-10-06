@@ -8,6 +8,7 @@
 import { CARD_FIELD_MESSAGES, SAVED_CARDS_MAX } from '@getir/contracts';
 import { ERROR_CODES, fixedClock, GRPC_STATUS, ID_PREFIX, newId } from '@getir/core';
 import type { MutableClock } from '@getir/core';
+import { withoutRandomNoise } from '@getir/core/testing';
 import { cardvaultV1 } from '@getir/proto';
 import { appErrorOf, unaryCall } from '@getir/service-kit/testing';
 import type { CallResult } from '@getir/service-kit/testing';
@@ -55,13 +56,18 @@ function addRequest(
   };
 }
 
-/** Hatanin disari giden her parcasi: durum metni, mesaj ve x-app-error yuku. */
+/**
+ * Hatanin disari giden her parcasi: durum metni, mesaj ve x-app-error yuku.
+ * Istek kimligi rastgele: kisa sir onun icinde tesadufen gecebilir (maskelenir).
+ */
 function visibleError(error: ServiceError | undefined): string {
-  return JSON.stringify([
-    error?.message,
-    error?.details,
-    error?.metadata.get(ERROR_METADATA_KEY).map((value) => value.toString()),
-  ]);
+  return withoutRandomNoise(
+    JSON.stringify([
+      error?.message,
+      error?.details,
+      error?.metadata.get(ERROR_METADATA_KEY).map((value) => value.toString()),
+    ]),
+  );
 }
 
 beforeAll(async () => {
@@ -95,7 +101,7 @@ describe('CardVaultService/AddCard', () => {
       createdAt: new Date(NOW_MS),
     });
     expect(response?.card?.id).toMatch(/^crd_[0-9a-f]{32}$/);
-    const body = JSON.stringify(response);
+    const body = withoutRandomNoise(JSON.stringify(response));
     for (const secret of ['tok_', '4242424242424242', '987', 'providerToken']) {
       expect(body).not.toContain(secret);
     }

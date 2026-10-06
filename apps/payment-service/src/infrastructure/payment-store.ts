@@ -59,7 +59,7 @@ export async function openPaymentStore(
     // Ayni kart kurali (kismi unique) ve kart sayaci acilista kurulur: sayac
     // koleksiyonu transaction icinde ortuk olusturmaya birakilmaz.
     await cards.ensureIndexes();
-    await wallets.ensureCollection();
+    await wallets.ensureCollection(connection.unbounded.db);
   } catch (error: unknown) {
     // Baglanti acik kalirsa process kapanmaz ve hata gizlenir.
     await connection.close();

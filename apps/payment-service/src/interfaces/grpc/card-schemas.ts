@@ -17,8 +17,6 @@ const userIdSchema = z.object({ userId: requiredText('userId') });
 
 export const addCardRequestSchema = userIdSchema.and(addCardBodySchema);
 
-export type AddCardRequestInput = z.infer<typeof addCardRequestSchema>;
-
 export const listCardsRequestSchema = userIdSchema;
 
 /**

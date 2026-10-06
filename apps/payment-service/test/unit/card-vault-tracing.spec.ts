@@ -4,6 +4,8 @@
  * canli Jaeger denetimi PR 3'un uctan uca testindedir.
  */
 
+import { fixedClock } from '@getir/core';
+import { withoutRandomNoise } from '@getir/core/testing';
 import { recordSpans } from '@getir/observability/testing';
 import type { ReadableSpan } from '@getir/observability/testing';
 import { cardvaultV1 } from '@getir/proto';
@@ -19,6 +21,8 @@ const spans = recordSpans();
 
 const Vault = cardvaultV1.CardVaultServiceService;
 const CVV = '9183';
+/** 5 Ekim 2026 12.00 UTC. */
+const NOW_MS = Date.parse('2026-10-05T12:00:00Z');
 
 let vault: RunningCardVault;
 let unreachable: RunningCardVault;
@@ -52,8 +56,10 @@ function visible(span: ReadableSpan): unknown {
 }
 
 beforeAll(async () => {
-  vault = await startCardVault({}, 'kasa-iz');
-  unreachable = await startCardVault({ verifier: failing }, 'kasa-iz-2');
+  // Sabit saat (QA D4): gercek saatle kartlarin son kullanma tarihi bir gun gecer.
+  const clock = fixedClock(NOW_MS);
+  vault = await startCardVault({ clock }, 'kasa-iz');
+  unreachable = await startCardVault({ clock, verifier: failing }, 'kasa-iz-2');
 });
 
 afterAll(async () => {
@@ -78,7 +84,8 @@ describe('kart kasasi izi (QA P7)', () => {
       .finished()
       .filter((span) => span.name === 'getir.cardvault.v1.CardVaultService/AddCard');
     expect(addCard).toHaveLength(5);
-    const text = JSON.stringify(addCard.map(visible));
+    // Istek kimligi (app.request_id) rastgele: kisa sir onun icinde tesadufen gecebilir.
+    const text = withoutRandomNoise(JSON.stringify(addCard.map(visible)));
     for (const secret of ['378282246310005', '378282', '822463', CVV, 'Kılıçarslan', 'Gizli']) {
       expect(text, `izde: ${secret.length} karakter`).not.toContain(secret);
     }

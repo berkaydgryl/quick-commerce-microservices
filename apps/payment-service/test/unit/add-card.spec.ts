@@ -6,7 +6,7 @@
 
 import { CARD_EXPIRY_MAX_YEARS_AHEAD, SAVED_CARDS_MAX } from '@getir/contracts';
 import { ERROR_CODES, fixedClock } from '@getir/core';
-import { recordingLogger } from '@getir/core/testing';
+import { recordingLogger, withoutRandomNoise } from '@getir/core/testing';
 import type { LogLine } from '@getir/core/testing';
 import { describe, expect, it } from 'vitest';
 
@@ -79,7 +79,8 @@ describe('AddCard: onay', () => {
     });
     expect(card.id).toMatch(/^crd_[0-9a-f]{32}$/);
     expect(Object.keys(card)).not.toEqual(expect.arrayContaining(['number']));
-    const stored = JSON.stringify(repository.stored(card.id));
+    // Kart kimligi rastgele 32 onaltilik: CVV onun icinde tesadufen gecebilir.
+    const stored = withoutRandomNoise(JSON.stringify(repository.stored(card.id)));
     expect(stored).not.toContain('4242424242424242');
     expect(stored).not.toContain('987');
   });
@@ -187,7 +188,7 @@ describe('AddCard: red', () => {
 
     expect(error).toMatchObject({ code: ERROR_CODES.SERVICE_UNAVAILABLE });
     expect(error).not.toHaveProperty('cause');
-    const visible = JSON.stringify([error, String(error), lines]);
+    const visible = withoutRandomNoise(JSON.stringify([error, String(error), lines]));
     for (const secret of ['4242424242424242', '4242 4242', '987', 'islenemedi']) {
       expect(visible).not.toContain(secret);
     }

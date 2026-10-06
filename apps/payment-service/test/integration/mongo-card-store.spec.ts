@@ -13,7 +13,8 @@
  */
 
 import { CARD_FIELD_MESSAGES, SAVED_CARDS_MAX } from '@getir/contracts';
-import { ERROR_CODES, silentLogger } from '@getir/core';
+import { ERROR_CODES, fixedClock, silentLogger } from '@getir/core';
+import { withoutRandomNoise } from '@getir/core/testing';
 import { connectMongo } from '@getir/mongo-kit';
 import type { MongoConnection } from '@getir/mongo-kit';
 import { cardvaultV1 } from '@getir/proto';
@@ -86,7 +87,11 @@ beforeAll(async () => {
     uri: `${container.getConnectionString()}?directConnection=true`,
     dbName: DB_NAME,
   });
-  vault = await startCardVault({ repository: opened.cards }, 'kasa-int');
+  // Sabit saat (QA D4): gercek saatle kartlarin son kullanma tarihi bir gun gecer.
+  vault = await startCardVault(
+    { repository: opened.cards, clock: fixedClock(Date.parse('2026-10-05T12:00:00Z')) },
+    'kasa-int',
+  );
 });
 
 afterAll(async () => {
@@ -150,7 +155,8 @@ describe('ham belge ve sayac', () => {
       last4: '0005',
       providerToken: 'tok_test_0005',
     });
-    const raw = JSON.stringify(document);
+    // _id rastgele 32 onaltilik: CVV onun icinde tesadufen gecebilir.
+    const raw = withoutRandomNoise(JSON.stringify(document));
     for (const secret of ['378282246310005', '822463', '9183']) {
       expect(raw).not.toContain(secret);
     }

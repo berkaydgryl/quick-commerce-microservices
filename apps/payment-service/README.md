@@ -83,9 +83,13 @@ oluşturulur (transaction içinde örtük oluşturmaya bırakılmaz). Göç yok:
 **Günlük ve iz:** handler istek nesnesini günlüğe **hiç vermez**; satırlar yalnızca `userId`,
 `cardId` ve `brand` taşır (ad ve kart adı da yok). İkinci emniyet ortak günlükçüde
 (`@getir/observability` `redact.ts`): `cvv` her zaman, `number` yalnızca kart numarasına
-benziyorsa gizlenir. Sağlayıcı hatası `cause`'a konmaz: pino `cause` mesajını satıra yazar.
-Sunucu span'inde yalnızca rpc nitelikleri vardır (testli: `card-vault-logs.spec.ts`,
-`card-vault-tracing.spec.ts`).
+benziyorsa gizlenir. Gizleme yalnızca **anahtar adına ve bilinen yollara** bakar (`cvv`, `number`,
+`card.*`, `input.*`, `request.*`; joker yok, QA O1): başka biçimde verilen kart verisini yakalamaz,
+asıl kural isteğin günlüğe hiç verilmemesidir. Sağlayıcı hatası `cause`'a konmaz: pino `cause`
+mesajını satıra yazar. Sunucu span'inde yalnızca rpc nitelikleri vardır (testli:
+`card-vault-logs.spec.ts`, `card-vault-tracing.spec.ts`). Testlerde kısa sır (CVV) günlük ya da
+iz metninde aranmadan önce `@getir/core/testing` `withoutRandomNoise`'dan geçer: rastgele kimlik
+(`req_…`) içinde tesadüfen geçebilir; kart numarası gibi genel rakam dizileri maskelenmez.
 
 ## Charge akışı ve çift çekim koruması
 

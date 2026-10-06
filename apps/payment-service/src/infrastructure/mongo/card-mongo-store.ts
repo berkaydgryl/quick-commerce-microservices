@@ -12,7 +12,7 @@ import type { MongoConnection } from '@getir/mongo-kit';
 
 import { cardKeyOf } from '../../domain/card.js';
 import type { Card } from '../../domain/card.js';
-import { cardAlreadySaved, cardWalletFull } from '../../domain/card-errors.js';
+import { cardAlreadySaved, cardWalletFull, cardWriteContended } from '../../domain/card-errors.js';
 import type { CardRepository } from '../../domain/card-repository.js';
 import { fromCardDocument, toCardDocument } from './card-mappers.js';
 import type { CardWalletsCollection } from './card-wallets-collection.js';
@@ -65,12 +65,15 @@ export class CardMongoStore implements CardRepository {
    * Her CONFLICT ayni sozlesme hatasina doner: ayni kart, var olan kartin
    * kimligiyle. Benzersiz indeks ihlalinde (son emniyet) kimlik transaction
    * icinde okunamaz (islem iptal); kart burada, transaction disinda bulunur.
+   * Kart bulunamazsa (cakisan yazim geri alindi ya da yeniden denemeler
+   * tukendi) yeniden denenebilir SERVICE_UNAVAILABLE doner: deponun ic
+   * ayrintili CONFLICT'i disari cikmaz (QA D1).
    */
   private async withExistingCard(card: Card, error: unknown): Promise<unknown> {
     if (!isAppError(error) || error.code !== ERROR_CODES.CONFLICT) {
       return error;
     }
     const existing = await this.cards.findActiveByKey(cardKeyOf(card));
-    return existing === null ? error : cardAlreadySaved(existing._id);
+    return existing === null ? cardWriteContended() : cardAlreadySaved(existing._id);
   }
 }

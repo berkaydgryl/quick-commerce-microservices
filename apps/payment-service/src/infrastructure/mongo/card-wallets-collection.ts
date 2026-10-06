@@ -9,7 +9,7 @@
  * belgeye yazinca yazma cakismasi dogar, surucu kaybedeni yeniden dener.
  */
 
-import { MongoRepository, NO_OPERATION_TIMEOUT } from '@getir/mongo-kit';
+import { MongoRepository } from '@getir/mongo-kit';
 import type { SessionOption } from '@getir/mongo-kit';
 import { MongoServerError } from 'mongodb';
 import type { Db, IndexDescription } from 'mongodb';
@@ -21,7 +21,7 @@ import { COLLECTIONS } from './documents.js';
 const NAMESPACE_EXISTS_CODE = 48;
 
 export class CardWalletsCollection extends MongoRepository<CardWalletDocument> {
-  constructor(private readonly db: Db) {
+  constructor(db: Db) {
     super(db, COLLECTIONS.CARD_WALLETS);
   }
 
@@ -34,18 +34,21 @@ export class CardWalletsCollection extends MongoRepository<CardWalletDocument> {
    * Acilis isi: koleksiyon yoksa olusturur. Indeksi olmadigi icin ensureIndexes
    * olusturmaz; ilk kartin sayaci transaction icinde ORTUK olusturmaya
    * birakilmaz (anlik goruntu okumali transaction'da surume bagli davranis).
-   * Suresiz (#51): acilis isidir.
+   *
+   * SURESIZ (#51, QA D6): acilis isidir; `startupDb` baglantinin suresiz gorunumu
+   * (`connection.unbounded.db`). Istek tutamaginin 2 sn'si yavas bir acilista
+   * (secim, yuk) acilisi gereksiz yere durdururdu.
    */
-  async ensureCollection(): Promise<void> {
+  async ensureCollection(startupDb: Db): Promise<void> {
     await this.run('ensureCollection', async () => {
-      const existing = await this.db
+      const existing = await startupDb
         .listCollections({ name: this.collectionName }, { nameOnly: true })
         .toArray();
       if (existing.length > 0) {
         return;
       }
       try {
-        await this.db.createCollection(this.collectionName, { timeoutMS: NO_OPERATION_TIMEOUT });
+        await startupDb.createCollection(this.collectionName);
       } catch (error: unknown) {
         // Baska bir kopya ayni anda olusturdu: istenen durum zaten var.
         if (!(error instanceof MongoServerError && error.code === NAMESPACE_EXISTS_CODE)) {

@@ -7,7 +7,7 @@
  */
 
 import { fixedClock } from '@getir/core';
-import { recordingLogger } from '@getir/core/testing';
+import { recordingLogger, withoutRandomNoise } from '@getir/core/testing';
 import type { LogLine } from '@getir/core/testing';
 import { cardvaultV1 } from '@getir/proto';
 import { unaryCall } from '@getir/service-kit/testing';
@@ -45,12 +45,18 @@ function request(overrides: Partial<cardvaultV1.AddCardRequest>): cardvaultV1.Ad
   };
 }
 
-/** Hata nesneleri pino gibi: mesaj ve yigin izi (cause'u da) metne girer. */
+/**
+ * Hata nesneleri pino gibi: mesaj ve yigin izi (cause'u da) metne girer.
+ * Rastgele kimlik ve sureler maskelenir: kisa sir (CVV) onlarin icinde
+ * tesadufen gecebilir (#132'nin titrek kosusu).
+ */
 function serialized(): string {
-  return JSON.stringify(lines, (_key, value: unknown) =>
-    value instanceof Error
-      ? { message: value.message, stack: value.stack, cause: String(value.cause) }
-      : value,
+  return withoutRandomNoise(
+    JSON.stringify(lines, (_key, value: unknown) =>
+      value instanceof Error
+        ? { message: value.message, stack: value.stack, cause: String(value.cause) }
+        : value,
+    ),
   );
 }
 
