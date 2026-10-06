@@ -51,7 +51,7 @@ import { openOrderStore } from '../../src/infrastructure/order-store.js';
 import type { OrderStore } from '../../src/infrastructure/order-store.js';
 import {
   crossCheck,
-  freeFixedPort,
+  FREE_FIXED_PORT,
   gate,
   HookedCourierRepository,
   isBusy,
@@ -117,7 +117,7 @@ async function courierOnMongo(options: {
   readonly placed?: readonly Courier[];
   readonly clock: MutableClock;
   readonly lines?: LogLine[];
-  readonly port?: number;
+  readonly port?: number | typeof FREE_FIXED_PORT;
 }): Promise<CourierSide> {
   const connection = await connectMongo({
     uri: directUri(),
@@ -498,8 +498,13 @@ describe('QA T13.1 PR 2 courier coker ve geri gelir (9)', () => {
     const dbs = freshDbs();
     const clock = fixedClock(QA_NOW_MS);
     const placed = placeCouriers(3);
-    const port = await freeFixedPort();
-    const first = await courierOnMongo({ dbName: dbs.courier, placed, clock, port });
+    const first = await courierOnMongo({
+      dbName: dbs.courier,
+      placed,
+      clock,
+      port: FREE_FIXED_PORT,
+    });
+    const { port } = first.service;
     const side = await orderOnMongo({
       dbName: dbs.order,
       courierAddress: first.service.address,

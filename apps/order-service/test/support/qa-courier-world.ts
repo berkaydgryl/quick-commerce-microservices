@@ -145,6 +145,9 @@ export interface QaCourierService {
   stop(): Promise<void>;
 }
 
+/** Courier'i bos bir SABIT portta acar: coktukten sonra ayni adreste yeniden acilabilir. */
+export const FREE_FIXED_PORT = 'bos-sabit-port';
+
 export async function startCourierService(options: {
   readonly repository: CourierRepository;
   /** Market kopyasi ve rotalar (T13.2): verilmezse courier'in bellek varsayilanlari. */
@@ -152,24 +155,32 @@ export async function startCourierService(options: {
   readonly routes?: RouteRepository;
   readonly clock: Clock;
   readonly logger?: Logger;
-  /** Verilirse bu portta acilir (coken courier'i ayni adreste yeniden acmak icin). */
-  readonly port?: number;
+  /**
+   * Verilirse bu portta acilir (coken courier'i ayni adreste yeniden acmak icin);
+   * FREE_FIXED_PORT ise bos bir sabit port secilir (sonradan `port` ile yeniden acilir).
+   */
+  readonly port?: number | typeof FREE_FIXED_PORT;
 }): Promise<QaCourierService> {
-  const handle: GrpcServerHandle = await startGrpcServer({
-    serviceName: 'courier-qa',
-    host: LOCALHOST,
-    port: options.port ?? EPHEMERAL_PORT,
-    services: [
-      buildCourierService({
-        couriers: options.repository,
-        ...(options.markets === undefined ? {} : { markets: options.markets }),
-        ...(options.routes === undefined ? {} : { routes: options.routes }),
-        clock: options.clock,
-        ...(options.logger === undefined ? {} : { logger: options.logger }),
-      }),
-    ],
-    ...(options.logger === undefined ? {} : { logger: options.logger }),
-  });
+  const serve = (port: number): Promise<GrpcServerHandle> =>
+    startGrpcServer({
+      serviceName: 'courier-qa',
+      host: LOCALHOST,
+      port,
+      services: [
+        buildCourierService({
+          couriers: options.repository,
+          ...(options.markets === undefined ? {} : { markets: options.markets }),
+          ...(options.routes === undefined ? {} : { routes: options.routes }),
+          clock: options.clock,
+          ...(options.logger === undefined ? {} : { logger: options.logger }),
+        }),
+      ],
+      ...(options.logger === undefined ? {} : { logger: options.logger }),
+    });
+  const handle =
+    options.port === FREE_FIXED_PORT
+      ? await onFreeFixedPort(serve)
+      : await serve(options.port ?? EPHEMERAL_PORT);
   const address = `${LOCALHOST}:${handle.port}`;
   const client = new Client(address, credentials.createInsecure());
   const service = courierV1.CourierServiceService;
@@ -193,17 +204,28 @@ export async function startCourierService(options: {
   };
 }
 
-/** Sabit portun araligi: metrik portu (gRPC + METRICS_PORT_OFFSET) 65535'i asmasin. */
-const FIXED_PORT_MIN = 20_000;
-const FIXED_PORT_SPAN = 40_000;
+/**
+ * Sabit portun araligi isletim sisteminin gecici (ephemeral) araliginin ALTINDA:
+ * Docker'in rastgele host portlari ve giden baglantilar oradan alinir; eski
+ * 20000-60000 araligi onlarla cakisiyordu (#135 CI, EADDRINUSE). Taban Linux
+ * varsayilani 32768 (GitHub runner'i varsayilanla gelir; macOS 49152'den baslar).
+ * Metrik portu (gRPC + METRICS_PORT_OFFSET) da tabanin altinda kalir. Aralik
+ * cakisma OLASILIGINI dusurur; kalan yaris icin ilk acilis yeni portla tekrar dener.
+ */
+const EPHEMERAL_FLOOR = 32_768;
+const FIXED_PORT_MIN = 10_000;
+const FIXED_PORT_SPAN = EPHEMERAL_FLOOR - METRICS_PORT_OFFSET - FIXED_PORT_MIN;
 const FIXED_PORT_TRIES = 50;
+/** Bos gorulen port sunucu baglanana kadar baskasina gecebilir (TOCTOU): yeni portla tekrar. */
+const FIXED_PORT_START_ATTEMPTS = 5;
+const PORT_IN_USE = 'EADDRINUSE';
 
 /**
  * Courier'i "cokertip" AYNI adreste yeniden acmak icin bos port: hem gRPC portu hem
  * metrik portu bos olmali. Isletim sisteminin sectigi port (0) metrik sinirini
  * asabildigi icin aralik icinden rastgele denenir.
  */
-export async function freeFixedPort(): Promise<number> {
+async function freeFixedPort(): Promise<number> {
   for (let attempt = 0; attempt < FIXED_PORT_TRIES; attempt += 1) {
     const port = FIXED_PORT_MIN + Math.floor(Math.random() * FIXED_PORT_SPAN);
     if ((await isFree(port)) && (await isFree(port + METRICS_PORT_OFFSET))) {
@@ -213,11 +235,29 @@ export async function freeFixedPort(): Promise<number> {
   throw new Error('bos port bulunamadi');
 }
 
+/**
+ * Bos sabit portta acar: port arada baskasina gectiyse (EADDRINUSE) YALNIZCA
+ * sunucuyu yeni portla yeniden acar (depo ve seed tekrarlanmaz). Ayni adreste
+ * yeniden acilis (coken courier geri gelir) portu degistiremez; ona tekrar yok.
+ */
+async function onFreeFixedPort<T>(serve: (port: number) => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await serve(await freeFixedPort());
+    } catch (error: unknown) {
+      const inUse = error instanceof Error && error.message.includes(PORT_IN_USE);
+      if (!inUse || attempt === FIXED_PORT_START_ATTEMPTS) throw error;
+    }
+  }
+}
+
 function isFree(port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const probe = createServer();
-    probe.once('error', () => resolve(false));
+    const busy = (): void => resolve(false);
+    probe.once('error', busy);
     probe.listen(port, LOCALHOST, () => {
+      probe.off('error', busy);
       probe.close(() => resolve(true));
     });
   });

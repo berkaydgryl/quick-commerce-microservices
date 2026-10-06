@@ -28,7 +28,7 @@ import { MongoCourierSeedWriter } from '../../../courier-service/src/infrastruct
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
 import { openOrderStore } from '../../src/infrastructure/order-store.js';
 import { HookedCourierRepository, orderSide, startCourierService } from './qa-courier-world.js';
-import type { QaCourierService, QaOrderSide } from './qa-courier-world.js';
+import type { QaCourierService, QaOrderSide, FREE_FIXED_PORT } from './qa-courier-world.js';
 
 /** Uretimdeki gibi sureli, yuklu makinede yanlis kirmizi vermesin diye genis. */
 export const STORE_TIMEOUT_MS = 10_000;
@@ -52,7 +52,7 @@ export async function courierOnMongo(options: {
   readonly placed?: readonly Courier[];
   readonly clock: MutableClock;
   readonly lines?: LogLine[];
-  readonly port?: number;
+  readonly port?: number | typeof FREE_FIXED_PORT;
   readonly cleanups: Cleanups;
 }): Promise<CourierSide> {
   const mongo = { uri: options.uri, dbName: options.dbName, operationTimeoutMs: STORE_TIMEOUT_MS };

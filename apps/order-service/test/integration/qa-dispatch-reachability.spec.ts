@@ -28,7 +28,7 @@ import type { Order } from '../../src/domain/order.js';
 import { ORDER_DISPATCHER_METRICS } from '../../src/interfaces/workers/dispatcher-metrics.js';
 import {
   crossCheck,
-  freeFixedPort,
+  FREE_FIXED_PORT,
   placeCouriers,
   QA_NOW_MS,
   waitFor,
@@ -165,15 +165,15 @@ describe('QA T13.2 D1: ulasilamamanin kaynagi, uretimdeki isci', () => {
     const clock = fixedClock(QA_NOW_MS);
     const placed = placeCouriers(2);
     const courierDb = `qa_courier_${newId(ID_PREFIX.EVENT).slice(-8)}`;
-    const port = await freeFixedPort();
     const crashed = await courierOnMongo({
       uri: directUri(),
       dbName: courierDb,
       placed,
       clock,
-      port,
+      port: FREE_FIXED_PORT,
       cleanups,
     });
+    const { port } = crashed.service;
     const lines: LogLine[] = [];
     const { side, proxy } = await frozenOrderSide({
       courierAddress: crashed.service.address,

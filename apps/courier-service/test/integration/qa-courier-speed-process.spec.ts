@@ -33,8 +33,24 @@ const MAIN_ENTRY = fileURLToPath(new URL('../../dist/main.js', import.meta.url))
 const READY_MESSAGE = 'kurye servisi hazir';
 const START_TIMEOUT_MS = 20_000;
 const LOCALHOST = '127.0.0.1';
-const PORT_MIN = 20_000;
-const PORT_SPAN = 40_000;
+/** Servisin dinledigi adres: alt surece GRPC_HOST olarak verilir, bosluk orada denenir. */
+const ANY_HOST = '0.0.0.0';
+/**
+ * Proje kurali port 0'dir; ama alt sureci ortam semasi (port >= 1) ile aciyoruz ve
+ * metrik portu gRPC portundan turer: sabit bir bos port gerekir.
+ *
+ * Aralik isletim sisteminin gecici (ephemeral) araliginin ALTINDA: Docker'in
+ * rastgele host portlari ve giden baglantilar oradan alinir; eski 20000-60000
+ * araligi onlarla cakisiyordu (#135 CI, EADDRINUSE). Taban Linux varsayilani 32768
+ * (GitHub runner'i varsayilanla gelir; macOS 49152'den baslar). Metrik portu da
+ * tabanin altinda kalir. Aralik cakisma OLASILIGINI dusurur; kalan yaris icin tekrar.
+ */
+const EPHEMERAL_FLOOR = 32_768;
+const PORT_MIN = 10_000;
+const PORT_SPAN = EPHEMERAL_FLOOR - METRICS_PORT_OFFSET - PORT_MIN;
+/** Bos gorulen port alt surec baglanana kadar baskasina gecebilir (TOCTOU): yeni portla tekrar. */
+const START_ATTEMPTS = 5;
+const PORT_IN_USE = 'EADDRINUSE';
 
 const service = courierV1.CourierServiceService;
 const running: ChildProcess[] = [];
@@ -63,12 +79,24 @@ afterEach(async () => {
   );
 });
 
-function isFree(port: number): Promise<boolean> {
+function isFreeOn(port: number, host: string): Promise<boolean> {
   return new Promise((resolve) => {
     const probe = createServer();
-    probe.once('error', () => resolve(false));
-    probe.listen(port, LOCALHOST, () => probe.close(() => resolve(true)));
+    const busy = (): void => resolve(false);
+    probe.once('error', busy);
+    probe.listen(port, host, () => {
+      probe.off('error', busy);
+      probe.close(() => resolve(true));
+    });
   });
+}
+
+/**
+ * Servis 0.0.0.0'da dinler, istemci 127.0.0.1'e baglanir: ikisi de bos olmali.
+ * macOS'ta yalnizca 127.0.0.1'i tutan bir surec 0.0.0.0 denemesinde gorunmez.
+ */
+async function isFree(port: number): Promise<boolean> {
+  return (await isFreeOn(port, ANY_HOST)) && (await isFreeOn(port, LOCALHOST));
 }
 
 /** gRPC portu ve metrik portu (port + 1000) bos olan bir port. */
@@ -87,14 +115,27 @@ interface Started {
   readonly port: number;
 }
 
-/** Servisi verilen hizla acar; "hazir" satirini ya da cikisi bekler. */
+/**
+ * Servisi verilen hizla acar; "hazir" satirini ya da cikisi bekler. Port arada
+ * baskasina gectiyse (cikis EADDRINUSE) yeni portla yeniden dener; baska her
+ * sonuc (acildi ya da hiz yuzunden acilmadi) oldugu gibi doner.
+ */
 async function startCourier(speed: string | undefined): Promise<Started> {
-  const port = await freePort();
+  for (let attempt = 1; ; attempt += 1) {
+    const started = await startCourierOn(await freePort(), speed);
+    if (started.ready || !started.output.includes(PORT_IN_USE) || attempt === START_ATTEMPTS) {
+      return started;
+    }
+  }
+}
+
+async function startCourierOn(port: number, speed: string | undefined): Promise<Started> {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     MOCK: 'true',
     NODE_ENV: 'development',
     LOG_LEVEL: 'info',
+    GRPC_HOST: ANY_HOST,
     COURIER_GRPC_PORT: String(port),
   };
   delete env['COURIER_SPEED_KMH'];
@@ -109,17 +150,19 @@ async function startCourier(speed: string | undefined): Promise<Started> {
       output += chunk.toString('utf8');
       if (output.includes(`"msg":"${READY_MESSAGE}"`)) finish(true);
     };
-    const onExit = (): void => finish(false);
+    // 'exit' degil 'close': exit geldiginde cikti borusu henuz okunmamis olabilir; son
+    // satir (fatal, EADDRINUSE) kacarsa ne yeniden deneme ne de fatal denetimi gorur.
+    const onClose = (): void => finish(false);
     function finish(ready: boolean): void {
       clearTimeout(timer);
       child.stdout?.off('data', collect);
       child.stderr?.off('data', collect);
-      child.off('exit', onExit);
+      child.off('close', onClose);
       resolve({ ready, code: child.exitCode, output, port });
     }
     child.stdout?.on('data', collect);
     child.stderr?.on('data', collect);
-    child.once('exit', onExit);
+    child.once('close', onClose);
   });
 }
 
