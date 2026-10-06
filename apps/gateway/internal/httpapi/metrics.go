@@ -20,6 +20,9 @@ type RequestMetrics interface {
 	CountReplay(route string)
 	CountKeyRejection(route, reason string)
 	CountRateLimited(route string)
+	// CountCardVerification, kart ekleme denemesinin sonucu (T11.17, K2):
+	// approved, declined, invalid, limited, other. Ret orani buradan.
+	CountCardVerification(result string)
 }
 
 // noMetrics, metrik verilmediginde kullanilir: hicbir sey yazmaz.
@@ -29,6 +32,7 @@ func (noMetrics) ObserveRequest(string, string, string, time.Duration) {}
 func (noMetrics) CountReplay(string)                                   {}
 func (noMetrics) CountKeyRejection(string, string)                     {}
 func (noMetrics) CountRateLimited(string)                              {}
+func (noMetrics) CountCardVerification(string)                         {}
 
 // Anahtar reddinin sebepleri (idempotency_key_rejections_total{reason}).
 const (

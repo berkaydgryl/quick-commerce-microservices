@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"reflect"
 	"strconv"
@@ -50,7 +51,7 @@ func decodeJSONBody(c fiber.Ctx, target any) error {
 		return &apperror.Error{
 			Code:    apperror.CodeValidationFailed,
 			Details: map[string]any{bodyField: singleValueReason},
-			Cause:   err,
+			Cause:   safeDecodeCause(err),
 		}
 	}
 	return nil
@@ -71,7 +72,19 @@ func bodyError(err error) error {
 			details = map[string]any{field: unknownFieldReason}
 		}
 	}
-	return &apperror.Error{Code: apperror.CodeValidationFailed, Details: details, Cause: err}
+	return &apperror.Error{Code: apperror.CodeValidationFailed, Details: details, Cause: safeDecodeCause(err)}
+}
+
+// safeDecodeCause, cozme hatasinin gunluge giden hali (T11.17, QA L4): girilen
+// DEGER yazilmaz. encoding/json tip hatasinda degeri mesaja koyar ("cannot
+// unmarshal number 4242424242424242 into ..."); kart numarasi yanlis alana
+// yazilirsa gunluge sizardi. Yalnizca alan ve beklenen tip kalir.
+func safeDecodeCause(err error) error {
+	var typeErr *json.UnmarshalTypeError
+	if errors.As(err, &typeErr) {
+		return fmt.Errorf("json: %q alani %v tipine cozulemedi", typeErr.Field, typeErr.Type)
+	}
+	return err
 }
 
 // unknownField, DisallowUnknownFields hatasindaki alan adi. encoding/json bu

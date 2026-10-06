@@ -29,6 +29,8 @@ const (
 	ReplaysName       = "idempotency_replays_total"
 	KeyRejectionsName = "idempotency_key_rejections_total"
 	RateLimitedName   = "rate_limit_rejections_total"
+	// CardVerificationsName, kart ekleme denemeleri (T11.17, K2); service="gateway" etiketiyle.
+	CardVerificationsName = "card_verifications_total"
 )
 
 // durationBuckets, Node'daki DURATION_BUCKETS_SECONDS ile ayni (5 ms - 10 sn).
@@ -42,6 +44,7 @@ type Metrics struct {
 	replays       *prometheus.CounterVec
 	keyRejections *prometheus.CounterVec
 	rateLimited   *prometheus.CounterVec
+	cardResults   *prometheus.CounterVec
 }
 
 // New, defteri ve metrikleri kurar; Go calisma zamani ve surec metrikleri dahil.
@@ -70,10 +73,14 @@ func New() *Metrics {
 			Name: RateLimitedName,
 			Help: "Hiz sinirina takilan istekler (429)",
 		}, []string{"route"}),
+		cardResults: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: CardVerificationsName,
+			Help: "Kart ekleme denemeleri; result: approved, declined, invalid, limited, other",
+		}, []string{"result"}),
 	}
 	registerer := prometheus.WrapRegistererWith(prometheus.Labels{"service": ServiceName}, m.registry)
 	registerer.MustRegister(
-		m.requests, m.duration, m.replays, m.keyRejections, m.rateLimited,
+		m.requests, m.duration, m.replays, m.keyRejections, m.rateLimited, m.cardResults,
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
@@ -99,6 +106,11 @@ func (m *Metrics) CountKeyRejection(route, reason string) {
 // CountRateLimited, hiz sinirina takilan istegi sayar.
 func (m *Metrics) CountRateLimited(route string) {
 	m.rateLimited.WithLabelValues(route).Inc()
+}
+
+// CountCardVerification, kart ekleme denemesinin sonucunu sayar (T11.17).
+func (m *Metrics) CountCardVerification(result string) {
+	m.cardResults.WithLabelValues(result).Inc()
 }
 
 // Handler, defterin Prometheus metin bicimi; toplama hatasi 500 doner.

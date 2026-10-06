@@ -911,6 +911,9 @@ paths:
         (T12.4). Kartı olmayan hesapta boş liste.
 
         Kasa payment servisindedir (`getir/cardvault/v1`); gateway iletir.
+        Kart uçları production'da KAPALIDIR (`404`): sağlayıcı bugün mock'tur,
+        yalnızca test kartları onaylanır. Bütün kart cevapları (hata dahil)
+        `Cache-Control: no-store` taşır.
       security:
         - bearerAuth: []
       responses:
@@ -947,7 +950,18 @@ paths:
         Kartı doğrular ve kasaya kaydeder. KART NUMARASI VE CVV YALNIZCA BU
         İSTEKTE VE BİR KEZ geçer: saklanmaz, günlüğe ve ize yazılmaz; hata
         ayrıntısı değeri yankılamaz (yalnızca alan → cümle). Gateway'in tekrar
-        koruması gövdenin yalnızca sunucu sırrıyla alınmış özetini (HMAC) tutar.
+        koruması gövdenin MASKELİ hâlinin özetini tutar (numara → ilk 4 + son 4 +
+        hane sayısı; CVV hiç girmez; sunucu sırrıyla HMAC) ve kayıt 15 dk yaşar.
+        Aynı anahtarla farklı kart `409`; yalnızca CVV'si farklı aynı kart aynı
+        istek sayılır (CVV düzeltilince yeni anahtar üretilir).
+
+        Deneme sınırı (kart test etmeye karşı): kullanıcı başına BAŞARISIZ
+        doğrulama (`PAYMENT_DECLINED`; numara, CVV ya da son kullanma hatası)
+        saatte 5 ve günde 20; IP başına her deneme saatte 30. Eşikte kasaya
+        gidilmeden `429 RATE_LIMITED` ve `Retry-After`. Başarılı ekleme, aynı kart
+        ve dolu kasa sayılmaz. Bir kullanıcının aynı anda tek doğrulaması işlenir:
+        eş zamanlı ikinci istek `429` ve `Retry-After: 1` alır (sayaç patlamayla
+        aşılamasın).
 
         Sıra: biçim ve kurallar (numara: rakam, boşluk ve tire; 13-19 hane, Luhn,
         bilinen marka: VISA, MASTERCARD, AMEX, TROY; ay 1-12; dört haneli yıl,

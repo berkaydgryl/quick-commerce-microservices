@@ -29,6 +29,7 @@ type recordingMetrics struct {
 	replays       []string
 	keyRejections []string
 	rateLimited   []string
+	cardResults   []string
 }
 
 func (m *recordingMetrics) ObserveRequest(route, method, code string, _ time.Duration) {
@@ -53,6 +54,18 @@ func (m *recordingMetrics) CountRateLimited(route string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.rateLimited = append(m.rateLimited, route)
+}
+
+func (m *recordingMetrics) CountCardVerification(result string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cardResults = append(m.cardResults, result)
+}
+
+func (m *recordingMetrics) cardVerifications() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]string(nil), m.cardResults...)
 }
 
 func (m *recordingMetrics) recorded() []recordedRequest {
