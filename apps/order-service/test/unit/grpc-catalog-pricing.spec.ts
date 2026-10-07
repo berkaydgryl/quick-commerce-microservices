@@ -13,14 +13,28 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { ITEM_UNIT } from '../../src/domain/order-item.js';
 import { GrpcCatalogPricing } from '../../src/infrastructure/catalog/grpc-catalog-pricing.js';
+import { cutAfterReach, HeldReplies } from '../support/held-replies.js';
 
-const TIMEOUT_MS = 200;
+/**
+ * Islevsel testlerin suresi COMERT (#113, E3 ile ayni desen): ilk cagri kanal kurulumunu da oder
+ * ve yuklu makinede 200 ms'yi asabiliyordu ("Deadline exceeded after 0.191s", LB pick 0.163s).
+ * Bu testler sureyi degil ceviriyi siner.
+ */
+const FUNCTIONAL_TIMEOUT_MS = 5_000;
+/** Yalnizca sure siniri testinin kisa siniri; yavas marketin cevabi HIC gelmez. */
+const DEADLINE_TIMEOUT_MS = 200;
+/** Sure testinin zaman butcesi: istek sunucuya ulasana kadar tekrar (testTimeout'un altinda). */
+const REACH_BUDGET_MS = 5_000;
+/** Ayakta olmayan catalog: baglanti reddi aninda doner; sure sinirini beklemek bu sureyi asar. */
+const REFUSED_WITHIN_MS = 2_000;
 const SLOW_MARKET_ID = 'mkt_yavas';
 const MISSING_MARKET_ID = 'mkt_olmayan';
 const scope = { requestId: 'req_iletim_1', logger: silentLogger };
 
 /** Sunucunun gordugu x-request-id degerleri. */
 const seenRequestIds: string[] = [];
+/** Yavas marketin bekletilen istekleri (cevap verilmez; kimlik ve kalan sure kaydedilir). */
+const held = new HeldReplies();
 
 const tryMoney = (amountMinor: number, currency = 'TRY'): commonV1.Money => ({
   amountMinor,
@@ -70,8 +84,8 @@ const implementation = {
           },
         },
       });
-    // Yavas market: istemcinin sure sinirindan SONRA cevap verir.
-    if (call.request.marketId === SLOW_MARKET_ID) setTimeout(respond, TIMEOUT_MS * 3);
+    // Yavas market: cevap bekletilir (istemcinin sure siniri keser).
+    if (call.request.marketId === SLOW_MARKET_ID) held.hold(call);
     else respond();
   },
   batchGetOffers: (
@@ -100,6 +114,7 @@ const implementation = {
 
 let handle: GrpcServerHandle;
 let catalog: GrpcCatalogPricing;
+let shortDeadline: GrpcCatalogPricing;
 
 beforeAll(async () => {
   handle = await startGrpcServer({
@@ -114,11 +129,13 @@ beforeAll(async () => {
       },
     ],
   });
-  catalog = new GrpcCatalogPricing(`127.0.0.1:${handle.port}`, TIMEOUT_MS);
+  catalog = new GrpcCatalogPricing(`127.0.0.1:${handle.port}`, FUNCTIONAL_TIMEOUT_MS);
+  shortDeadline = new GrpcCatalogPricing(`127.0.0.1:${handle.port}`, DEADLINE_TIMEOUT_MS);
 });
 
 afterAll(async () => {
   catalog?.close();
+  shortDeadline?.close();
   await handle?.shutdown('test bitti');
 });
 
@@ -178,17 +195,26 @@ describe('GrpcCatalogPricing', () => {
   });
 
   it('sure siniri dolarsa SERVICE_UNAVAILABLE (takilan catalog cagirani kilitlemez)', async () => {
-    const error = await rejectionOf(catalog.marketRules(SLOW_MARKET_ID, scope));
+    const { error, reply } = await cutAfterReach(
+      (requestId) => shortDeadline.marketRules(SLOW_MARKET_ID, { requestId, logger: silentLogger }),
+      held,
+      REACH_BUDGET_MS,
+    );
 
-    expect(error.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+    // Istemci KENDI kisa sinirini gonderdi: sinirini yok sayan istemci burada duser.
+    expect(reply.remainingMs).toBeLessThanOrEqual(DEADLINE_TIMEOUT_MS);
   });
 
-  it('catalog hic ayakta degilse SERVICE_UNAVAILABLE', async () => {
-    const unreachable = new GrpcCatalogPricing('127.0.0.1:1', TIMEOUT_MS);
+  it('catalog hic ayakta degilse SERVICE_UNAVAILABLE (baglanti reddi, sure siniri beklenmez)', async () => {
+    const unreachable = new GrpcCatalogPricing('127.0.0.1:1', FUNCTIONAL_TIMEOUT_MS);
     try {
+      const startedAt = Date.now();
       const error = await rejectionOf(unreachable.marketRules('mkt_migros-jet-moda', scope));
 
       expect(error.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+      expect(Date.now() - startedAt).toBeLessThan(REFUSED_WITHIN_MS);
     } finally {
       unreachable.close();
     }
