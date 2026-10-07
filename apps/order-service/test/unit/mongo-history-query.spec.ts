@@ -50,6 +50,28 @@ describe('Mongo eslemesi: inHistory (#101)', () => {
     ).toBe(true);
   });
 
+  it('iade isareti (#166): belgeye girer, geri okunur; odenmeden iptal edilmis siparis gecmiste', () => {
+    const lapsed = walk(
+      createDraftOrder(sampleDraftInput(), clock),
+      S.RISK_CHECK,
+      S.RESERVED,
+      S.AWAITING_PAYMENT,
+      S.CANCELLED,
+    );
+    const refunded = {
+      ...lapsed,
+      refund: { reason: 'reservation_expired', requestedAt: clock.date() },
+    };
+
+    const document = toOrderDocument(refunded);
+
+    expect(document.refund).toEqual({ reason: 'reservation_expired', requestedAt: clock.date() });
+    expect(document.inHistory).toBe(true);
+    expect(fromOrderDocument(document)).toEqual(refunded);
+    expect(toOrderDocument(lapsed)).not.toHaveProperty('refund');
+    expect(toOrderDocument(lapsed).inHistory).toBe(false);
+  });
+
   it('turetilmis alan okumada domain nesnesine girmez', () => {
     const paid = walk(
       createDraftOrder(sampleDraftInput(), clock),

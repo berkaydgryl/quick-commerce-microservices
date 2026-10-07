@@ -25,8 +25,8 @@ import { toOrderDocument } from '../../src/infrastructure/mongo/mappers.js';
 import { OrderMongoStore } from '../../src/infrastructure/mongo/order-mongo-store.js';
 import { OrdersCollection } from '../../src/infrastructure/mongo/orders-collection.js';
 import { OutboxCollection } from '../../src/infrastructure/mongo/outbox-collection.js';
+import { courierQueue } from '../../src/migrations/0001-kurye-sirasi.js';
 import { historyVisibility } from '../../src/migrations/0002-gecmis-gorunurlugu.js';
-import { MIGRATIONS } from '../../src/migrations/index.js';
 import { sampleDraftInput } from '../support/order-builders.js';
 import { TO_PAID } from '../support/order-store-fixtures.js';
 
@@ -43,7 +43,13 @@ let connection: MongoConnection;
 
 const orders = () => connection.db.collection<Document>(COLLECTIONS.ORDERS);
 const runner = () =>
-  createMigrationRunner({ connection, migrations: MIGRATIONS, logger: silentLogger });
+  // Calistirici 0002'ye kadar bilir: `down` en son gocu geri alir, sonraki gocler
+  // (0003, migration-0003.spec.ts) bu dosyanin down'unu kendine cekmesin.
+  createMigrationRunner({
+    connection,
+    migrations: [courierQueue, historyVisibility],
+    logger: silentLogger,
+  });
 
 /** `minute`'ta acilip `steps` yolundan gecen, son adimi `note` notlu siparis. */
 function orderAt(minute: number, steps: readonly OrderStatus[], note?: string): Order {

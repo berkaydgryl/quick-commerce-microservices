@@ -60,7 +60,7 @@ derlemede karar ister):
 
 | Geçmişte | Durum                                                                                                                                                                                                     |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Görünür  | `PAID`, `PREPARING`, `ON_THE_WAY`, `DELIVERED`, `REVIEW`; `CANCELLED` ve zaman çizelgesinde `PAID` kaydı var (ödendikten sonra iptal: "İptal edildi · İade edildi")                                       |
+| Görünür  | `PAID`, `PREPARING`, `ON_THE_WAY`, `DELIVERED`, `REVIEW`; `CANCELLED` ve parası alınmış: zaman çizelgesinde `PAID` kaydı ya da iade işareti (`refund`, #166) var ("İptal edildi · İade edildi")           |
 | Gizli    | `DRAFT`, `RISK_CHECK`, `RESERVED`, `AWAITING_PAYMENT`, `EXPIRED`, `PAYMENT_FAILED`, `REJECTED`; ödenmeden iptal (sepeti bırakma, yeni sepet, stok yetmedi, kilit düştü, kullanıcının ödeme öncesi iptali) |
 
 - **Saklama:** Mongo belgesinde türetilmiş `inHistory` (boolean). Sipariş her yazımda bütün belge
@@ -76,11 +76,31 @@ derlemede karar ister):
   taranmaz.
 - **Kenar (kabul):** `REVIEW`'dan onaylanıp ödeme bekleyen sipariş (`RESERVED`,
   `AWAITING_PAYMENT`) listeden çıkar, ödenince geri gelir.
+- **İade işareti (#166):** parası alınıp `PAID` olmadan iptal edilen sipariş (kilidi düşmüş ödeme)
+  zaman çizelgesinde `PAID` taşımaz; kalıcı `refund` işareti (gerekçe, an; tutar yok) onu geçmişte
+  tutar (`domain/order-refund.ts`). Siparişi kendisi iptal eden kapatma (`lapsed-order.ts`)
+  işareti iptal ve iade komutuyla aynı yazımda yazar. Siparişi başka yol iptal etmiş, para sonra
+  iade edilmişse (`refund-step.ts`: `refundIfCancelledElsewhere`, `markPaid` çakışması) iadeden ya
+  da komuttan sonra sürüm kontrollü ayrı yazım (`refund-record.ts`, en çok 3 deneme; durum dışı
+  güncelleme, sürüm +1, olay yok). İade de komut da olmadıysa işaret yazılmaz. Ayrı yazım
+  başarısızsa iade geri alınmaz, sipariş gizli kalır, WARN (yalnızca kimlik ve gerekçe). İade
+  sipariş açıkken yapıldıysa (ödeme sırasında sürüm çakışması) işareti, kilidi dolunca süpürücünün
+  kapatması yazar: ödeme kaydı `REFUNDED` bulunur (gerekçe `payment_refunded`, komut ve iade yok).
 - **Göç 0002 (`gecmis-gorunurlugu`):** alan öncesi kayıtlara `inHistory`'yi durum ve zaman
   çizelgesinden yazar (o günün kuralının donmuş kopyası, ADR-19); alanı olana dokunmaz. `down` alanı
   ve kısmi indeksi kaldırır. Transaction'sız ve yeniden çalıştırılabilir (indeks düşürmek
   transaction'da yapılamaz).
-- **Sözleşme:** tel biçimi (`order.proto`) değişmedi; değişen, listenin kapsamı. Gateway'in kendi
+- **Göç 0003 (`iade-isareti`):** #166 öncesi kayıtlara işareti outbox'taki iade komutundan
+  (`payment.refund_requested`, sipariş başına EN ESKİSİ) yazar; yalnızca `CANCELLED` ve işaretsiz
+  siparişe, tek `$set` (`refund` + `inHistory: true`). `down` işareti siler ve `inHistory`'yi 0002
+  kuralına döndürür. Transaction'sız, yeniden çalıştırılabilir. Outbox satırları silinmez (TTL
+  indeksi yok, yayıncı yalnızca `publishedAt` işaretler; budama ADR-04 borcu): kilidi düşmüş ödemenin
+  komutu her zaman vardır. **Kurtarılamayan:** siparişi başka yolun iptal ettiği ve doğrudan iadesi
+  başarılı olan eski kayıtlar (komut yalnızca doğrudan iade başarısızsa yazılırdı); izleri payment'ta,
+  order'ın göçü başka servisin verisini okumaz (ADR-05).
+- **Sözleşme:** tel biçimi (`order.proto`) değişmedi; değişen, listenin kapsamı. İşaret bugün
+  istemciye taşınmaz: gateway'in `refunded` bayrağı yalnızca `PAID` kaydına bakar, bu siparişler
+  "İptal edildi" görünür (proto + gateway ayrı zincir). Gateway'in kendi
   süzmesi (`orderhistory.Visible`, en fazla 3 tur) artık bir şey elemez; temizliği ayrı iş.
 - **Bilinen sınır (dağıtım):** göç, eski kopyalar kapandıktan sonraki açılışı varsayar. Eski sürümlü
   bir kopya göçten sonra siparişi bütün belge olarak yeniden yazarsa (`replaceOne`) `inHistory`
@@ -639,6 +659,7 @@ src/
 │   ├── awaiting-courier-finder.ts  # port: kurye bekleyen siparişler, kurye işçisinin kuyruğu (T13.1)
 │   ├── courier-milestone.ts     # kurye olayı (paket alındı, teslim) → geçiş kararı (T14.3)
 │   ├── order-history-listing.ts # Geçmiş Siparişlerim'de görünürlük kuralı (#101)
+│   ├── order-refund.ts          # kalıcı iade işareti: aynı yazımda ya da ayrı yazımla (#166)
 │   └── order-history-cursor.ts  # geçmiş sırası ve imleç
 ├── application/       # bir dosya = bir use-case
 │   ├── create-draft-order.ts, create-order.ts, confirm-payment.ts, cancel-order.ts
@@ -650,6 +671,7 @@ src/
 │   ├── lapsed-order.ts          # kilidi düşmüş siparişi kapatma tablosu: saga ve süpürücü (T15.3)
 │   ├── order-transition.ts      # sürüm kontrollü geçiş yazımı ve PAID (payment-step, lapsed-order)
 │   ├── refund-step.ts           # telafi iadesi: doğrudan, olmazsa outbox komutu (T7.1, T7.3)
+│   ├── refund-record.ts         # iadeden sonra iptal edilmiş siparişe iade işareti (#166)
 │   ├── sweep-expired-reservations.ts  # süpürücünün tek turu (T11.2 PR 2)
 │   ├── dispatch-couriers.ts     # kurye işçisinin tek turu (T13.1 PR 2; kuyruk, kaynak, geri çekilme T13.2)
 │   ├── failure-backoff.ts       # atanamayan siparişin geri çekilmesi (D3, T13.2)
@@ -686,7 +708,7 @@ src/
 ├── interfaces/workers/courier-dispatcher.ts  # kurye işçisi zamanlayıcısı (T13.1 PR 2)
 ├── interfaces/workers/dispatcher-metrics.ts   # kurye işçisinin sonuç ve hata metrikleri (kaynak etiketi T13.2)
 ├── interfaces/workers/courier-milestones.ts   # kurye olayı tüketicileri: yük doğrulama → use-case → onay (T14.3)
-├── migrations/        # göçler (ADR-19): 0001-kurye-sirasi (kurye kuyruğu anı, T13.2), 0002-gecmis-gorunurlugu (#101)
+├── migrations/        # göçler (ADR-19): 0001-kurye-sirasi (kurye kuyruğu anı, T13.2), 0002-gecmis-gorunurlugu (#101), 0003-iade-isareti (#166)
 ├── config/            # env.ts (process.env yalnızca burada) + constants.ts
 ├── bootstrap.ts
 ├── main.ts
