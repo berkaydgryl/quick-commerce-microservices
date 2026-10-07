@@ -36,6 +36,7 @@ export * from './events.js';
 export * from './favorites.js';
 export * from './card-rules.js';
 export * from './cards.js';
+export * from './tracking.js';
 export * from './email.js';
 export * from './phone.js';
 export * from './verification.js';

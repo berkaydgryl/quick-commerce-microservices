@@ -1119,6 +1119,82 @@ paths:
   /v1/me/cards/{cardId}:
     parameters:
       - $ref: "#/components/parameters/CardIdPath"
+    patch:
+      tags: [auth]
+      operationId: updateSavedCardNickname
+      summary: Kayıtlı kartın adını değiştir (#148)
+      description: |
+        YALNIZCA kart adı değişir; numara, son kullanma ve CVV değişmez (yeni kart
+        için sil + ekle). Cevap GÜNCEL karttır. Kurallar eklemedeki `nickname` ile
+        aynıdır. Boş ya da yalnızca boşluk adı KALDIRIR. Alan yoksa ya da `null`
+        ise `400 VALIDATION_FAILED` ("Kart adı gönderilmedi"): boş gövde adı silmez.
+        Bilinmeyen alan (numara, CVV, son kullanma) `400`'dür. Süresi geçmiş kartın
+        adı da değişebilir.
+
+        Kart bu hesapta yoksa, başkasınınsa ya da silinmişse `404 NOT_FOUND`
+        (biçimsiz kimlik dahil). Kart adı kişisel veridir: günlüğe yazılmaz, hata
+        ayrıntısında yankılanmaz. `Idempotency-Key` zorunludur.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCardNicknameRequest"
+      responses:
+        "200":
+          description: Kart adı güncellendi; güncel kart (maskeli)
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            Idempotent-Replayed:
+              $ref: "#/components/headers/IdempotentReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedCardResponse"
+        "400":
+          description: |
+            Kart adı kurala uymuyor ya da gönderilmedi, bilinmeyen alan ya da
+            `Idempotency-Key` eksik (VALIDATION_FAILED; ayrıntıda alan -> cümle, değer
+            yankılanmaz).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          description: Kart bu hesabın kasasında yok (NOT_FOUND; ayrıntısız).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "409":
+          description: |
+            Aynı `Idempotency-Key` ile ilk istek hâlâ işleniyor
+            (`REQUEST_IN_PROGRESS`) ya da anahtar farklı bir gövdeyle geldi
+            (`CONFLICT`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                inProgress:
+                  $ref: "#/components/examples/IdempotencyRequestInProgress"
+                keyReused:
+                  $ref: "#/components/examples/IdempotencyKeyReused"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
     delete:
       tags: [auth]
       operationId: deleteSavedCard
@@ -2928,6 +3004,59 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/Order"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/OrderNotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /v1/orders/{id}/tracking:
+    get:
+      tags: [orders]
+      operationId: getOrderTracking
+      summary: Sipariş takibi (kurye konumu, aşama, kalan; T13.3)
+      description: |
+        Siparişin kuryesinin o anki konumu, aşaması ve teslimata kalanı. Web 3
+        adımlı takibi ("Hazırlanıyor" → "Kurye yolda" → "Teslim edildi") ve
+        "Kuryem nerede" haritasını bununla çizer. Aşama 1'de web 2 saniyede bir
+        yoklar; canlı akış aşama 2'de sokettir.
+
+        Değerler istek anında hesaplanır (rota atamada üretilir; kurye hızı ve
+        marketteki hazırlık süresiyle ilerler). Başkasının siparişi `404`. Takip
+        yoksa da `404`: kurye henüz atanmadı, rota bırakıldı (sipariş iptal ya da
+        kurye yeniden atandı) ya da sipariş T13.3'ten önce teslim edildi. Kişisel
+        veridir: önbelleğe alınmaz (`no-store`).
+
+        YOKLAMA KURALI (aşama 1): web yalnızca sipariş ayrıntısında kurye varken ve
+        sayfa başına tek döngüyle yoklar; `404`'te, `phase` DELIVERED olunca ya da
+        sipariş son durumdayken yoklamayı BIRAKIR (her yoklama genel kullanıcı
+        sınırından düşer).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OrderIdPathId"
+      responses:
+        "200":
+          description: Takip
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiSuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/OrderTracking"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
@@ -5564,7 +5693,7 @@ components:
           format: date-time
 
     SavedCardResponse:
-      description: Eklenen kart (maskeli).
+      description: Eklenen ya da adı değişen kart (maskeli).
       allOf:
         - $ref: "#/components/schemas/ApiSuccessResponse"
         - type: object
@@ -5635,6 +5764,24 @@ components:
             8 ya da daha fazla yan yana rakam reddedilir (kart adında kart numarası
             saklanmaz). Boş ya da yalnızca boşluk: kart adı yok.
           example: "Maaş kartım"
+
+    UpdateCardNicknameRequest:
+      type: object
+      description: |
+        Kart adı düzenleme gövdesi (#148). Yalnızca `nickname`; kurallar
+        `AddCardRequest.nickname` ile aynı. Boş ya da yalnızca boşluk adı kaldırır;
+        alan yoksa ya da `null` ise "Kart adı gönderilmedi".
+      required: [nickname]
+      additionalProperties: false
+      properties:
+        nickname:
+          type: string
+          maxLength: 30
+          description: |
+            Yeni kart adı: NFC'ye çevrilip kırpılır; harf, rakam, boşluk ve
+            `. , ' -`; bu ayraçlar atılınca 8 ya da daha fazla yan yana rakam yok.
+            Boş metin: kart adı kaldırılır.
+          example: "İş kartım"
 
     UpdateAddressRequest:
       description: |
@@ -5915,6 +6062,96 @@ components:
         etaMinutes:
           type: integer
           minimum: 0
+
+    OrderTracking:
+      type: object
+      description: |
+        Sipariş takibi (T13.3; @getir/contracts orderTrackingSchema). 3 adımlı takip
+        `phase`'i izler; `status` order'ın kaydıdır ve birkaç saniye geride
+        kalabilir. `remainingMeters` teslimat adresine kalan yol, `etaSeconds`
+        marketteki bekleme dahil teslimata kalan süredir. Paket alındıktan sonra
+        (`TO_CUSTOMER`) kalan `COURIER_APPROACHING_METERS` (300 m) ya da altına
+        inince web bir kez "kurye yaklaştı" bildirir (`isCourierApproaching`).
+
+        GİZLİLİK: kurye bir teslimattan sonra önceki müşterinin adresinde boşa çıkar
+        ve oradan atanır. Bu yüzden paket alınmadan (`TO_MARKET`): `location` YOK,
+        rota yalnızca market → adres parçası, `remainingMeters` yalnızca bu bacak,
+        `etaSeconds` dakikaya yukarı yuvarlanır.
+
+        Tutarlılık: `TO_MARKET`'ta `pickedUpAt` ve `deliveredAt` yok; `TO_CUSTOMER`'da
+        `pickedUpAt` var, `deliveredAt` yok; `DELIVERED`'da ikisi de var ve kalanlar 0.
+      required:
+        [
+          orderId,
+          status,
+          phase,
+          courier,
+          at,
+          remainingMeters,
+          etaSeconds,
+          route,
+          marketLocation,
+          deliveryLocation,
+        ]
+      properties:
+        orderId:
+          $ref: "#/components/schemas/RuntimeId"
+        status:
+          type: string
+          enum: [PREPARING, ON_THE_WAY, DELIVERED]
+          description: Order'ın kaydı; iptal edilmiş siparişin takibi yoktur.
+        phase:
+          type: string
+          enum: [TO_MARKET, TO_CUSTOMER, DELIVERED]
+          description: |
+            TO_MARKET: kurye markete gidiyor ya da hazırlığı bekliyor (PREPARING);
+            TO_CUSTOMER: paket alındı, adrese gidiyor (ON_THE_WAY);
+            DELIVERED: teslim edildi.
+        courier:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              $ref: "#/components/schemas/RuntimeId"
+            name:
+              type: string
+              minLength: 1
+              example: "Mehmet K."
+        location:
+          allOf:
+            - $ref: "#/components/schemas/GeoPoint"
+          description: Kuryenin o anki konumu; `TO_MARKET`'ta yok (gizlilik), sonra zorunlu.
+        at:
+          type: string
+          format: date-time
+          description: Değerlerin hesaplandığı an.
+        remainingMeters:
+          type: integer
+          minimum: 0
+          example: 840
+        etaSeconds:
+          type: integer
+          minimum: 0
+          example: 68
+        route:
+          type: array
+          minItems: 1
+          maxItems: 40
+          description: Rotanın market → adres parçası (ilk nokta market, son nokta adres; adres marketin kendisiyse tek nokta), çizim için.
+          items:
+            $ref: "#/components/schemas/GeoPoint"
+        marketLocation:
+          $ref: "#/components/schemas/GeoPoint"
+        deliveryLocation:
+          $ref: "#/components/schemas/GeoPoint"
+        pickedUpAt:
+          type: string
+          format: date-time
+          description: Paket alındıysa an; yoksa alan yok.
+        deliveredAt:
+          type: string
+          format: date-time
+          description: Teslim edildiyse an; yoksa alan yok.
 
     Order:
       type: object
