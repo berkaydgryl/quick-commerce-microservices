@@ -176,13 +176,17 @@
   --size-map-pin-icon: 1.25rem;
 
   /* Market listesi (T11.12; referans getircarsi): sol menunun kucuk gorseli
-     ve oku, kart kapaginin orani, kapaktaki bas harf rozeti, puan yildizi,
-     Sepetim'in bos durum ikonu ve telefondaki sepet cubugu. Sutunlar oranla
-     (1:2:1) bolunur; sabit sutun genisligi yok. */
+     ve oku, kart kapaginin orani, kapaktaki rozet ya da 2:1 logo (sol ortada,
+     soldan yuzde; 07.10), puan yildizi, Sepetim'in bos durum ikonu ve telefondaki
+     sepet cubugu. Sutunlar oranla (1:2:1) bolunur; sabit sutun genisligi yok. */
   --size-store-menu-image: 2.5rem;
   --size-store-menu-chevron: 1.25rem;
   --ratio-market-cover: 16 / 9;
   --size-market-badge: 2.75rem;
+  --inset-market-badge: 4%;
+  --size-market-logo: 40%;
+  --size-market-logo-narrow: 30%;
+  --ratio-market-logo: 2 / 1;
   --size-rating-icon: 1em;
   --size-cart-empty-icon: 2.5rem;
   --size-cart-bar: 3.5rem;
@@ -192,6 +196,7 @@
      gorseli, urun kartinin gorseli ve izgarada kartin en az genisligi. */
   --ratio-market-hero: 8 / 3;
   --size-market-hero-badge: 4rem;
+  --size-market-hero-logo: 22%;
   --size-rating-star: 1rem;
   --size-category-nav-icon: 2.25rem;
   --size-product-visual: 7.5rem;

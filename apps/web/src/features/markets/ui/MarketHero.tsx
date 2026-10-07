@@ -3,9 +3,9 @@ import type { ReactNode } from 'react';
 
 import { formatDeliveryTime, formatMoney, formatRating } from '../../../shared/services/format';
 import { ChevronRightIcon } from '../../cart/ui/icons';
-import { marketInitials } from '../services/market-initials';
 
 import { StarIcon } from './icons';
+import { MarketBadge } from './MarketBadge';
 import styles from './MarketHero.module.css';
 import { RatingStars } from './RatingStars';
 
@@ -31,7 +31,7 @@ interface MarketHeroProps {
 
 /**
  * Magaza sayfasinin basi (T16.2; referans getircarsi isletme sayfasi): ustte
- * kapak ve uzerinde bas harf rozeti (logo yok, T11.11), altta bilgi karti:
+ * kapak ve sol ortasinda marka kutusu (MarketBadge: logo ya da bas harf), altta bilgi karti:
  * ad, yildizlar, puan ve favori; teslimat suresi ve minimum sepet; acik ya da
  * kapali ve "Hakkında"; ucretsiz teslimat rozeti. Kapanis saati verisi yok
  * (B3): yerine durum yazilir. Durumsuz.
@@ -45,9 +45,7 @@ export function MarketHero({ market, pageTexts, listTexts, action, onAbout }: Ma
         {market.coverUrl !== undefined && (
           <img className={styles['c-market-hero__cover']} src={market.coverUrl} alt="" />
         )}
-        <span className={styles['c-market-hero__badge']} aria-hidden="true">
-          {marketInitials(market.brand)}
-        </span>
+        <MarketBadge brand={market.brand} logoUrl={market.logoUrl} size="hero" />
       </div>
       <div className={styles['c-market-hero__body']}>
         <div className={styles['c-market-hero__top']}>
