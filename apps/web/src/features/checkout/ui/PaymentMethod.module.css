@@ -1,7 +1,8 @@
 /*
  * Odeme yontemi (T17.1; referans #33): kartin icinde satir (logo, ad, maskeli
  * numara) ve sagda cerceveli mor "Değiştir" (kart yoksa "Kart ekle"); ince
- * ayiricidan sonra guvenlik cumlesi. Pasif dugmeler (F5'e kadar) soluk.
+ * ayiricidan sonra guvenlik cumlesi. Pasif dugmeler (kasa kapali, siparis
+ * suruyor) soluk.
  */
 .c-payment-method__card {
   display: flex;
@@ -62,7 +63,7 @@
   border-radius: var(--radius-md);
 }
 
-/* Odeme yontemi penceresi (F5) gelene kadar pasif: odaklanir, basilmaz. */
+/* Pasif (kasa kapali ya da siparis suruyor): odaklanir, basilmaz. */
 .c-payment-method__change[aria-disabled='true'],
 .c-payment-method__add[aria-disabled='true'] {
   cursor: not-allowed;

@@ -1,0 +1,191 @@
+/*
+ * "Ödeme Yöntemi Seç" penceresinin liste adimi (T17.1; F5): "Online Ödeme"
+ * basligi, ince ayiricili kart satirlari (radyo, logo, ad, maskeli numara),
+ * secili kartin yaninda "Kartı Sil", sonda "+ Kredi/Banka Kartı" ve mor "Seç".
+ * Satir ve logo olculeri Ödeme Yöntemlerim'inkiyle ayni token'lar.
+ */
+.c-method-list {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.c-method-list__group {
+  min-inline-size: 0;
+  padding: 0;
+  margin: 0;
+  border: none;
+}
+
+.c-method-list__legend {
+  padding: 0;
+  margin-block-end: var(--space-2);
+  font-weight: var(--font-weight-extrabold);
+}
+
+.c-method-list__rows {
+  display: grid;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.c-method-list__row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: calc(var(--size-card-logo-tile) + var(--space-3) * 2);
+  padding-block: var(--space-3);
+}
+
+.c-method-list__row + .c-method-list__row {
+  border-block-start: var(--border-width-thin) solid var(--border-faint);
+}
+
+.c-method-list__option {
+  display: flex;
+  flex: 1;
+  gap: var(--space-3);
+  align-items: center;
+  min-width: 0;
+  min-height: var(--size-touch-min);
+  cursor: pointer;
+}
+
+.c-method-list__radio {
+  flex-shrink: 0;
+  inline-size: var(--size-checkbox);
+  block-size: var(--size-checkbox);
+  margin: 0;
+  cursor: inherit;
+  accent-color: var(--color-brand-primary);
+}
+
+.c-method-list__logo,
+.c-method-list__add-icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  inline-size: var(--size-card-logo-tile);
+  aspect-ratio: 1;
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-method-list__text {
+  display: grid;
+  min-width: 0;
+}
+
+.c-method-list__name {
+  font-weight: var(--font-weight-bold);
+  overflow-wrap: anywhere;
+}
+
+.c-method-list__number {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* Suresi gecmis kart: secilemez (radyo pasif), silinebilir. */
+.c-method-list__row.is-expired .c-method-list__option {
+  cursor: not-allowed;
+}
+
+.c-method-list__row.is-expired .c-method-list__logo,
+.c-method-list__row.is-expired .c-method-list__text {
+  opacity: var(--opacity-disabled);
+}
+
+.c-method-list__expired {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-muted);
+  white-space: nowrap;
+  border: var(--border-width-thin) solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+}
+
+.c-method-list__delete {
+  flex-shrink: 0;
+  min-height: var(--size-touch-min);
+  padding: var(--space-1) var(--space-2);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+}
+
+.c-method-list__add {
+  display: flex;
+  flex: 1;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: var(--size-card-action);
+  padding: 0;
+  font: inherit;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+  text-align: start;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+}
+
+.c-method-list__delete:hover,
+.c-method-list__add:hover {
+  text-decoration: underline;
+}
+
+.c-method-list__add-icon svg {
+  inline-size: var(--size-card-action-icon);
+}
+
+.c-method-list__full {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.c-method-list__choose {
+  min-height: var(--size-field-min-height);
+  padding: var(--space-3) var(--space-4);
+  font: inherit;
+  font-weight: var(--font-weight-extrabold);
+  color: var(--text-on-brand);
+  cursor: pointer;
+  background: var(--color-brand-primary);
+  border: none;
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast) var(--easing-standard);
+}
+
+.c-method-list__choose:disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
+}
+
+.c-method-list__choose:hover:not(:disabled) {
+  background: var(--color-brand-primary-strong);
+}
+
+/* Ekranda gorunmez, ekran okuyucu okur ("Visa, son dört hane 4242"). */
+.c-method-list__sr {
+  position: absolute;
+  width: var(--size-visually-hidden);
+  height: var(--size-visually-hidden);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-method-list__choose {
+    transition: none;
+  }
+}
