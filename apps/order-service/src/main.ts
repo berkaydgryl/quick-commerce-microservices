@@ -6,9 +6,11 @@
  *   pnpm --filter @getir/order-service start      (kok .env varsa okunur)
  *
  * Depo MOCK ile secilir: MOCK=true -> bellek (Mongo ve Redis gerekmez, olay
- * yayinci kapali), aksi halde ORDER_MONGO_URI ve REDIS_URL zorunlu: siparisler
- * kendi veritabaninin (D14) `orders`'ina, olaylari ayni transaction'da
- * `outbox`'a yazilir ve yayinci onlari stream:events'e basar (T7.3).
+ * yayinci ve dinleme kapali), aksi halde ORDER_MONGO_URI ve REDIS_URL zorunlu:
+ * siparisler kendi veritabaninin (D14) `orders`'ina, olaylari ayni
+ * transaction'da `outbox`'a yazilir ve yayinci onlari stream:events'e basar
+ * (T7.3); kurye kilometre taslari (courier.picked_up, courier.delivered;
+ * T14.3) ayni akistan dinlenir.
  *
  * Dogrulama (grpcurl):
  *   grpcurl -plaintext -import-path packages/proto/proto \
@@ -16,7 +18,13 @@
  *     -d '{...}' localhost:50053 getir.order.v1.OrderService/CreateDraftOrder
  */
 
-import { RedisStreamsPublisher } from '@getir/event-bus';
+import { hostname } from 'node:os';
+
+import {
+  DEFAULT_DELIVERY_SETTINGS,
+  RedisStreamsConsumer,
+  RedisStreamsPublisher,
+} from '@getir/event-bus';
 import { connectRedis } from '@getir/redis-kit';
 import type { RedisEnv } from '@getir/redis-kit';
 import type { Logger } from '@getir/core';
@@ -32,11 +40,14 @@ import {
   startCourierDispatching,
   startEventPublishing,
   startReservationSweeping,
+  subscribeOrderEvents,
 } from './bootstrap.js';
 import type { OrderOutbox } from './domain/order-outbox.js';
+import type { OrderRepository } from './domain/order-repository.js';
 import {
   CATALOG_CALL_TIMEOUT_MS,
   COURIER_CALL_TIMEOUT_MS,
+  COURIER_EVENT_RETRY_WINDOW_MS,
   INVENTORY_CALL_TIMEOUT_MS,
   PAYMENT_CALL_TIMEOUT_MS,
   RISK_CALL_TIMEOUT_MS,
@@ -54,11 +65,14 @@ import { GrpcRiskAssessment } from './infrastructure/risk/grpc-risk-assessment.j
 const env = loadServiceEnv();
 const logger = createLogger({ name: SERVICE_NAME, level: env.LOG_LEVEL });
 
-/** Kapanista cagrilir; MOCK modunda yapacak is yok. */
-interface EventPublishing {
+/** Olay yayini ya da dinlemesi; kapanista cagrilir, MOCK modunda yapacak is yok. */
+interface EventChannel {
   readonly name: 'redis' | 'kapali (MOCK)';
   stop(): Promise<void>;
 }
+
+/** Tuketici adindaki makine adi parcasinin en uzun hali (ad en fazla 128 karakter). */
+const CONSUMER_HOST_MAX_LENGTH = 100;
 
 /**
  * Olay yayini (T7.3): Redis'e baglanir, outbox yayincisini baslatir. MOCK
@@ -69,7 +83,7 @@ async function openEventPublishing(
   redisEnv: RedisEnv | undefined,
   outbox: OrderOutbox,
   log: Logger,
-): Promise<EventPublishing> {
+): Promise<EventChannel> {
   if (redisEnv === undefined) {
     return { name: 'kapali (MOCK)', stop: () => Promise.resolve() };
   }
@@ -93,14 +107,57 @@ async function openEventPublishing(
   };
 }
 
+/**
+ * Olay dinleme (T14.3): kurye kilometre taslarini stream:events'ten dinler.
+ * MOCK modunda Redis yoktur, dinleme kapalidir. Tuketici adi surece tekildir
+ * (makine + pid): order'in kopyalari ayni grupta isi paylasir.
+ */
+async function openEventConsuming(
+  redisEnv: RedisEnv | undefined,
+  repository: OrderRepository,
+  log: Logger,
+): Promise<EventChannel> {
+  if (redisEnv === undefined) {
+    return { name: 'kapali (MOCK)', stop: () => Promise.resolve() };
+  }
+  const consumer = new RedisStreamsConsumer({
+    connect: () =>
+      connectRedis({
+        url: redisEnv.REDIS_URL,
+        connectTimeoutMs: redisEnv.REDIS_CONNECT_TIMEOUT_MS,
+        name: `${SERVICE_NAME}-events`,
+        logger: log,
+      }),
+    consumerName: `${hostname().slice(0, CONSUMER_HOST_MAX_LENGTH)}-${process.pid}`,
+    logger: log,
+    // Kurye yazimini bekleyen olay erken olu olaylara dusmesin (constants.ts): 10 dk, 20 teslim.
+    delivery: {
+      maxDeliveries: Math.ceil(
+        COURIER_EVENT_RETRY_WINDOW_MS / DEFAULT_DELIVERY_SETTINGS.claimIdleMs,
+      ),
+    },
+  });
+  subscribeOrderEvents(consumer, { repository });
+  await consumer.start();
+  return { name: 'redis', stop: () => consumer.stop() };
+}
+
 // Acilis adimlari (veri kaynagi, indeksler, port) sarilir: biri basarisizsa hata
 // duz metin yigin izi yerine tek satir fatal JSON olarak yazilir ve process kapanir.
-const { handle, store, events } = await startOrExit(
+const { handle, store, events, consuming } = await startOrExit(
   async () => {
     const opened = await openOrderStore(env.mongo, logger, env.NODE_ENV);
     const publishing = await openEventPublishing(env.redis, opened.outbox, logger).catch(
       async (error: unknown) => {
         // Redis'e baglanilamadi: acilmis Mongo baglantisi askida kalmasin.
+        await opened.close();
+        throw error;
+      },
+    );
+    const consuming = await openEventConsuming(env.redis, opened.repository, logger).catch(
+      async (error: unknown) => {
+        // Yayin acildi ama dinleme acilamadi: ikisi de askida kalmasin.
+        await publishing.stop();
         await opened.close();
         throw error;
       },
@@ -181,9 +238,10 @@ const { handle, store, events } = await startOrExit(
       // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti
       // kesilmesin. Once giden istemci, veritabani EN SON (proje kurali).
       onShutdown: async () => {
-        // Once isciler (suren tur biter; istemcileri ve Mongo'yu kullanir), sonra
-        // olay yayini (suren tur biter, Redis kapanir), sonra istemciler,
-        // veritabani EN SON: yayinci outbox'i Mongo'dan okur.
+        // Once olay dinleme ve isciler (suren is biter; istemcileri ve Mongo'yu
+        // kullanir), sonra olay yayini (suren tur biter, Redis kapanir), sonra
+        // istemciler, veritabani EN SON: yayinci outbox'i Mongo'dan okur.
+        await consuming.stop();
         await dispatcher.stop();
         await sweeper.stop();
         await publishing.stop();
@@ -195,7 +253,7 @@ const { handle, store, events } = await startOrExit(
         await opened.close();
       },
     });
-    return { handle: server, store: opened, events: publishing };
+    return { handle: server, store: opened, events: publishing, consuming };
   },
   { logger },
 );
@@ -210,6 +268,7 @@ logger.info(
     mock: env.MOCK,
     storage: store.name,
     events: events.name,
+    consuming: consuming.name,
     catalog: env.CATALOG_GRPC_ADDR,
     risk: env.RISK_GRPC_ADDR,
     payment: env.PAYMENT_GRPC_ADDR,
