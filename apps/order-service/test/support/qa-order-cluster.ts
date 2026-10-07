@@ -27,6 +27,7 @@ import type {
 } from '../../src/application/risk-assessment.js';
 import type { SweepRound } from '../../src/application/sweep-expired-reservations.js';
 import type { OrderRiskContext } from '../../src/domain/checkout-risk.js';
+import type { ExpiredOrderFinder } from '../../src/domain/expired-order-finder.js';
 import type { OrderRepository } from '../../src/domain/order-repository.js';
 import { openOrderStore } from '../../src/infrastructure/order-store.js';
 import type { OrderStore } from '../../src/infrastructure/order-store.js';
@@ -103,6 +104,8 @@ export interface ClusterOptions {
    * cagrinin ARKASINDAN baska istek kosan senaryo genis verir: sonuc saate degil kapiya bagli.
    */
   readonly paymentTimeoutMs?: number;
+  /** Supurucunun is kuyrugunu sarar (OQ4: iki supurucu ayni partiyi okuyup bulusur). */
+  readonly expired?: (finder: ExpiredOrderFinder) => ExpiredOrderFinder;
 }
 
 let databases = 0;
@@ -147,7 +150,7 @@ async function startOrderCluster(
     const started = await startOrderCopy({
       name: `qa-order-${String(index)}`,
       clock: world.clock,
-      store,
+      store: { ...store, expired: options.expired?.(store.expired) ?? store.expired },
       risk,
       paymentAddress,
       inventoryAddress: world.address(),
