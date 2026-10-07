@@ -1119,6 +1119,82 @@ paths:
   /v1/me/cards/{cardId}:
     parameters:
       - $ref: "#/components/parameters/CardIdPath"
+    patch:
+      tags: [auth]
+      operationId: updateSavedCardNickname
+      summary: Kayıtlı kartın adını değiştir (#148)
+      description: |
+        YALNIZCA kart adı değişir; numara, son kullanma ve CVV değişmez (yeni kart
+        için sil + ekle). Cevap GÜNCEL karttır. Kurallar eklemedeki `nickname` ile
+        aynıdır. Boş ya da yalnızca boşluk adı KALDIRIR. Alan yoksa ya da `null`
+        ise `400 VALIDATION_FAILED` ("Kart adı gönderilmedi"): boş gövde adı silmez.
+        Bilinmeyen alan (numara, CVV, son kullanma) `400`'dür. Süresi geçmiş kartın
+        adı da değişebilir.
+
+        Kart bu hesapta yoksa, başkasınınsa ya da silinmişse `404 NOT_FOUND`
+        (biçimsiz kimlik dahil). Kart adı kişisel veridir: günlüğe yazılmaz, hata
+        ayrıntısında yankılanmaz. `Idempotency-Key` zorunludur.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCardNicknameRequest"
+      responses:
+        "200":
+          description: Kart adı güncellendi; güncel kart (maskeli)
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/XRequestId"
+            Cache-Control:
+              $ref: "#/components/headers/NoStore"
+            Idempotent-Replayed:
+              $ref: "#/components/headers/IdempotentReplayed"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SavedCardResponse"
+        "400":
+          description: |
+            Kart adı kurala uymuyor ya da gönderilmedi, bilinmeyen alan ya da
+            `Idempotency-Key` eksik (VALIDATION_FAILED; ayrıntıda alan -> cümle, değer
+            yankılanmaz).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          description: Kart bu hesabın kasasında yok (NOT_FOUND; ayrıntısız).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "409":
+          description: |
+            Aynı `Idempotency-Key` ile ilk istek hâlâ işleniyor
+            (`REQUEST_IN_PROGRESS`) ya da anahtar farklı bir gövdeyle geldi
+            (`CONFLICT`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                inProgress:
+                  $ref: "#/components/examples/IdempotencyRequestInProgress"
+                keyReused:
+                  $ref: "#/components/examples/IdempotencyKeyReused"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
     delete:
       tags: [auth]
       operationId: deleteSavedCard
@@ -5545,7 +5621,7 @@ components:
           format: date-time
 
     SavedCardResponse:
-      description: Eklenen kart (maskeli).
+      description: Eklenen ya da adı değişen kart (maskeli).
       allOf:
         - $ref: "#/components/schemas/ApiSuccessResponse"
         - type: object
@@ -5616,6 +5692,24 @@ components:
             8 ya da daha fazla yan yana rakam reddedilir (kart adında kart numarası
             saklanmaz). Boş ya da yalnızca boşluk: kart adı yok.
           example: "Maaş kartım"
+
+    UpdateCardNicknameRequest:
+      type: object
+      description: |
+        Kart adı düzenleme gövdesi (#148). Yalnızca `nickname`; kurallar
+        `AddCardRequest.nickname` ile aynı. Boş ya da yalnızca boşluk adı kaldırır;
+        alan yoksa ya da `null` ise "Kart adı gönderilmedi".
+      required: [nickname]
+      additionalProperties: false
+      properties:
+        nickname:
+          type: string
+          maxLength: 30
+          description: |
+            Yeni kart adı: NFC'ye çevrilip kırpılır; harf, rakam, boşluk ve
+            `. , ' -`; bu ayraçlar atılınca 8 ya da daha fazla yan yana rakam yok.
+            Boş metin: kart adı kaldırılır.
+          example: "İş kartım"
 
     UpdateAddressRequest:
       description: |
