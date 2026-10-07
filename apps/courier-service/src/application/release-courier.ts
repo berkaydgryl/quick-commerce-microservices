@@ -5,9 +5,10 @@
  * atanmadi) hata degil "birakilmadi" doner. Order, atamadan sonra siparisi
  * yazamazsa (bu arada iptal edildi) kuryeyi bununla geri verir.
  *
- * Kurye oldugu yerde IDLE kalir (havuz, T13.2): konumu degismez, bosta
- * beklemesi birakma aninda baslar (idleSince; #88). Yoldaki anlik konumda
- * birakma bekleyen is #174.
+ * Kurye IDLE olur, Mongo konumu DEGISMEZ: yolda canli konum yalnizca Redis'te
+ * oldugu icin iptal edilen kurye havuza ATANDIGI yerden girer (yoldaki anlik
+ * konumda birakma bekleyen is #174). Bosta beklemesi birakma aninda baslar
+ * (idleSince; #88).
  *
  * Rota (T13.3, karar M6 a): birakilan kuryenin ilerleyen rotasi burada ENDED
  * yazilir; tick'i beklemez, olay yayinlanmaz. Yazilamazsa kurye yine birakilmis

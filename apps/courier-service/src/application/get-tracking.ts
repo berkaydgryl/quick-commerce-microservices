@@ -7,14 +7,27 @@
  * NOT_FOUND: rota yok, rota birakildi (ENDED) ya da teslimattan once kurye
  * artik bu siparisi tasimiyor (iptal; tick henuz ENDED yazmadi). Sahiplik
  * (siparis kimin) cagirandadir: courier kullaniciyi bilmez.
+ *
+ * TESLIM ANI YARISI: tick once deliveredAt'i yazar, SONRA kuryeyi birakir. Rota
+ * ile kurye okumasi arasina teslim duserse kurye birakilmis, rota teslimsiz
+ * gorunur; o zaman rota BIR KEZ yeniden okunur (teslim yazilmissa DELIVERED).
+ * Web 404'te yoklamayi biraktigi icin teslimi hic gormezdi.
  */
 
 import type { Clock } from '@getir/core';
 import { AppError } from '@getir/core';
 
 import { carriesOrder } from '../domain/courier.js';
+import type { Courier } from '../domain/courier.js';
 import type { CourierRepository } from '../domain/courier-repository.js';
-import { ROUTE_STATE, routeState } from '../domain/route.js';
+import {
+  belongsToAssignment,
+  isDelivered,
+  ROUTE_STATE,
+  routeState,
+  sameRoute,
+} from '../domain/route.js';
+import type { Route } from '../domain/route.js';
 import type { MovementRule } from '../domain/route-progress.js';
 import { routeProgress } from '../domain/route-progress.js';
 import type { RouteRepository } from '../domain/route-repository.js';
@@ -45,13 +58,13 @@ export function createGetTracking(deps: GetTrackingDeps): GetTracking {
     AppError.notFound('Siparisin takibi yok', { details: { orderId } });
 
   return async (orderId) => {
-    const route = await deps.routes.findByOrder(orderId);
-    if (route === null || routeState(route) === ROUTE_STATE.ENDED) {
+    const first = await deps.routes.findByOrder(orderId);
+    if (first === null || routeState(first) === ROUTE_STATE.ENDED) {
       throw notFound(orderId);
     }
-    const courier = await deps.couriers.findById(route.courierId);
-    const delivered = route.deliveredAt !== undefined || routeState(route) === ROUTE_STATE.DONE;
-    if (!delivered && !carriesOrder(courier, route.orderId)) {
+    const courier = await deps.couriers.findById(first.courierId);
+    const route = await trackedRoute(first, courier, () => deps.routes.findByOrder(orderId));
+    if (route === null) {
       throw notFound(orderId);
     }
     const at = deps.clock.date();
@@ -62,4 +75,32 @@ export function createGetTracking(deps: GetTrackingDeps): GetTracking {
       at,
     };
   };
+}
+
+/**
+ * Takip edilecek rota; yoksa null (NOT_FOUND):
+ *   - teslim kaydedildiyse rota (kurye artik baska iste olabilir);
+ *   - kurye siparisi tasiyorsa ve rota BU atamanin rotasiysa rota (kurye ayni
+ *     siparisi yeniden aldiysa eski rota, yenisi yazilana kadar gosterilmez);
+ *   - aksi halde TESLIM ANI YARISI: rota BIR KEZ yeniden okunur; AYNI rota
+ *     (kurye + uretilme ani), birakilmamis ve teslimi yazilmissa o.
+ */
+async function trackedRoute(
+  first: Route,
+  courier: Courier | null,
+  reread: () => Promise<Route | null>,
+): Promise<Route | null> {
+  if (isDelivered(first)) {
+    return first;
+  }
+  if (carriesOrder(courier, first.orderId)) {
+    return belongsToAssignment(first, courier) ? first : null;
+  }
+  const again = await reread();
+  return again !== null &&
+    sameRoute(again, first) &&
+    routeState(again) !== ROUTE_STATE.ENDED &&
+    isDelivered(again)
+    ? again
+    : null;
 }

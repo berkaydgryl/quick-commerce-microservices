@@ -183,4 +183,94 @@ describe('createGetTracking', () => {
     const result = await createGetTracking({ routes, couriers: empty, rule: RULE, clock })(order);
     expect(result.courierName).toBe(COURIER_FALLBACK_NAME);
   });
+
+  describe('teslim ani yarisi (QA N1): rota ile kurye okumasi arasina olay duser', () => {
+    /** Kurye okunurken once araya giren olayi isletir; rota okumalarini sayar. */
+    function racing(between: () => Promise<void>) {
+      const reads = { route: 0 };
+      const tracker = createGetTracking({
+        routes: {
+          findByOrder: (id) => {
+            reads.route += 1;
+            return routes.findByOrder(id);
+          },
+        },
+        couriers: {
+          findById: async (id) => {
+            await between();
+            return couriers.findById(id);
+          },
+        },
+        rule: RULE,
+        clock,
+      });
+      return { tracker, reads };
+    }
+    const deliveredAt = new Date(NOW_MS + 600_000);
+    /** Tick'in sirasi: once teslim ani, SONRA kurye adreste birakilir. */
+    const deliver = async () => {
+      await routes.update(route, { pickedUpAt: new Date(NOW_MS + 100_000), deliveredAt });
+      await couriers.releaseByOrder(order, deliveredAt, {
+        courierId: courierId(1),
+        location: DELIVERY,
+      });
+    };
+    /** ReleaseCourier'in sirasi: kurye birakilir, SONRA rota ENDED. */
+    const cancel = async (at: Date) => {
+      await couriers.releaseByOrder(order, at);
+      const current = await routes.findByOrder(order);
+      if (current !== null) await routes.update(current, { state: ROUTE_STATE.ENDED, endedAt: at });
+    };
+
+    it('teslim araya duserse NOT_FOUND degil DELIVERED; rota BIR KEZ yeniden okunur', async () => {
+      clock.set(deliveredAt.getTime() - 1);
+      const { tracker, reads } = racing(deliver);
+
+      const result = await tracker(order);
+
+      expect(result.phase).toBe(TRACKING_PHASE.DELIVERED);
+      expect(result.deliveredAt).toEqual(deliveredAt);
+      expect(reads.route).toBe(2);
+    });
+
+    it('araya iptal duserse (kurye birakildi, rota ENDED) NOT_FOUND', async () => {
+      const { tracker } = racing(() => cancel(new Date(NOW_MS + 1_000)));
+
+      await expect(tracker(order)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+
+    it('iptal ile teslim ust uste duserse (rota ENDED + teslim ani) NOT_FOUND: birakilan rota gosterilmez', async () => {
+      const { tracker } = racing(async () => {
+        await deliver();
+        const current = await routes.findByOrder(order);
+        if (current !== null) {
+          await routes.replace({ ...current, state: ROUTE_STATE.ENDED, endedAt: deliveredAt });
+        }
+      });
+
+      await expect(tracker(order)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+
+    it('araya AYNI kuryeye yeniden atama duserse (yeni rota ani) NOT_FOUND: eski ve yeni rota karismaz', async () => {
+      const { tracker } = racing(async () => {
+        await couriers.releaseByOrder(order, new Date(NOW_MS + 1_000));
+        await routes.replace({ ...route, createdAt: new Date(NOW_MS + 2_000), deliveredAt });
+      });
+
+      await expect(tracker(order)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    });
+  });
+
+  it('kurye siparisi YENIDEN aldiysa (atama rotadan yeni) eski rota gosterilmez: NOT_FOUND', async () => {
+    couriers = new InMemoryCourierStore([
+      courier(1, {
+        status: COURIER_STATUS.BUSY,
+        currentOrderId: order,
+        lastAssignedAt: new Date(NOW_MS + 60_000),
+      }),
+    ]);
+    clock.set(NOW_MS + 61_000);
+
+    await expect(tracking()).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
 });

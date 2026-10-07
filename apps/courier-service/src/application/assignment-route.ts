@@ -18,7 +18,7 @@ import type { Clock, Logger } from '@getir/core';
 
 import type { Courier, GeoPoint } from '../domain/courier.js';
 import type { MarketLocator } from '../domain/market-locator.js';
-import { ROUTE_STATE } from '../domain/route.js';
+import { belongsToAssignment, ROUTE_STATE } from '../domain/route.js';
 import type { Route } from '../domain/route.js';
 import { planRoute } from '../domain/route-planner.js';
 import type { RouteRule } from '../domain/route-planner.js';
@@ -82,15 +82,4 @@ export function createAssignmentRoute(deps: AssignmentRouteDeps): AssignmentRout
     );
     return route;
   };
-}
-
-/** Saklanan rota kuryenin bu atamasinin mi: ayni kurye, son atamadan once uretilmemis. */
-function belongsToAssignment(route: Route, courier: Courier): boolean {
-  if (route.courierId !== courier.id) {
-    return false;
-  }
-  return (
-    courier.lastAssignedAt === undefined ||
-    route.createdAt.getTime() >= courier.lastAssignedAt.getTime()
-  );
 }

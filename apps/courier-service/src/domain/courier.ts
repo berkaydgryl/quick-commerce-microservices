@@ -60,6 +60,9 @@ export interface Courier {
  * Kurye bu siparisi TASIYOR mu (BUSY ve bagli). Atama, rota, tick ve takip ayni
  * kurali kullanir: biri degisirse digerleri ayrismasin.
  */
-export function carriesOrder(courier: Courier | null | undefined, orderId: string): boolean {
+export function carriesOrder(
+  courier: Courier | null | undefined,
+  orderId: string,
+): courier is Courier {
   return courier?.status === COURIER_STATUS.BUSY && courier.currentOrderId === orderId;
 }

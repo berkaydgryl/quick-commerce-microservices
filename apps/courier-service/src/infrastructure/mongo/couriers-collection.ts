@@ -109,8 +109,9 @@ export class CouriersCollection extends MongoRepository<CourierDocument> {
   }
 
   /**
-   * Siparisi tasiyan kuryeyi IDLE'a dondurur; bosta beklemesi `at`'te baslar.
-   * lastAssignedAt ve konum kalir (kurye oldugu yerde bekler).
+   * Siparisi tasiyan (`courierId` verildiyse yalnizca O) kuryeyi IDLE'a
+   * dondurur; bosta beklemesi `at`'te baslar. lastAssignedAt kalir. `location`
+   * verilirse (teslimat noktasi) konum ve ani yazilir; verilmezse konum kalir.
    */
   async releaseByOrder(
     orderId: string,

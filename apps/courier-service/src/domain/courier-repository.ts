@@ -54,8 +54,9 @@ export interface CourierBatchReader {
 
 export interface ReleaseOptions {
   /**
-   * Kuryenin bosa ciktigi yer (T13.3): teslimatta teslimat noktasi, yolda
-   * iptalde rotadaki anlik konum. Verilmezse konum KALIR.
+   * Kuryenin bosa ciktigi yer (T13.3): teslimatta teslimat noktasi. Verilmezse
+   * konum KALIR: iptalde (ReleaseCourier) kurye bugun atandigi yerde kalir;
+   * yoldaki anlik konumda birakma bekleyen is #174.
    */
   readonly location?: GeoPoint;
   /**

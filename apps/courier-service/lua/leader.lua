@@ -6,7 +6,7 @@
 -- sahibi (belirteci tasiyan ornek) yeniler ya da birakir; kontrol ile yazim
 -- ayni atomik adimdadir, araya baska ornek giremez.
 --
--- KEYS[1] kilit (lock:reconcile)
+-- KEYS[1] kilit (lock:courier-tick)
 -- ARGV[1] sahiplik belirteci (ornege ozgu)   ARGV[2] omur (ms)   ARGV[3] 'hold' | 'release'
 --
 -- Doner:

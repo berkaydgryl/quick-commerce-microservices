@@ -12,7 +12,7 @@
  *            ilerlemez, takip NOT_FOUND
  */
 
-import type { GeoPoint } from './courier.js';
+import type { Courier, GeoPoint } from './courier.js';
 
 export interface Route {
   /** Rota siparis basina tektir: kimligi siparisin kimligi. */
@@ -67,4 +67,36 @@ export type RoutePatch = Partial<
 /** Rotanin ilerleme durumu; T13.3 oncesi rotada alan yoktur ve MOVING sayilir. */
 export function routeState(route: Pick<Route, 'state'>): RouteState {
   return route.state ?? ROUTE_STATE.MOVING;
+}
+
+/** Teslim kaydedildi mi (an yazildi ya da rota DONE). Tick, iptal ve takip ayni kurali kullanir. */
+export function isDelivered(route: Pick<Route, 'deliveredAt' | 'state'>): boolean {
+  return route.deliveredAt !== undefined || routeState(route) === ROUTE_STATE.DONE;
+}
+
+/** Ayni rota mi: siparis basina tek belge; kimlik kurye + uretilme ani (yeniden atamada yenilenir). */
+export function sameRoute(
+  left: Pick<Route, 'courierId' | 'createdAt'>,
+  right: Pick<Route, 'courierId' | 'createdAt'>,
+): boolean {
+  return (
+    left.courierId === right.courierId && left.createdAt.getTime() === right.createdAt.getTime()
+  );
+}
+
+/**
+ * Rota bu kuryenin SON atamasinin mi: kurye ayni siparisi yeniden aldiysa eski
+ * rota, yenisi yazilana kadar onun degildir (atama ani rotadan yeni).
+ */
+export function belongsToAssignment(
+  route: Pick<Route, 'courierId' | 'createdAt'>,
+  courier: Pick<Courier, 'id' | 'lastAssignedAt'>,
+): boolean {
+  if (route.courierId !== courier.id) {
+    return false;
+  }
+  return (
+    courier.lastAssignedAt === undefined ||
+    route.createdAt.getTime() >= courier.lastAssignedAt.getTime()
+  );
 }
