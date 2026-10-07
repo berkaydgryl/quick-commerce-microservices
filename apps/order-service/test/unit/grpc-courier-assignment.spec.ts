@@ -8,7 +8,6 @@
 import { AppError, ERROR_CODES, silentLogger } from '@getir/core';
 import { courierV1 } from '@getir/proto';
 import {
-  BREAKER_STATE,
   CircuitBreaker,
   REQUEST_ID_METADATA_KEY,
   startGrpcServer,
@@ -26,11 +25,10 @@ import {
   HeldReplies,
   REACH_BUDGET_MS,
 } from '../support/held-replies.js';
+import { businessError, UNAVAILABLE, withProbe } from '../support/qa-breaker-probe.js';
 
 const scope = { requestId: 'req_kurye_1', logger: silentLogger };
 const LOCATION = { lat: 40.9885, lng: 29.0262 };
-/** Dinlemeyen port aninda reddeder; kisa sinir takilan ortamda testi testTimeout'tan once bitirir. */
-const UNREACHABLE_TIMEOUT_MS = 500;
 const SLOW_ORDER_ID = 'ord_yavas';
 /** Yavas siparisin bekletilen istekleri (cevap verilmez; kimlik ve kalan sure kaydedilir). */
 const held = new HeldReplies();
@@ -199,6 +197,8 @@ describe('GrpcCourierAssignment - dayaniklilik (D17)', () => {
     breaker: new CircuitBreaker({ target: 'courier', failureThreshold: 2, openMs: 60_000 }),
     retry: { target: 'courier', maxRetries: 2, baseDelayMs: 1 },
   });
+  const connectCourier = (address: string) =>
+    new GrpcCourierAssignment(address, FUNCTIONAL_TIMEOUT_MS, resilience());
   let resilient: GrpcCourierAssignment;
 
   beforeAll(() => {
@@ -226,40 +226,45 @@ describe('GrpcCourierAssignment - dayaniklilik (D17)', () => {
   });
 
   it('ulasilamayan courier a ust uste hatadan sonra devre acilir; cagri ag a gitmeden hemen reddedilir', async () => {
-    // Dinlemeyen bir port: baglanti hemen reddedilir (UNAVAILABLE).
-    const unreachable = new GrpcCourierAssignment(
-      '127.0.0.1:1',
-      UNREACHABLE_TIMEOUT_MS,
-      resilience(),
-    );
-    try {
-      await rejectionOf(unreachable.assign(request('ord_1'), scope));
-      await rejectionOf(unreachable.assign(request('ord_1'), scope));
-      const started = Date.now();
-      const rejected = await rejectionOf(unreachable.release('ord_1', scope));
+    // Kanit sunucu sayaci (#123): kapali port ve hiz olcumu kesicisiz de geciyordu.
+    await withProbe(
+      'courier',
+      courierV1.CourierServiceService,
+      connectCourier,
+      async (client, faults) => {
+        faults.setAll(UNAVAILABLE);
+        await rejectionOf(client.assign(request('ord_1'), scope));
+        const reached = faults.calls();
 
-      expect(rejected.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
-      expect(Date.now() - started).toBeLessThan(50);
-    } finally {
-      unreachable.close();
-    }
+        const rejected = await rejectionOf(client.release('ord_1', scope));
+
+        expect(rejected.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+        expect(faults.calls()).toBe(reached);
+      },
+    );
   });
 
   it('bos kurye yok (NOT_FOUND) devreyi ACMAZ: beklenen sonuc', async () => {
-    const options = resilience();
-    const subject = new GrpcCourierAssignment(
-      `127.0.0.1:${handle.port}`,
-      FUNCTIONAL_TIMEOUT_MS,
-      options,
+    await withProbe(
+      'courier',
+      courierV1.CourierServiceService,
+      connectCourier,
+      async (client, faults) => {
+        faults.set('assignCourier', businessError(ERROR_CODES.NOT_FOUND));
+        for (let i = 0; i < 4; i += 1) {
+          await expect(client.assign(request('ord_bos_kurye_yok'), scope)).resolves.toBeNull();
+        }
+        // Esik 2, dort is hatasi: hepsi sunucuya ulasti.
+        expect(faults.calls('assignCourier')).toBe(4);
+
+        // Iki yonlu kanit (#123): ayni istemcide devre gercekten acilabiliyor.
+        faults.setAll(UNAVAILABLE);
+        await rejectionOf(client.assign(request('ord_bos_kurye_yok'), scope));
+        const reached = faults.calls();
+        await rejectionOf(client.release('ord_bos_kurye_yok', scope));
+        expect(faults.calls()).toBe(reached);
+      },
     );
-    try {
-      for (let i = 0; i < 4; i += 1) {
-        await expect(subject.assign(request('ord_bos_kurye_yok'), scope)).resolves.toBeNull();
-      }
-      expect(options.breaker.currentState).toBe(BREAKER_STATE.CLOSED);
-    } finally {
-      subject.close();
-    }
   });
 });
 

@@ -17,32 +17,14 @@
  */
 
 import { AppError, ERROR_CODES, ORDER_STATUS } from '@getir/core';
-import { toServiceError } from '@getir/service-kit';
 import type { GrpcServiceRegistration } from '@getir/service-kit';
-import type {
-  sendUnaryData,
-  ServerUnaryCall,
-  ServiceError,
-  UntypedServiceImplementation,
-} from '@grpc/grpc-js';
+import type { sendUnaryData, ServerUnaryCall } from '@grpc/grpc-js';
 
 import type { OrderEvent } from '../../src/domain/order-events.js';
 import type { Order } from '../../src/domain/order.js';
 import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-order-store.js';
-
-/** Elle acilan kapi; `opened` acilinca cozulur. */
-export interface Gate {
-  open(): void;
-  readonly opened: Promise<void>;
-}
-
-export function gate(): Gate {
-  let open: () => void = () => undefined;
-  const opened = new Promise<void>((resolve) => {
-    open = resolve;
-  });
-  return { open, opened };
-}
+import { gate, unavailable, wrapHandlers } from './qa-grpc-faults.js';
+import type { Gate, UnaryHandler } from './qa-grpc-faults.js';
 
 export type PaymentRpc = 'charge' | 'confirm3Ds' | 'getPayment' | 'refund';
 
@@ -58,15 +40,7 @@ type Fault =
   | { readonly kind: 'barrier'; readonly size: number; readonly arrivals: Gate[] }
   | { readonly kind: 'fail' };
 
-type Handler = (
-  call: ServerUnaryCall<{ orderId?: string }, unknown>,
-  callback: sendUnaryData<unknown>,
-) => void;
-
 const RPCS: readonly PaymentRpc[] = ['charge', 'confirm3Ds', 'getPayment', 'refund'];
-
-const unavailable = (message: string): ServiceError =>
-  toServiceError(new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, message));
 
 export class PaymentFaults {
   private readonly faults = new Map<string, Fault>();
@@ -119,26 +93,24 @@ export class PaymentFaults {
   }
 
   wrap(registration: GrpcServiceRegistration): GrpcServiceRegistration {
-    const implementation: UntypedServiceImplementation = { ...registration.implementation };
-    for (const rpc of RPCS) {
-      const original = registration.implementation[rpc] as Handler;
-      const faulty: Handler = (call, callback) => {
-        const key = keyOf(rpc, call.request.orderId ?? '');
+    return wrapHandlers(
+      registration,
+      (rpc, original) => (call, callback) => {
+        const key = keyOf(rpc as PaymentRpc, orderIdOf(call.request));
         this.counts.set(key, (this.counts.get(key) ?? 0) + 1);
         // Beklenmedik hata yutulmaz: cagri hatayla kapanir, test o hatayi gorur.
         this.handle(key, original, call, callback).catch((error: unknown) => {
           callback(unavailable(`QA ariza katmani: ${String(error)}`));
         });
-      };
-      implementation[rpc] = faulty as UntypedServiceImplementation[string];
-    }
-    return { ...registration, implementation };
+      },
+      RPCS,
+    );
   }
 
   private async handle(
     key: string,
-    original: Handler,
-    call: ServerUnaryCall<{ orderId?: string }, unknown>,
+    original: UnaryHandler,
+    call: ServerUnaryCall<unknown, unknown>,
     callback: sendUnaryData<unknown>,
   ): Promise<void> {
     const fault = this.faults.get(key);
@@ -197,6 +169,12 @@ function dropping(callback: sendUnaryData<unknown>): sendUnaryData<unknown> {
   return (error) => {
     callback(error ?? unavailable('QA: cevap kayboldu'));
   };
+}
+
+/** Istegin siparis kimligi (payment RPC'lerinin hepsinde var); okunamazsa bos anahtar. */
+function orderIdOf(request: unknown): string {
+  if (typeof request !== 'object' || request === null || !('orderId' in request)) return '';
+  return typeof request.orderId === 'string' ? request.orderId : '';
 }
 
 /** order deposu; isaretlenen siparisin SIRADAKI PAID yazimi bir kez duser (CONFLICT degil). */

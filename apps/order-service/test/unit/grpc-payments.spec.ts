@@ -8,7 +8,6 @@
 import { AppError, ERROR_CODES, silentLogger } from '@getir/core';
 import { paymentV1 } from '@getir/proto';
 import {
-  BREAKER_STATE,
   CircuitBreaker,
   REQUEST_ID_METADATA_KEY,
   startGrpcServer,
@@ -28,11 +27,10 @@ import {
   HeldReplies,
   REACH_BUDGET_MS,
 } from '../support/held-replies.js';
+import { businessError, UNAVAILABLE, withProbe } from '../support/qa-breaker-probe.js';
 
 const scope = { requestId: 'req_odeme_1', logger: silentLogger };
 const S = paymentV1.PaymentStatus;
-/** Dinlemeyen port aninda reddeder; kisa sinir takilan ortamda testi testTimeout'tan once bitirir. */
-const UNREACHABLE_TIMEOUT_MS = 500;
 const SLOW_ORDER_ID = 'ord_yavas';
 /** Yavas siparisin bekletilen istekleri (cevap verilmez; kimlik ve kalan sure kaydedilir). */
 const held = new HeldReplies();
@@ -330,6 +328,8 @@ describe('GrpcPayments - dayaniklilik (D17)', () => {
     breaker: new CircuitBreaker({ target: 'payment', failureThreshold: 2, openMs: 60_000 }),
     retry: { target: 'payment', maxRetries: 2, baseDelayMs: 1 },
   });
+  const connectPayments = (address: string) =>
+    new GrpcPayments(address, FUNCTIONAL_TIMEOUT_MS, resilience());
   let resilient: GrpcPayments;
 
   beforeAll(() => {
@@ -358,44 +358,59 @@ describe('GrpcPayments - dayaniklilik (D17)', () => {
   });
 
   it('ulasilamayan servise ust uste hatadan sonra devre acilir; cagri ag a gitmeden hemen reddedilir', async () => {
-    // Dinlemeyen bir port: baglanti hemen reddedilir (UNAVAILABLE).
-    const unreachable = new GrpcPayments('127.0.0.1:1', UNREACHABLE_TIMEOUT_MS, resilience());
-    try {
-      await rejectionOf(
-        unreachable.confirmThreeDs(
-          { orderId: 'ord_1', challengeId: 'tds_1', code: '123456' },
-          scope,
-        ),
-      );
-      await rejectionOf(
-        unreachable.confirmThreeDs(
-          { orderId: 'ord_1', challengeId: 'tds_1', code: '123456' },
-          scope,
-        ),
-      );
-      const started = Date.now();
-      const rejected = await rejectionOf(unreachable.getPayment('ord_1', scope));
+    // Kanit sunucu sayaci (#123): kapali port ve hiz olcumu kesicisiz de geciyordu.
+    await withProbe(
+      'payment',
+      paymentV1.PaymentServiceService,
+      connectPayments,
+      async (client, faults) => {
+        faults.setAll(UNAVAILABLE);
+        const confirm = () =>
+          rejectionOf(
+            client.confirmThreeDs(
+              { orderId: 'ord_1', challengeId: 'tds_1', code: '123456' },
+              scope,
+            ),
+          );
+        await confirm();
+        await confirm();
+        const reached = faults.calls();
 
-      expect(rejected.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
-      expect(Date.now() - started).toBeLessThan(50);
-    } finally {
-      unreachable.close();
-    }
+        const rejected = await rejectionOf(client.getPayment('ord_1', scope));
+
+        expect(rejected.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+        expect(faults.calls()).toBe(reached);
+      },
+    );
   });
 
   it('is hatasi (yanlis 3DS kodu) devreyi ACMAZ', async () => {
-    const options = resilience();
-    const client = new GrpcPayments(`127.0.0.1:${handle.port}`, FUNCTIONAL_TIMEOUT_MS, options);
-    try {
-      for (let i = 0; i < 4; i += 1) {
-        await rejectionOf(
-          client.confirmThreeDs({ orderId: 'ord_1', challengeId: 'tds_1', code: '000000' }, scope),
-        );
-      }
-      expect(options.breaker.currentState).toBe(BREAKER_STATE.CLOSED);
-    } finally {
-      client.close();
-    }
+    await withProbe(
+      'payment',
+      paymentV1.PaymentServiceService,
+      connectPayments,
+      async (client, faults) => {
+        faults.set('confirm3Ds', businessError(ERROR_CODES.THREEDS_FAILED));
+        const confirm = () =>
+          rejectionOf(
+            client.confirmThreeDs(
+              { orderId: 'ord_1', challengeId: 'tds_1', code: '000000' },
+              scope,
+            ),
+          );
+        for (let i = 0; i < 4; i += 1) await confirm();
+        // Esik 2, dort is hatasi: hepsi sunucuya ulasti.
+        expect(faults.calls('confirm3Ds')).toBe(4);
+
+        // Iki yonlu kanit (#123): ayni istemcide devre gercekten acilabiliyor.
+        faults.setAll(UNAVAILABLE);
+        await confirm();
+        await confirm();
+        const reached = faults.calls();
+        await rejectionOf(client.getPayment('ord_1', scope));
+        expect(faults.calls()).toBe(reached);
+      },
+    );
   });
 });
 
