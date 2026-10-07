@@ -149,8 +149,10 @@ func (s *Service) Place(ctx context.Context, in PlaceInput) (Placement, error) {
 		UserId:  in.UserID,
 		// REST yuzeyinde tek yontem kart (contracts paymentMethodSchema).
 		PaymentMethod:  paymentv1.PaymentMethod_PAYMENT_METHOD_CARD,
+		CardId:         in.CardID,
 		CardToken:      in.CardToken,
 		IdempotencyKey: in.IdempotencyKey,
+		Details:        toProtoDetails(in.Details),
 		// Risk sinyalleri istemciden ALINMAZ (B9): IP baglantidan, digerleri
 		// oturum ve kullanici kaydindan (T8.1).
 		Signals: toProtoSignals(in.Signals),
@@ -160,7 +162,7 @@ func (s *Service) Place(ctx context.Context, in PlaceInput) (Placement, error) {
 	if err != nil {
 		return Placement{}, rpc.RenameFields(err, placeFieldNames)
 	}
-	return toPlacement(response.GetOrderId(), response.GetStatus(), response.GetChallengeId())
+	return toPlacement(response.GetOrderId(), response.GetStatus(), challengeOf(response, s.now()))
 }
 
 // ConfirmThreeDS, 3DS kodunu dogrular (POST /v1/orders/{id}/3ds -> ConfirmPayment).
@@ -177,19 +179,45 @@ func (s *Service) ConfirmThreeDS(ctx context.Context, in ConfirmInput) (Placemen
 	if err != nil {
 		return Placement{}, rpc.RenameFields(err, confirmFieldNames)
 	}
-	return toPlacement(response.GetOrderId(), response.GetStatus(), "")
+	return toPlacement(response.GetOrderId(), response.GetStatus(), nil)
 }
 
-// Get, kullanicinin tek siparisi (GET /v1/orders/{id} -> GetOrder).
-// Baskasinin siparisi NOT_FOUND doner (varlik bilgisi bile sizmaz; order-service).
+// Get, kullanicinin tek siparisi (GetOrder), AYRINTISIZ: sahiplik denetimi
+// (oda jetonu) ve "zaten iptal" yolu bunu kullanir. Baskasinin siparisi
+// NOT_FOUND doner (varlik bilgisi bile sizmaz; order-service).
 func (s *Service) Get(ctx context.Context, userID, orderID string) (Order, error) {
-	request := &orderv1.GetOrderRequest{OrderId: orderID, UserId: userID}
+	raw, err := s.fetch(ctx, userID, orderID)
+	if err != nil {
+		return Order{}, err
+	}
+	return toOrder(raw, s.now())
+}
 
+// GetDetailed, GET /v1/orders/{id}: siparis ve ayrintisi (T12.4), SAHIBINE.
+// Ayrinti yalnizca bu cevap tipinde vardir; liste (Page) ve Get onu tasiyamaz.
+func (s *Service) GetDetailed(ctx context.Context, userID, orderID string) (OrderDetail, error) {
+	raw, err := s.fetch(ctx, userID, orderID)
+	if err != nil {
+		return OrderDetail{}, err
+	}
+	found, err := toOrder(raw, s.now())
+	if err != nil {
+		return OrderDetail{}, err
+	}
+	details, err := toDetailsView(raw.GetDetails())
+	if err != nil {
+		return OrderDetail{}, err
+	}
+	return OrderDetail{Order: found, Details: details}, nil
+}
+
+func (s *Service) fetch(ctx context.Context, userID, orderID string) (*orderv1.Order, error) {
+	request := &orderv1.GetOrderRequest{OrderId: orderID, UserId: userID}
 	response, err := rpc.Invoke(ctx, s.timeout, service, "GetOrder", s.rpc.GetOrder, request)
 	if err != nil {
-		return Order{}, rpc.RenameFields(err, getFieldNames)
+		return nil, rpc.RenameFields(err, getFieldNames)
 	}
-	return toOrder(response.GetOrder(), s.now())
+	return response.GetOrder(), nil
 }
 
 // OrderPage, kullanicinin siparislerinin bir sayfasi, yeniden eskiye (ham:

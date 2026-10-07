@@ -4,6 +4,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -98,4 +99,23 @@ func StringRecord(t *testing.T, source, name string) map[string]string {
 		record[entry[1]] = entry[2]
 	}
 	return record
+}
+
+// MessageConstant, `export const AD = 'cumle';` ya da sablon
+// (`export const AD = `... ${SINIR} ...`;`) cumlesi; satir kirilabilir. Sablon
+// yerleri values'tan doldurulur; doldurulamayan yer kalirsa test durur.
+func MessageConstant(t *testing.T, source, name string, values map[string]int) string {
+	t.Helper()
+	match := regexp.MustCompile(`export const ` + name + ` =\s*(?:'([^']*)'|` + "`([^`]*)`" + `);`).FindStringSubmatch(source)
+	if match == nil {
+		t.Fatalf("%s sozlesmede bulunamadi", name)
+	}
+	message := match[1] + match[2]
+	for placeholder, value := range values {
+		message = strings.ReplaceAll(message, "${"+placeholder+"}", strconv.Itoa(value))
+	}
+	if strings.Contains(message, "${") {
+		t.Fatalf("%s: doldurulamayan sablon yeri: %q", name, message)
+	}
+	return message
 }
