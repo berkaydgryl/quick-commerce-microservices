@@ -18,19 +18,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { OrderRiskContext } from '../../src/domain/checkout-risk.js';
 import { GrpcRiskAssessment } from '../../src/infrastructure/risk/grpc-risk-assessment.js';
-import { cutAfterReach, HeldReplies } from '../support/held-replies.js';
+import {
+  cutAfterReach,
+  DEADLINE_TIMEOUT_MS,
+  FUNCTIONAL_TIMEOUT_MS,
+  HeldReplies,
+  REACH_BUDGET_MS,
+} from '../support/held-replies.js';
 
-/**
- * Islevsel testlerin suresi COMERT (D17): ilk cagri kanal kurulumunu da oder ve
- * yuklu makinede 200 ms'yi asabiliyordu ("Deadline exceeded after 0.201s").
- * Bu testler sureyi degil ceviriyi siner; dayaniklilik testinde de yeniden
- * denemeyi kalan sure degil kural engellemeli.
- */
-const FUNCTIONAL_TIMEOUT_MS = 5_000;
-/** Yalnizca sure siniri testinin kisa siniri; yavas kullanicinin cevabi HIC gelmez. */
-const DEADLINE_TIMEOUT_MS = 200;
-/** Sure testinin zaman butcesi: istek sunucuya ulasana kadar tekrar (testTimeout'un altinda). */
-const REACH_BUDGET_MS = 5_000;
 const scope = { requestId: 'req_risk_1', logger: silentLogger };
 
 /** Sunucunun gordugu istekler ve x-request-id degerleri. */

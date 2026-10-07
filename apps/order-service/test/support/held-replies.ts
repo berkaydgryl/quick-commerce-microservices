@@ -10,6 +10,17 @@
 import { REQUEST_ID_METADATA_KEY } from '@getir/service-kit';
 import type { ServerUnaryCall } from '@grpc/grpc-js';
 
+/**
+ * order gRPC istemci testlerinin ortak sureleri (#113). Islevsel istemci: ilk cagri kanal kurulumunu
+ * da oder, soguk 200-500 ms'lik istemci yuklu makinede asiliyordu; 2 sn hem bol hem de arka arkaya
+ * birkac cagri testTimeout'un (10 sn) altinda kalir ve yeniden denemenin geri cekilmesini sinirlar.
+ */
+export const FUNCTIONAL_TIMEOUT_MS = 2_000;
+/** Yalnizca sure siniri testlerinin kisa siniri; yavas istegin cevabi HIC gelmez. */
+export const DEADLINE_TIMEOUT_MS = 200;
+/** Sure testinin zaman butcesi: istek sunucuya ulasana kadar tekrar (testTimeout'un altinda). */
+export const REACH_BUDGET_MS = 5_000;
+
 export interface HeldReply {
   /** Istegin x-request-id'si: denemeyi kesin olarak tanir. */
   readonly requestId: string;
@@ -35,6 +46,8 @@ export class HeldReplies {
   }
 }
 
+let cutRound = 0;
+
 /**
  * Yavas cagriyi, istegi sunucuya ULASANA kadar (zaman butcesi icinde) tekrarlar. Yuklu makinede
  * ilk deneme kanal kurulumunda kesilebilir; her deneme kendi istek kimligiyle taninir.
@@ -44,9 +57,11 @@ export async function cutAfterReach(
   held: HeldReplies,
   budgetMs: number,
 ): Promise<{ readonly error: unknown; readonly reply: HeldReply }> {
+  // Cagri basina benzersiz on ek: onceki kosunun (--retry, ikinci cagri) kaydiyla eslesmesin.
+  cutRound += 1;
   const until = Date.now() + budgetMs;
   for (let index = 1; ; index += 1) {
-    const requestId = `req_sure_siniri_${index}`;
+    const requestId = `req_sure_siniri_${cutRound}_${index}`;
     const error = await attempt(requestId).then(
       () => undefined,
       (reason: unknown) => reason,

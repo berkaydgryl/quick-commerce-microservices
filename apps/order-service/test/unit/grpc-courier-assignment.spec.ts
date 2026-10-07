@@ -19,9 +19,21 @@ import type { sendUnaryData, ServerUnaryCall } from '@grpc/grpc-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { GrpcCourierAssignment } from '../../src/infrastructure/courier/grpc-courier-assignment.js';
+import {
+  cutAfterReach,
+  DEADLINE_TIMEOUT_MS,
+  FUNCTIONAL_TIMEOUT_MS,
+  HeldReplies,
+  REACH_BUDGET_MS,
+} from '../support/held-replies.js';
 
 const scope = { requestId: 'req_kurye_1', logger: silentLogger };
 const LOCATION = { lat: 40.9885, lng: 29.0262 };
+/** Dinlemeyen port aninda reddeder; kisa sinir takilan ortamda testi testTimeout'tan once bitirir. */
+const UNREACHABLE_TIMEOUT_MS = 500;
+const SLOW_ORDER_ID = 'ord_yavas';
+/** Yavas siparisin bekletilen istekleri (cevap verilmez; kimlik ve kalan sure kaydedilir). */
+const held = new HeldReplies();
 
 const seenAssigns: courierV1.AssignCourierRequest[] = [];
 const seenReleases: courierV1.ReleaseCourierRequest[] = [];
@@ -53,6 +65,11 @@ const implementation = {
     call: ServerUnaryCall<courierV1.AssignCourierRequest, courierV1.AssignCourierResponse>,
     callback: sendUnaryData<courierV1.AssignCourierResponse>,
   ): void => {
+    // Yavas siparis kayda YAZILMADAN bekletilir: gec gelen deneme baska testin at(-1)'ini bozmasin.
+    if (call.request.orderId === SLOW_ORDER_ID) {
+      held.hold(call);
+      return;
+    }
     seenAssigns.push(call.request);
     seenRequestIds.push(call.metadata.get(REQUEST_ID_METADATA_KEY)[0]);
     const { orderId } = call.request;
@@ -117,7 +134,7 @@ beforeAll(async () => {
       },
     ],
   });
-  client = new GrpcCourierAssignment(`127.0.0.1:${handle.port}`, 500);
+  client = new GrpcCourierAssignment(`127.0.0.1:${handle.port}`, FUNCTIONAL_TIMEOUT_MS);
 });
 
 afterAll(async () => {
@@ -185,11 +202,15 @@ describe('GrpcCourierAssignment - dayaniklilik (D17)', () => {
   let resilient: GrpcCourierAssignment;
 
   beforeAll(() => {
-    resilient = new GrpcCourierAssignment(`127.0.0.1:${handle.port}`, 500, resilience());
+    resilient = new GrpcCourierAssignment(
+      `127.0.0.1:${handle.port}`,
+      FUNCTIONAL_TIMEOUT_MS,
+      resilience(),
+    );
   });
 
   afterAll(() => {
-    resilient.close();
+    resilient?.close();
   });
 
   it('atama tekrar guvenli: ilk deneme duserse yeniden denenir ve kurye doner', async () => {
@@ -206,7 +227,11 @@ describe('GrpcCourierAssignment - dayaniklilik (D17)', () => {
 
   it('ulasilamayan courier a ust uste hatadan sonra devre acilir; cagri ag a gitmeden hemen reddedilir', async () => {
     // Dinlemeyen bir port: baglanti hemen reddedilir (UNAVAILABLE).
-    const unreachable = new GrpcCourierAssignment('127.0.0.1:1', 500, resilience());
+    const unreachable = new GrpcCourierAssignment(
+      '127.0.0.1:1',
+      UNREACHABLE_TIMEOUT_MS,
+      resilience(),
+    );
     try {
       await rejectionOf(unreachable.assign(request('ord_1'), scope));
       await rejectionOf(unreachable.assign(request('ord_1'), scope));
@@ -222,7 +247,11 @@ describe('GrpcCourierAssignment - dayaniklilik (D17)', () => {
 
   it('bos kurye yok (NOT_FOUND) devreyi ACMAZ: beklenen sonuc', async () => {
     const options = resilience();
-    const subject = new GrpcCourierAssignment(`127.0.0.1:${handle.port}`, 500, options);
+    const subject = new GrpcCourierAssignment(
+      `127.0.0.1:${handle.port}`,
+      FUNCTIONAL_TIMEOUT_MS,
+      options,
+    );
     try {
       for (let i = 0; i < 4; i += 1) {
         await expect(subject.assign(request('ord_bos_kurye_yok'), scope)).resolves.toBeNull();
@@ -231,5 +260,31 @@ describe('GrpcCourierAssignment - dayaniklilik (D17)', () => {
     } finally {
       subject.close();
     }
+  });
+});
+
+describe('GrpcCourierAssignment sure siniri (#113)', () => {
+  let shortDeadline: GrpcCourierAssignment;
+
+  beforeAll(() => {
+    shortDeadline = new GrpcCourierAssignment(`127.0.0.1:${handle.port}`, DEADLINE_TIMEOUT_MS);
+  });
+
+  afterAll(() => {
+    shortDeadline?.close();
+  });
+
+  it('sure siniri dolarsa SERVICE_UNAVAILABLE; istemci KENDI kisa sinirini gonderir', async () => {
+    const { error, reply } = await cutAfterReach(
+      (requestId) =>
+        shortDeadline.assign(request(SLOW_ORDER_ID), { requestId, logger: silentLogger }),
+      held,
+      REACH_BUDGET_MS,
+    );
+
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+    // Istek sunucuya ulasti ve istemci kendi kisa sinirini gonderdi.
+    expect(reply.remainingMs).toBeLessThanOrEqual(DEADLINE_TIMEOUT_MS);
   });
 });
