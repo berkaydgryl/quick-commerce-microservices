@@ -89,6 +89,11 @@ export function describeOrderHistoryListingContract(
         walk(draftAt(userId, at(9)), TO_DELIVERED),
         // Odendikten sonra iptal (iade): notu ne olursa olsun gecmiste kalir.
         ended(userId, at(11), TO_PAID, S.CANCELLED, 'RESERVATION_EXPIRED'),
+        // Kilidi dusup parasi iade edilen (#166): PAID kaydi yok, iade isareti var.
+        {
+          ...ended(userId, at(13), TO_AWAITING, S.CANCELLED, 'RESERVATION_EXPIRED'),
+          refund: { reason: 'reservation_expired', requestedAt: new Date(at(13)) },
+        },
       ];
       for (const order of [...hidden, ...listed]) {
         await store.insert(order, []);

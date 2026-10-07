@@ -75,6 +75,20 @@ export interface DeliveryLocation {
 }
 
 /**
+ * Alinan paranin iadesi (#166): iade komutu (payment.refund_requested) yazildi,
+ * dogrudan iade yapildi ya da odeme kaydi kapanista iade edilmis bulundu. Kalici
+ * isarettir; iptal edilen siparisi zaman cizelgesinde PAID olmasa da (kilidi
+ * dusmus odeme) gecmiste tutar. Istemciye bugun TASINMAZ ("Iade edildi" etiketi
+ * proto + gateway zincirinde). Tutar ve kart bilgisi TASIMAZ; iade payment'tadir.
+ */
+export interface OrderRefund {
+  /** Iade gerekcesi anahtari (checkout-payment.ts REFUND_REASON). */
+  readonly reason: string;
+  /** Iadenin istendigi an (order'in saati). */
+  readonly requestedAt: Date;
+}
+
+/**
  * Siparisi tasiyan kurye (T13.1): kurye kaydinin sahibi courier-service'tir
  * (ADR-05); burada yalnizca hangi kuryenin ne zaman atandigi tutulur. Adi ve
  * konumu siparise yazilmaz.
@@ -141,6 +155,8 @@ export interface Order {
    * yaziminda kaydedilir, odeme bekleyen sipariste degismez. Eski sipariste yok.
    */
   readonly payment?: OrderPayment;
+  /** Para alinip iade baslatildiysa (#166, order-refund.ts); yoksa YOK. */
+  readonly refund?: OrderRefund;
   readonly createdAt: Date;
   readonly updatedAt: Date;
   /**

@@ -86,7 +86,7 @@ export interface OrderCluster {
   readonly payments: InMemoryPaymentStore;
   /** payment gRPC'sinin ariza katmani (kapilar, bariyer, cagri sayisi). */
   readonly faults: PaymentFaults;
-  /** Ortak siparis deposu (iki kopya ayni Mongo'yu okur); denetim icin. */
+  /** Ortak siparis deposu (iki kopya ayni Mongo'yu okur); denetim ve fikstur (OQ5 H1 esitlikleri). */
   readonly orders: OrderRepository;
   /** Iki yayincinin ortak akisi (yayin sirasiyla). */
   readonly stream: Published[];
