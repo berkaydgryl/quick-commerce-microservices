@@ -15,10 +15,10 @@ import { createAttemptKeys } from '../../cards/services/attempt-key';
 import { marketKeys } from '../../markets/api/query-keys';
 import { orderPath } from '../../orders/routes';
 import { isUnknownOutcome } from '../../cards/services/attempt-key';
-import { heldMatchesBody, orderBodyFingerprint } from '../services/held-order';
+import { orderBodyFingerprint } from '../services/held-order';
 import type { HeldOrder } from '../services/held-order';
 import { monotonicNow } from '../services/monotonic-clock';
-import { placeReserved, releaseSafely, startOrder, submitCode } from '../services/place-order';
+import { placeReserved, releaseSafely, reserveOrder, submitCode } from '../services/place-order';
 import type { OrderFlowDeps } from '../services/place-order';
 import { createReserveIntent } from '../services/reserve-intent';
 
@@ -103,7 +103,7 @@ export function useOrderFlow(
 
   const fail = (error: unknown, used: HeldOrder | undefined) => {
     if (used !== undefined && isUnknownOutcome(error)) {
-      reservation.keep(used);
+      reservation.uncertain(used);
     } else {
       reservation.forget();
     }
@@ -136,22 +136,6 @@ export function useOrderFlow(
    * siparis; siparis bir kez verildiyse yontem ve ayrintilar da ayni olmali
    * (QA #176 N2). Uymuyorsa birakilir ve rezervasyon + siparis bastan.
    */
-  const placeWithReservation = async (
-    request: ReserveCartRequest,
-    orderBody: (orderId: string) => CreateOrderRequest,
-  ) => {
-    let held = await reservation.take(request);
-    if (held !== undefined && !heldMatchesBody(held, orderBody(held.orderId))) {
-      reservation.forget();
-      await releaseSafely(deps, held.orderId);
-      held = undefined;
-    }
-    const outcome = await (held === undefined
-      ? startOrder(deps, request, orderBody)
-      : placeReserved(deps, held, orderBody));
-    return { outcome, used: held };
-  };
-
   const place = async (
     request: ReserveCartRequest,
     orderBody: (orderId: string) => CreateOrderRequest,
@@ -160,9 +144,12 @@ export function useOrderFlow(
     setState({ kind: 'busy' });
     let used: HeldOrder | undefined;
     try {
-      const result = await placeWithReservation(request, orderBody);
-      used = result.used;
-      const { outcome } = result;
+      // Rezervasyon siparis isteginden ONCE belli olur ve 'placing'e alinir:
+      // istek ucustayken ya da sonucu belirsizken sayfadan ayrilmak onu birakmaz
+      // (QA K9 #178 F1). Erken rezervasyon uymuyorsa ya da yoksa burada alinir.
+      used = (await reservation.take(request, orderBody)) ?? (await reserveOrder(deps, request));
+      reservation.uncertain(used);
+      const outcome = await placeReserved(deps, used, orderBody);
       if (outcome.kind === 'card-missing') {
         reservation.keep({
           ...outcome.held,

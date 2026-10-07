@@ -22,9 +22,17 @@ export interface HeldOrder {
   readonly placedWith?: string | undefined;
 }
 
-/** Siparisin kartTAN bagimsiz kismi: odeme yontemi ve ayrintilar (hediye, not, zil, sozlesme). */
+/**
+ * Siparisin kartTAN bagimsiz kismi: odeme yontemi, kapida odemenin turu (nakit
+ * ya da kart; sunucu degisimini 409 CONFLICT ile reddeder, QA #178 N2) ve
+ * ayrintilar (hediye, not, zil, sozlesme).
+ */
 export function orderBodyFingerprint(body: CreateOrderRequest): string {
-  return JSON.stringify({ method: body.payment.method, details: body.details });
+  return JSON.stringify({
+    method: body.payment.method,
+    onDelivery: body.payment.onDelivery,
+    details: body.details,
+  });
 }
 
 /**

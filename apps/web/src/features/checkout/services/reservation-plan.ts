@@ -13,6 +13,13 @@ export type ReservationPhase =
   | { readonly kind: 'reserving'; readonly fingerprint: string }
   | { readonly kind: 'held'; readonly held: HeldOrder }
   | { readonly kind: 'failed'; readonly fingerprint: string; readonly error: unknown }
+  /**
+   * Siparis istegi UCUSTA ya da sonucu belirsiz (503, REQUEST_IN_PROGRESS):
+   * siparis sunucuda olusmus olabilir; ASLA birakilmaz ve dokunulmaz (sunucunun
+   * ttl'i ve supurucu dusurur; QA K9 #178 F1). Belirsizde ayni rezervasyonla
+   * yeniden denenebilir.
+   */
+  | { readonly kind: 'placing'; readonly held: HeldOrder }
   /** Siparis verildi (odendi, incelemede ya da 3DS suruyor): rezervasyon siparisin; ASLA birakilmaz. */
   | { readonly kind: 'ordered'; readonly orderId: string };
 
@@ -31,7 +38,7 @@ export function reservationStep(
   request: ReserveCartRequest | undefined,
   now: number,
 ): ReservationStep {
-  if (phase.kind === 'ordered' || phase.kind === 'reserving') {
+  if (phase.kind === 'ordered' || phase.kind === 'placing' || phase.kind === 'reserving') {
     return 'wait';
   }
   if (request === undefined) {
@@ -53,7 +60,11 @@ export function reservationStep(
   }
 }
 
-/** Sayfadan ayrilinca birakilacak rezervasyon: yalnizca siparisi VERILMEMIS olan (PM ek sart). */
+/**
+ * Sayfadan ayrilinca birakilacak rezervasyon: yalnizca siparisi VERILMEMIS
+ * olan ('held'; PM ek sarti). Ucustaki ya da belirsiz siparisin ('placing') ve
+ * verilmis siparisin ('ordered') rezervasyonu birakilmaz.
+ */
 export function releasableOnLeave(phase: ReservationPhase): HeldOrder | undefined {
   return phase.kind === 'held' ? phase.held : undefined;
 }

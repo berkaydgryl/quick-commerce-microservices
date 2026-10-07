@@ -1,11 +1,12 @@
-import type { ReserveCartRequest } from '@getir/contracts';
+import type { CreateOrderRequest, ReserveCartRequest } from '@getir/contracts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { canReuseHeldOrder, heldExpiresAt, heldFingerprint } from '../services/held-order';
+import { heldExpiresAt, heldFingerprint } from '../services/held-order';
 import type { HeldOrder } from '../services/held-order';
 import { releaseSafely, reserveOrder } from '../services/place-order';
 import type { OrderFlowDeps } from '../services/place-order';
-import { releasableOnLeave, reservationStep } from '../services/reservation-plan';
+import { createReservationKeeper } from '../services/reservation-keeper';
+import { reservationStep } from '../services/reservation-plan';
 import type { ReservationPhase, ReservationStep } from '../services/reservation-plan';
 
 /** Degisiklikten sonra sakinlesme: adres ve tutar art arda degisirse tek istek. */
@@ -18,12 +19,18 @@ export interface EarlyReservation {
   /** Hata satirinin "Tekrar dene"si: rezervasyon yeniden denenir. */
   readonly retry: () => void;
   /**
-   * "Sipariş Ver": istek suruyorsa bekler; bu istege uyan gecerli rezervasyon
-   * varsa onu verir. Uymuyorsa (sure doldu, sepet degisti) birakir; undefined.
+   * "Sipariş Ver": istek suruyorsa bekler; bu istege ve govdeye uyan
+   * rezervasyon varsa 'placing'e alip verir (ucustayken ayrilmak birakmaz).
+   * Uymuyorsa undefined (reservation-keeper.ts).
    */
-  readonly take: (request: ReserveCartRequest) => Promise<HeldOrder | undefined>;
-  /** Rezervasyon hala gecerli (kart 404'u, belirsiz sonuc): tutulur. */
+  readonly take: (
+    request: ReserveCartRequest,
+    orderBody: (orderId: string) => CreateOrderRequest,
+  ) => Promise<HeldOrder | undefined>;
+  /** Kart 404'u: siparis odemesiz bekler, rezervasyon tutulur (ayrilinca birakilabilir). */
   readonly keep: (held: HeldOrder) => void;
+  /** Siparis istegi ucusta ya da sonucu belirsiz (503, REQUEST_IN_PROGRESS): BIRAKILMAZ, ayni rezervasyonla yeniden denenir. */
+  readonly uncertain: (held: HeldOrder) => void;
   /** Siparis verildi (odendi, incelemede, 3DS suruyor): rezervasyon siparisin, ASLA birakilmaz. */
   readonly ordered: (orderId: string) => void;
   /** Rezervasyon akista birakildi ya da kullanilamaz: yeniden alinabilir. */
@@ -44,7 +51,8 @@ interface EarlyReservationInput {
  * Erken rezervasyon (T12.4; PM K4): odeme sayfasi acikken sepet ayrilir;
  * "Sipariş Ver" yalnizca siparisi verir. Kurallar saf fonksiyonda
  * (reservation-plan.ts); bu hook istekleri, zamanlayiciyi ve ayrilinca
- * birakmayi isletir. Siparisi verilmis rezervasyon ASLA birakilmaz.
+ * birakmayi isletir; faz reservation-keeper.ts'te. Siparisi verilmis, ucustaki
+ * ya da sonucu belirsiz rezervasyon ASLA birakilmaz.
  */
 export function useEarlyReservation({
   deps,
@@ -53,8 +61,8 @@ export function useEarlyReservation({
   onRenewed,
 }: EarlyReservationInput): EarlyReservation {
   const [phase, setPhaseState] = useState<ReservationPhase>({ kind: 'none' });
+  const [keeper] = useState(() => createReservationKeeper(deps, setPhaseState));
   const [expiryTick, setExpiryTick] = useState(0);
-  const phaseRef = useRef<ReservationPhase>(phase);
   const requestRef = useRef(request);
   const onRenewedRef = useRef(onRenewed);
   const inFlight = useRef<Promise<void> | undefined>(undefined);
@@ -66,10 +74,7 @@ export function useEarlyReservation({
     onRenewedRef.current = onRenewed;
   });
 
-  const setPhase = useCallback((next: ReservationPhase) => {
-    phaseRef.current = next;
-    setPhaseState(next);
-  }, []);
+  const setPhase = keeper.set;
 
   const reserve = useCallback(
     async (target: ReserveCartRequest, renewed: boolean) => {
@@ -96,7 +101,7 @@ export function useEarlyReservation({
 
   const run = useCallback(
     async (step: ReservationStep) => {
-      const current = phaseRef.current;
+      const current = keeper.phase();
       if ((step === 'release' || step === 'replace') && current.kind === 'held') {
         setPhase({ kind: 'none' });
         await releaseSafely(deps, current.held.orderId);
@@ -110,7 +115,7 @@ export function useEarlyReservation({
         await reserve(target, step === 'renew');
       }
     },
-    [deps, reserve, setPhase],
+    [deps, keeper, reserve, setPhase],
   );
 
   useEffect(() => {
@@ -118,9 +123,9 @@ export function useEarlyReservation({
       return undefined;
     }
     const now = deps.now();
-    const step = reservationStep(phaseRef.current, requestRef.current, now);
+    const step = reservationStep(keeper.phase(), requestRef.current, now);
     if (step === 'wait') {
-      const current = phaseRef.current;
+      const current = keeper.phase();
       const expiresAt = current.kind === 'held' ? heldExpiresAt(current.held) : undefined;
       if (expiresAt === undefined) {
         return undefined;
@@ -140,36 +145,24 @@ export function useEarlyReservation({
       step === 'renew' ? 0 : SETTLE_MS,
     );
     return () => clearTimeout(timer);
-  }, [active, requestKey, phase, expiryTick, deps, run]);
+  }, [active, requestKey, phase, expiryTick, deps, keeper, run]);
 
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
-      const leftOver = releasableOnLeave(phaseRef.current);
-      if (leftOver !== undefined) {
-        void releaseSafely(deps, leftOver.orderId);
-      }
+      keeper.leave();
     };
-  }, [deps]);
+  }, [keeper]);
 
   const take = useCallback(
-    async (target: ReserveCartRequest) => {
+    async (target: ReserveCartRequest, orderBody: (orderId: string) => CreateOrderRequest) => {
       if (inFlight.current !== undefined) {
         await inFlight.current;
       }
-      const current = phaseRef.current;
-      if (current.kind !== 'held') {
-        return undefined;
-      }
-      if (!canReuseHeldOrder(current.held, target, deps.now())) {
-        setPhase({ kind: 'none' });
-        await releaseSafely(deps, current.held.orderId);
-        return undefined;
-      }
-      return current.held;
+      return keeper.take(target, orderBody);
     },
-    [deps, setPhase],
+    [keeper],
   );
 
   return {
@@ -177,6 +170,7 @@ export function useEarlyReservation({
     retry: useCallback(() => setPhase({ kind: 'none' }), [setPhase]),
     take,
     keep: useCallback((held: HeldOrder) => setPhase({ kind: 'held', held }), [setPhase]),
+    uncertain: useCallback((held: HeldOrder) => setPhase({ kind: 'placing', held }), [setPhase]),
     ordered: useCallback((orderId: string) => setPhase({ kind: 'ordered', orderId }), [setPhase]),
     forget: useCallback(() => setPhase({ kind: 'none' }), [setPhase]),
   };
