@@ -156,6 +156,15 @@
   white-space: nowrap;
 }
 
+/* Teslimat Ücreti satiri (F15): solda ad, sagda tutar ya da "Ücretsiz"; panel boyu (sm). */
+.c-cart-panel__fee {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: space-between;
+  font-size: var(--font-size-sm);
+}
+
 /* Tutar ("49,50 TL") kirilmaz. */
 .c-cart-panel__amount {
   white-space: nowrap;

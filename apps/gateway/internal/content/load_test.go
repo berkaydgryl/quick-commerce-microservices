@@ -89,7 +89,7 @@ const validJSON = `{
     ],
     "cart": {
       "title": "Sepetim", "emptyTitle": "Sepetin şu an boş", "emptyHint": "Sepetine ürün ekle", "itemCountLabel": "ürün",
-      "subtotalLabel": "Ara toplam", "deliveryLabel": "Teslimat", "freeDeliveryLabel": "Ücretsiz", "totalLabel": "Toplam",
+      "subtotalLabel": "Ara toplam", "deliveryLabel": "Teslimat Ücreti", "freeDeliveryLabel": "Ücretsiz", "totalLabel": "Toplam",
       "minBasketRemainingLabel": "Minimum sepet tutarına kalan", "closedNotice": "Market şu an kapalı", "goToCartLabel": "Sepete git", "clearLabel": "Sepeti boşalt", "clearConfirmQuestion": "Sepeti boşaltmak istediğinden emin misin?", "switchConfirmPrefix": "Sepeti boşaltıp", "switchConfirmSuffix": "ile devam edilsin mi?", "decreaseSuffix": "adedini azalt", "increaseSuffix": "adedini artır", "removeSuffix": "sepetten çıkar", "quantitySuffix": "adedi"
     }
   },
