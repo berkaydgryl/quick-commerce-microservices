@@ -52,11 +52,17 @@ type moneyBody struct {
 type placeBody struct {
 	OrderID string       `json:"orderId"`
 	Payment *paymentBody `json:"payment"`
+	// Details, hediye, not, "Zili Çalma", onay (T12.4): order_details_body.go.
+	Details *detailsBody `json:"details"`
 }
 
+// paymentBody: kart alanlari isaretcidir (T12.4): sozlesmede GONDERILEN
+// alanlardan tam biri olmali; bos metin "gonderilmedi" sayilmaz.
 type paymentBody struct {
-	Method    string `json:"method"`
-	CardToken string `json:"cardToken"`
+	Method string `json:"method"`
+	// CardID, kasadaki kayitli kart; CardToken DEPRECATED test jetonu.
+	CardID    *string `json:"cardId"`
+	CardToken *string `json:"cardToken"`
 }
 
 // threeDSBody, POST /v1/orders/{id}/3ds (threeDsRequestSchema).
@@ -126,12 +132,15 @@ func (b placeBody) toInput(userID, idempotencyKey string, errs fieldErrors) orde
 	}
 	switch {
 	case b.Payment == nil:
-		errs["payment"] = requiredReason
+		errs[paymentField] = requiredReason
 	case b.Payment.Method != cardMethod:
-		errs["payment.method"] = "CARD olmali"
+		errs[paymentField+".method"] = "CARD olmali"
 	default:
-		input.CardToken = b.Payment.CardToken
+		card := order.CardChoice{ID: b.Payment.CardID, Token: b.Payment.CardToken}.Normalized()
+		collectUnder(errs, paymentField, card.Problems())
+		card.Apply(&input)
 	}
+	input.Details = b.Details.toDetails(errs)
 	return input
 }
 

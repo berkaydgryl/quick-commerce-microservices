@@ -30,8 +30,10 @@ var placeFieldNames = renamer(
 	map[string]string{
 		"paymentMethod":  "payment.method",
 		"cardToken":      "payment.cardToken",
+		"cardId":         "payment.cardId",
 		"idempotencyKey": idempotencyKeyField,
 	},
+	// Ayrinti hatalari (T12.4) REST'teki adlariyla ayni gelir: "details.gift.recipientPhone".
 	nil,
 )
 

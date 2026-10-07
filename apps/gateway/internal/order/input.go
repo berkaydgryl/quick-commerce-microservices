@@ -33,10 +33,15 @@ type ReserveInput struct {
 
 // PlaceInput, POST /v1/orders.
 type PlaceInput struct {
-	UserID         string
-	OrderID        string
+	UserID  string
+	OrderID string
+	// CardID, kasadaki kayitli kart (T12.4); CardToken (DEPRECATED test jetonu)
+	// ile ikisinden TAM biri dolu. Biri bossa gonderilmedi demektir.
+	CardID         string
 	CardToken      string
 	IdempotencyKey string
+	// Details, hediye, not, "Zili Çalma" ve sozlesme onayi (T12.4); dogrulanmis.
+	Details Details
 	// Signals, gateway'in bildigi risk sinyalleri (B9: istemciden alinmaz).
 	Signals Signals
 }

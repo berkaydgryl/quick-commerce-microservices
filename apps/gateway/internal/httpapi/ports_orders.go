@@ -34,9 +34,9 @@ type OrderLister interface {
 	List(ctx context.Context, userID string, pageSize int32, pageToken string) (orderhistory.List, error)
 }
 
-// OrderGetter, GET /v1/orders/{id}.
+// OrderGetter, GET /v1/orders/{id}: siparis ve ayrintisi (T12.4), sahibine.
 type OrderGetter interface {
-	Get(ctx context.Context, userID, orderID string) (order.Order, error)
+	GetDetailed(ctx context.Context, userID, orderID string) (order.OrderDetail, error)
 }
 
 // OrderRoomTokenIssuer, GET /v1/orders/{id}/token (T12.2): siparis odasinin
