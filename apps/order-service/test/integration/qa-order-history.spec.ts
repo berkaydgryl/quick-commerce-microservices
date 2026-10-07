@@ -13,10 +13,15 @@
  *      sayfanin jetonu kalani verir.
  *   H4 sahiplik: baskasinin siparisi GetOrder, CancelOrder ve ConfirmPayment'ta olmayan siparisle
  *      AYNI hata (varlik sizmaz); siparis ve odeme degismez; listesine hic girmez.
+ *
+ * Liste yalnizca gecmiste gorunen siparisleri verir (#101): H1-H3'un siparisleri incelemeye duser
+ * (REVIEW, gorunur). Inceleme kilidi birakir, stok doner: H3'un 101 siparisi stoga sigar. Gizli
+ * siparislerin (taslak, odenmemis) listede olmamasi order'in kendi testlerinde
+ * (order-history-listing-contract.ts, grpc/list-my-orders.spec.ts).
  */
 
 import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '@getir/contracts';
-import { ERROR_CODES, GRPC_STATUS, ORDER_STATUS } from '@getir/core';
+import { ERROR_CODES, GRPC_STATUS, ORDER_STATUS, RISK_BANDS } from '@getir/core';
 import { orderV1 } from '@getir/proto';
 import { appErrorOf, appErrorPayloadOf } from '@getir/service-kit/testing';
 import type { ServiceError } from '@grpc/grpc-js';
@@ -35,8 +40,20 @@ const PAGE = 4;
 const TIE_LIMIT = 40;
 const SECOND_MS = 1_000;
 
-/** Kullanicinin sirayla actigi taslaklar (her yenisi oncekini iptal eder, B22); kimlikler. */
-async function draftsAt(
+/**
+ * Gecmiste gorunen siparis (#101): taslak ve siparis `copy` kopyasinda, inceleme bandi (HIGH) ->
+ * REVIEW. Kilit birakilir (stok doner); kullanicinin sonraki taslagi bunu iptal etmez.
+ */
+async function reviewed(cluster: OrderCluster, copy: number, userId: string): Promise<string> {
+  cluster.risk.bands.set(userId, RISK_BANDS.HIGH);
+  const orderId = await cluster.copy(copy).calls.draft(userId);
+  const placed = await cluster.copy(copy).calls.createOrder(orderId, userId);
+  expect(appErrorOf(placed.error)?.code).toBe(ERROR_CODES.RISK_REVIEW);
+  return orderId;
+}
+
+/** Kullanicinin sirayla verdigi, gecmiste gorunen siparisler (kopyalar donusumlu); kimlikler. */
+async function ordersAt(
   cluster: OrderCluster,
   userId: string,
   plan: readonly { readonly at: number; readonly count: number }[],
@@ -45,7 +62,7 @@ async function draftsAt(
   for (const { at, count } of plan) {
     world.clock.set(at);
     for (let index = 0; index < count; index += 1) {
-      ids.push(await cluster.copy(ids.length % 2).calls.draft(userId));
+      ids.push(await reviewed(cluster, ids.length % 2, userId));
     }
   }
   return ids;
@@ -117,7 +134,7 @@ describe('QA OQ5 ListMyOrders ve GetOrder (iki kopya, gercek Mongo)', () => {
     const cluster = await openCluster();
     const userId = cluster.nextUser();
     const t0 = world.clock.now();
-    const originals = await draftsAt(cluster, userId, [
+    const originals = await ordersAt(cluster, userId, [
       { at: t0, count: 3 },
       { at: t0 + SECOND_MS, count: 3 },
       { at: t0 + 2 * SECOND_MS, count: 3 },
@@ -132,7 +149,7 @@ describe('QA OQ5 ListMyOrders ve GetOrder (iki kopya, gercek Mongo)', () => {
     const ties: string[] = [];
     const bothSides = () => ties.some((id) => id > cursor) && ties.some((id) => id < cursor);
     while (!bothSides() && ties.length < TIE_LIMIT) {
-      ties.push(await cluster.copy(ties.length % 2).calls.draft(userId));
+      ties.push(await reviewed(cluster, ties.length % 2, userId));
     }
     expect(bothSides(), `${String(TIE_LIMIT)} esit-anli sipariste imlecin iki yani dolmadi`).toBe(
       true,
@@ -140,7 +157,7 @@ describe('QA OQ5 ListMyOrders ve GetOrder (iki kopya, gercek Mongo)', () => {
     // Ayrica en yeni ve en eski grupta birer siparis.
     const inserted = [
       ...ties,
-      ...(await draftsAt(cluster, userId, [
+      ...(await ordersAt(cluster, userId, [
         { at: t0 + 3 * SECOND_MS, count: 1 },
         { at: t0, count: 1 },
       ])),
@@ -160,8 +177,8 @@ describe('QA OQ5 ListMyOrders ve GetOrder (iki kopya, gercek Mongo)', () => {
     const owner = cluster.nextUser();
     const stranger = cluster.nextUser();
     const t0 = world.clock.now();
-    const own = await draftsAt(cluster, owner, [{ at: t0, count: 3 }]);
-    const theirs = await draftsAt(cluster, stranger, [{ at: t0 + SECOND_MS, count: 3 }]);
+    const own = await ordersAt(cluster, owner, [{ at: t0, count: 3 }]);
+    const theirs = await ordersAt(cluster, stranger, [{ at: t0 + SECOND_MS, count: 3 }]);
 
     for (const bad of [
       '%%%',
@@ -194,7 +211,7 @@ describe('QA OQ5 ListMyOrders ve GetOrder (iki kopya, gercek Mongo)', () => {
   it('H3 sayfa boyutu: 0 ve negatif varsayilan, ust sinirin ustu kirpilir; jeton kalani verir', async () => {
     const cluster = await openCluster();
     const userId = cluster.nextUser();
-    const ids = await draftsAt(cluster, userId, [
+    const ids = await ordersAt(cluster, userId, [
       { at: world.clock.now(), count: PAGE_SIZE_MAX + 1 },
     ]);
 

@@ -10,7 +10,7 @@ import { DeleteAddressDialog } from '../../features/address/ui/DeleteAddressDial
 import { formFeedback } from '../../features/auth/services/server-errors';
 import { RequireAuth } from '../../features/auth/ui/RequireAuth';
 import { useAddressesContent } from '../../features/content/hooks/useAddressesContent';
-import { useWelcomeContent } from '../../features/content/hooks/useWelcomeContent';
+import { useAppHeaderContent } from '../../features/content/hooks/useAppHeaderContent';
 import { useSessionStore } from '../../shared/session/session-store';
 import { useToastStore } from '../../shared/toast/toast-store';
 import { PageLayout } from '../../shared/ui/page-layout/PageLayout';
@@ -49,7 +49,7 @@ function SignedInAddresses() {
  */
 function AddressesSection({ userId }: { readonly userId: string }) {
   const texts = useAddressesContent();
-  const { data: content } = useWelcomeContent();
+  const content = useAppHeaderContent();
   const book = useSavedAddresses(userId);
   const { delivery, choose } = useAddressBook();
   const removing = useDeleteAddress(userId);
@@ -107,7 +107,7 @@ function AddressesSection({ userId }: { readonly userId: string }) {
       {texts !== undefined && content !== undefined && dialog?.mode === 'edit' && (
         <AddressSetupDialog
           content={content.addressSetup}
-          closeLabel={content.loginCard.closeLabel}
+          closeLabel={content.closeLabel}
           userId={userId}
           onClose={close}
           closableOnDetails
@@ -126,7 +126,7 @@ function AddressesSection({ userId }: { readonly userId: string }) {
       {content !== undefined && dialog?.mode === 'add' && (
         <AddressSetupDialog
           content={content.addressSetup}
-          closeLabel={content.loginCard.closeLabel}
+          closeLabel={content.closeLabel}
           userId={userId}
           onClose={close}
           closableOnDetails

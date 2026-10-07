@@ -6,12 +6,9 @@ import { loginPathFor } from '../features/auth/services/next-path';
 import { HeaderAccount } from '../features/auth/ui/HeaderAccount';
 import type { HeaderAccountTexts } from '../features/auth/ui/HeaderAccount';
 import { useAccountMenuContent } from '../features/content/hooks/useAccountMenuContent';
-import { useWelcomeContent } from '../features/content/hooks/useWelcomeContent';
-import {
-  HeaderSearch,
-  HeaderSearchFallback,
-  HeaderSearchPlaceholder,
-} from '../features/search/ui/HeaderSearch';
+import { useAppHeaderContent } from '../features/content/hooks/useAppHeaderContent';
+import { contentFailed, useWelcomeContent } from '../features/content/hooks/useWelcomeContent';
+import { HeaderSearch, HeaderSearchPlaceholder } from '../features/search/ui/HeaderSearch';
 import { accountMenuLinks } from '../pages/account/account-menu';
 import { useSessionStore } from '../shared/session/session-store';
 import { Logo } from '../shared/ui/logo/Logo';
@@ -24,18 +21,20 @@ import { headerSearchHref } from './header-search-href';
  * giris yolunu tanimaz. Metinler icerik ucundan; icerik gelene kadar ayni
  * boyda yer tutucu.
  *
- * Icerik ucu hata verirse (T11.10 duzeltmesi) bar calismaya devam eder: logo
- * ve hesap alani icerik yedegiyle (@getir/contracts CONTENT_FALLBACK; degerler
- * welcome.json ile ayni) gelir, arama kutusunun yerinde mesaj ve "Tekrar dene".
- * Oturumdaki kullanici her durumda cikis yapabilir ve Hesabim'a gidebilir.
+ * Icerik ucu hata verirse ya da gateway ile web arasindaki surum farki
+ * yuzunden sema gecmezse bar AYNEN calisir (F21; 07.10 hatasi): logo, arama
+ * kutusu, adres dugmesi ve penceresi, hesap alani icerik yedegiyle
+ * (@getir/contracts CONTENT_FALLBACK; degerler welcome.json ile ayni). Barda
+ * hata mesaji yok; oturumdaki kullanici her durumda cikis yapabilir.
  */
 
 export function AppHeaderLogo() {
-  const { data: content, error } = useWelcomeContent();
+  const query = useWelcomeContent();
+  const content = query.data;
   if (content !== undefined) {
     return <Logo brand={content.header.brand} service={content.header.service} tone="inverse" />;
   }
-  if (error !== null) {
+  if (contentFailed(query)) {
     return (
       <Logo brand={CONTENT_FALLBACK.brand} service={CONTENT_FALLBACK.service} tone="inverse" />
     );
@@ -44,29 +43,21 @@ export function AppHeaderLogo() {
 }
 
 export function AppHeaderSearch() {
-  const { data: content, error, refetch } = useWelcomeContent();
+  const texts = useAppHeaderContent();
   const session = useSessionStore((state) => state.status);
   const loginHref = loginPathFor(useLocation());
-  if (content === undefined) {
-    return error === null ? (
-      <HeaderSearchPlaceholder />
-    ) : (
-      <HeaderSearchFallback
-        message={error.message}
-        retryLabel={CONTENT_FALLBACK.retryLabel}
-        onRetry={() => void refetch()}
-      />
-    );
+  if (texts === undefined) {
+    return <HeaderSearchPlaceholder />;
   }
   return (
     <HeaderSearch
-      content={content.appHeader}
+      content={texts.appHeader}
       resultsHref={(query) => headerSearchHref(session, query)}
       address={
         <HeaderAddressPicker
-          content={content.appHeader}
-          setup={content.addressSetup}
-          closeLabel={content.loginCard.closeLabel}
+          content={texts.appHeader}
+          setup={texts.addressSetup}
+          closeLabel={texts.closeLabel}
           loginHref={loginHref}
         />
       }
@@ -76,19 +67,20 @@ export function AppHeaderSearch() {
 
 /**
  * Sade barin teslimat adresi (T16.3; sepet ve odeme): aramadaki adres
- * dugmesinin AYNISI, tek basina. Icerik gelene kadar yer yok.
+ * dugmesinin AYNISI, tek basina. Icerik gelene kadar yer yok; icerik hatasinda
+ * yedekle (F21).
  */
 export function AppHeaderAddress() {
-  const { data: content } = useWelcomeContent();
+  const texts = useAppHeaderContent();
   const loginHref = loginPathFor(useLocation());
-  if (content === undefined) {
+  if (texts === undefined) {
     return null;
   }
   return (
     <HeaderAddressPicker
-      content={content.appHeader}
-      setup={content.addressSetup}
-      closeLabel={content.loginCard.closeLabel}
+      content={texts.appHeader}
+      setup={texts.addressSetup}
+      closeLabel={texts.closeLabel}
       loginHref={loginHref}
     />
   );
@@ -99,11 +91,11 @@ export function AppHeaderAddress() {
  * (T11.16, accountMenuItems); burada yalnizca baglanir.
  */
 export function AppHeaderAccount() {
-  const { data: content, error } = useWelcomeContent();
+  const query = useWelcomeContent();
   const menu = useAccountMenuContent();
   return (
     <HeaderAccount
-      texts={accountTexts(content, error)}
+      texts={accountTexts(query.data, contentFailed(query))}
       menu={menu === undefined ? undefined : accountMenuLinks(menu)}
     />
   );
@@ -111,10 +103,10 @@ export function AppHeaderAccount() {
 
 function accountTexts(
   content: ReturnType<typeof useWelcomeContent>['data'],
-  error: Error | null,
+  failed: boolean,
 ): HeaderAccountTexts | undefined {
   if (content !== undefined) {
     return { ...content.appHeader, loginLabel: content.header.loginLabel };
   }
-  return error === null ? undefined : CONTENT_FALLBACK;
+  return failed ? CONTENT_FALLBACK : undefined;
 }

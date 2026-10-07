@@ -88,7 +88,7 @@ describe('OrderDetailView (T11.16)', () => {
     const plain = text(view({}));
 
     expect(plain).toContain('Ara toplam450,00 TL');
-    expect(plain).toContain('Teslimat50,00 TL');
+    expect(plain).toContain('Teslimat Ücreti50,00 TL');
     expect(plain).toContain('Toplam500,00 TL');
     expect(plain).not.toContain(TEXTS.discountLabel);
   });
@@ -105,7 +105,7 @@ describe('OrderDetailView (T11.16)', () => {
       }),
     );
 
-    expect(plain).toContain('TeslimatÜcretsiz');
+    expect(plain).toContain('Teslimat ÜcretiÜcretsiz');
     expect(plain).toContain('İndirim−25,00 TL');
     expect(plain).toContain('Toplam425,00 TL');
   });

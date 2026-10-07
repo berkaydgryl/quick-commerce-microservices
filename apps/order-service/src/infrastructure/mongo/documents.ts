@@ -73,6 +73,15 @@ export interface OrderDocument extends BaseDocument {
   deliveryAddress: string;
   status: OrderStatus;
   timeline: TimelineEntryDocument[];
+  /**
+   * Gecmis Siparislerim'de gorunur mu (#101): TURETILMIS alan, okumada
+   * kullanilmaz. Esleme her yazimda domain kuralindan (isListedInHistory)
+   * hesaplar; alan oncesi kayitlari goc 0002 doldurur. ListMyOrders yalnizca
+   * `true` olanlari kismi indeksten okur. Tip YAZIM seklidir (zorunlu: eslemede
+   * unutulursa derleme kirilir); goc oncesi ya da eski surumlu kopyanin yazdigi
+   * belgede alan olmayabilir, okuyan kod buna guvenmez.
+   */
+  inHistory: boolean;
   /** Risk adimindan once HIC yazilmaz (T7.1). */
   riskBand?: RiskBand;
   /** Stok kilidi (T11.2); kilitlenemeyen ve T11.2 oncesi taslakta HIC yok. */

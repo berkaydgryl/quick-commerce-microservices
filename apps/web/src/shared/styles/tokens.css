@@ -204,6 +204,9 @@
   /* Sepet sayfasi (T16.3): satirin gorseli. */
   --size-cart-row-visual: 4rem;
 
+  /* Siparis takip cizgisi (F21): adim yuvarlagi. */
+  --size-track-dot: 1.5rem;
+
   /* Form parcalari (T17.1; odeme sayfasi): en az dokunma yuksekligi (44 px),
      onay kutusu, anahtarin rayi ve topu, cok satirli alanin en az yuksekligi. */
   --size-touch-min: 2.75rem;
@@ -272,6 +275,7 @@
 
   /* --- Hareket --- */
   --duration-fast: 150ms;
+  --duration-pulse: 1.6s;
   --easing-standard: cubic-bezier(0.2, 0, 0, 1);
 
   /* --- Katman sirasi --- */

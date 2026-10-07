@@ -38,6 +38,7 @@ import type { RunningProcess } from '../../../inventory-service/test/support/qa-
 import { InMemoryPaymentStore } from '../../../payment-service/src/infrastructure/memory/in-memory-payment-store.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
 import type { OutboxDocument } from '../../src/infrastructure/mongo/documents.js';
+import { HISTORY_INDEX_NAME } from '../../src/infrastructure/mongo/history-query.js';
 import { openOrderStore } from '../../src/infrastructure/order-store.js';
 import { MIGRATIONS } from '../../src/migrations/index.js';
 import { insertAwaitingPayment } from '../support/order-builders.js';
@@ -230,12 +231,22 @@ describe('QA OQ7 order sureci: acilis, ortam, gocler ve iscilerin zarif durmasi'
         expect(applied.map((record) => record.name)).toEqual(
           MIGRATIONS.map((migration) => migration.name),
         );
+        // Indeksin kimligi anahtar + kismi filtre (Mongo ayni anahtarli iki indeksi filtreleri
+        // farkliysa ayri tutar): gecmis indeksi (#101) tam indeksle ayni anahtarli, kismi.
         for (const name of [COLLECTIONS.ORDERS, COLLECTIONS.OUTBOX]) {
-          const keys = (await db.collection(name).indexes()).map((index) =>
-            JSON.stringify(index.key),
+          const indexes = await db.collection(name).indexes();
+          const keys = indexes.map((index) =>
+            JSON.stringify({ key: index.key, partial: index.partialFilterExpression ?? null }),
           );
           expect(new Set(keys).size, name).toBe(keys.length);
+          const names = indexes.map((index) => index.name);
+          expect(new Set(names).size, name).toBe(names.length);
         }
+        const orderIndexes = await db.collection(COLLECTIONS.ORDERS).indexes();
+        expect(orderIndexes.find((index) => index.name === HISTORY_INDEX_NAME)).toMatchObject({
+          key: { userId: 1, createdAt: -1, _id: -1 },
+          partialFilterExpression: { inHistory: true },
+        });
       });
     },
     TEST_TIMEOUT_MS,
