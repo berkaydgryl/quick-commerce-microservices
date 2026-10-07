@@ -213,6 +213,7 @@ describe('gRPC -> Mongo (T4.5 bitti sayilir: siparis Mongo da gorulur)', () => {
       userId: 'usr_grpc',
       paymentMethod: paymentV1.PaymentMethod.PAYMENT_METHOD_CARD,
       cardToken: TEST_CARD.APPROVED,
+      cardId: '',
       idempotencyKey: '4f1c3a2b-9d8e-11ef',
     });
 

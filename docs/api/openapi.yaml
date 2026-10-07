@@ -2641,6 +2641,7 @@ paths:
                       status: AWAITING_PAYMENT
                       threeDs:
                         challengeId: "tds_0009d7cd0e904b689aabcacf4458d520"
+                        ttlSeconds: 60
         "202":
           description: |
             Risk yüksek (HIGH): sipariş `REVIEW` durumunda, manuel inceleme
@@ -2699,7 +2700,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
         "404":
-          $ref: "#/components/responses/OrderNotFound"
+          description: |
+            Sipariş bulunamadı ya da seçilen kart kasada yok (silinmiş ya da
+            başkasının; iki durum aynı cevap, T12.4). Kartta sipariş ödeme bekler
+            kalır: başka kartla yeni `Idempotency-Key` ile tekrar verilebilir.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                orderNotFound:
+                  summary: NOT_FOUND (sipariş)
+                  value:
+                    success: false
+                    error:
+                      code: NOT_FOUND
+                      message: "Sipariş bulunamadı."
+                      details:
+                        orderId: "ord_db77f4c0e24f49919cc1d78a649c9c94"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                cardNotFound:
+                  summary: NOT_FOUND (kart)
+                  value:
+                    success: false
+                    error:
+                      code: NOT_FOUND
+                      message: "Bu kart artık kayıtlı değil. Başka bir kart seç."
+                      details:
+                        resource: card
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "409":
           description: |
             Sipariş bu adıma uygun değil (`ORDER_STATE_INVALID`, ayrıntıda denenen
@@ -5594,7 +5623,7 @@ components:
 
     CreateOrderRequest:
       type: object
-      required: [orderId, payment]
+      required: [orderId, payment, details]
       properties:
         orderId:
           allOf:
@@ -5602,15 +5631,111 @@ components:
           description: Rezervasyondan dönen kimlik. Sepet ve adres tekrar gönderilmez.
         payment:
           type: object
-          required: [method, cardToken]
+          description: |
+            `cardId` ya da (eski) `cardToken`: tam biri (T12.4). İkisi birden ya da
+            hiçbiri `400 VALIDATION_FAILED` ("Ödeme için bir kart seç").
+          required: [method]
           properties:
             method:
               type: string
               enum: [CARD]
+            cardId:
+              allOf:
+                - $ref: "#/components/schemas/CardId"
+              description: |
+                Kayıtlı kart (T12.4): kasadaki kartın kimliği. Kart verisi ve
+                sağlayıcı jetonu taşınmaz. Kart yoksa, silinmişse ya da başkasınınsa
+                `404 NOT_FOUND`, ayrıntıda `resource: card` (iki durum aynı cevap);
+                sipariş ödeme bekler kalır, başka kartla yeniden verilebilir (yeni
+                `Idempotency-Key` ile).
             cardToken:
               type: string
               minLength: 1
-              description: Demo ödeme sağlayıcısının ürettiği jeton; kart numarası taşınmaz.
+              deprecated: true
+              description: |
+                ESKİ (T12.4; `cardId` kullanın): demo sağlayıcısının test jetonu.
+                Kaldırma bekleyen iş #118.
+        details:
+          $ref: "#/components/schemas/OrderDetails"
+
+    GiftDetails:
+      type: object
+      description: |
+        Hediye (T12.4): yalnızca hediye açıkken gönderilir. Alıcı adı ve telefonu
+        kişisel veridir; günlüğe yazılmaz, mesaj günlükte maskelenir. Uzunluklar
+        UTF-16 kod birimi, kırpılarak (`@getir/contracts` checkout-rules.ts).
+      required: [enabled, message, senderName, recipientName, recipientPhone]
+      properties:
+        enabled:
+          type: boolean
+          enum: [true]
+        message:
+          type: string
+          maxLength: 250
+        senderName:
+          type: string
+          maxLength: 60
+        recipientName:
+          type: string
+          minLength: 1
+          maxLength: 60
+          description: Boşluktan ibaret olamaz ("Alıcının adını yaz").
+        recipientPhone:
+          type: string
+          pattern: "^\\+905[0-9]{9}$"
+          example: "+905321234567"
+
+    OrderDetails:
+      type: object
+      description: |
+        Sipariş ayrıntıları (T12.4). Hata ayrıntısı değeri YANKILAMAZ (yalnızca
+        alan ve cümle).
+      required: [note, doNotRingBell, agreementsAccepted]
+      properties:
+        gift:
+          $ref: "#/components/schemas/GiftDetails"
+        note:
+          type: string
+          maxLength: 250
+          description: Kuryeye not; boş olabilir. Günlükte maskelenir.
+        doNotRingBell:
+          type: boolean
+          description: Zili çalma (kurye arar).
+        agreementsAccepted:
+          type: boolean
+          enum: [true]
+          description: Sözleşme onayı zorunlu ("Siparişi vermek için sözleşmeleri onayla").
+
+    OrderDetailsView:
+      type: object
+      description: |
+        Siparişin ayrıntıları cevapta; yalnızca siparişin sahibine döner. İstek
+        kuralları (kırpma, sınırlar) cevabı doğrulamaz: kurallar sıkılaşsa da eski
+        sipariş okunur. Hediyede `enabled` yoktur; alanın varlığı hediyedir.
+      required: [note, doNotRingBell, agreementsAccepted, agreementsAcceptedAt]
+      properties:
+        gift:
+          type: object
+          required: [message, senderName, recipientName, recipientPhone]
+          properties:
+            message:
+              type: string
+            senderName:
+              type: string
+            recipientName:
+              type: string
+            recipientPhone:
+              type: string
+        note:
+          type: string
+        doNotRingBell:
+          type: boolean
+        agreementsAccepted:
+          type: boolean
+        agreementsAcceptedAt:
+          type: string
+          format: date-time
+          description: Onayın sunucu saatiyle anı.
 
     ThreeDsRequest:
       type: object
@@ -5631,6 +5756,12 @@ components:
       properties:
         challengeId:
           type: string
+        ttlSeconds:
+          type: integer
+          minimum: 0
+          description: |
+            Kodun sunucunun saatiyle kalan geçerliliği, saniye (T12.4); pencere
+            çekim anından başlar (60 sn).
 
     OrderPlacement:
       type: object
@@ -5736,6 +5867,8 @@ components:
           type: integer
           minimum: 0
           description: Kilidin sunucunun saatiyle kalan saniyesi; `reservationExpiresAt` ile birlikte gelir.
+        details:
+          $ref: "#/components/schemas/OrderDetailsView"
 
     OrderSummary:
       type: object

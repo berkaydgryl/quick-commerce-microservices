@@ -47,6 +47,7 @@ describe('Charge - log baglami', () => {
       amount: { amountMinor: 12_990, currency: 'TRY' },
       method: paymentV1.PaymentMethod.PAYMENT_METHOD_CARD,
       cardToken: 'tok_test_4242',
+      cardId: '',
       idempotencyKey: 'anahtar-log-0001',
       requireThreeDs: false,
     };

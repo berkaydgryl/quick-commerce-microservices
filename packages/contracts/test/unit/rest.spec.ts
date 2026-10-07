@@ -227,10 +227,13 @@ describe('reservationSchema', () => {
 });
 
 describe('createOrderRequestSchema', () => {
-  it('sepeti ve adresi degil yalnizca orderId ve odemeyi alir (T7.5)', () => {
+  const DETAILS = { note: '', doNotRingBell: false, agreementsAccepted: true };
+
+  it('sepeti ve adresi degil yalnizca orderId, odeme ve ayrintilari alir (T7.5, T12.4)', () => {
     const parsed = createOrderRequestSchema.parse({
       orderId: ORDER_ID,
       payment: { method: 'CARD', cardToken: 'tok_demo' },
+      details: DETAILS,
       items: [{ productId: PRODUCT_ID, quantity: 99 }],
       address: VALID_ADDRESS,
     });
@@ -238,13 +241,23 @@ describe('createOrderRequestSchema', () => {
     expect(parsed).toEqual({
       orderId: ORDER_ID,
       payment: { method: 'CARD', cardToken: 'tok_demo' },
+      details: DETAILS,
     });
   });
 
-  it('kartli odemede jeton zorunlu', () => {
+  it('kartli odemede kart zorunlu; ayrintisiz istek (sozlesme onayi yok) gecmez', () => {
     expect(
-      createOrderRequestSchema.safeParse({ orderId: ORDER_ID, payment: { method: 'CARD' } })
-        .success,
+      createOrderRequestSchema.safeParse({
+        orderId: ORDER_ID,
+        payment: { method: 'CARD' },
+        details: DETAILS,
+      }).success,
+    ).toBe(false);
+    expect(
+      createOrderRequestSchema.safeParse({
+        orderId: ORDER_ID,
+        payment: { method: 'CARD', cardToken: 'tok_demo' },
+      }).success,
     ).toBe(false);
   });
 });
@@ -261,6 +274,19 @@ describe('orderPlacementSchema', () => {
         threeDs: { challengeId: 'tds_1' },
       }).success,
     ).toBe(true);
+  });
+
+  it('3DS kodunun kalan suresi (T12.4) tam sayi saniye; yoksa da gecer', () => {
+    const placement = (ttlSeconds: number) =>
+      orderPlacementSchema.safeParse({
+        orderId: ORDER_ID,
+        status: 'AWAITING_PAYMENT',
+        threeDs: { challengeId: 'tds_1', ttlSeconds },
+      }).success;
+
+    expect(placement(60)).toBe(true);
+    expect(placement(-1)).toBe(false);
+    expect(placement(1.5)).toBe(false);
   });
 });
 
