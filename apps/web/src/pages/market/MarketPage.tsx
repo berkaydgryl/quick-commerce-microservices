@@ -5,7 +5,7 @@ import { cartPath } from '../../features/cart/routes';
 import { productCartTexts } from '../../features/cart/services/product-cart-texts';
 import { CartBar } from '../../features/cart/ui/CartBar';
 import { CartPanel } from '../../features/cart/ui/CartPanel';
-import { CartSwitchPrompt } from '../../features/cart/ui/CartSwitchPrompt';
+import { CartSwitchDialog } from '../../features/cart/ui/CartSwitchDialog';
 import { ProductCartAction } from '../../features/cart/ui/ProductCartAction';
 import { searchQueryFrom } from '../../features/catalog/services/search-query';
 import { MarketCatalogSection } from '../../features/catalog/ui/MarketCatalogSection';
@@ -87,9 +87,10 @@ export function MarketPage() {
             placeholder={pageTexts.searchPlaceholder}
           />
           {cart.pending !== undefined && cartMarket !== undefined && (
-            <CartSwitchPrompt
+            <CartSwitchDialog
               pending={cart.pending}
               targetMarketName={cartMarket.name}
+              texts={listTexts.cart}
               onConfirm={cart.confirmSwitch}
               onCancel={cart.cancelSwitch}
             />
