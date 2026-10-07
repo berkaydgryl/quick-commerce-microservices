@@ -17,7 +17,7 @@ skor önerir.
 | `CreateOrder`      | ✅ Saga (T7.1): risk-svc → bant kararı → payment-svc çekimi → stok kesinleşir (T11.2); `PAID`, `PAYMENT_FAILED`, 3DS ya da `REVIEW`/`REJECTED`         |
 | `ConfirmPayment`   | ✅ 3DS kodu (T7.1): doğruysa stok kesinleşir ve `PAID`; hak biter / süre dolarsa `PAYMENT_FAILED`, kilit bırakılır                                     |
 | `GetOrder`         | ✅ Tek sipariş, zaman çizelgesi dahil; başkasının siparişi `NOT_FOUND`                                                                                 |
-| `ListMyOrders`     | ✅ Yeniden eskiye, imleçle sayfalı; sipariş yoksa boş liste                                                                                            |
+| `ListMyOrders`     | ✅ Yeniden eskiye, imleçle sayfalı; yalnızca geçmişte görünen siparişler (#101, aşağıda "Geçmiş kapsamı"); sipariş yoksa boş liste                     |
 | `CancelOrder`      | ✅ Kullanıcı iptali: yalnızca `DRAFT`, `RESERVED`, `AWAITING_PAYMENT` (B29); Idempotency-Key zorunlu (D4); kilit bırakılır; parası alınmışsa iptal yok |
 
 RPC'lerin yanında iki işçi çalışır: kilidi dolan siparişleri kapatan süpürücü (T11.2 PR 2) ve
@@ -52,12 +52,49 @@ listeyi gezerken yeni sipariş verirse offset kayar. Sayfa boyutu sözleşme sı
 oturtulur (0 → 20, 100 üstü → 100); bu sınırlar REST ile aynı yerden, `@getir/contracts`'tan
 gelir.
 
-| Koleksiyon | İndeks                                                                                 | Sorgu                 |
-| ---------- | -------------------------------------------------------------------------------------- | --------------------- |
-| `orders`   | `{ userId: 1, createdAt: -1, _id: -1 }` (`userId_createdAt_id`)                        | `ListMyOrders`        |
-| `orders`   | `{ status: 1, 'reservation.expiresAt': 1, _id: 1 }` (`status_reservationExpiresAt_id`) | süpürücü (T11.2 PR 2) |
-| `orders`   | `{ status: 1, courierRetryAt: 1, _id: 1 }` (`status_courierRetryAt_id`), kısmi         | kurye işçisi (T13.1)  |
-| `orders`   | `{ status: 1, courierQueuedAt: 1, _id: 1 }` (`status_courierQueuedAt_id`), kısmi       | kurye kuyruğu (#92)   |
+**Geçmiş kapsamı (#101, T11.16).** `ListMyOrders` yalnızca kullanıcının gerçekten verdiği
+siparişleri döner; süzme sunucudadır, sayfa tam dolar. Kural tek yerde,
+`domain/order-history-listing.ts` (`isListedInHistory`; tablo `Record<OrderStatus, …>`, yeni durum
+derlemede karar ister):
+
+| Geçmişte | Durum                                                                                                                                                                                                     |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Görünür  | `PAID`, `PREPARING`, `ON_THE_WAY`, `DELIVERED`, `REVIEW`; `CANCELLED` ve zaman çizelgesinde `PAID` kaydı var (ödendikten sonra iptal: "İptal edildi · İade edildi")                                       |
+| Gizli    | `DRAFT`, `RISK_CHECK`, `RESERVED`, `AWAITING_PAYMENT`, `EXPIRED`, `PAYMENT_FAILED`, `REJECTED`; ödenmeden iptal (sepeti bırakma, yeni sepet, stok yetmedi, kilit düştü, kullanıcının ödeme öncesi iptali) |
+
+- **Saklama:** Mongo belgesinde türetilmiş `inHistory` (boolean). Sipariş her yazımda bütün belge
+  olarak yazıldığı için eşleyici (`mappers.ts`) alanı her yazımda kuraldan hesaplar; okumada
+  kullanılmaz. Bellek deposu aynı kuralla süzer (aynı sözleşme testi,
+  `test/support/order-history-listing-contract.ts`).
+- **Sorgu:** `{ userId, inHistory: true }` + imleç, kısmi indeksten (aşağıdaki tablo,
+  `infrastructure/mongo/history-query.ts`). Gizli sipariş okunup atılmaz: okunan belge dönen satır
+  kadardır (explain testli). İndeks adıyla istenir (`hint`): aynı anahtarlı tam indeks de sorguya
+  uyar ve plan yarışı eşit biterse planlayıcı onu seçip önbelleğe alabilirdi. Bedeli: indeks yoksa
+  sorgu yavaşlamaz, hata verir (indeks açılışta kurulur; göç 0002 geri alınınca eski kod beklenir).
+  İmleçli sayfada `createdAt <= imleç` aralığı daraltır; önceki sayfaların anahtarları yeniden
+  taranmaz.
+- **Kenar (kabul):** `REVIEW`'dan onaylanıp ödeme bekleyen sipariş (`RESERVED`,
+  `AWAITING_PAYMENT`) listeden çıkar, ödenince geri gelir.
+- **Göç 0002 (`gecmis-gorunurlugu`):** alan öncesi kayıtlara `inHistory`'yi durum ve zaman
+  çizelgesinden yazar (o günün kuralının donmuş kopyası, ADR-19); alanı olana dokunmaz. `down` alanı
+  ve kısmi indeksi kaldırır. Transaction'sız ve yeniden çalıştırılabilir (indeks düşürmek
+  transaction'da yapılamaz).
+- **Sözleşme:** tel biçimi (`order.proto`) değişmedi; değişen, listenin kapsamı. Gateway'in kendi
+  süzmesi (`orderhistory.Visible`, en fazla 3 tur) artık bir şey elemez; temizliği ayrı iş.
+- **Bilinen sınır (dağıtım):** göç, eski kopyalar kapandıktan sonraki açılışı varsayar. Eski sürümlü
+  bir kopya göçten sonra siparişi bütün belge olarak yeniden yazarsa (`replaceOne`) `inHistory`
+  silinir ve sipariş geçmişte görünmez; son durumdaki (`DELIVERED`, iptal) sipariş bir daha
+  yazılmadığı için bu KALICIDIR. Onarım: yeni kodla `migrate down` + `migrate up` (alanı olmayanları
+  doldurur), sonra servis yeniden başlatılır (kısmi indeks açılışta kurulur). Bugün tek order
+  kopyası çalışır; çok kopyalı dağıtımda önce eski kopyalar kapanır.
+
+| Koleksiyon | İndeks                                                                                              | Sorgu                               |
+| ---------- | --------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `orders`   | `{ userId: 1, createdAt: -1, _id: -1 }` (`userId_createdAt_id`)                                     | risk geçmişi, ILK10, persona seed'i |
+| `orders`   | `{ userId: 1, createdAt: -1, _id: -1 }` (`userId_createdAt_id_inHistory`), kısmi: `inHistory: true` | `ListMyOrders` (#101)               |
+| `orders`   | `{ status: 1, 'reservation.expiresAt': 1, _id: 1 }` (`status_reservationExpiresAt_id`)              | süpürücü (T11.2 PR 2)               |
+| `orders`   | `{ status: 1, courierRetryAt: 1, _id: 1 }` (`status_courierRetryAt_id`), kısmi                      | kurye işçisi (T13.1)                |
+| `orders`   | `{ status: 1, courierQueuedAt: 1, _id: 1 }` (`status_courierQueuedAt_id`), kısmi                    | kurye kuyruğu (#92)                 |
 
 Roadmap veri modelindeki `status` indeksi süpürücüyle (T11.2 PR 2) geldi: durum (`$in`, iki
 değer) + kilidin bitişi aralığı ve aynı sıraya göre okuma tek indeksten, bellekte sıralama yok
@@ -553,6 +590,7 @@ src/
 │   ├── expired-order-finder.ts  # port: kilidi dolmuş siparişler, süpürücünün kuyruğu (T11.2 PR 2)
 │   ├── courier-dispatch.ts      # kurye bekleyen sipariş, kuryeyle/kuryesiz PREPARING, telafi kararı (T13.1), kuyruk sırası (#92)
 │   ├── awaiting-courier-finder.ts  # port: kurye bekleyen siparişler, kurye işçisinin kuyruğu (T13.1)
+│   ├── order-history-listing.ts # Geçmiş Siparişlerim'de görünürlük kuralı (#101)
 │   └── order-history-cursor.ts  # geçmiş sırası ve imleç
 ├── application/       # bir dosya = bir use-case
 │   ├── create-draft-order.ts, create-order.ts, confirm-payment.ts, cancel-order.ts
@@ -598,7 +636,7 @@ src/
 ├── interfaces/workers/sweeper-metrics.ts   # kapanan ve kapanamayan sipariş metrikleri
 ├── interfaces/workers/courier-dispatcher.ts  # kurye işçisi zamanlayıcısı (T13.1 PR 2)
 ├── interfaces/workers/dispatcher-metrics.ts   # kurye işçisinin sonuç ve hata metrikleri (kaynak etiketi T13.2)
-├── migrations/        # göçler (ADR-19): 0001-kurye-sirasi (kurye kuyruğu anı, T13.2)
+├── migrations/        # göçler (ADR-19): 0001-kurye-sirasi (kurye kuyruğu anı, T13.2), 0002-gecmis-gorunurlugu (#101)
 ├── config/            # env.ts (process.env yalnızca burada) + constants.ts
 ├── bootstrap.ts
 ├── main.ts
@@ -624,6 +662,8 @@ geçmişleri burada (`infrastructure/fixtures/persona-orders.ts`), aynı kullan�
 
 Siparişler hazır "Ev" adresine, geçmiş tarihlidir; kimlikleri persona ve sıradan türetilir
 (tekrar yazımda kopya olmaz). Olay YAZILMAZ: geçmiş sipariş bugün olmuş gibi yayınlanmaz.
+İptaller ödeme öncesi kullanıcı iptalidir (`USER_CANCELLED`): risk geçmişinde sayılır, Geçmiş
+Siparişlerim'de görünmez (#101); listede yalnızca teslim edilenler durur.
 
 - `MOCK=true`: servis açılırken belleğe yüklenir (production dışında).
 - Mongo: `pnpm --filter @getir/order-service seed:personas` personaların eski siparişlerini
@@ -677,7 +717,10 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/order/v1/order
 # 2c) Kurye (T13.1): courier-service (50056) ayaktaysa PAID sipariş ~1 sn içinde PREPARING olur
 #     (GetOrder ile bak); markette boş kurye yoksa kuryesiz PREPARING, 30 sn sonra yeniden.
 
-# 3) Geçmiş → en yeni sipariş başta; Mongo modunda Compass'ta getir.orders altında da görünür
+# 3) Geçmiş → en yeni sipariş başta; yalnızca ödenmiş, incelemedeki ve ödendikten sonra iptal
+#    edilenler (#101): 1. adımın taslağı ödenene kadar listede yok.
+#    Mongo modunda Compass'ta getir.orders altında da görünür (inHistory alanıyla).
+
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/order/v1/order.proto \
   -d '{"user_id":"usr_1","page":{"page_size":10}}' \
   localhost:50053 getir.order.v1.OrderService/ListMyOrders

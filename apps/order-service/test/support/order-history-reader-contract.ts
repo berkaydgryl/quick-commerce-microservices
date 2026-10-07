@@ -1,7 +1,9 @@
 /**
  * OrderHistoryReader portunun sozlesmesi: kullaniciya ozel, yeniden eskiye
  * siralama ve imlecle kayipsiz sayfalama. Veri hazirlamak icin depoya yazar;
- * bu yuzden ikisini birlikte ister.
+ * bu yuzden ikisini birlikte ister. Listelenen siparisler ODENMISTIR: gecmiste
+ * yalnizca gorunenler listelenir (#101; gizlenenler
+ * order-history-listing-contract.ts).
  */
 
 import { fixedClock, ORDER_STATUS } from '@getir/core';
@@ -12,22 +14,26 @@ import type { OrderHistoryCursor } from '../../src/domain/order-history-cursor.j
 import type { Order } from '../../src/domain/order.js';
 import { transitionOrder } from '../../src/domain/order.js';
 import type { OrderStoreFixtures, OrderStoreUnderTest } from './order-store-fixtures.js';
-import { MINUTE_MS, START_MS } from './order-store-fixtures.js';
+import { MINUTE_MS, START_MS, TO_DELIVERED, TO_PAID, walk } from './order-store-fixtures.js';
 
 export function describeOrderHistoryReaderContract(
   name: string,
   getStore: () => OrderStoreUnderTest,
   { newUserId, draftAt }: OrderStoreFixtures,
 ): void {
+  /** Verilen anda acilip odenmis siparis: gecmiste gorunur. */
+  const paidAt = (userId: string, epochMs: number): Order =>
+    walk(draftAt(userId, epochMs), TO_PAID);
+
   describe(`OrderHistoryReader sozlesmesi: ${name}`, () => {
     it('yeniden eskiye, yalnizca o kullanicinin siparisleri', async () => {
       const store = getStore();
       const userId = newUserId();
-      const oldest = draftAt(userId, START_MS);
-      const middle = draftAt(userId, START_MS + MINUTE_MS);
-      const newest = draftAt(userId, START_MS + 2 * MINUTE_MS);
+      const oldest = paidAt(userId, START_MS);
+      const middle = paidAt(userId, START_MS + MINUTE_MS);
+      const newest = paidAt(userId, START_MS + 2 * MINUTE_MS);
       // Ekleme sirasi kasten karisik: sira yazma sirasindan degil createdAt'ten gelir.
-      for (const order of [middle, oldest, newest, draftAt(newUserId(), START_MS)]) {
+      for (const order of [middle, oldest, newest, paidAt(newUserId(), START_MS)]) {
         await store.insert(order, []);
       }
 
@@ -40,7 +46,7 @@ export function describeOrderHistoryReaderContract(
     it('ayni milisaniyedeki siparisler kimlige gore azalan (esitlik bozucu)', async () => {
       const store = getStore();
       const userId = newUserId();
-      const twins = [draftAt(userId, START_MS), draftAt(userId, START_MS)];
+      const twins = [paidAt(userId, START_MS), paidAt(userId, START_MS)];
       for (const order of twins) {
         await store.insert(order, []);
       }
@@ -58,9 +64,7 @@ export function describeOrderHistoryReaderContract(
       const store = getStore();
       const userId = newUserId();
       // 5 siparis, ikisi AYNI anda: sayfa siniri tam esitligin ortasina dusebilir.
-      const orders = [0, 1, 1, 2, 3].map((minute) =>
-        draftAt(userId, START_MS + minute * MINUTE_MS),
-      );
+      const orders = [0, 1, 1, 2, 3].map((minute) => paidAt(userId, START_MS + minute * MINUTE_MS));
       for (const order of orders) {
         await store.insert(order, []);
       }
@@ -84,7 +88,7 @@ export function describeOrderHistoryReaderContract(
       const store = getStore();
       const userId = newUserId();
       for (const minute of [0, 1]) {
-        await store.insert(draftAt(userId, START_MS + minute * MINUTE_MS), []);
+        await store.insert(paidAt(userId, START_MS + minute * MINUTE_MS), []);
       }
 
       const page = await store.listByUser({ userId, pageSize: 2 });
@@ -184,26 +188,4 @@ export function describeOrderHistoryReaderContract(
       });
     });
   });
-}
-
-const TO_PAID: readonly OrderStatus[] = [
-  ORDER_STATUS.RISK_CHECK,
-  ORDER_STATUS.RESERVED,
-  ORDER_STATUS.AWAITING_PAYMENT,
-  ORDER_STATUS.PAID,
-];
-
-const TO_DELIVERED: readonly OrderStatus[] = [
-  ...TO_PAID,
-  ORDER_STATUS.PREPARING,
-  ORDER_STATUS.ON_THE_WAY,
-  ORDER_STATUS.DELIVERED,
-];
-
-/** Siparisi tablodaki yoldan verilen durumlara yurutur (sabit saat). */
-function walk(order: Order, steps: readonly OrderStatus[]): Order {
-  return steps.reduce(
-    (current, status) => transitionOrder(current, status, fixedClock(START_MS)),
-    order,
-  );
 }
