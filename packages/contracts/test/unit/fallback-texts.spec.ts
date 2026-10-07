@@ -32,6 +32,7 @@ const WELCOME = JSON.parse(
   cartPage: unknown;
   footer: unknown;
   checkout: unknown;
+  confirm: unknown;
 };
 
 /** Yapidaki butun metinler (dizi ve ic nesneler dahil). */
