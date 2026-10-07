@@ -87,7 +87,8 @@ describe('Reserve (T10.1)', () => {
     expect(error?.code).toBe(GRPC_STATUS.ALREADY_EXISTS);
     expect(appErrorOf(error)).toMatchObject({
       code: ERROR_CODES.RESERVATION_ACTIVE,
-      details: { activeOrderId: orderId(1) },
+      // Kalan omur (T15.3): saat sabit; 1. siparisin kilidi ilk testte 120 sn ile acildi.
+      details: { activeOrderId: orderId(1), activeExpiresInMs: 120_000 },
     });
   });
 

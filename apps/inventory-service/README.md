@@ -62,9 +62,13 @@ giremez: kısmi rezervasyon imkânsızdır. Rezervasyonun kimliği siparişin ki
 | Sipariş zaten rezerve           | OK, `already_reserved: true`, ilk bitiş anı  | Sayaçlar ikinci kez düşmez (ADR-08)                               |
 | Bir kalem yetmedi               | `FAILED_PRECONDITION` / `STOCK_INSUFFICIENT` | `sku`, `requested`, `available` (yetmeyen ilk kalem)              |
 | Sayacı olmayan SKU (#36)        | `FAILED_PRECONDITION` / `STOCK_INSUFFICIENT` | `available: 0`, `counterMissing: true`; uyarı günlüğü             |
-| Kullanıcının aktif rezervasyonu | `ALREADY_EXISTS` / `RESERVATION_ACTIVE`      | `activeOrderId`; eskisini bırakıp yenisini almak order'ın (T11.2) |
+| Kullanıcının aktif rezervasyonu | `ALREADY_EXISTS` / `RESERVATION_ACTIVE`      | `activeOrderId` + `activeExpiresInMs` (kilidin kalan ömrü, T15.3) |
 | Bozuk (tam sayı olmayan) sayaç  | `INTERNAL`                                   | Hiçbir şey yazılmaz                                               |
 
+- **Aktif rezervasyon (B22, T15.3):** eskisini bırakıp yenisini almak order'ın (T11.2).
+  `activeExpiresInMs` o kilidin kalan ömrüdür (ms, JSON sayısı): kullanıcı kilidinin `PTTL`'i,
+  `reserve.lua` aynı adımda okur. Göreli olduğu için saat farkından etkilenmez; order kaydı olmayan
+  (yetim) kilidin yaşını bununla bulur (bekleyen iş 126). Okunamazsa (negatif) alan yazılmaz.
 - **Kararlar (30 Eylül, (a)x6):**
   - Kullanıcı kilidi kullanıcı başına tek anahtar. Market anahtarlarından ayrı slot'ta; tek düğümlü Redis'te
     çalışır, Cluster'a geçişte yeniden karar gerekir. Script bunu yüklemede beyan eder

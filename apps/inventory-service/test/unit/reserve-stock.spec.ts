@@ -137,13 +137,30 @@ describe('reserveStock', () => {
     expect(lines).toMatchObject([{ level: 'warn', fields: { counter: -3 } }]);
   });
 
-  it('kullanicinin aktif rezervasyonu: RESERVATION_ACTIVE, ayrintida o siparis', async () => {
+  it('kullanicinin aktif rezervasyonu: RESERVATION_ACTIVE, ayrintida o siparis ve kilidinin kalan omru (T15.3)', async () => {
     const active = 'ord_00000000000000000000000000000009';
-    const { reserveStock } = useCase({ status: 'user-has-active', activeOrderId: active });
+    const { reserveStock } = useCase({
+      status: 'user-has-active',
+      activeOrderId: active,
+      activeExpiresInMs: 42_000,
+    });
 
     const error = await errorOf(reserveStock(INPUT));
 
     expect(error.code).toBe(ERROR_CODES.RESERVATION_ACTIVE);
+    expect(error.details).toEqual({ activeOrderId: active, activeExpiresInMs: 42_000 });
+  });
+
+  it('aktif kilidin kalan omru bilinmiyorsa (negatif) alan YAZILMAZ: cagiran "bilinmiyor" sayar', async () => {
+    const active = 'ord_00000000000000000000000000000009';
+    const { reserveStock } = useCase({
+      status: 'user-has-active',
+      activeOrderId: active,
+      activeExpiresInMs: -1,
+    });
+
+    const error = await errorOf(reserveStock(INPUT));
+
     expect(error.details).toEqual({ activeOrderId: active });
   });
 });
