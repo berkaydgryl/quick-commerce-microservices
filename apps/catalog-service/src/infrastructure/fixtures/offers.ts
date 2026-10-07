@@ -1,229 +1,27 @@
 /**
  * Demo verisi: teklifler (market x urun -> fiyat). ADR-15.
+ *
+ * Iki kaynak, bu sirayla:
+ *   1. Acik fiyat tablolari (offers/price-lists.ts; T4.8, T11.11): oldugu gibi.
+ *   2. Cesitlilik (07.10): marketin cesidinde (assortments.ts) olup acik
+ *      tabloda olmayan her urun, taban fiyat x marka endeksiyle
+ *      (offers/base-prices.ts). Acik fiyat her zaman ustundur.
+ * Ayni urun marketten markete farkli fiyattadir; bir marketin satmadigi urun
+ * teklif listesinde yoktur.
  */
 
 import type { OfferSeed } from '../../domain/catalog-snapshot.js';
-
-/**
- * Teklifler: market -> (urun -> fiyat). Ayni urun marketten markete farkli
- * fiyattadir; bir marketin satmadigi urun tabloda yoktur.
- */
-const PRICE_LISTS: Readonly<Record<string, Readonly<Record<string, number>>>> = {
-  'mkt_migros-jet-moda': {
-    'prd_sut-1l': 3490,
-    'prd_yumurta-10': 8990,
-    'prd_peynir-500': 14990,
-    'prd_tereyag-250': 12750,
-    'prd_domates-1k': 5990,
-    'prd_muz-1k': 7490,
-    'prd_elma-1k': 4290,
-    'prd_salatalik-1k': 3990,
-    'prd_su-5l': 2990,
-    'prd_kola-1l': 4590,
-    'prd_portakal-suyu-1l': 6490,
-    'prd_cikolata-80': 3290,
-    'prd_cips-150': 4990,
-    'prd_bulasik-deterjan': 6790,
-    'prd_camasir-suyu': 5490,
-  },
-  'mkt_a101-caferaga': {
-    'prd_sut-1l': 3210,
-    'prd_yumurta-10': 8270,
-    'prd_peynir-500': 13790,
-    'prd_domates-1k': 5510,
-    'prd_muz-1k': 6890,
-    'prd_elma-1k': 3950,
-    'prd_su-5l': 2750,
-    'prd_kola-1l': 4220,
-    'prd_cikolata-80': 3030,
-    'prd_cips-150': 4590,
-    'prd_bulasik-deterjan': 6250,
-    'prd_camasir-suyu': 5050,
-  },
-  'mkt_kardesler-manavi': {
-    'prd_domates-1k': 5390,
-    'prd_muz-1k': 6740,
-    'prd_elma-1k': 3860,
-    'prd_salatalik-1k': 3590,
-  },
-  'mkt_migros-jet-besiktas': {
-    'prd_sut-1l': 3490,
-    'prd_yumurta-10': 8990,
-    'prd_peynir-500': 14990,
-    'prd_tereyag-250': 12750,
-    'prd_domates-1k': 5990,
-    'prd_muz-1k': 7490,
-    'prd_elma-1k': 4290,
-    'prd_salatalik-1k': 3990,
-    'prd_su-5l': 2990,
-    'prd_kola-1l': 4590,
-    'prd_portakal-suyu-1l': 6490,
-    'prd_cikolata-80': 3290,
-    'prd_cips-150': 4990,
-    'prd_bulasik-deterjan': 6790,
-    'prd_camasir-suyu': 5490,
-  },
-  'mkt_carrefour-express-barbaros': {
-    'prd_sut-1l': 3660,
-    'prd_yumurta-10': 9440,
-    'prd_peynir-500': 15740,
-    'prd_tereyag-250': 13390,
-    'prd_domates-1k': 6290,
-    'prd_muz-1k': 7860,
-    'prd_salatalik-1k': 4190,
-    'prd_su-5l': 3140,
-    'prd_kola-1l': 4820,
-    'prd_portakal-suyu-1l': 6810,
-    'prd_cikolata-80': 3450,
-    'prd_cips-150': 5240,
-    'prd_bulasik-deterjan': 7130,
-  },
-  'mkt_a101-abbasaga': {
-    'prd_sut-1l': 3210,
-    'prd_yumurta-10': 8270,
-    'prd_peynir-500': 13790,
-    'prd_domates-1k': 5510,
-    'prd_muz-1k': 6890,
-    'prd_elma-1k': 3950,
-    'prd_su-5l': 2750,
-    'prd_kola-1l': 4220,
-    'prd_cikolata-80': 3030,
-    'prd_cips-150': 4590,
-    'prd_bulasik-deterjan': 6250,
-    'prd_camasir-suyu': 5050,
-  },
-  // T11.11: yeni marketler ve dukkanlar.
-  'mkt_sok-moda': {
-    'prd_sut-1l': 3300,
-    'prd_yumurta-10': 8340,
-    'prd_peynir-500': 13970,
-    'prd_domates-1k': 5530,
-    'prd_elma-1k': 3980,
-    'prd_su-5l': 2760,
-    'prd_kola-1l': 4270,
-    'prd_bulasik-deterjan': 6300,
-    'prd_ekmek-somun': 1460,
-    'prd_pirinc-1k': 8720,
-    'prd_makarna-500': 2420,
-    'prd_aycicek-yagi-1l': 9210,
-    'prd_mercimek-1k': 7270,
-    'prd_dondurma-kakao': 11540,
-    'prd_dondurma-cubuk': 3390,
-    'prd_sampuan-500': 13480,
-    'prd_dis-macunu': 7750,
-    'prd_kagit-havlu-6': 15420,
-    'prd_cop-poseti': 4840,
-    'prd_bebek-bezi-4': 38700,
-    'prd_islak-mendil': 6780,
-    'prd_kedi-mamasi': 41610,
-  },
-  'mkt_moda-kasabi': {
-    'prd_kiyma-500': 39000,
-    'prd_kusbasi-500': 42640,
-    'prd_tavuk-gogus-1k': 23820,
-    'prd_sucuk-250': 28600,
-  },
-  'mkt_moda-sarkuteri': {
-    'prd_peynir-500': 15260,
-    'prd_tereyag-250': 13670,
-    'prd_kasar-400': 23210,
-    'prd_zeytin-500': 15790,
-    'prd_sucuk-250': 29150,
-    'prd_pastirma-100': 34450,
-  },
-  'mkt_altiyol-kuruyemis': {
-    'prd_findik-200': 21000,
-    'prd_antep-fistigi-200': 32000,
-    'prd_kaju-200': 26500,
-    'prd_leblebi-250': 9000,
-  },
-  'mkt_bahariye-firini': {
-    'prd_ekmek-somun': 1500,
-    prd_simit: 1750,
-    'prd_pogaca-peynirli': 2250,
-    prd_acma: 2000,
-  },
-  'mkt_pati-pet-shop-kadikoy': {
-    'prd_kedi-mamasi': 42900,
-    'prd_kopek-mamasi': 64900,
-    'prd_kedi-kumu': 24900,
-  },
-  'mkt_moda-cicekcilik': {
-    'prd_gul-buket': 89000,
-    'prd_papatya-buket': 45000,
-    'prd_orkide-saksi': 120000,
-  },
-  'mkt_bim-sinanpasa': {
-    'prd_sut-1l': 3230,
-    'prd_yumurta-10': 8170,
-    'prd_peynir-500': 13680,
-    'prd_su-5l': 2710,
-    'prd_kola-1l': 4180,
-    'prd_cikolata-80': 2990,
-    'prd_ekmek-somun': 1420,
-    'prd_pirinc-1k': 8540,
-    'prd_makarna-500': 2370,
-    'prd_aycicek-yagi-1l': 9020,
-    'prd_mercimek-1k': 7120,
-    'prd_tavuk-gogus-1k': 21760,
-    'prd_dondurma-cubuk': 3320,
-    'prd_sampuan-500': 13200,
-    'prd_sivi-sabun': 6170,
-    'prd_dis-macunu': 7590,
-    'prd_kagit-havlu-6': 15100,
-    'prd_cop-poseti': 4740,
-    'prd_bebek-bezi-4': 37900,
-    'prd_islak-mendil': 6640,
-    'prd_kedi-kumu': 23660,
-    'prd_kopek-mamasi': 61660,
-  },
-  'mkt_carsi-manavi': {
-    'prd_domates-1k': 5470,
-    'prd_muz-1k': 6820,
-    'prd_elma-1k': 3940,
-    'prd_salatalik-1k': 3650,
-  },
-  'mkt_barbaros-kasabi': {
-    'prd_kiyma-500': 40120,
-    'prd_kusbasi-500': 43870,
-    'prd_tavuk-gogus-1k': 24500,
-    'prd_sucuk-250': 29420,
-  },
-  'mkt_besiktas-sarkuteri': {
-    'prd_peynir-500': 15700,
-    'prd_kasar-400': 23870,
-    'prd_zeytin-500': 16240,
-    'prd_sucuk-250': 29980,
-    'prd_pastirma-100': 35420,
-  },
-  'mkt_yildiz-kuruyemis': {
-    'prd_findik-200': 22050,
-    'prd_antep-fistigi-200': 33600,
-    'prd_kaju-200': 27820,
-    'prd_leblebi-250': 9450,
-  },
-  'mkt_abbasaga-firini': {
-    'prd_ekmek-somun': 1500,
-    prd_simit: 1750,
-    'prd_pogaca-peynirli': 2250,
-    prd_acma: 2000,
-  },
-  'mkt_pati-pet-shop-besiktas': {
-    'prd_kedi-mamasi': 44620,
-    'prd_kopek-mamasi': 67500,
-    'prd_kedi-kumu': 25900,
-  },
-  'mkt_lale-cicekcilik': {
-    'prd_gul-buket': 96120,
-    'prd_papatya-buket': 48600,
-    'prd_orkide-saksi': 129600,
-  },
-};
+import { assortmentOf } from './assortments.js';
+import { MARKETS } from './markets.js';
+import { BASE_PRICES, brandPrice } from './offers/base-prices.js';
+import { PRICE_LISTS } from './offers/price-lists.js';
+import { productIdOf } from './products/product.js';
 
 /** Satistan kaldirilmis teklifler: listede gorunur, "satista degil" (gizlenmez). */
 const INACTIVE_OFFERS: ReadonlySet<string> = new Set(['mkt_migros-jet-moda/prd_camasir-suyu']);
 
-export const OFFERS: readonly OfferSeed[] = Object.entries(PRICE_LISTS).flatMap(
+/** Acik tablolarin teklifleri, tablo sirasiyla (07.10 oncesi teklifin tamami). */
+export const EXPLICIT_OFFERS: readonly OfferSeed[] = Object.entries(PRICE_LISTS).flatMap(
   ([marketId, prices]) =>
     Object.entries(prices).map(([productId, priceMinor]) => ({
       marketId,
@@ -232,3 +30,26 @@ export const OFFERS: readonly OfferSeed[] = Object.entries(PRICE_LISTS).flatMap(
       isActive: !INACTIVE_OFFERS.has(`${marketId}/${productId}`),
     })),
 );
+
+/** Cesitten gelen ek teklifler: acik tabloda olmayan market-urun ciftleri. */
+const ASSORTMENT_OFFERS: readonly OfferSeed[] = MARKETS.flatMap((market) => {
+  const explicit = PRICE_LISTS[market.id] ?? {};
+  return assortmentOf(market.id)
+    .filter((sku) => explicit[productIdOf(sku)] === undefined)
+    .map((sku) => ({
+      marketId: market.id,
+      productId: productIdOf(sku),
+      priceMinor: brandPrice(basePriceOf(sku), market.brand),
+      isActive: true,
+    }));
+});
+
+function basePriceOf(sku: string): number {
+  const base = BASE_PRICES[sku];
+  if (base === undefined) {
+    throw new Error(`taban fiyati olmayan urun: ${sku}`);
+  }
+  return base;
+}
+
+export const OFFERS: readonly OfferSeed[] = [...EXPLICIT_OFFERS, ...ASSORTMENT_OFFERS];

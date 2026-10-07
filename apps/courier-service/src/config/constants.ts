@@ -39,8 +39,9 @@ export const COURIER_SPEED_KMH_MAX = 120;
 
 /**
  * Kurye havuzu (T13.2, domain/courier-pool.ts): marketin 3 km cevresindeki
- * bos kuryeler. Demo verisinde Kadikoy ile Besiktas 6,6 km ayri; semt icinde
- * en uzak market cifti 1,4 km. Yaricap iki semti kendiliginden ayirir.
+ * bos kuryeler. Demo verisinde iki semtin en yakin market cifti 4,9 km ayri;
+ * semt icinde en uzak cift 2,6 km (07.10 subeleriyle). Yaricap iki semti
+ * kendiliginden ayirir (test/unit/courier-fixtures.spec.ts denetler).
  */
 export const COURIER_POOL_RADIUS_METERS = 3_000;
 
@@ -57,5 +58,5 @@ export const COURIER_PROXIMITY_BAND_METERS = 300;
  */
 export const COURIER_CLAIM_CANDIDATES = 5;
 
-/** Demo seed'inde her marketin yakinina konan kurye sayisi (21 x 3 = 63). */
+/** Demo seed'inde her marketin yakinina konan kurye sayisi (33 x 3 = 99). */
 export const DEMO_COURIERS_PER_MARKET_AREA = 3;

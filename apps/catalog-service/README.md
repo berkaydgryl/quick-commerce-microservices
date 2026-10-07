@@ -118,9 +118,13 @@ alanıdır; iki arama aynı eşleşme kuralını kullanır (T9.4: harf ve Türk�
 | değil  | Mongo repository'leri (`markets`, `offers`, `products`, `categories`) | Evet, `CATALOG_MONGO_URI` zorunlu; kendi veritabanı `getir_catalog` (D14) |
 
 İki kaynak da **aynı demo verisinden** beslenir (`src/infrastructure/fixtures/`: 13 kategori,
-49 ortak ürün, 21 market, 166 teklif; T11.11'den beri her dükkân türünden) ve **aynı sözleşme testlerinden** geçer
+122 ortak ürün, 33 market, 1505 teklif; T11.11'den beri her dükkân türünden, 07.10'dan beri zincirlerde
+60-100 ürün) ve **aynı sözleşme testlerinden** geçer
 (`test/support/{category,market,offer}-reader-contract.ts`): birim testinde bellek, entegrasyon
 testinde gerçek Mongo. Veri kaynağını seçip açan tek yer `infrastructure/catalog-source.ts`'tir.
+Davranış testleri (arama, listeleme, sayfalama, gRPC) demo verisinin 07.10 öncesi hâliyle, sabit **klasik
+kümeyle** koşar (`test/support/classic-catalog.ts`; güncel verinin başıdır): veri büyüdükçe senaryolar
+değişmez. Güncel verinin bütünlüğü `test/unit/catalog-fixtures.spec.ts`'tedir.
 
 ### Üç port, her use-case yalnızca ihtiyacını alır
 

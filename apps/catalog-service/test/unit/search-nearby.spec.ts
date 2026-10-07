@@ -13,12 +13,13 @@ import type { MarketOfferMatches } from '../../src/domain/offer-reader.js';
 import { createInMemoryReaders } from '../../src/infrastructure/memory/in-memory-catalog.js';
 import type { DemoAddressTitle } from '../support/demo-addresses.js';
 import { demoLocation, EXPECTED_NEARBY } from '../support/demo-addresses.js';
+import { CLASSIC_SNAPSHOT } from '../support/classic-catalog.js';
 
 const A101_CAFERAGA = 'mkt_a101-caferaga';
 const MIGROS_MODA = 'mkt_migros-jet-moda';
 const SOK_MODA = 'mkt_sok-moda';
 
-const readers = createInMemoryReaders();
+const readers = createInMemoryReaders(CLASSIC_SNAPSHOT);
 const searchNearby = createSearchNearby(readers);
 
 const summary = (result: NearbySearchResult) => ({

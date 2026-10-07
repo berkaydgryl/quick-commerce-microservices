@@ -45,7 +45,7 @@ describe('demo kuryeleri ve market kopyasi (T13.2 havuz)', () => {
     expect(() => assertValidMarkets(MARKET_LOCATION_SEEDS)).not.toThrow();
   });
 
-  it('her marketin 40-150 m yakininda 3 kurye; toplam 63 (Kadikoy 30, Besiktas 33)', () => {
+  it('her marketin 40-150 m yakininda 3 kurye; toplam 99 (Kadikoy 48, Besiktas 51)', () => {
     for (const market of MARKET_LOCATIONS) {
       const close = COURIER_SEEDS.filter((seed) => {
         const distance = distanceMeters(market, seed.location);
@@ -54,8 +54,8 @@ describe('demo kuryeleri ve market kopyasi (T13.2 havuz)', () => {
       expect(close.length, market.marketId).toBeGreaterThanOrEqual(DEMO_COURIERS_PER_MARKET_AREA);
     }
     expect(COURIER_SEEDS).toHaveLength(MARKET_LOCATIONS.length * DEMO_COURIERS_PER_MARKET_AREA);
-    expect(COURIER_SEEDS.filter((seed) => isKadikoy(seed.location))).toHaveLength(30);
-    expect(COURIER_SEEDS.filter((seed) => !isKadikoy(seed.location))).toHaveLength(33);
+    expect(COURIER_SEEDS.filter((seed) => isKadikoy(seed.location))).toHaveLength(48);
+    expect(COURIER_SEEDS.filter((seed) => !isKadikoy(seed.location))).toHaveLength(51);
   });
 
   it('semtler karismaz: her kurye kendi semtinin butun marketlerinin havuzunda, obur semtinkilerin disinda', () => {

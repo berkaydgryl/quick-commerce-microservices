@@ -3,7 +3,7 @@
  *
  * Sahte istemciyle dogrulanamayan seyler burada sinanir:
  *   1. Redis sayaclari bellektekiyle AYNI sozlesmeden gecer (MGET, SET NX).
- *   2. Seed: 166 kayit, tekrar kosu kopya uretmez, benzersiz indeks.
+ *   2. Seed: demo stogunun tamami, tekrar kosu kopya uretmez, benzersiz indeks.
  *   3. Acilis: sayaclar Mongo'dan yazilir, VAR OLAN sayac ezilmez.
  *   4. T9.2 olcutu: "Redis silinip yeniden kurulur" (FLUSHALL -> reseed).
  *   5. P1: tahliye eden Redis'te (allkeys-lru) servis acilmaz.
@@ -59,6 +59,9 @@ const REDIS_IMAGE = 'redis:7-alpine';
 const DB_NAME = 'getir_inventory_test';
 const MIGROS = 'mkt_migros-jet-moda';
 
+/** Demo stogunun satir sayisi: seed, sayac ve defter bu kadar kayit yazar. */
+const STOCK_COUNT = STOCK_LEVELS.length;
+
 let mongoContainer: StartedMongoDBContainer;
 let redisContainer: StartedRedisContainer;
 let env: StockStoresEnv;
@@ -108,11 +111,11 @@ describeStockCounterContract('redis', async () => {
 });
 
 describe('kalici stok (Mongo)', () => {
-  it('seed 166 kayit yazar; tekrar kosmak kopya uretmez', async () => {
+  it('seed demo stogunun tamamini yazar; tekrar kosmak kopya uretmez', async () => {
     await seedStock();
     await seedStock();
 
-    expect(await stores.mongo.db.collection(COLLECTIONS.STOCK).countDocuments()).toBe(166);
+    expect(await stores.mongo.db.collection(COLLECTIONS.STOCK).countDocuments()).toBe(STOCK_COUNT);
   });
 
   it('market x sku benzersiz indeksli', async () => {
@@ -131,8 +134,12 @@ describe('kalici stok (Mongo)', () => {
       total += batch.length;
     }
 
-    expect(sizes).toEqual([...Array.from({ length: 16 }, () => 10), 6]);
-    expect(total).toBe(166);
+    expect(sizes).toEqual(
+      Array.from({ length: Math.ceil(STOCK_COUNT / 10) }, (_, index) =>
+        Math.min(10, STOCK_COUNT - 10 * index),
+      ),
+    );
+    expect(total).toBe(STOCK_COUNT);
   });
 });
 
@@ -146,7 +153,7 @@ describe('acilis ve reseed (T9.2)', () => {
 
     const source = await openStockSource(env, silentLogger);
     try {
-      expect(source.seeded).toEqual({ scanned: 166, written: 165 });
+      expect(source.seeded).toEqual({ scanned: STOCK_COUNT, written: STOCK_COUNT - 1 });
       const found = await source.counters.available(MIGROS, ['SUT-1L', 'PEYNIR-500']);
       expect(found.get('SUT-1L')).toBe(5);
       expect(found.get('PEYNIR-500')).toBe(onHandOf('PEYNIR-500'));
@@ -167,7 +174,7 @@ describe('acilis ve reseed (T9.2)', () => {
 
     const result = await reseed('overwrite');
 
-    expect(result).toEqual({ scanned: 166, written: 166 });
+    expect(result).toEqual({ scanned: STOCK_COUNT, written: STOCK_COUNT });
     expect((await stores.counters.available(MIGROS, ['SUT-1L'])).get('SUT-1L')).toBe(
       onHandOf('SUT-1L'),
     );
@@ -412,8 +419,8 @@ describe('stok defteri (T10.2, ADR-18)', () => {
   });
 
   it('seed defteri acilis kayitlariyla yazar: her market x SKU icin +onHand; defter toplami onHand ile tutar', async () => {
-    expect(await ledgerCollection().countDocuments({ kind: 'opening' })).toBe(166);
-    expect(await ledgerCollection().countDocuments()).toBe(166);
+    expect(await ledgerCollection().countDocuments({ kind: 'opening' })).toBe(STOCK_COUNT);
+    expect(await ledgerCollection().countDocuments()).toBe(STOCK_COUNT);
     expect(await ledgerMismatches()).toEqual([]);
   });
 
@@ -430,7 +437,7 @@ describe('stok defteri (T10.2, ADR-18)', () => {
 
     await seedStock();
 
-    expect(await ledgerCollection().countDocuments()).toBe(166);
+    expect(await ledgerCollection().countDocuments()).toBe(STOCK_COUNT);
     expect(await ledgerCollection().countDocuments({ orderId: ORDER })).toBe(0);
   });
 
@@ -855,7 +862,7 @@ describe('stok defteri (T10.2, ADR-18)', () => {
       ledger: stores.ledger,
       batchSize: 20,
     });
-    expect(await check()).toEqual({ checked: 166, mismatches: [] });
+    expect(await check()).toEqual({ checked: STOCK_COUNT, mismatches: [] });
 
     await stores.mongo.db
       .collection<StockDocument>(COLLECTIONS.STOCK)
@@ -952,10 +959,10 @@ describe('stok defteri (T10.2, ADR-18)', () => {
     }
   });
 
-  it('supurucunun market listesi Mongo stoktan: 21 market, sirali', async () => {
+  it('supurucunun market listesi Mongo stoktan: demo stogunun butun marketleri, sirali', async () => {
     const markets = await stores.repository.marketIds();
 
-    expect(markets).toHaveLength(21);
+    expect(markets).toHaveLength(new Set(STOCK_LEVELS.map((level) => level.marketId)).size);
     expect(markets).toEqual([...markets].sort());
     expect(markets).toContain(MIGROS);
   });

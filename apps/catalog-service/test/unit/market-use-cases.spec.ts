@@ -10,28 +10,43 @@ import { createListMarketCategories } from '../../src/application/list-market-ca
 import { createListNearbyMarkets } from '../../src/application/list-nearby-markets.js';
 import { createInMemoryReaders } from '../../src/infrastructure/memory/in-memory-catalog.js';
 import type { DemoAddressTitle } from '../support/demo-addresses.js';
-import { demoLocation, EXPECTED_NEARBY } from '../support/demo-addresses.js';
+import {
+  demoLocation,
+  EXPECTED_NEARBY,
+  expectedNearbyCurrent,
+  expectNearbyList,
+} from '../support/demo-addresses.js';
+import { CLASSIC_SNAPSHOT } from '../support/classic-catalog.js';
 
-const readers = createInMemoryReaders();
+const readers = createInMemoryReaders(CLASSIC_SNAPSHOT);
 const listNearbyMarkets = createListNearbyMarkets({ markets: readers.markets });
 const getMarket = createGetMarket({ markets: readers.markets });
 const listMarketCategories = createListMarketCategories(readers);
+/** GUNCEL demo verisinin (07.10) market okuyucusu: liste basi testi icin. */
+const listCurrentNearby = createListNearbyMarkets({ markets: createInMemoryReaders().markets });
+/** Tam sayiya yuvarlama tasima isidir (mapper); burada ham mesafe, yarim metreden yakin. */
+const HALF_METER = 0.5;
 
 describe('listNearbyMarkets', () => {
   it.each(['Ev', 'İş', 'Yazlık'] as const)(
     '%s: hizmet veren marketler, yakindan uzaga; mesafe yuvarlanmamis metre',
     async (title: DemoAddressTitle) => {
-      const nearby = await listNearbyMarkets(demoLocation(title));
-      const expected = EXPECTED_NEARBY[title];
-
-      expect(nearby.map((entry) => entry.market.id)).toEqual(
-        expected.map((entry) => entry.marketId),
+      expectNearbyList(
+        await listNearbyMarkets(demoLocation(title)),
+        EXPECTED_NEARBY[title],
+        HALF_METER,
       );
-      // Tam sayiya yuvarlama tasima isidir (mapper); burada ham mesafe,
-      // beklenen tam sayiya yarim metreden yakin.
-      nearby.forEach((entry, index) => {
-        expect(entry.distanceMeters).toBeCloseTo(expected[index]?.meters ?? Number.NaN, 0);
-      });
+    },
+  );
+
+  it.each(['Ev', 'İş', 'Yazlık'] as const)(
+    'GUNCEL demo verisi (07.10) %s: klasik liste aynen basta, yeni subeler sonda',
+    async (title: DemoAddressTitle) => {
+      expectNearbyList(
+        await listCurrentNearby(demoLocation(title)),
+        expectedNearbyCurrent(title),
+        HALF_METER,
+      );
     },
   );
 

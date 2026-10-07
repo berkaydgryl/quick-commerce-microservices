@@ -15,6 +15,7 @@ import {
   toProtoNearbyMarket,
   toProtoOffer,
 } from '../../src/interfaces/grpc/mappers.js';
+import { CLASSIC_SNAPSHOT } from '../support/classic-catalog.js';
 
 const MIGROS = 'mkt_migros-jet-moda';
 const PAGE_SIZE = 2;
@@ -22,7 +23,7 @@ const TOTAL_SIZE = 15;
 
 describe('toListProductsResponse', () => {
   it('teklifleri ve sayfa bilgisini tasir; deprecated products bos (ADR-15)', async () => {
-    const { offers } = createInMemoryReaders();
+    const { offers } = createInMemoryReaders(CLASSIC_SNAPSHOT);
     const page = await offers.listOffers({ marketId: MIGROS }, { size: PAGE_SIZE, token: '' });
 
     const response = toListProductsResponse(page);

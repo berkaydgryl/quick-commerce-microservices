@@ -4,9 +4,9 @@
  * Komut yalnizca ortam degiskenleriyle yonetilir; sonuc cikis kodundan, gunluk
  * satirlarindan ve veritabanindan okunur.
  *
- * Beklenen (T13.1; havuz T13.2): katalogdaki 21 marketin yakinina 3'er kurye = 63;
+ * Beklenen (T13.1; havuz T13.2): katalogdaki 33 marketin yakinina 3'er kurye = 99;
  * hepsi IDLE, hic atanmamis, bosta beklemesi seed aninda baslamis, markete bagli
- * degil; 21 marketin konumu kopyada. Tekrar kosmak sifirlar; production reddeder ve
+ * degil; 33 marketin konumu kopyada. Tekrar kosmak sifirlar; production reddeder ve
  * canli atamalara dokunmaz. Kuryenin adi gunluge yazilmaz.
  *
  * CI'da `pnpm build` entegrasyon testlerinden once kosar; yerelde once derleyin.
@@ -138,7 +138,7 @@ afterAll(async () => {
 });
 
 describe('QA kurye seed komutu (node dist/seed.js, gercek Mongo)', () => {
-  it('bos veritabanina 63 kurye (her marketin yakininda 3) ve 21 market konumu: hepsi IDLE, atanmamis, markete bagli degil; indeksler kurulu', async () => {
+  it('bos veritabanina 99 kurye (her marketin yakininda 3) ve 33 market konumu: hepsi IDLE, atanmamis, markete bagli degil; indeksler kurulu', async () => {
     const dbName = freshDb();
 
     const run = await runSeed(dbName, 'development');
