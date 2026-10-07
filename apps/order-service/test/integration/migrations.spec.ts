@@ -4,6 +4,9 @@
  * yazar: kuryesi olmayan PAID ve kuryesiz bekleyen PREPARING. Bitti tanimi:
  * up -> down -> up ayni veriyi verir ve iscinin bekleyen sorgusu gocten sonra
  * eski siparisleri odeme sirasiyla bulur.
+ *
+ * Calistirici yalnizca 0001'i bilir: `down` en son gocu geri alir, sonraki
+ * gocler (0002, migration-0002.spec.ts) bu dosyanin down'unu kendine cekmesin.
  */
 
 import { fixedClock, ORDER_STATUS, silentLogger } from '@getir/core';
@@ -23,7 +26,7 @@ import { toOrderDocument } from '../../src/infrastructure/mongo/mappers.js';
 import { OrderMongoStore } from '../../src/infrastructure/mongo/order-mongo-store.js';
 import { OrdersCollection } from '../../src/infrastructure/mongo/orders-collection.js';
 import { OutboxCollection } from '../../src/infrastructure/mongo/outbox-collection.js';
-import { MIGRATIONS } from '../../src/migrations/index.js';
+import { courierQueue } from '../../src/migrations/0001-kurye-sirasi.js';
 import { sampleDraftInput } from '../support/order-builders.js';
 
 const MONGO_IMAGE = 'mongo:7';
@@ -37,7 +40,7 @@ let connection: MongoConnection;
 
 const orders = () => connection.db.collection<Document>(COLLECTIONS.ORDERS);
 const runner = () =>
-  createMigrationRunner({ connection, migrations: MIGRATIONS, logger: silentLogger });
+  createMigrationRunner({ connection, migrations: [courierQueue], logger: silentLogger });
 
 const TO_PAID: readonly OrderStatus[] = [
   ORDER_STATUS.RISK_CHECK,
@@ -155,13 +158,11 @@ describe('goc 0001 kurye-sirasi', () => {
   });
 
   it('up tekrar calisirsa alani olan belgeye dokunmaz', async () => {
-    const migration = MIGRATIONS[0];
-    if (migration === undefined) throw new Error('goc yok');
     await orders().updateOne({ _id: paid.id } as Document, {
       $set: { courierQueuedAt: new Date(T0 + 9 * MINUTE) },
     });
 
-    await migration.up({ db: connection.db, session: undefined, logger: silentLogger });
+    await courierQueue.up({ db: connection.db, session: undefined, logger: silentLogger });
 
     expect((await queueTimes())[paid.id]).toEqual(new Date(T0 + 9 * MINUTE));
   });

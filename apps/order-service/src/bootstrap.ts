@@ -2,9 +2,9 @@
  * Bagimlilik kurulumu - elle (DI framework yok).
  */
 
-import { systemClock } from '@getir/core';
+import { EVENTS, systemClock } from '@getir/core';
 import type { Clock, Logger } from '@getir/core';
-import type { EventPublisher } from '@getir/event-bus';
+import type { EventPublisher, EventSubscriber } from '@getir/event-bus';
 import { orderV1 } from '@getir/proto';
 import type { GrpcServiceRegistration } from '@getir/service-kit';
 
@@ -17,6 +17,7 @@ import { createCreateOrder } from './application/create-order.js';
 import { createDispatchCouriers } from './application/dispatch-couriers.js';
 import { createGetOrder } from './application/get-order.js';
 import { createListMyOrders } from './application/list-my-orders.js';
+import { createRecordCourierMilestone } from './application/record-courier-milestone.js';
 import { createRelayOutbox } from './application/relay-outbox.js';
 import { createSweepExpiredReservations } from './application/sweep-expired-reservations.js';
 import type { Payments } from './application/payments.js';
@@ -25,12 +26,14 @@ import type { LockPolicy } from './application/lock-timing.js';
 import type { StockReservations } from './application/stock-reservations.js';
 import {
   COURIER_ASSIGNMENT_WRITE_ATTEMPTS,
+  COURIER_MILESTONE_WRITE_ATTEMPTS,
   COURIER_DISPATCH_BATCH_SIZE,
   COURIER_DISPATCH_INTERVAL_MS,
   COURIER_RETRY_DELAY_MS,
   DEFAULT_MEDIUM_RISK_RESERVATION_SECONDS,
   DEFAULT_RESERVATION_EXTEND_SECONDS,
   DEFAULT_RESERVATION_TTL_SECONDS,
+  EVENT_CONSUMER_GROUP,
   ORDER_SERVICE_FULL_NAME,
   ORPHAN_LOCK_MIN_AGE_SECONDS,
   DEFAULT_ORDER_SWEEPER_INTERVAL_MS,
@@ -48,6 +51,10 @@ import { createOrderImplementation } from './interfaces/grpc/order-handlers.js';
 import { recordOrphanLockReleased } from './interfaces/grpc/orphan-lock-metrics.js';
 import { startCourierDispatcher } from './interfaces/workers/courier-dispatcher.js';
 import type { CourierDispatcher } from './interfaces/workers/courier-dispatcher.js';
+import {
+  createCourierDeliveredHandler,
+  createCourierPickedUpHandler,
+} from './interfaces/workers/courier-milestones.js';
 import { startOutboxPublisher } from './interfaces/workers/outbox-publisher.js';
 import type { OutboxPublisherWorker } from './interfaces/workers/outbox-publisher.js';
 import { startReservationSweeper } from './interfaces/workers/reservation-sweeper.js';
@@ -235,4 +242,37 @@ export function startCourierDispatching(options: CourierDispatchingOptions): Cou
     intervalMs: options.intervalMs ?? COURIER_DISPATCH_INTERVAL_MS,
     logger: options.logger,
   });
+}
+
+export interface OrderEventOptions {
+  /** gRPC servisiyle AYNI depo: kurye olayi, GetOrder'in gordugu siparisi ilerletir. */
+  readonly repository: OrderRepository;
+  readonly clock?: Clock;
+}
+
+/**
+ * Olay dinleme kayitlari (T14.3): courier.picked_up ve courier.delivered ->
+ * RecordCourierMilestone use-case. Dinlemeyi baslatmak (start) ve durdurmak
+ * main.ts'in isidir; burada yalnizca hangi konunun hangi isleyiciye gidecegi
+ * baglanir.
+ */
+export function subscribeOrderEvents(
+  subscriber: EventSubscriber,
+  options: OrderEventOptions,
+): void {
+  const record = createRecordCourierMilestone({
+    repository: options.repository,
+    clock: options.clock ?? systemClock,
+    writeAttempts: COURIER_MILESTONE_WRITE_ATTEMPTS,
+  });
+  subscriber.subscribe(
+    EVENTS.COURIER_PICKED_UP,
+    EVENT_CONSUMER_GROUP,
+    createCourierPickedUpHandler({ record }),
+  );
+  subscriber.subscribe(
+    EVENTS.COURIER_DELIVERED,
+    EVENT_CONSUMER_GROUP,
+    createCourierDeliveredHandler({ record }),
+  );
 }

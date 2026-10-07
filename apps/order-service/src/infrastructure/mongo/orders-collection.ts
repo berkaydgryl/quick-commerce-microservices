@@ -16,9 +16,7 @@ import { COURIER_DISPATCH_STATUSES } from '../../domain/courier-dispatch.js';
 import type { OrderHistoryCursor } from '../../domain/order-history-cursor.js';
 import type { OrderDocument } from './documents.js';
 import { COLLECTIONS } from './documents.js';
-
-/** Gecmis sirasi: yeniden eskiye, esitlikte kimlik azalan (domain comesBefore ile ayni). */
-const HISTORY_SORT = { createdAt: -1, _id: -1 } as const;
+import { findHistoryCursor, HISTORY_INDEX } from './history-query.js';
 
 /** Supurucu sirasi (T11.2 PR 2): kilidi once dolan once, esitlikte kimlik. */
 const EXPIRY_SORT = { 'reservation.expiresAt': 1, _id: 1 } as const;
@@ -39,8 +37,10 @@ export class OrdersCollection extends MongoRepository<OrderDocument> {
   }
 
   protected override indexes(): readonly IndexDescription[] {
-    // ListMyOrders: esitlik (userId) + siralama (createdAt, _id) tek indeksten;
-    // bellekte siralama (SORT asamasi) olmaz.
+    // userId onekli okumalar (risk gecmisi, ILK10, persona seed'i): tam indeks.
+    // ListMyOrders (#101): ayni anahtarli KISMI indeks, yalnizca gecmiste
+    // gorunenler (history-query.ts); esitlik + siralama tek indeksten, bellekte
+    // siralama (SORT asamasi) olmaz.
     // Supurucu (T11.2 PR 2): durum ($in, iki deger) + kilidin bitisi araligi ve
     // ayni siraya gore okuma; durum basina indeks araliklari birlestirilir
     // (SORT_MERGE), bellekte siralama olmaz.
@@ -54,6 +54,7 @@ export class OrdersCollection extends MongoRepository<OrderDocument> {
     // siralama olmaz. Talep sorgusu (ustteki) degismedi.
     return [
       { key: { userId: 1, createdAt: -1, _id: -1 }, name: 'userId_createdAt_id' },
+      HISTORY_INDEX,
       {
         key: { status: 1, 'reservation.expiresAt': 1, _id: 1 },
         name: 'status_reservationExpiresAt_id',
@@ -93,18 +94,14 @@ export class OrdersCollection extends MongoRepository<OrderDocument> {
     return result.matchedCount > 0;
   }
 
-  /** Kullanicinin siparisleri, imlecten sonrakiler, en fazla `limit` belge. */
+  /** Kullanicinin gecmiste gorunen siparisleri (#101; sorgu history-query.ts). */
   async findHistory(
     userId: string,
     after: OrderHistoryCursor | undefined,
     limit: number,
   ): Promise<OrderDocument[]> {
     return this.run('findHistory', () =>
-      this.collection
-        .find({ userId, ...afterFilter(after) })
-        .sort(HISTORY_SORT)
-        .limit(limit)
-        .toArray(),
+      findHistoryCursor(this.collection, userId, after, limit).toArray(),
     );
   }
 
@@ -246,19 +243,6 @@ export class OrdersCollection extends MongoRepository<OrderDocument> {
       ),
     );
   }
-}
-
-/** Imlecten SONRAKI kayitlar (yeniden eskiye): daha eski, ya da ayni an ve daha kucuk kimlik. */
-function afterFilter(after: OrderHistoryCursor | undefined): Filter<OrderDocument> {
-  if (after === undefined) {
-    return {};
-  }
-  return {
-    $or: [
-      { createdAt: { $lt: after.createdAt } },
-      { createdAt: after.createdAt, _id: { $lt: after.orderId } },
-    ],
-  };
 }
 
 export interface CountByStatusOptions {

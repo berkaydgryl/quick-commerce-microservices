@@ -9,6 +9,7 @@
 
 import { describeAwaitingCourierFinderContract } from './awaiting-courier-finder-contract.js';
 import { describeExpiredOrderFinderContract } from './expired-order-finder-contract.js';
+import { describeOrderHistoryListingContract } from './order-history-listing-contract.js';
 import { describeOrderHistoryReaderContract } from './order-history-reader-contract.js';
 import { describeOrderRepositoryContract } from './order-repository-contract.js';
 import type { OrderStoreUnderTest } from './order-store-fixtures.js';
@@ -23,6 +24,7 @@ export function describeOrderStoreContract(
   const fixtures = createOrderStoreFixtures(name);
   describeOrderRepositoryContract(name, getStore, fixtures);
   describeOrderHistoryReaderContract(name, getStore, fixtures);
+  describeOrderHistoryListingContract(name, getStore, fixtures);
   describeExpiredOrderFinderContract(name, getStore, fixtures);
   describeAwaitingCourierFinderContract(name, getStore, fixtures);
 }

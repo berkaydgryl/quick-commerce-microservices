@@ -3,7 +3,8 @@ package content
 // Orders, Gecmis Siparislerim'in metinleri (T11.16; /hesabim/siparislerim):
 // liste satiri, durum gruplari (Tamamlandı, Devam ediyor, İptal edildi ve
 // "Ücret iade edildi"), "Teslim edilmedi" (#91), bos not, "Daha fazla göster"
-// ve detay etiketleri. Yalnizca metin; durum eslemesi web'dedir.
+// ve detay etiketleri; detayin en altindaki takip cizgisi (F21). Yalnizca metin;
+// durum eslemesi web'dedir.
 type Orders struct {
 	Title              string `json:"title"`
 	LoadingLabel       string `json:"loadingLabel"`
@@ -28,4 +29,11 @@ type Orders struct {
 	FreeDeliveryLabel  string `json:"freeDeliveryLabel"`
 	DiscountLabel      string `json:"discountLabel"`
 	TotalLabel         string `json:"totalLabel"`
+	// Takip cizgisi (F21): uc adim ve "Kuryem nerede" (pencere F22).
+	TrackTitle          string `json:"trackTitle"`
+	TrackPreparingLabel string `json:"trackPreparingLabel"`
+	TrackOnTheWayLabel  string `json:"trackOnTheWayLabel"`
+	TrackDeliveredLabel string `json:"trackDeliveredLabel"`
+	WhereIsCourierLabel string `json:"whereIsCourierLabel"`
+	WhereIsCourierHint  string `json:"whereIsCourierHint"`
 }

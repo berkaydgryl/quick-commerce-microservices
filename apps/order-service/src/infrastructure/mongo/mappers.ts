@@ -3,6 +3,7 @@
  */
 
 import type { OrderDetails } from '../../domain/order-details.js';
+import { isListedInHistory } from '../../domain/order-history-listing.js';
 import type { OrderItem, OrderPricing } from '../../domain/order-item.js';
 import { paymentChoiceOf } from '../../domain/order-payment.js';
 import type { OrderPayment } from '../../domain/order-payment.js';
@@ -113,6 +114,9 @@ export function toOrderDocument(order: Order): OrderDocument {
     deliveryAddress: order.deliveryAddress,
     status: order.status,
     timeline: order.timeline.map(toTimelineEntryDocument),
+    // Turetilmis (#101): siparis her yazimda butun belge olarak yazilir, alan
+    // durum ve zaman cizelgesiyle birlikte guncel kalir.
+    inHistory: isListedInHistory(order),
     ...(order.riskBand === undefined ? {} : { riskBand: order.riskBand }),
     ...(order.reservation === undefined
       ? {}
