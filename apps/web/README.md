@@ -568,16 +568,17 @@ yüze dönme. Hareket azaltma açıkken dönme yerine solma; eğim, ışık, par
 - **Liste:** beyaz kutuda satırlar: marka logosu, kart adı (yoksa marka adı), maskeli numara ("4242 \*\*\*\* \*\*\*\*
   4242"), süresi geçtiyse etiket, çöp kutusu. Son satır "+ Kredi/Banka Kartı"; kasa doluysa onun yerine sözleşmenin
   cümlesi; kartı olmayan hesapta yalnızca bu satır.
-- **Kart Ekle:** "< Ödeme Yöntemlerim'e geri dön", başlık; beyaz kutuda sırayla Güvenlik kutusu (kendi metnimiz), kart
-  adı, numara, kart üzerindeki isim, "Kartın Son Kullanma Tarihi:" Ay/Yıl seçimleri ve CVV, zorunlu "Kullanım
-  Koşulları'nı okudum, kabul ediyorum" (bağlantı içerikteki koşulları pencerede açar), tam genişlik "Devam", sağ altta
-  kabul edilen kartlar. Kart geniş ekranda (`--bp-xl`) kutunun sağında yapışkan, dar ekranda Güvenlik kutusunun altında.
+- **Kart Ekle (F14):** "< Ödeme Yöntemlerim'e geri dön", başlık; beyaz kutuda en üstte kart animasyonu (her genişlikte
+  aynı yerde; Güvenlik kutusu yok), sonra kart adı, numara, kart üzerindeki isim, son kullanma ve CVV, koşul onayı, Devam;
+  Devam'ın altında küçük güvenlik satırı (kendi metnimiz; ödeme penceresinde yok) ve kabul edilen kartlar. Kart
+  eklemede sağlayıcı reddi "Ödeme alınamadı" değil: "Kartın doğrulanamadı. Bankan bu kartı onaylamadı; başka bir kart
+  deneyebilirsin." (`addDeclinedMessage`; ödeme sayfasının cümlesi değişmez).
 
 | Parça      | Dosya                                                                                | Not                                                                                                              |
 | ---------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
 | Kart       | `features/cards/ui/CardVisual.tsx`                                                   | Büyük (Kart Ekle); iç ölçüler kartın genişliğine oranlı (`cqi`), ölçü ve renkler `payment-card/tokens.css`       |
 | Kart yüzü  | `features/cards/services/card-face.ts`                                               | Yalnızca ilk 4 ve son 4 hane, aradakiler "•"; liste numarası yıldızlı; kısa ad "Visa •••• 4242"                  |
-| Form       | `features/cards/ui/AddCardForm.tsx`, `hooks/useCardForm.ts`, `services/card-form.ts` | Parçalar: `SecurityNotice`, `CardNumberField`, `ExpirySelects`, `TermsField`, `FormAlert`, `AcceptedBrands`      |
+| Form       | `features/cards/ui/AddCardForm.tsx`, `hooks/useCardForm.ts`, `services/card-form.ts` | Parçalar: `CardNumberField`, `ExpirySelects`, `TermsField`, `FormAlert`, `AcceptedBrands`                        |
 | Kurallar   | `@getir/contracts` `card-rules.ts`                                                   | Cümleler, marka uzunlukları (`BRAND_LENGTHS`), yıl seçenekleri (`cardExpiryYears`, İstanbul takvimi)             |
 | Liste      | `pages/account/PaymentMethodsView.tsx`, `features/cards/ui/BrandLogo.tsx`            | Satırlar; çöp kutusunun adı karttan ("Visa •••• 4242 kartını sil")                                               |
 | Veri       | `features/cards/api`, `hooks/useSavedCards`, `useAddCard`, `useDeleteCard`           | `GET`/`POST`/`DELETE /v1/me/cards`; anahtarlar kullanıcıya bağlı                                                 |

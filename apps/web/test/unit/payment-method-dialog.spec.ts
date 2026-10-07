@@ -256,19 +256,19 @@ describe('AddCardForm variant (F5)', () => {
       }),
     );
 
-  it('checkout: Guvenlik kutusu YOK; kart gorseli ilk alandan once (en ustte)', () => {
+  it('checkout: guvenlik cumlesi YOK; kart gorseli ilk alandan once (en ustte)', () => {
     const html = form('checkout');
 
-    expect(html).not.toContain(`>${CARD_TEXTS.securityTitle}<`);
+    expect(html).not.toContain('c-add-card__security');
     expect(html.indexOf('c-payment-card__tilt')).toBeGreaterThan(-1);
     expect(html.indexOf('c-payment-card__tilt')).toBeLessThan(html.indexOf('id="kart-takma-ad"'));
     expect(html).toMatch(/<form class="[^"]*c-add-card_[^"]* [^"]*c-add-card--checkout/);
   });
 
-  it('page (varsayilan): Guvenlik kutusu ve sinif degismedi; checkout sinifi yok', () => {
+  it('page (varsayilan): Devam altinda guvenlik satiri; checkout sinifi yok (F14)', () => {
     const html = form('page');
 
-    expect(html).toContain(`>${CARD_TEXTS.securityTitle}<`);
+    expect(html).toContain('c-add-card__security');
     expect(html).not.toContain('c-add-card--checkout');
     expect(html).toMatch(/<form class="[^" ]*c-add-card_[^" ]*" novalidate/);
   });

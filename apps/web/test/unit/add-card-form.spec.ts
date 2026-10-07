@@ -1,8 +1,8 @@
 /**
- * Kart Ekle formu (T11.17; referans getircarsi "Kart Ekle"): sirayla
- * Guvenlik kutusu, kart gorseli, kart adi, numara, kart uzerindeki isim,
- * son kullanma (Ay/Yil secimleri) ve CVV, zorunlu kosul onayi, Devam ve
- * kabul edilen kartlar. Uyarinin geri sayimi canli bolgenin disinda (QA C2);
+ * Kart Ekle formu (T11.17; referans getircarsi "Kart Ekle"; F14): sirayla
+ * en ustte kart gorseli (Guvenlik kutusu yok), kart adi, numara, kart uzerindeki
+ * isim, son kullanma (Ay/Yil secimleri) ve CVV, zorunlu kosul onayi, Devam,
+ * sayfada Devam'in altinda kucuk guvenlik satiri ve kabul edilen kartlar. Uyarinin geri sayimi canli bolgenin disinda (QA C2);
  * kosullar penceresi icerikten. Metinler icerik yedeginden.
  */
 
@@ -22,10 +22,12 @@ const TEXTS = CONTENT_FALLBACK.paymentMethods;
 const noop = () => undefined;
 const escape = (text: string) => text.replace(/'/g, '&#x27;');
 
-const form = () =>
+/** Tur verilmezse AddCardPage'deki gibi varsayilan ("page"). */
+const form = (variant?: 'page' | 'checkout') =>
   renderToStaticMarkup(
     createElement(AddCardForm, {
       texts: TEXTS,
+      ...(variant === undefined ? {} : { variant }),
       onSave: () => Promise.resolve(VISA_CARD),
       onChanged: noop,
       onSaved: noop,
@@ -39,12 +41,11 @@ const inOrder = (html: string, needles: readonly string[]) =>
     .every((at, index, all) => at > (all[index - 1] ?? -1));
 
 describe('AddCardForm (T11.17, referans getircarsi)', () => {
-  it('referansin sirasi: Guvenlik, kart, alanlar, son kullanma, CVV, onay, Devam, markalar', () => {
+  it('sira: en ustte kart, alanlar, son kullanma, CVV, onay, Devam, guvenlik satiri, markalar', () => {
     const html = form();
 
     expect(
       inOrder(html, [
-        TEXTS.securityTitle,
         'c-payment-card__tilt',
         'id="kart-takma-ad"',
         'id="kart-numara"',
@@ -53,16 +54,34 @@ describe('AddCardForm (T11.17, referans getircarsi)', () => {
         'id="kart-cvv"',
         'type="checkbox"',
         `>${TEXTS.saveLabel}</button>`,
+        escape(TEXTS.securityText),
         `aria-label="${TEXTS.acceptedBrandsLabel}"`,
       ]),
     ).toBe(true);
   });
 
-  it('Guvenlik kutusu kendi metnimizle; Masterpass yok', () => {
-    const html = form();
+  it('F14: iki turde de kart formun ilk ogesi; Guvenlik kutusu (baslik, ikon) yok', () => {
+    for (const variant of [undefined, 'page', 'checkout'] as const) {
+      const html = form(variant);
+      const formOpen = html.indexOf('<form');
 
-    expect(html).toContain(escape(TEXTS.securityText));
-    expect(html.toLowerCase()).not.toContain('masterpass');
+      // Formun ILK ogesi kart sahnesi (araya hicbir oge girmez).
+      expect(html.slice(formOpen)).toMatch(/^<form[^>]*><div class="[^"]*c-add-card__stage/);
+      expect(html).not.toContain('c-security-notice');
+      expect(html).not.toContain('>Güvenlik<');
+    }
+  });
+
+  it("F14: guvenlik cumlesi sayfada (varsayilan) Devam'in altinda; Devam ona bagli; pencerede YOK", () => {
+    const page = form();
+    const securityId = /<p id="([^"]+)" class="[^"]*c-add-card__security/.exec(page)?.[1];
+
+    expect(securityId).toBeDefined();
+    expect(page).toContain(
+      `aria-describedby="${securityId}">${TEXTS.saveLabel}</button><p id="${securityId}"`,
+    );
+    expect(form('checkout')).not.toContain(escape(TEXTS.securityText));
+    expect(page.toLowerCase()).not.toContain('masterpass');
   });
 
   it('dort metin alani yuzen etiketle, kart otomatik doldurma adlariyla', () => {

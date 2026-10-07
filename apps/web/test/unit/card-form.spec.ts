@@ -6,6 +6,9 @@
  * hatasinin forma eslenmesi (ayni kart QA C4).
  */
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { CARD_FIELD_MESSAGES, CONTENT_FALLBACK, errorMessage } from '@getir/contracts';
 import { AppError, ERROR_CODES } from '@getir/core';
 import { describe, expect, it } from 'vitest';
@@ -27,6 +30,8 @@ const NOTICES = {
   termsRequiredNotice: TEXTS.termsRequiredNotice,
 };
 const DUPLICATE = TEXTS.duplicateCardNotice;
+const DECLINED = TEXTS.addDeclinedMessage;
+const FEEDBACK_NOTICES = { duplicate: DUPLICATE, declined: DECLINED };
 const NOW = new Date('2026-10-05T12:00:00.000Z');
 const VALID: CardFormValues = {
   nickname: '',
@@ -117,7 +122,7 @@ describe('card-form (T11.17)', () => {
       new AppError(ERROR_CODES.VALIDATION_FAILED, 'x', {
         details: { expiryYear: CARD_FIELD_MESSAGES.expiryYear, cards: CARD_FIELD_MESSAGES.cards },
       }),
-      DUPLICATE,
+      FEEDBACK_NOTICES,
     );
 
     expect(feedback.fields).toEqual({ expiryYear: CARD_FIELD_MESSAGES.expiryYear });
@@ -129,19 +134,41 @@ describe('card-form (T11.17)', () => {
       new AppError(ERROR_CODES.CONFLICT, 'x', {
         details: { cardId: 'crd_00000000000000000000000000000001' },
       }),
-      DUPLICATE,
+      FEEDBACK_NOTICES,
     );
 
     expect(feedback).toEqual({ fields: {}, message: DUPLICATE });
   });
 
-  it('cardId siz CONFLICT ve saglayici reddi sozlugun cumlesiyle ustte', () => {
-    expect(cardFormFeedback(new AppError(ERROR_CODES.CONFLICT, 'x'), DUPLICATE).message).toBe(
-      errorMessage(ERROR_CODES.CONFLICT),
-    );
+  it('cardId siz CONFLICT sozlugun cumlesiyle ustte', () => {
     expect(
-      cardFormFeedback(new AppError(ERROR_CODES.PAYMENT_DECLINED, 'x'), DUPLICATE).message,
-    ).toBe(errorMessage(ERROR_CODES.PAYMENT_DECLINED));
+      cardFormFeedback(new AppError(ERROR_CODES.CONFLICT, 'x'), FEEDBACK_NOTICES).message,
+    ).toBe(errorMessage(ERROR_CODES.CONFLICT));
+  });
+
+  it('F14: form kancasi reddi ve ayni karti dogru icerik anahtarlariyla esler', () => {
+    const hook = readFileSync(
+      fileURLToPath(new URL('../../src/features/cards/hooks/useCardForm.ts', import.meta.url)),
+      'utf8',
+    ).replace(/\s+/g, ' ');
+
+    expect(hook).toContain('duplicate: texts.duplicateCardNotice');
+    expect(hook).toContain('declined: texts.addDeclinedMessage');
+  });
+
+  it('F14: kart eklemede saglayici reddi "Ödeme alınamadı" DEGIL, kartin cumlesi', () => {
+    const message = cardFormFeedback(
+      new AppError(ERROR_CODES.PAYMENT_DECLINED, 'x'),
+      FEEDBACK_NOTICES,
+    ).message;
+
+    expect(message).toBe(DECLINED);
+    expect(message).not.toContain('Ödeme alınamadı');
+    expect(DECLINED).toBe(
+      'Kartın doğrulanamadı. Bankan bu kartı onaylamadı; başka bir kart deneyebilirsin.',
+    );
+    // Odeme sayfasinin cumlesi sozlukte degismedi.
+    expect(errorMessage(ERROR_CODES.PAYMENT_DECLINED)).toContain('Ödeme alınamadı');
   });
 
   it('cok fazla deneme (429): kalan saniye ayrintidan; baska hata ya da sure yoksa null', () => {

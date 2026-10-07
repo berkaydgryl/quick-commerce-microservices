@@ -24,8 +24,7 @@ type PaymentMethods struct {
 	// BackToListLabel, Kart ekle sayfasi (referans getircarsi "Kart Ekle").
 	BackToListLabel string `json:"backToListLabel"`
 	AddTitle        string `json:"addTitle"`
-	// SecurityTitle, Guvenlik kutusu: kendi metnimiz (Masterpass yok).
-	SecurityTitle    string `json:"securityTitle"`
+	// SecurityText, Guvenlik cumlesi (F14): sayfada Devam'in altinda kucuk satir.
 	SecurityText     string `json:"securityText"`
 	NicknameLabel    string `json:"nicknameLabel"`
 	NumberLabel      string `json:"numberLabel"`
@@ -49,6 +48,8 @@ type PaymentMethods struct {
 	RetryWaitLabel string `json:"retryWaitLabel"`
 	// DuplicateCardNotice, Ayni kart (CONFLICT, details.cardId; QA C4).
 	DuplicateCardNotice string `json:"duplicateCardNotice"`
+	// AddDeclinedMessage, Kart eklemede saglayici reddi (F14): "Ödeme alınamadı" denmez.
+	AddDeclinedMessage string `json:"addDeclinedMessage"`
 	// AddedToastPrefix, Basarida bildirimin basi: "Kart eklendi:" + " Visa •••• 4242".
 	AddedToastPrefix string `json:"addedToastPrefix"`
 	// AcceptedBrandsLabel, Formun altindaki marka logolarinin erisilebilir adi.

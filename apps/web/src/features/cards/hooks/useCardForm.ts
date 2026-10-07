@@ -80,7 +80,10 @@ export function useCardForm({ texts, save, changed, onSaved }: UseCardFormInput)
             setFormMessage(errorMessage(ERROR_CODES.RATE_LIMITED));
             return;
           }
-          const feedback = cardFormFeedback(error, texts.duplicateCardNotice);
+          const feedback = cardFormFeedback(error, {
+            duplicate: texts.duplicateCardNotice,
+            declined: texts.addDeclinedMessage,
+          });
           showServerErrors(CARD_FORM_FIELDS, feedback.fields, form.setError);
           setFormMessage(feedback.message);
         }
