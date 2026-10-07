@@ -39,6 +39,11 @@ export interface CartItem {
   readonly quantity: number;
   /** Eklendigi andaki adet siniri: stok ya da platform siniri (T16.3; panelin "+"si). */
   readonly maxQuantity: number;
+  /**
+   * Urunun kategorisi (T16.3): sepet sayfasinda satirin gorseli kategorininki
+   * (urun gorselleri yayinda degil, K2). T16.3 oncesi kalemde yok.
+   */
+  readonly categoryId?: Product['categoryId'] | undefined;
 }
 
 /** Sepetin ait oldugu market; onay metni icin adi da tutulur. */
@@ -76,6 +81,7 @@ function toItem(product: Product): CartItem {
     unitPriceMinor: product.price.amountMinor,
     quantity: 1,
     maxQuantity: quantityLimitOf(product).max,
+    categoryId: product.categoryId,
   };
 }
 
@@ -148,8 +154,9 @@ export function addItem(state: CartState, product: Product, market: CartMarket):
 
   const existing = state.items.find((item) => item.offerId === product.offerId);
   if (existing !== undefined) {
-    // Sinir her eklemede urunun guncel stokuyla tazelenir (panel bu siniri kullanir).
-    const refreshed = withMaxQuantity(state, product.offerId, quantityLimitOf(product).max);
+    // Sinir her eklemede urunun guncel stokuyla tazelenir (panel bu siniri kullanir);
+    // kategorisi olmayan eski kalem de kategorisini alir.
+    const refreshed = withProductFacts(state, product);
     return {
       state: withQuantity({ ...refreshed, market }, product.offerId, existing.quantity + 1),
       outcome: { status: 'added' },
@@ -211,10 +218,13 @@ export function lineTotalMinor(item: CartItem): number {
   return item.unitPriceMinor * item.quantity;
 }
 
-function withMaxQuantity(state: CartState, offerId: string, maxQuantity: number): CartState {
+function withProductFacts(state: CartState, product: Product): CartState {
+  const facts = { maxQuantity: quantityLimitOf(product).max, categoryId: product.categoryId };
   return {
     ...state,
-    items: state.items.map((item) => (item.offerId === offerId ? { ...item, maxQuantity } : item)),
+    items: state.items.map((item) =>
+      item.offerId === product.offerId ? { ...item, ...facts } : item,
+    ),
   };
 }
 

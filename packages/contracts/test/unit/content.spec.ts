@@ -163,6 +163,8 @@ const WELCOME: WelcomeContent = {
   orders: CONTENT_FALLBACK.orders,
   paymentMethods: CONTENT_FALLBACK.paymentMethods,
   marketPage: CONTENT_FALLBACK.marketPage,
+  cartPage: CONTENT_FALLBACK.cartPage,
+  footer: CONTENT_FALLBACK.footer,
 };
 
 const withMarketList = (marketList: Partial<WelcomeContent['marketList']>) => ({

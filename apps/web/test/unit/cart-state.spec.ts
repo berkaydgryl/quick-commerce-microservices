@@ -301,3 +301,23 @@ describe('panelin "+"si: kalemdeki adet siniri (T16.3)', () => {
     expect(canIncrement(sepet, EKMEK.offerId)).toBe(false);
   });
 });
+
+describe('satirin kategorisi: sepet sayfasinin gorseli (T16.3, L2)', () => {
+  it('kalem eklenirken urunun kategorisi kaleme yazilir', () => {
+    expect(addItem(EMPTY_CART, SUT, MIGROS).state.items[0]?.categoryId).toBe(SUT.categoryId);
+  });
+
+  it('kategorisi olmayan eski kalem urunden yeniden eklenince kategorisini alir', () => {
+    const eski = addMany(EMPTY_CART, SUT, 1);
+    const kategorisiz: CartState = {
+      ...eski,
+      items: eski.items.map(({ categoryId: _kategori, ...kalem }) => kalem),
+    };
+
+    const tazelenmis = addItem(kategorisiz, SUT, MIGROS).state;
+
+    expect(kategorisiz.items[0]?.categoryId).toBeUndefined();
+    expect(tazelenmis.items[0]?.categoryId).toBe(SUT.categoryId);
+    expect(quantityOf(tazelenmis, SUT.offerId)).toBe(2);
+  });
+});

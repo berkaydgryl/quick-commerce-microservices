@@ -3714,6 +3714,8 @@ components:
           orders,
           paymentMethods,
           marketPage,
+          cartPage,
+          footer,
         ]
       properties:
         header:
@@ -3769,6 +3771,10 @@ components:
           $ref: "#/components/schemas/PaymentMethodsContent"
         marketPage:
           $ref: "#/components/schemas/MarketPageContent"
+        cartPage:
+          $ref: "#/components/schemas/CartPageContent"
+        footer:
+          $ref: "#/components/schemas/FooterContent"
 
     FavoritesContent:
       type: object
@@ -4069,6 +4075,8 @@ components:
           addSuffix,
           soldOutLabel,
           unavailableLabel,
+          lowStockPrefix,
+          lowStockSuffix,
         ]
       properties:
         infoLabel:
@@ -4105,6 +4113,54 @@ components:
           description: 'Ürün kartının "+"sı, adın arkası: "Beyaz Peynir 500 g sepete ekle".'
         soldOutLabel: { $ref: "#/components/schemas/ContentText" }
         unavailableLabel: { $ref: "#/components/schemas/ContentText" }
+        lowStockPrefix:
+          $ref: "#/components/schemas/ContentText"
+          description: '"Son 3 adet" rozetinin sayıdan önceki kısmı (T16.3).'
+        lowStockSuffix: { $ref: "#/components/schemas/ContentText" }
+
+    CartPageContent:
+      type: object
+      description: |
+        Sepet sayfası (T16.3; `/sepet`; referans getirçarşı sepet sayfası): başlık ve "Sepeti temizle",
+        adres kartı, "Sepet Toplamı" kartı, "Ödemeye Geç", üst bardaki teslim süresi çipi ve boş sepetin
+        bağlantısı. Onay penceresi, adet kutusu ve minimum sepet metinleri `MarketListContent.cart` ile ortaktır.
+      required:
+        [
+          title,
+          clearLabel,
+          addressTitle,
+          addressLoadingLabel,
+          noAddressNotice,
+          totalsTitle,
+          subtotalLabel,
+          freeDeliveryRemainingLabel,
+          checkoutLabel,
+          deliveryTimeShortLabel,
+          deliveryTimeLabel,
+          browseMarketsLabel,
+        ]
+      properties:
+        title: { $ref: "#/components/schemas/ContentText" }
+        clearLabel: { $ref: "#/components/schemas/ContentText" }
+        addressTitle: { $ref: "#/components/schemas/ContentText" }
+        addressLoadingLabel: { $ref: "#/components/schemas/ContentText" }
+        noAddressNotice: { $ref: "#/components/schemas/ContentText" }
+        totalsTitle: { $ref: "#/components/schemas/ContentText" }
+        subtotalLabel: { $ref: "#/components/schemas/ContentText" }
+        freeDeliveryRemainingLabel: { $ref: "#/components/schemas/ContentText" }
+        checkoutLabel: { $ref: "#/components/schemas/ContentText" }
+        deliveryTimeShortLabel: { $ref: "#/components/schemas/ContentText" }
+        deliveryTimeLabel: { $ref: "#/components/schemas/ContentText" }
+        browseMarketsLabel: { $ref: "#/components/schemas/ContentText" }
+
+    FooterContent:
+      type: object
+      description: |
+        Sayfa alt bilgisi (T16.3; sepet ve ödeme sayfaları): telif satırı. Sosyal ikonlar ve bilgi
+        bağlantısı gerçek adresler verilene kadar yok.
+      required: [copyright]
+      properties:
+        copyright: { $ref: "#/components/schemas/ContentText" }
 
     PaymentMethodsContent:
       type: object

@@ -44,6 +44,9 @@ export const marketPageContentSchema = z.object({
   /** Stogu biten (T8.4) ve satista olmayan (T7.6) teklif. */
   soldOutLabel: contentTextSchema,
   unavailableLabel: contentTextSchema,
+  /** "Son 3 adet" rozeti (T16.3): urun kartinda ve sepet satirinda, sayinin iki yani. */
+  lowStockPrefix: contentTextSchema,
+  lowStockSuffix: contentTextSchema,
 });
 
 export type MarketPageContent = z.infer<typeof marketPageContentSchema>;

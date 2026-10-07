@@ -1,6 +1,7 @@
 import { useParams, useSearchParams } from 'react-router-dom';
 
 import { useAddToCart } from '../../features/cart/hooks/useAddToCart';
+import { cartPath } from '../../features/cart/routes';
 import { productCartTexts } from '../../features/cart/services/product-cart-texts';
 import { CartBar } from '../../features/cart/ui/CartBar';
 import { CartPanel } from '../../features/cart/ui/CartPanel';
@@ -116,12 +117,12 @@ export function MarketPage() {
           <CartPanel
             texts={listTexts.cart}
             marketHref={marketPath}
-            cartHref={marketPath}
+            cartHref={cartPath}
             titleVisible={false}
           />
         </aside>
       </div>
-      <CartBar texts={listTexts.cart} cartHref={marketPath} />
+      <CartBar texts={listTexts.cart} cartHref={cartPath} />
     </PageLayout>
   );
 }

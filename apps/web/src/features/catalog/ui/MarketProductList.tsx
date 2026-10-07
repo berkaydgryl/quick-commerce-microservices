@@ -8,7 +8,7 @@ import styles from './MarketProductList.module.css';
 /**
  * Urun satirlari (T5.4 kabugundan; T16.2'den beri yalnizca ana sayfa aramasi,
  * T9.6): ad ve BU MARKETIN fiyati (ADR-15). Magaza sayfasi kart izgarasini
- * kullanir (MarketProductGrid). Stok rozeti yok: "Son N adet" rozeti T16.3'te.
+ * kullanir (MarketProductGrid). "Son N adet" rozeti yalnizca magaza kartinda (T16.3).
  * Satista olmayan ve stogu biten teklif de listelenir; "Satista degil" (T7.6)
  * ve "Tukendi" (T8.4) durumlarini sepet eylemi cizer.
  */

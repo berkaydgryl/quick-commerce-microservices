@@ -83,6 +83,7 @@ export function MarketCatalogSection({
           <MarketProductGrid
             products={items}
             categories={categories.data}
+            texts={texts}
             {...(renderProductAction === undefined ? {} : { renderAction: renderProductAction })}
           />
         )}

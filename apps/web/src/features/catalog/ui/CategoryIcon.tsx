@@ -2,13 +2,17 @@ import { useState } from 'react';
 
 import styles from './CategoryIcon.module.css';
 
-/** Yer: karsilama izgarasi (varsayilan), magaza sayfasinin kategori listesi, urun karti (T16.2). */
-export type CategoryIconVariant = 'grid' | 'nav' | 'product';
+/**
+ * Yer: karsilama izgarasi (varsayilan), magaza sayfasinin kategori listesi ve
+ * urun karti (T16.2), sepet sayfasinin satiri (T16.3).
+ */
+export type CategoryIconVariant = 'grid' | 'nav' | 'product' | 'row';
 
 const VARIANT_CLASS = {
   grid: styles['c-category-icon'],
   nav: `${styles['c-category-icon']} ${styles['c-category-icon--nav']}`,
   product: `${styles['c-category-icon']} ${styles['c-category-icon--product']}`,
+  row: `${styles['c-category-icon']} ${styles['c-category-icon--row']}`,
 } as const;
 
 interface CategoryIconProps {

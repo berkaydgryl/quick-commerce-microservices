@@ -10,6 +10,8 @@ interface MarketProductGridProps {
   readonly categories: readonly Category[] | undefined;
   /** Kartin sag ustundeki eylem (sepet dugmesi); sayfa verir. */
   readonly renderAction?: (product: Product) => ReactNode;
+  /** "Son 3 adet" rozetinin metinleri (T16.3). */
+  readonly texts: { readonly lowStockPrefix: string; readonly lowStockSuffix: string };
 }
 
 /**
@@ -17,7 +19,12 @@ interface MarketProductGridProps {
  * (referans getircarsi). Satista olmayan ve stogu biten teklif de listelenir;
  * "Satışta değil" (T7.6) ve "Tükendi" (T8.4) durumlarini sepet eylemi cizer.
  */
-export function MarketProductGrid({ products, categories, renderAction }: MarketProductGridProps) {
+export function MarketProductGrid({
+  products,
+  categories,
+  renderAction,
+  texts,
+}: MarketProductGridProps) {
   const categoryOf = (id: string) => categories?.find((category) => category.id === id);
 
   return (
@@ -28,6 +35,7 @@ export function MarketProductGrid({ products, categories, renderAction }: Market
           product={product}
           category={categoryOf(product.categoryId)}
           action={renderAction?.(product)}
+          texts={texts}
         />
       ))}
     </ul>

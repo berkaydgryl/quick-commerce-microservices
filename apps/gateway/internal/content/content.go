@@ -64,6 +64,9 @@ type Welcome struct {
 	PaymentMethods PaymentMethods `json:"paymentMethods"`
 	// MarketPage, magaza sayfasi (T16.2).
 	MarketPage MarketPage `json:"marketPage"`
+	// CartPage ve Footer, sepet sayfasi ve alt bilgi (T16.3).
+	CartPage CartPage `json:"cartPage"`
+	Footer   Footer   `json:"footer"`
 }
 
 // Header, ust bar: logonun iki parcasi ve iki dugme.

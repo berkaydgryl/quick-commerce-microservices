@@ -1,0 +1,78 @@
+/*
+ * Sepet sayfasinin kutusu (T16.3; referans getircarsi): beyaz kartta ustte
+ * magaza, altta satirlar (gorsel, ad ve mor tutar, adet kutusu). Dar ekranda
+ * adet kutusu adin altina iner; ad kelime ortasindan kirilmaz.
+ */
+.c-cart-items__card {
+  display: grid;
+  padding: var(--space-2) var(--space-5);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-cart-items__store {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  padding-block: var(--space-4);
+  border-block-end: var(--border-width-thin) solid var(--border-subtle);
+}
+
+.c-cart-items__store-icon {
+  display: grid;
+  width: var(--size-cart-store-icon);
+  color: var(--color-brand-primary);
+}
+
+.c-cart-items__store-name {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-default);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.c-cart-items__store-name:hover {
+  color: var(--color-brand-primary);
+  text-decoration: underline;
+}
+
+.c-cart-items__items {
+  display: grid;
+}
+
+.c-cart-items__item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-4);
+  align-items: center;
+  padding-block: var(--space-4);
+}
+
+.c-cart-items__item + .c-cart-items__item {
+  border-block-start: var(--border-width-thin) solid var(--border-subtle);
+}
+
+.c-cart-items__visual {
+  display: grid;
+  flex: none;
+}
+
+.c-cart-items__item-text {
+  display: grid;
+  flex: 1 1 var(--size-cart-item-text);
+  gap: var(--space-1);
+  justify-items: start;
+  min-width: 0;
+}
+
+.c-cart-items__item-name {
+  font-weight: var(--font-weight-bold);
+  overflow-wrap: anywhere;
+}
+
+.c-cart-items__item-price {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-brand-primary);
+  white-space: nowrap;
+}

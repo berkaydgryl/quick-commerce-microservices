@@ -410,6 +410,25 @@
     "loadingMoreLabel": "Yükleniyor…",
     "addSuffix": "sepete ekle",
     "soldOutLabel": "Tükendi",
-    "unavailableLabel": "Satışta değil"
+    "unavailableLabel": "Satışta değil",
+    "lowStockPrefix": "Son",
+    "lowStockSuffix": "adet"
+  },
+  "cartPage": {
+    "title": "Sepetim",
+    "clearLabel": "Sepeti temizle",
+    "addressTitle": "Adres",
+    "addressLoadingLabel": "Adresin yükleniyor…",
+    "noAddressNotice": "Kayıtlı adresin yok; üstteki adres düğmesinden ekleyebilirsin.",
+    "totalsTitle": "Sepet Toplamı",
+    "subtotalLabel": "Sepet Tutarı",
+    "freeDeliveryRemainingLabel": "Ücretsiz teslimata kalan",
+    "checkoutLabel": "Ödemeye Geç",
+    "deliveryTimeShortLabel": "TVS",
+    "deliveryTimeLabel": "Tahmini varış süresi",
+    "browseMarketsLabel": "Marketlere göz at"
+  },
+  "footer": {
+    "copyright": "© 2026 getir"
   }
 }

@@ -142,6 +142,8 @@ const welcome = {
   orders: CONTENT_FALLBACK.orders,
   paymentMethods: CONTENT_FALLBACK.paymentMethods,
   marketPage: CONTENT_FALLBACK.marketPage,
+  cartPage: CONTENT_FALLBACK.cartPage,
+  footer: CONTENT_FALLBACK.footer,
 };
 
 function clientReturning(body: unknown) {

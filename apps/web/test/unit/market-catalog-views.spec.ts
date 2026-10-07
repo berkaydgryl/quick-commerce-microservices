@@ -61,6 +61,7 @@ function grid(products: readonly Product[], categories: readonly Category[] | un
       products,
       categories,
       renderAction: (product: Product) => `EYLEM:${product.sku}`,
+      texts: CONTENT_FALLBACK.marketPage,
     }),
   );
 }
@@ -124,6 +125,16 @@ describe('MarketProductGrid / ProductCard (T16.2)', () => {
 
     expect(markup).not.toContain('<img');
     expect(markup).toMatch(/>B<\/span>/);
+  });
+
+  it('"Son N adet" (T16.3): stok 1..5 ise sol ustte rozet; 6, 0 ve bilinmeyen stokta yok', () => {
+    const badge = (stock: number | undefined) =>
+      grid([{ ...PEYNIR, availableQuantity: stock }], [SUT]).replace(/<[^>]+>/g, '');
+
+    expect(badge(3)).toContain('Son 3 adet');
+    expect(badge(6)).not.toContain('Son ');
+    expect(badge(0)).not.toContain('Son ');
+    expect(grid([PEYNIR], [SUT])).not.toContain('c-low-stock');
   });
 
   it('aciklamasi olmayan urunde aciklama satiri yok', () => {
