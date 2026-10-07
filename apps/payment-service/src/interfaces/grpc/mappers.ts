@@ -35,7 +35,15 @@ export function toProtoPayment(payment: Payment): paymentV1.Payment {
   };
 }
 
-/** Sozlesme: challenge_id bos DEGILSE 3DS bekleniyor demektir. */
+/**
+ * Sozlesme: challenge_id bos DEGILSE 3DS bekleniyor demektir; bitis (T12.4)
+ * yalnizca onunla birlikte: kayittaki an (cekim + 3DS omru, payment saati),
+ * tekrar istekte ilk cekiminki.
+ */
 export function toProtoChargeResponse(payment: Payment): paymentV1.ChargeResponse {
-  return { payment: toProtoPayment(payment), challengeId: payment.challenge?.id ?? '' };
+  return {
+    payment: toProtoPayment(payment),
+    challengeId: payment.challenge?.id ?? '',
+    ...(payment.challenge === undefined ? {} : { challengeExpiresAt: payment.challenge.expiresAt }),
+  };
 }

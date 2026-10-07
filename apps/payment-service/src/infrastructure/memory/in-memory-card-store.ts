@@ -36,6 +36,12 @@ export class InMemoryCardStore implements CardRepository {
     );
   }
 
+  findActive(userId: string, cardId: string): Promise<Card | null> {
+    const card = this.cards.get(cardId);
+    const owned = card?.userId === userId && card.status === CARD_STATUS.ACTIVE;
+    return Promise.resolve(owned ? card : null);
+  }
+
   softDelete(userId: string, cardId: string, at: Date): Promise<boolean> {
     const card = this.cards.get(cardId);
     if (card === undefined || card.userId !== userId || card.status !== CARD_STATUS.ACTIVE) {

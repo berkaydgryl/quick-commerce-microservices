@@ -43,6 +43,7 @@ export function toPaymentDocument(payment: Payment): PaymentDocument {
     ...(payment.challenge === undefined ? {} : { threeDS: toThreeDsDocument(payment.challenge) }),
     ...(payment.refundReason === undefined ? {} : { refundReason: payment.refundReason }),
     ...(payment.cancelReason === undefined ? {} : { cancelReason: payment.cancelReason }),
+    ...(payment.cardId === undefined ? {} : { cardId: payment.cardId }),
     attempts: payment.attempts.map((attempt) => ({ ...attempt })),
     idempotencyKey: payment.idempotencyKey,
     version: payment.version,
@@ -63,6 +64,7 @@ export function fromPaymentDocument(document: PaymentDocument): Payment {
     ...(document.threeDS === undefined ? {} : { challenge: fromThreeDsDocument(document.threeDS) }),
     ...(document.refundReason === undefined ? {} : { refundReason: document.refundReason }),
     ...(document.cancelReason === undefined ? {} : { cancelReason: document.cancelReason }),
+    ...(document.cardId === undefined ? {} : { cardId: document.cardId }),
     attempts: document.attempts.map((attempt) => ({
       kind: attempt.kind,
       outcome: attempt.outcome,

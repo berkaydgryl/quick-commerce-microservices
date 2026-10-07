@@ -28,6 +28,15 @@ export function cardNotFound(cardId: string): AppError {
   return AppError.notFound('Kart bulunamadi', { details: { cardId } });
 }
 
+/**
+ * Odemenin kayitli karti kasada yok (T12.4): silinmis, baskasinin ya da hic
+ * olmamis; ucu ayni cevap. Ayrinti yalnizca kaynak: kart kimligi YANKILANMAZ
+ * (order ve gateway bunu siparis 404'unden ayirir).
+ */
+export function paymentCardNotFound(): AppError {
+  return AppError.notFound('Kart bulunamadi', { details: { resource: 'card' } });
+}
+
 export function cardExpiryRejected(problem: CardExpiryProblem): AppError {
   return AppError.validation('Gecersiz istek', {
     details: { [problem.field]: problem.message },

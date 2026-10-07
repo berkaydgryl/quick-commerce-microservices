@@ -51,6 +51,11 @@ export class CardMongoStore implements CardRepository {
     return (await this.cards.listActive(userId)).map(fromCardDocument);
   }
 
+  async findActive(userId: string, cardId: string): Promise<Card | null> {
+    const document = await this.cards.findActive(userId, cardId);
+    return document === null ? null : fromCardDocument(document);
+  }
+
   async softDelete(userId: string, cardId: string, at: Date): Promise<boolean> {
     return this.transactions.withTransaction(async (session) => {
       const deleted = await this.cards.softDelete(userId, cardId, at, { session });

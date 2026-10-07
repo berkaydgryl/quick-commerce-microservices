@@ -10,13 +10,27 @@
  *   4. Iyimser kilit gercek veritabaninda: es zamanli iki yanlis kod iki hak yakar.
  */
 
-import { ERROR_CODES, MOCK_THREEDS_CODE } from '@getir/core';
+import {
+  ERROR_CODES,
+  ID_PREFIX,
+  MOCK_THREEDS_CODE,
+  newId,
+  silentLogger,
+  systemClock,
+} from '@getir/core';
 import type { MongoConnection } from '@getir/mongo-kit';
 import { appErrorOf } from '@getir/service-kit/testing';
 import { MongoDBContainer } from '@testcontainers/mongodb';
 import type { StartedMongoDBContainer } from '@testcontainers/mongodb';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { createCharge } from '../../src/application/charge.js';
+import { THREEDS_CHALLENGE_TTL_MS } from '../../src/config/constants.js';
+import { CARD_STATUS } from '../../src/domain/card.js';
+import type { Card } from '../../src/domain/card.js';
+import { PAYMENT_METHOD } from '../../src/domain/payment.js';
+import { InMemoryCardStore } from '../../src/infrastructure/memory/in-memory-card-store.js';
+import { MockPaymentProvider } from '../../src/infrastructure/mock-provider/mock-payment-provider.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
 import type { PaymentDocument } from '../../src/infrastructure/mongo/documents.js';
 import type { PaymentMongoStore } from '../../src/infrastructure/mongo/payment-mongo-store.js';
@@ -148,5 +162,53 @@ describe("iyimser kilit gercek Mongo'da", () => {
     await service.stop();
 
     expect((await rawDocument('ord_race-1'))?.threeDS?.failedAttempts).toBe(2);
+  });
+});
+
+describe('kayitli kartla odeme (T12.4)', () => {
+  it("belgede yalnizca kartin kimligi; saglayici jetonu ve 'providerToken' YOK", async () => {
+    const cards = new InMemoryCardStore();
+    const card: Card = {
+      id: newId(ID_PREFIX.CARD),
+      userId: 'usr_kayitli-kart-mongo',
+      brand: 'VISA',
+      first4: '4242',
+      last4: '4242',
+      expiryMonth: 12,
+      expiryYear: 2031,
+      holderName: 'Ayşe Yılmaz',
+      providerToken: 'tok_test_4242',
+      status: CARD_STATUS.ACTIVE,
+      createdAt: new Date(),
+    };
+    await cards.add(card, 10);
+    const charge = createCharge({
+      repository: store,
+      cards,
+      provider: new MockPaymentProvider(),
+      clock: systemClock,
+      challengeTtlMs: THREEDS_CHALLENGE_TTL_MS,
+    });
+
+    await charge(
+      {
+        orderId: 'ord_kayitli-kart-mongo',
+        userId: card.userId,
+        amount: { amountMinor: 12_990, currency: 'TRY' },
+        method: PAYMENT_METHOD.CARD,
+        idempotencyKey: 'anahtar-kayitli-kart-mongo',
+        requireThreeDs: false,
+        card: { cardId: card.id },
+      },
+      silentLogger,
+    );
+
+    const document = await rawDocument('ord_kayitli-kart-mongo');
+    expect(document).toMatchObject({ status: 'SUCCEEDED', cardId: card.id });
+    const serialized = JSON.stringify(document);
+    expect(serialized).not.toContain('tok_');
+    expect(serialized).not.toContain('providerToken');
+    // Depodan okununca da kimlik doner (fromPaymentDocument).
+    expect((await store.findByOrderId('ord_kayitli-kart-mongo'))?.cardId).toBe(card.id);
   });
 });

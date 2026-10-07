@@ -43,6 +43,11 @@ export interface BootstrapOptions {
   readonly repository?: PaymentRepository;
   /** Verilmezse mock saglayici (test kartlari). */
   readonly provider?: PaymentProvider;
+  /**
+   * Kayitli kartla odeme (T12.4): kart kasasinin deposu; kart kasasi servisiyle
+   * AYNI depo verilmeli (main.ts). Verilmezse bellek (testler).
+   */
+  readonly cards?: CardRepository;
   /** Saat; testte sabitlenebilsin diye disaridan verilebilir. */
   readonly clock?: Clock;
 }
@@ -59,6 +64,7 @@ export function buildPaymentService(options: BootstrapOptions = {}): GrpcService
   // requestId bagli gunlukcusu gecer (ctx.logger).
   const charge = createCharge({
     repository,
+    cards: options.cards ?? new InMemoryCardStore(),
     provider,
     clock,
     challengeTtlMs: THREEDS_CHALLENGE_TTL_MS,

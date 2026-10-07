@@ -112,6 +112,11 @@ export interface Payment {
   /** Yalnizca CANCELLED durumunda dolu: iptali isteyen tarafin gerekce anahtari. */
   readonly cancelReason?: string;
   /**
+   * Kayitli kartla odemede kasadaki kartin kimligi (T12.4; iz icin). Saglayici
+   * jetonu kayda HICBIR ZAMAN yazilmaz.
+   */
+  readonly cardId?: string;
+  /**
    * Denetim gecmisi (T5.3): odemede olan her karar, eskiden yeniye. Durumu
    * degistirmeyen istekler (tekrar istek, bicimi bozuk kod, ulasilamayan
    * banka) kayit EKLEMEZ. Girilen 3DS kodu hicbir kayitta tutulmaz.
