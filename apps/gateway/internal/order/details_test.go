@@ -82,22 +82,22 @@ func TestDetailsCheckReportsEachRuleWithContractReason(t *testing.T) {
 	}
 }
 
-func TestCardChoiceFollowsContractOrder(t *testing.T) {
+func TestCardPaymentFollowsContractOrder(t *testing.T) {
 	text := func(value string) *string { return &value }
 	for _, tc := range []struct {
 		name   string
-		choice CardChoice
+		choice PaymentChoice
 		want   map[string]string
 	}{
-		{"kayitli kart", CardChoice{ID: text(testCardID)}, map[string]string{}},
-		{"eski jeton (kirpilir)", CardChoice{Token: text(" tok_test_4242 ")}, map[string]string{}},
-		{"ikisi", CardChoice{ID: text(testCardID), Token: text("tok_test_4242")}, map[string]string{fieldCardID: paymentCardReason}},
-		{"hicbiri", CardChoice{}, map[string]string{fieldCardID: paymentCardReason}},
+		{"kayitli kart", PaymentChoice{Method: MethodCard, CardID: text(testCardID)}, map[string]string{}},
+		{"eski jeton (kirpilir)", PaymentChoice{Method: MethodCard, CardToken: text(" tok_test_4242 ")}, map[string]string{}},
+		{"ikisi", PaymentChoice{Method: MethodCard, CardID: text(testCardID), CardToken: text("tok_test_4242")}, map[string]string{fieldCardID: paymentCardReason}},
+		{"hicbiri", PaymentChoice{Method: MethodCard}, map[string]string{fieldCardID: paymentCardReason}},
 		// Bicim once: gonderilen bos kimlik "yok" sayilmaz, bicimsizdir.
-		{"bos kimlik + jeton", CardChoice{ID: text(""), Token: text("tok_test_4242")}, map[string]string{fieldCardID: cardIDReason}},
-		{"kirpilmayan kimlik", CardChoice{ID: text(" " + testCardID)}, map[string]string{fieldCardID: cardIDReason}},
-		{"buyuk harfli hex", CardChoice{ID: text(strings.ToUpper(testCardID))}, map[string]string{fieldCardID: cardIDReason}},
-		{"bosluk jeton", CardChoice{Token: text("   ")}, map[string]string{fieldCardToken: cardTokenReason}},
+		{"bos kimlik + jeton", PaymentChoice{Method: MethodCard, CardID: text(""), CardToken: text("tok_test_4242")}, map[string]string{fieldCardID: cardIDReason}},
+		{"kirpilmayan kimlik", PaymentChoice{Method: MethodCard, CardID: text(" " + testCardID)}, map[string]string{fieldCardID: cardIDReason}},
+		{"buyuk harfli hex", PaymentChoice{Method: MethodCard, CardID: text(strings.ToUpper(testCardID))}, map[string]string{fieldCardID: cardIDReason}},
+		{"bosluk jeton", PaymentChoice{Method: MethodCard, CardToken: text("   ")}, map[string]string{fieldCardToken: cardTokenReason}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := tc.choice.Normalized().Problems(); testkit.JSON(t, got) != testkit.JSON(t, tc.want) {
@@ -118,7 +118,7 @@ func TestPlaceSendsSavedCardAndDetailsAndCountsDownThreeDS(t *testing.T) {
 	service := startStub(t, stub)
 	service.now = func() time.Time { return now }
 
-	placement, err := service.Place(context.Background(), PlaceInput{
+	placement, err := service.Place(context.Background(), PlaceInput{Method: MethodCard,
 		UserID: "usr_1", OrderID: orderID, CardID: testCardID, IdempotencyKey: "anahtar-0002",
 		Details: Details{Gift: validGift(), Note: "Zili çalma", DoNotRingBell: true, AgreementsAccepted: true},
 	})
@@ -154,7 +154,7 @@ func TestThreeDSTTLNeverNegativeWhenClocksDrift(t *testing.T) {
 	service := startStub(t, stub)
 	service.now = func() time.Time { return now }
 
-	placement, err := service.Place(context.Background(), PlaceInput{UserID: "usr_1", OrderID: orderID, CardID: testCardID, IdempotencyKey: "anahtar-0002"})
+	placement, err := service.Place(context.Background(), PlaceInput{Method: MethodCard, UserID: "usr_1", OrderID: orderID, CardID: testCardID, IdempotencyKey: "anahtar-0002"})
 	if err != nil {
 		t.Fatalf("hata beklenmiyordu: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestThreeDSWithoutExpiryOmitsTTL(t *testing.T) {
 	}}
 	service := startStub(t, stub)
 
-	placement, err := service.Place(context.Background(), PlaceInput{UserID: "usr_1", OrderID: orderID, CardID: testCardID, IdempotencyKey: "anahtar-0002"})
+	placement, err := service.Place(context.Background(), PlaceInput{Method: MethodCard, UserID: "usr_1", OrderID: orderID, CardID: testCardID, IdempotencyKey: "anahtar-0002"})
 	if err != nil {
 		t.Fatalf("hata beklenmiyordu: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestMissingSavedCardIsNotFoundWithCardResourceAndValidationNamesAreREST(t *
 		trailer: metadata.Pairs(apperror.MetadataKey, `{"code":"NOT_FOUND","message":"x","details":{"resource":"card"}}`),
 	}
 	service := startStub(t, stub)
-	input := PlaceInput{UserID: "usr_1", OrderID: orderID, CardID: testCardID, IdempotencyKey: "anahtar-0002"}
+	input := PlaceInput{Method: MethodCard, UserID: "usr_1", OrderID: orderID, CardID: testCardID, IdempotencyKey: "anahtar-0002"}
 
 	_, err := service.Place(context.Background(), input)
 

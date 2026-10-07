@@ -95,7 +95,7 @@ func TestPlaceSendsCardAndSignals(t *testing.T) {
 	service := startStub(t, stub)
 	createdAt := time.Date(2026, 8, 30, 9, 0, 0, 0, time.UTC)
 
-	placement, err := service.Place(context.Background(), PlaceInput{
+	placement, err := service.Place(context.Background(), PlaceInput{Method: MethodCard,
 		UserID: "usr_1", OrderID: orderID, CardToken: "tok_test_4242", IdempotencyKey: "anahtar-0002",
 		Signals: Signals{
 			IPAddress: "85.105.1.20", IPCity: "Istanbul", DeviceID: "dvc_1", AccountsOnDevice: 4,
@@ -131,7 +131,7 @@ func TestPlaceOmitsUnknownSignals(t *testing.T) {
 	}}
 	service := startStub(t, stub)
 
-	if _, err := service.Place(context.Background(), PlaceInput{
+	if _, err := service.Place(context.Background(), PlaceInput{Method: MethodCard,
 		UserID: "usr_1", OrderID: orderID, CardToken: "tok_test_4242", IdempotencyKey: "anahtar-0003",
 		Signals: Signals{IPAddress: "85.105.1.20"},
 	}); err != nil {
@@ -148,7 +148,7 @@ func TestPlaceWithoutChallengeOmitsThreeDs(t *testing.T) {
 	stub := &stubServer{placeResponse: &orderv1.CreateOrderResponse{OrderId: orderID, Status: orderv1.OrderStatus_ORDER_STATUS_PAID}}
 	service := startStub(t, stub)
 
-	placement, err := service.Place(context.Background(), PlaceInput{UserID: "usr_1", OrderID: orderID, CardToken: "tok_test_4242", IdempotencyKey: "anahtar-0002"})
+	placement, err := service.Place(context.Background(), PlaceInput{Method: MethodCard, UserID: "usr_1", OrderID: orderID, CardToken: "tok_test_4242", IdempotencyKey: "anahtar-0002"})
 	if err != nil {
 		t.Fatalf("hata beklenmiyordu: %v", err)
 	}

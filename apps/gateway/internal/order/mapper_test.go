@@ -69,7 +69,7 @@ func TestUnknownStatusIsInternal(t *testing.T) {
 	stub := &stubServer{placeResponse: &orderv1.CreateOrderResponse{OrderId: orderID}}
 	service := startStub(t, stub)
 
-	_, err := service.Place(context.Background(), PlaceInput{UserID: "usr_1", OrderID: orderID, CardToken: "tok", IdempotencyKey: "anahtar-0002"})
+	_, err := service.Place(context.Background(), PlaceInput{Method: MethodCard, UserID: "usr_1", OrderID: orderID, CardToken: "tok", IdempotencyKey: "anahtar-0002"})
 
 	if code := testkit.AppErrorOf(t, err).Code; code != apperror.CodeInternal {
 		t.Errorf("INTERNAL bekleniyordu, %s geldi", code)

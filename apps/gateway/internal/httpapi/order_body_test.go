@@ -10,7 +10,9 @@ func TestPlaceOrderPaymentFormat(t *testing.T) {
 		name, body, field, reason string
 	}{
 		{"odeme yok", `{"orderId":"` + testOrderID + `"}`, "payment", requiredReason},
-		{"kart disi yontem", `{"orderId":"` + testOrderID + `","payment":{"method":"CASH_ON_DELIVERY"}}`, "payment.method", "CARD olmali"},
+		{"bilinmeyen yontem", `{"orderId":"` + testOrderID + `","payment":{"method":"CHEQUE"}}`, "payment.method", "CARD ya da CASH_ON_DELIVERY olmali"},
+		// Kapida odeme (T12.4) acik; tur zorunlu.
+		{"kapida odemede tur yok", `{"orderId":"` + testOrderID + `","payment":{"method":"CASH_ON_DELIVERY"}}`, "payment.onDelivery", "Kapıda nasıl ödeyeceğini seç"},
 	}
 	for _, tc := range cases {
 		orders := &fakeOrders{}
