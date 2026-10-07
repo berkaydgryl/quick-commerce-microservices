@@ -1,19 +1,22 @@
-import type { CheckoutContent, ReserveCartRequest } from '@getir/contracts';
+import type { CheckoutContent, CreateOrderRequest, ReserveCartRequest } from '@getir/contracts';
 import { errorMessage } from '@getir/contracts';
 import { AppError, ERROR_CODES } from '@getir/core';
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 
 import { createIdempotencyKey } from '../../../shared/api/idempotency-key';
 import { authorizedClient } from '../../../shared/session/session';
 import { useToastStore } from '../../../shared/toast/toast-store';
 import { useCartStore } from '../../cart/stores/useCartStore';
+import { cardKeys } from '../../cards/api/query-keys';
 import { createAttemptKeys } from '../../cards/services/attempt-key';
 import { marketKeys } from '../../markets/api/query-keys';
 import { orderPath } from '../../orders/routes';
-import type { PlaceOrderDraft } from '../services/order-draft';
-import { releaseSafely, startOrder, submitCode } from '../services/place-order';
+import { canReuseHeldOrder } from '../services/held-order';
+import type { HeldOrder } from '../services/held-order';
+import { placeReserved, releaseSafely, startOrder, submitCode } from '../services/place-order';
 import type { OrderFlowDeps } from '../services/place-order';
 import { createReserveIntent } from '../services/reserve-intent';
 
@@ -23,7 +26,7 @@ export type OrderFlowState =
       readonly kind: 'challenge';
       readonly orderId: string;
       readonly challengeId: string;
-      readonly deadline: number;
+      readonly deadline: number | undefined;
       readonly verifying: boolean;
       /** Son yanlis kodun cumlesi ve kalan hak. */
       readonly failure?: { readonly message: string; readonly attemptsLeft: number } | undefined;
@@ -31,7 +34,11 @@ export type OrderFlowState =
 
 type FlowTexts = Pick<
   CheckoutContent,
-  'orderPlacedToast' | 'orderInReviewToast' | 'threeDsExpiredToast' | 'threeDsCancelledToast'
+  | 'orderPlacedToast'
+  | 'orderInReviewToast'
+  | 'threeDsExpiredToast'
+  | 'threeDsCancelledToast'
+  | 'cardMissingNotice'
 >;
 
 /** Kullaniciya gosterilecek cumle: gateway'in cumlesi (ERROR_MESSAGES) ya da genel hata. */
@@ -44,6 +51,12 @@ const userMessage = (error: unknown) =>
  * useMutation DEGIL: mutasyon onbellegi degiskenleri (kisisel veri, 3DS kodu)
  * saklardi. Istek surerken ikinci basis yok (busy). PRICE_CHANGED'de marketin
  * kurallari yeniden cekilir: toplam tazelenir.
+ *
+ * Kart 404'unde (secili kart artik yok) siparis TUTULUR (PM K2): bildirim,
+ * kart listesi yeniden okunur; sonraki "Sipariş Ver" sepet, adres ve tutar
+ * ayniysa ve sure dolmadiysa ayni siparisi yeni kartla verir, degilse tutulan
+ * rezervasyonu birakip bastan baslar. Sayfadan ayrilinca tutulan rezervasyon
+ * en iyi cabayla birakilir.
  */
 export function useOrderFlow(marketId: string | undefined, texts: FlowTexts) {
   const navigate = useNavigate();
@@ -58,9 +71,24 @@ export function useOrderFlow(marketId: string | undefined, texts: FlowTexts) {
     orderAttempts: createAttemptKeys(),
     newKey: createIdempotencyKey,
   }));
+  /** Kart 404'unden sonra tutulan siparis (yeniden cizim gerekmez: yalnizca sonraki basista okunur). */
+  const held = useRef<HeldOrder | undefined>(undefined);
+
+  useEffect(
+    () => () => {
+      const leftOver = held.current;
+      if (leftOver !== undefined) {
+        void releaseSafely(deps, leftOver.orderId);
+      }
+    },
+    [deps],
+  );
 
   const finish = (orderId: string, message: string) => {
-    setState({ kind: 'done' });
+    // 'done' sepet bosalmadan ISLENMELI: sepet deposu (useSyncExternalStore) senkron
+    // seritte cizilir; durum ondan once islenmezse ekran bos sepeti gorup /sepet'e
+    // donerdi (siparis detayindan sonra; canli testte bulundu).
+    flushSync(() => setState({ kind: 'done' }));
     navigate(orderPath(orderId), { replace: true });
     clear();
     show(message);
@@ -90,14 +118,37 @@ export function useOrderFlow(marketId: string | undefined, texts: FlowTexts) {
     show(message);
   };
 
+  /** Tutulan siparis gecerliyse onu yeni kartla verir; degilse birakir ve bastan baslar. */
+  const placeOrHeld = async (
+    request: ReserveCartRequest,
+    orderBody: (orderId: string) => CreateOrderRequest,
+  ) => {
+    const current = held.current;
+    held.current = undefined;
+    if (current !== undefined && canReuseHeldOrder(current, request, deps.now())) {
+      return placeReserved(deps, current, orderBody);
+    }
+    if (current !== undefined) {
+      await releaseSafely(deps, current.orderId);
+    }
+    return startOrder(deps, request, orderBody);
+  };
+
   const place = async (
     request: ReserveCartRequest,
-    draft: (orderId: string) => PlaceOrderDraft,
+    orderBody: (orderId: string) => CreateOrderRequest,
   ) => {
     if (state.kind !== 'idle') return;
     setState({ kind: 'busy' });
     try {
-      const outcome = await startOrder(deps, request, draft);
+      const outcome = await placeOrHeld(request, orderBody);
+      if (outcome.kind === 'card-missing') {
+        held.current = outcome.held;
+        setState({ kind: 'idle' });
+        show(texts.cardMissingNotice);
+        void queryClient.invalidateQueries({ queryKey: cardKeys.all });
+        return;
+      }
       if (outcome.kind === 'challenge') {
         setState({ ...outcome, verifying: false });
         return;

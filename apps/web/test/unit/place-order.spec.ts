@@ -3,10 +3,12 @@
  * (anahtarlar: rezervasyon niyet, siparis deneme), 3DS (her deneme yeni
  * anahtar; yanlis kodda kalan hak), RISK_REVIEW incelemede (N3), birakma
  * (N2 ve PM ek sart 1: yeni anahtar; 404 sessiz; 409 REQUEST_IN_PROGRESS'te
- * siparis okunur, PAID ise "paid").
+ * siparis okunur, PAID ise "paid"). Kesin siparis hatasinda rezervasyon
+ * birakilir; kart 404'unde (resource "card") siparis tutulur ve ayni siparis
+ * baska kartla verilir (PM K2); belirsiz sonucta hicbir sey birakilmaz.
  */
 
-import type { ReserveCartRequest } from '@getir/contracts';
+import type { CreateOrderRequest, ReserveCartRequest } from '@getir/contracts';
 import { AppError, ERROR_CODES } from '@getir/core';
 import type { ErrorCode } from '@getir/core';
 import { describe, expect, it } from 'vitest';
@@ -14,8 +16,8 @@ import type { z } from 'zod';
 
 import type { HttpClient } from '../../src/shared/api/http-client';
 import { createAttemptKeys } from '../../src/features/cards/services/attempt-key';
-import type { PlaceOrderDraft } from '../../src/features/checkout/services/order-draft';
 import {
+  placeReserved,
   releaseSafely,
   startOrder,
   submitCode,
@@ -31,9 +33,9 @@ const REQUEST: ReserveCartRequest = {
   address: { line: 'Moda Cad. No:12', location: { lat: 40.98, lng: 29.02 } },
   expectedTotal: { amountMinor: 5200, currency: 'TRY' },
 };
-const DRAFT = (orderId: string): PlaceOrderDraft => ({
+const BODY = (orderId: string, cardId = CARD_ID): CreateOrderRequest => ({
   orderId,
-  payment: { method: 'CARD', cardId: CARD_ID },
+  payment: { method: 'CARD', cardId },
   details: { note: '', doNotRingBell: false, agreementsAccepted: true },
 });
 
@@ -92,7 +94,7 @@ describe('startOrder (T12.4)', () => {
       { data: { orderId: ORDER_ID, status: 'PAID' } },
     ]);
 
-    await expect(startOrder(deps(client), REQUEST, DRAFT)).resolves.toEqual({
+    await expect(startOrder(deps(client), REQUEST, BODY)).resolves.toEqual({
       kind: 'paid',
       orderId: ORDER_ID,
     });
@@ -100,7 +102,7 @@ describe('startOrder (T12.4)', () => {
       ['POST', '/v1/cart/reserve', 'niyet-1'],
       ['POST', '/v1/orders', 'deneme-1'],
     ]);
-    expect(calls[1]?.body).toEqual(DRAFT(ORDER_ID));
+    expect(calls[1]?.body).toEqual(BODY(ORDER_ID));
   });
 
   it('3DS: pencerenin son ani rezervasyonun sunucu ttl suresi ve kodun suresinden kisa olan', async () => {
@@ -110,7 +112,7 @@ describe('startOrder (T12.4)', () => {
       { data: { orderId: ORDER_ID, status: 'AWAITING_PAYMENT', threeDs: { challengeId: 'ch_1' } } },
     ]);
 
-    await expect(startOrder(deps(client, clock), REQUEST, DRAFT)).resolves.toEqual({
+    await expect(startOrder(deps(client, clock), REQUEST, BODY)).resolves.toEqual({
       kind: 'challenge',
       orderId: ORDER_ID,
       challengeId: 'ch_1',
@@ -124,7 +126,7 @@ describe('startOrder (T12.4)', () => {
       { error: error(ERROR_CODES.RISK_REVIEW) },
     ]);
 
-    await expect(startOrder(deps(client), REQUEST, DRAFT)).resolves.toEqual({
+    await expect(startOrder(deps(client), REQUEST, BODY)).resolves.toEqual({
       kind: 'review',
       orderId: ORDER_ID,
     });
@@ -133,7 +135,7 @@ describe('startOrder (T12.4)', () => {
   it('rezervasyon hatasi (PRICE_CHANGED) siparis istegi atilmadan firlar', async () => {
     const { client, calls } = fakeClient([{ error: error(ERROR_CODES.PRICE_CHANGED) }]);
 
-    await expect(startOrder(deps(client), REQUEST, DRAFT)).rejects.toMatchObject({
+    await expect(startOrder(deps(client), REQUEST, BODY)).rejects.toMatchObject({
       code: ERROR_CODES.PRICE_CHANGED,
     });
     expect(calls).toHaveLength(1);
@@ -145,14 +147,15 @@ describe('startOrder (T12.4)', () => {
       { error: error(ERROR_CODES.SERVICE_UNAVAILABLE) },
       { data: RESERVATION },
       { error: error(ERROR_CODES.PAYMENT_DECLINED) },
+      { data: { orderId: ORDER_ID, released: true, releasedAt: '2026-10-07T05:00:00.000Z' } },
       { data: RESERVATION },
       { data: { orderId: ORDER_ID, status: 'PAID' } },
     ]);
     const flow = deps(client);
 
-    await expect(startOrder(flow, REQUEST, DRAFT)).rejects.toBeInstanceOf(AppError);
-    await expect(startOrder(flow, REQUEST, DRAFT)).rejects.toBeInstanceOf(AppError);
-    await startOrder(flow, REQUEST, DRAFT);
+    await expect(startOrder(flow, REQUEST, BODY)).rejects.toBeInstanceOf(AppError);
+    await expect(startOrder(flow, REQUEST, BODY)).rejects.toBeInstanceOf(AppError);
+    await startOrder(flow, REQUEST, BODY);
     const orderKeys = calls.filter((call) => call.path === '/v1/orders').map((call) => call.key);
 
     expect(orderKeys).toEqual(['deneme-1', 'deneme-1', 'deneme-2']);
@@ -277,27 +280,48 @@ describe('rezervasyonun niyeti (QA K9 F1): kesin sonucta yeni, belirsizde ayni a
     ]);
     const flow = deps(client);
 
-    await startOrder(flow, REQUEST, DRAFT);
+    await startOrder(flow, REQUEST, BODY);
     await releaseSafely(flow, ORDER_ID);
-    const second = await startOrder(flow, REQUEST, DRAFT);
+    const second = await startOrder(flow, REQUEST, BODY);
 
     expect(reserveKeys(calls)).toEqual(['niyet-1', 'niyet-2']);
     expect(second).toEqual({ kind: 'paid', orderId: ORDER_2 });
   });
 
-  it('(2) odeme reddi (402) sonrasi Sipariş Ver: YENI anahtar', async () => {
+  it('(2) odeme reddi (402): rezervasyon BIRAKILIR (stok kilidi birikmez), sonraki Sipariş Ver YENI anahtar', async () => {
     const { client, calls } = fakeClient([
       reserved(ORDER_ID),
       { error: error(ERROR_CODES.PAYMENT_DECLINED) },
+      released,
       reserved(ORDER_2),
       placed(ORDER_2),
     ]);
     const flow = deps(client);
 
-    await expect(startOrder(flow, REQUEST, DRAFT)).rejects.toBeInstanceOf(AppError);
-    await startOrder(flow, REQUEST, DRAFT);
+    await expect(startOrder(flow, REQUEST, BODY)).rejects.toMatchObject({
+      code: ERROR_CODES.PAYMENT_DECLINED,
+    });
+    expect(calls[2]).toMatchObject({
+      method: 'DELETE',
+      path: `/v1/cart/reserve/${ORDER_ID}`,
+      key: 'yeni-1',
+    });
+    await startOrder(flow, REQUEST, BODY);
 
     expect(reserveKeys(calls)).toEqual(['niyet-1', 'niyet-2']);
+  });
+
+  it('kart disinda NOT_FOUND (ornek siparis yok) kesin hatadir: birakilir', async () => {
+    const { client, calls } = fakeClient([
+      reserved(ORDER_ID),
+      { error: error(ERROR_CODES.NOT_FOUND, { orderId: ORDER_ID }) },
+      released,
+    ]);
+
+    await expect(startOrder(deps(client), REQUEST, BODY)).rejects.toMatchObject({
+      code: ERROR_CODES.NOT_FOUND,
+    });
+    expect(calls.map((call) => call.method)).toEqual(['POST', 'POST', 'DELETE']);
   });
 
   it('(3) belirsiz sonuc (503: siparis ya da rezervasyon) sonrasi Sipariş Ver: AYNI anahtar', async () => {
@@ -310,11 +334,12 @@ describe('rezervasyonun niyeti (QA K9 F1): kesin sonucta yeni, belirsizde ayni a
     ]);
     const flow = deps(client);
 
-    await expect(startOrder(flow, REQUEST, DRAFT)).rejects.toBeInstanceOf(AppError);
-    await expect(startOrder(flow, REQUEST, DRAFT)).rejects.toBeInstanceOf(AppError);
-    await startOrder(flow, REQUEST, DRAFT);
+    await expect(startOrder(flow, REQUEST, BODY)).rejects.toBeInstanceOf(AppError);
+    await expect(startOrder(flow, REQUEST, BODY)).rejects.toBeInstanceOf(AppError);
+    await startOrder(flow, REQUEST, BODY);
 
     expect(reserveKeys(calls)).toEqual(['niyet-1', 'niyet-1', 'niyet-1']);
+    expect(calls.some((call) => call.method === 'DELETE')).toBe(false);
   });
 
   it('basarili siparisten sonraki niyet YENI anahtar (onceki niyet bitti)', async () => {
@@ -326,8 +351,8 @@ describe('rezervasyonun niyeti (QA K9 F1): kesin sonucta yeni, belirsizde ayni a
     ]);
     const flow = deps(client);
 
-    await startOrder(flow, REQUEST, DRAFT);
-    await startOrder(flow, REQUEST, DRAFT);
+    await startOrder(flow, REQUEST, BODY);
+    await startOrder(flow, REQUEST, BODY);
 
     expect(reserveKeys(calls)).toEqual(['niyet-1', 'niyet-2']);
   });
@@ -343,5 +368,63 @@ describe('rezervasyonun niyeti (QA K9 F1): kesin sonucta yeni, belirsizde ayni a
       ['POST', '/v1/cart/reserve'],
       ['DELETE', `/v1/cart/reserve/${ORDER_ID}`],
     ]);
+  });
+});
+
+describe('kart 404: siparis tutulur, baska kartla verilir (PM K2)', () => {
+  const OTHER_CARD = `crd_${'d'.repeat(32)}`;
+  const cardMissing = { error: error(ERROR_CODES.NOT_FOUND, { resource: 'card' }) };
+
+  it('rezervasyon ve niyet KORUNUR (DELETE yok); ayni siparis yeni kartla, yeni deneme anahtariyla', async () => {
+    const { client, calls } = fakeClient([
+      { data: RESERVATION },
+      cardMissing,
+      { data: { orderId: ORDER_ID, status: 'PAID' } },
+    ]);
+    const flow = deps(client);
+
+    const first = await startOrder(flow, REQUEST, BODY);
+    expect(first).toEqual({
+      kind: 'card-missing',
+      held: {
+        orderId: ORDER_ID,
+        fingerprint: JSON.stringify(REQUEST),
+        reservationReceivedAt: 1_000,
+        reservationTtlSeconds: 600,
+      },
+    });
+    if (first.kind !== 'card-missing') return;
+    const second = await placeReserved(flow, first.held, (orderId) => BODY(orderId, OTHER_CARD));
+
+    expect(second).toEqual({ kind: 'paid', orderId: ORDER_ID });
+    expect(calls.map((call) => [call.method, call.path, call.key])).toEqual([
+      ['POST', '/v1/cart/reserve', 'niyet-1'],
+      ['POST', '/v1/orders', 'deneme-1'],
+      ['POST', '/v1/orders', 'deneme-2'],
+    ]);
+    expect(calls[2]?.body).toEqual(BODY(ORDER_ID, OTHER_CARD));
+  });
+
+  it('tutulan siparisle 3DS: son an rezervasyonun KALAN suresi ve kodun suresi', async () => {
+    const clock = { value: 1_000 };
+    const { client } = fakeClient([
+      { data: RESERVATION },
+      cardMissing,
+      {
+        data: {
+          orderId: ORDER_ID,
+          status: 'AWAITING_PAYMENT',
+          threeDs: { challengeId: 'ch_2', ttlSeconds: 60 },
+        },
+      },
+    ]);
+    const flow = deps(client, clock);
+
+    const first = await startOrder(flow, REQUEST, BODY);
+    if (first.kind !== 'card-missing') throw new Error('kart 404 beklenirdi');
+    clock.value = 1_000 + 580_000;
+    const second = await placeReserved(flow, first.held, BODY);
+
+    expect(second).toMatchObject({ kind: 'challenge', deadline: 1_000 + 600_000 });
   });
 });

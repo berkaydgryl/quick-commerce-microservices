@@ -1,10 +1,10 @@
+import { CHECKOUT_TEXT_MAX } from '@getir/contracts';
 import type { CheckoutContent } from '@getir/contracts';
 import { useId } from 'react';
 
 import { CheckboxField } from '../../../shared/ui/checkbox/CheckboxField';
 import { SectionCard } from '../../../shared/ui/section-card/SectionCard';
 import { TextAreaField } from '../../../shared/ui/text-area/TextAreaField';
-import { CHECKOUT_TEXT_MAX } from '../services/checkout-rules';
 
 import styles from './NoteSection.module.css';
 

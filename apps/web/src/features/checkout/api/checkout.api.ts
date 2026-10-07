@@ -4,6 +4,7 @@ import {
   reservationSchema,
 } from '@getir/contracts';
 import type {
+  CreateOrderRequest,
   OrderPlacement,
   Reservation,
   ReservationRelease,
@@ -12,7 +13,6 @@ import type {
 } from '@getir/contracts';
 
 import type { HttpClient } from '../../../shared/api/http-client';
-import type { PlaceOrderDraft } from '../services/order-draft';
 
 /** POST /v1/cart/reserve (T11.4): stok kilitlenir, siparisin kimligi doner. */
 export function reserveCart(
@@ -28,10 +28,10 @@ export function reserveCart(
   });
 }
 
-/** POST /v1/orders: TASLAK govde (cardId, details; B1/B2, order-draft.ts). */
+/** POST /v1/orders: kayitli kartla (cardId) ve siparis ayrintilariyla (details; B1/B2, order-request.ts). */
 export function placeOrder(
   client: HttpClient,
-  body: PlaceOrderDraft,
+  body: CreateOrderRequest,
   idempotencyKey: string,
 ): Promise<OrderPlacement> {
   return client.request('/v1/orders', {

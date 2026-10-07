@@ -1,3 +1,4 @@
+import { CHECKOUT_TEXT_MAX, GIFT_NAME_MAX } from '@getir/contracts';
 import type { CheckoutContent } from '@getir/contracts';
 import { useId, useState } from 'react';
 
@@ -7,7 +8,6 @@ import { TextAreaField } from '../../../shared/ui/text-area/TextAreaField';
 import { PHONE_COUNTRY_PREFIX } from '../../auth/services/phone';
 import { AuthField } from '../../auth/ui/AuthField';
 import { PhoneField } from '../../auth/ui/PhoneField';
-import { CHECKOUT_TEXT_MAX, GIFT_NAME_MAX } from '../services/checkout-rules';
 import type { GiftFieldErrors, GiftForm } from '../services/checkout-rules';
 
 import styles from './GiftSection.module.css';

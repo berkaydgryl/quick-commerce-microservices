@@ -1,8 +1,9 @@
 /**
- * Siparis akisinin saf parcalari (T12.4): taslak govde (B1/B2; yalniz cardId,
- * hediye kapaliyken gift YOK - QA N3), "Sipariş Ver"in ilk eksik kosulu (N1),
- * rezervasyon istegi (adresin yalniz satiri ve konumu) ve 3DS geri sayimi
- * (sunucunun ttl'i, son 30 saniye uyari - T17.1).
+ * Siparis akisinin saf parcalari (T12.4): siparis govdesi (sozlesmenin
+ * createOrderRequestSchema'si; yalniz cardId, hediye kapaliyken gift YOK - QA
+ * N3), "Sipariş Ver"in ilk eksik kosulu (N1), rezervasyon istegi (adresin yalniz
+ * satiri ve konumu), 3DS geri sayimi (rezervasyonun ve kodun SUNUCU sureleri,
+ * son 30 saniye uyari - T17.1; PM K1) ve tutulan siparisin gecerliligi (K2).
  */
 
 import type { SavedAddress } from '@getir/contracts';
@@ -16,9 +17,12 @@ import {
   formatCountdown,
   isCountdownWarning,
   remainingSeconds,
-  THREEDS_CHALLENGE_SECONDS,
 } from '../../src/features/checkout/services/countdown';
-import { buildPlaceOrderDraft } from '../../src/features/checkout/services/order-draft';
+import {
+  canReuseHeldOrder,
+  heldFingerprint,
+} from '../../src/features/checkout/services/held-order';
+import { buildOrderRequest } from '../../src/features/checkout/services/order-request';
 import { orderBlocker } from '../../src/features/checkout/services/order-readiness';
 import type { ReadinessInput } from '../../src/features/checkout/services/order-readiness';
 import { buildReserveRequest } from '../../src/features/checkout/services/reserve-request';
@@ -39,9 +43,9 @@ const GIFT_FORM: CheckoutForm = {
   },
 };
 
-describe('buildPlaceOrderDraft (T12.4, B1/B2 taslagi)', () => {
+describe('buildOrderRequest (T12.4, B1/B2; sozlesmenin semasi)', () => {
   it('hediye KAPALI: govdede gift alani YOK (QA N3); odeme yalnizca cardId', () => {
-    const draft = buildPlaceOrderDraft(ORDER_ID, CARD_ID, {
+    const draft = buildOrderRequest(ORDER_ID, CARD_ID, {
       ...READY_FORM,
       gift: { ...GIFT_FORM.gift, enabled: false },
     });
@@ -55,7 +59,7 @@ describe('buildPlaceOrderDraft (T12.4, B1/B2 taslagi)', () => {
   });
 
   it('hediye ACIK: alanlar kirpilir, telefon E.164; not ve "Zili Çalma" gider', () => {
-    expect(buildPlaceOrderDraft(ORDER_ID, CARD_ID, GIFT_FORM).details).toEqual({
+    expect(buildOrderRequest(ORDER_ID, CARD_ID, GIFT_FORM).details).toEqual({
       gift: {
         enabled: true,
         message: 'İyi ki doğdun!',
@@ -70,7 +74,7 @@ describe('buildPlaceOrderDraft (T12.4, B1/B2 taslagi)', () => {
   });
 
   it('M7: govdede kart numarasi ya da CVV yok; yalnizca kasanin kimligi', () => {
-    const json = JSON.stringify(buildPlaceOrderDraft(ORDER_ID, CARD_ID, GIFT_FORM));
+    const json = JSON.stringify(buildOrderRequest(ORDER_ID, CARD_ID, GIFT_FORM));
 
     // Alan adlari ve kart numarasi boyunda (15-16 hane) rakam dizisi yok; telefon 12 hane.
     expect(json).not.toMatch(/"(?:cvv|cardNumber|pan|number)"/i);
@@ -79,16 +83,16 @@ describe('buildPlaceOrderDraft (T12.4, B1/B2 taslagi)', () => {
   });
 
   it('sozlesme onaysiz ya da gecersiz kart kimligiyle govde KURULMAZ', () => {
-    expect(() => buildPlaceOrderDraft(ORDER_ID, CARD_ID, EMPTY_CHECKOUT_FORM)).toThrow();
-    expect(() => buildPlaceOrderDraft(ORDER_ID, '4242424242424242', READY_FORM)).toThrow();
+    expect(() => buildOrderRequest(ORDER_ID, CARD_ID, EMPTY_CHECKOUT_FORM)).toThrow();
+    expect(() => buildOrderRequest(ORDER_ID, '4242424242424242', READY_FORM)).toThrow();
   });
 
   it('not sinirini (UTF-16 birimi, QA N2) asan govde kurulmaz', () => {
     expect(() =>
-      buildPlaceOrderDraft(ORDER_ID, CARD_ID, { ...READY_FORM, note: '😀'.repeat(126) }),
+      buildOrderRequest(ORDER_ID, CARD_ID, { ...READY_FORM, note: '😀'.repeat(126) }),
     ).toThrow();
     expect(() =>
-      buildPlaceOrderDraft(ORDER_ID, CARD_ID, { ...READY_FORM, note: '😀'.repeat(125) }),
+      buildOrderRequest(ORDER_ID, CARD_ID, { ...READY_FORM, note: '😀'.repeat(125) }),
     ).not.toThrow();
   });
 });
@@ -153,28 +157,53 @@ describe('buildReserveRequest (T12.4)', () => {
 });
 
 describe('3DS geri sayimi (T12.4, T17.1)', () => {
-  it('son an: kodun suresi ile rezervasyonun SUNUCU ttl suresinden kisa olani', () => {
+  it('son an: kodun ve rezervasyonun SUNUCU surelerinden kisa olani', () => {
     expect(
       challengeDeadline({
         reservationReceivedAt: 0,
         reservationTtlSeconds: 600,
         challengeReceivedAt: 2000,
+        challengeTtlSeconds: 60,
       }),
-    ).toBe(2000 + THREEDS_CHALLENGE_SECONDS * 1000);
+    ).toBe(62_000);
     expect(
       challengeDeadline({
         reservationReceivedAt: 0,
         reservationTtlSeconds: 45,
         challengeReceivedAt: 2000,
+        challengeTtlSeconds: 60,
       }),
     ).toBe(45_000);
+  });
+
+  it('K1: kodun suresi gelmezse YALNIZ rezervasyon suresi (60 sn tahmini yok)', () => {
+    expect(
+      challengeDeadline({
+        reservationReceivedAt: 0,
+        reservationTtlSeconds: 600,
+        challengeReceivedAt: 2000,
+        challengeTtlSeconds: undefined,
+      }),
+    ).toBe(600_000);
+  });
+
+  it('rezervasyon suresi gelmezse kodun suresi; ikisi de yoksa son an yok (sayac gosterilmez)', () => {
     expect(
       challengeDeadline({
         reservationReceivedAt: 0,
         reservationTtlSeconds: undefined,
-        challengeReceivedAt: 0,
+        challengeReceivedAt: 1000,
+        challengeTtlSeconds: 90,
       }),
-    ).toBe(60_000);
+    ).toBe(91_000);
+    expect(
+      challengeDeadline({
+        reservationReceivedAt: 0,
+        reservationTtlSeconds: undefined,
+        challengeReceivedAt: 1000,
+        challengeTtlSeconds: undefined,
+      }),
+    ).toBeUndefined();
   });
 
   it('kalan saniye yukari yuvarlanir, sifirin alti yok', () => {
@@ -190,5 +219,49 @@ describe('3DS geri sayimi (T12.4, T17.1)', () => {
 
   it('bicim "1:00", "0:29", "0:05"', () => {
     expect([60, 29, 5].map(formatCountdown)).toEqual(['1:00', '0:29', '0:05']);
+  });
+});
+
+describe('tutulan siparis (kart 404; PM K2)', () => {
+  const item: CartItem = {
+    productId: 'prd_sut-1l',
+    offerId: 'ofr_a101-sut-1l',
+    sku: 'SUT-1L',
+    name: 'Süt 1 L',
+    unitPriceMinor: 3210,
+    quantity: 1,
+    maxQuantity: 5,
+  };
+  const address: SavedAddress = {
+    id: 'adr_ev',
+    title: 'Ev',
+    line: 'Moda Cad. No:12',
+    location: { lat: 40.98, lng: 29.02 },
+  };
+  const request = buildReserveRequest('mkt_a101', [item], address, {
+    amountMinor: 3210,
+    currency: 'TRY',
+  });
+  const held = {
+    orderId: ORDER_ID,
+    fingerprint: heldFingerprint(request),
+    reservationReceivedAt: 1000,
+    reservationTtlSeconds: 600,
+  };
+
+  it('ayni sepet, adres ve tutar; sure dolmamis: yeniden verilebilir', () => {
+    expect(canReuseHeldOrder(held, request, 1000 + 599_000)).toBe(true);
+  });
+
+  it('sure dolduysa ya da istek degistiyse: yeniden verilemez (birakilip bastan)', () => {
+    expect(canReuseHeldOrder(held, request, 1000 + 600_000)).toBe(false);
+    const changed = { ...request, expectedTotal: { amountMinor: 9000, currency: 'TRY' as const } };
+    expect(canReuseHeldOrder(held, changed, 2000)).toBe(false);
+  });
+
+  it('sunucu sure bildirmediyse sure kurali yok (siparis ucu karar verir)', () => {
+    expect(
+      canReuseHeldOrder({ ...held, reservationTtlSeconds: undefined }, request, 10_000_000),
+    ).toBe(true);
   });
 });

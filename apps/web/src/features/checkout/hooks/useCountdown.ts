@@ -9,13 +9,23 @@ const monotonicNow = () => performance.now();
 const TICK_MS = 500;
 
 /**
- * Son ana kalan saniye (T12.4): hesap saf fonksiyonda (countdown.ts), bu hook
+ * Son ana kalan saniye (T12.4); son an yoksa (sunucu sure bildirmedi) undefined
+ * ve zamanlayici kurulmaz. Hesap saf fonksiyonda (countdown.ts), bu hook
  * yalnizca saati okur ve yeniden cizer. Saat disaridan verilebilir (test).
  * Zamanlayici her son an degisiminde ve cikista temizlenir.
  */
-export function useCountdown(deadline: number, now: () => number = monotonicNow): number {
-  const [seconds, setSeconds] = useState(() => remainingSeconds(deadline, now()));
+export function useCountdown(
+  deadline: number | undefined,
+  now: () => number = monotonicNow,
+): number | undefined {
+  const [seconds, setSeconds] = useState(() =>
+    deadline === undefined ? undefined : remainingSeconds(deadline, now()),
+  );
   useEffect(() => {
+    if (deadline === undefined) {
+      setSeconds(undefined);
+      return undefined;
+    }
     const tick = () => setSeconds(remainingSeconds(deadline, now()));
     tick();
     const timer = setInterval(tick, TICK_MS);

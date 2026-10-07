@@ -1,17 +1,16 @@
 /**
- * Odeme formunun kurallari (T17.1; B2 taslagi): hediye acikken alici adi ve
+ * Odeme formunun kurallari (T17.1; B2, sozlesmenin giftDetailsSchema'si): hediye acikken alici adi ve
  * Turkiye cep telefonu zorunlu, kapaliyken hata yok; secili kart suresi
  * gecmemis en yeni kart (M4). Arayuzden bagimsiz.
  */
 
-import { PHONE_MESSAGE } from '@getir/contracts';
+import { PHONE_MESSAGE, RECIPIENT_NAME_MESSAGE } from '@getir/contracts';
 import type { SavedCard } from '@getir/contracts';
 import { describe, expect, it } from 'vitest';
 
 import {
   EMPTY_CHECKOUT_FORM,
   giftFieldErrors,
-  RECIPIENT_NAME_MESSAGE,
 } from '../../src/features/checkout/services/checkout-rules';
 import { defaultCard } from '../../src/features/checkout/services/selected-card';
 
