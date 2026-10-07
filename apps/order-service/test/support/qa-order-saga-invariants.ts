@@ -57,7 +57,7 @@ export async function ordersOf(
 }
 
 /** inventory'de kilidi acik (rezervasyon indeksindeki) siparisler. */
-async function openLocks(world: InventoryWorld): Promise<Set<string>> {
+export async function openLocks(world: InventoryWorld): Promise<Set<string>> {
   return new Set(await world.stores.redis.redis.zrange(reservationIndexKey(MARKET), '0', '-1'));
 }
 
