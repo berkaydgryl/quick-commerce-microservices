@@ -5,10 +5,13 @@
 
 import { courierV1 } from '@getir/proto';
 
+import type { OrderTracking } from '../../application/get-tracking.js';
 import type { CourierRelease } from '../../application/release-courier.js';
 import type { StartedRoute } from '../../application/start-route.js';
 import { COURIER_STATUS } from '../../domain/courier.js';
-import type { Courier, CourierStatus } from '../../domain/courier.js';
+import type { Courier, CourierStatus, GeoPoint } from '../../domain/courier.js';
+import { TRACKING_PHASE } from '../../domain/route-progress.js';
+import type { TrackingPhase } from '../../domain/route-progress.js';
 
 const STATUS_TO_PROTO: Readonly<Record<CourierStatus, courierV1.CourierStatus>> = {
   [COURIER_STATUS.IDLE]: courierV1.CourierStatus.COURIER_STATUS_IDLE,
@@ -44,5 +47,33 @@ export function toProtoStartedRoute(started: StartedRoute): courierV1.StartRoute
     },
     startedAt: started.startedAt,
     alreadyStarted: started.alreadyStarted,
+  };
+}
+
+const PHASE_TO_PROTO: Readonly<Record<TrackingPhase, courierV1.TrackingPhase>> = {
+  [TRACKING_PHASE.TO_MARKET]: courierV1.TrackingPhase.TRACKING_PHASE_TO_MARKET,
+  [TRACKING_PHASE.TO_CUSTOMER]: courierV1.TrackingPhase.TRACKING_PHASE_TO_CUSTOMER,
+  [TRACKING_PHASE.DELIVERED]: courierV1.TrackingPhase.TRACKING_PHASE_DELIVERED,
+};
+
+function toProtoPoint(point: GeoPoint): { lat: number; lng: number } {
+  return { lat: point.lat, lng: point.lng };
+}
+
+/** Takip cevabi: paket alinmadan konum alani BOS (gizlilik, tracking-view.ts). */
+export function toProtoTracking(tracking: OrderTracking): courierV1.GetTrackingResponse {
+  return {
+    courierId: tracking.courierId,
+    courierName: tracking.courierName,
+    phase: PHASE_TO_PROTO[tracking.phase],
+    location: tracking.location === undefined ? undefined : toProtoPoint(tracking.location),
+    at: tracking.at,
+    remainingMeters: tracking.remainingMeters,
+    etaSeconds: tracking.etaSeconds,
+    route: tracking.route.map(toProtoPoint),
+    marketLocation: toProtoPoint(tracking.marketLocation),
+    deliveryLocation: toProtoPoint(tracking.deliveryLocation),
+    pickedUpAt: tracking.pickedUpAt,
+    deliveredAt: tracking.deliveredAt,
   };
 }

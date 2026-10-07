@@ -36,11 +36,33 @@ export interface CourierRepository {
 
   /**
    * Siparisi tasiyan kuryeyi IDLE'a dondurur, siparis bagini siler ve bosta
-   * beklemeye `at`'te baslatir (idleSince). lastAssignedAt ve konum KALIR:
-   * kurye oldugu yerde bekler.
-   * @returns Birakilan kurye; siparisi tasiyan kurye yoksa null.
+   * beklemeye `at`'te baslatir (idleSince). lastAssignedAt KALIR.
+   * @returns Birakilan kurye; siparisi tasiyan (verildiyse BU) kurye yoksa null.
    */
-  releaseByOrder(orderId: string, at: Date): Promise<Courier | null>;
+  releaseByOrder(orderId: string, at: Date, options?: ReleaseOptions): Promise<Courier | null>;
+}
+
+/**
+ * Kuryeleri kimlikleriyle TOPLU okur (T13.3 tick: rota basina okuma yok, N+1
+ * yasak). Ayri port: yalnizca tick'in ihtiyaci; depo uygulamalari ikisini de
+ * saglar.
+ */
+export interface CourierBatchReader {
+  /** Bulunanlar; olmayan kimlik sessizce atlanir, sira garanti degil. */
+  findByIds(ids: readonly string[]): Promise<readonly Courier[]>;
+}
+
+export interface ReleaseOptions {
+  /**
+   * Kuryenin bosa ciktigi yer (T13.3): teslimatta teslimat noktasi, yolda
+   * iptalde rotadaki anlik konum. Verilmezse konum KALIR.
+   */
+  readonly location?: GeoPoint;
+  /**
+   * Yalnizca siparisi BU kurye tasiyorsa birakir. Tick bunu verir: rota bu
+   * arada baska kuryeye yeniden atandiysa o kurye birakilmaz.
+   */
+  readonly courierId?: string;
 }
 
 /** Seed yazicisi: kuryeleri ve market konumlarini bastan yazar (eskiler silinir). */

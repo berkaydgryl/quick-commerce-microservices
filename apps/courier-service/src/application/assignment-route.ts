@@ -18,6 +18,7 @@ import type { Clock, Logger } from '@getir/core';
 
 import type { Courier, GeoPoint } from '../domain/courier.js';
 import type { MarketLocator } from '../domain/market-locator.js';
+import { ROUTE_STATE } from '../domain/route.js';
 import type { Route } from '../domain/route.js';
 import { planRoute } from '../domain/route-planner.js';
 import type { RouteRule } from '../domain/route-planner.js';
@@ -67,6 +68,9 @@ export function createAssignmentRoute(deps: AssignmentRouteDeps): AssignmentRout
         deps.rule,
       ),
       createdAt: deps.clock.date(),
+      // T13.3: tick paketi bu marketten alir (courier.picked_up) ve rotayi ilerletir.
+      marketId: request.marketId,
+      state: ROUTE_STATE.MOVING,
     };
     if (stored === null) {
       return deps.routes.insertOnce(route);

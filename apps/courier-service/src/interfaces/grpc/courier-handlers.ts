@@ -10,13 +10,15 @@ import type { UntypedServiceImplementation } from '@grpc/grpc-js';
 
 import type { AssignCourier } from '../../application/assign-courier.js';
 import type { GetCourier } from '../../application/get-courier.js';
+import type { GetTracking } from '../../application/get-tracking.js';
 import type { ReleaseCourier } from '../../application/release-courier.js';
 import type { StartRoute } from '../../application/start-route.js';
-import { toProtoCourier, toProtoRelease, toProtoStartedRoute } from './mappers.js';
+import { toProtoCourier, toProtoRelease, toProtoStartedRoute, toProtoTracking } from './mappers.js';
 import {
   assignCourierRequestSchema,
   getCourierRequestSchema,
   releaseCourierRequestSchema,
+  getTrackingRequestSchema,
   startRouteRequestSchema,
 } from './schemas.js';
 
@@ -25,6 +27,7 @@ export interface CourierHandlerDeps {
   readonly getCourier: GetCourier;
   readonly releaseCourier: ReleaseCourier;
   readonly startRoute: StartRoute;
+  readonly getTracking: GetTracking;
   readonly logger?: Logger;
 }
 
@@ -71,6 +74,14 @@ export function createCourierImplementation(
       ...(logger === undefined ? {} : { logger }),
       handle: async (command, ctx): Promise<courierV1.StartRouteResponse> =>
         toProtoStartedRoute(await deps.startRoute(command, ctx.logger)),
+    }),
+
+    getTracking: unaryHandler({
+      name: 'GetTracking',
+      schema: getTrackingRequestSchema,
+      ...(logger === undefined ? {} : { logger }),
+      handle: async (orderId): Promise<courierV1.GetTrackingResponse> =>
+        toProtoTracking(await deps.getTracking(orderId)),
     }),
   };
 }

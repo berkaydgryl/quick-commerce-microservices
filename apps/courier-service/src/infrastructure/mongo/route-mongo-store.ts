@@ -3,12 +3,12 @@
  * bellek deposuyla ayni sozlesme testinden gecer.
  */
 
-import type { Route } from '../../domain/route.js';
-import type { RouteRepository } from '../../domain/route-repository.js';
-import { fromRouteDocument, toRouteDocument } from './mappers.js';
+import type { Route, RoutePatch } from '../../domain/route.js';
+import type { MovingRouteRepository, RouteRepository } from '../../domain/route-repository.js';
+import { fromRouteDocument, routeProgressFields, toRouteDocument } from './mappers.js';
 import type { RoutesCollection } from './routes-collection.js';
 
-export class RouteMongoStore implements RouteRepository {
+export class RouteMongoStore implements RouteRepository, MovingRouteRepository {
   constructor(private readonly routes: RoutesCollection) {}
 
   async findByOrder(orderId: string): Promise<Route | null> {
@@ -22,5 +22,15 @@ export class RouteMongoStore implements RouteRepository {
 
   async replace(route: Route): Promise<void> {
     await this.routes.replace(toRouteDocument(route));
+  }
+
+  async listMoving(limit: number): Promise<readonly Route[]> {
+    return (await this.routes.findMoving(limit)).map(fromRouteDocument);
+  }
+
+  async update(route: Route, patch: RoutePatch): Promise<Route | null> {
+    const document = toRouteDocument(route);
+    const updated = await this.routes.updateCurrent(document, routeProgressFields(patch));
+    return updated === null ? null : fromRouteDocument(updated);
   }
 }

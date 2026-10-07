@@ -53,8 +53,35 @@ export function toRouteDocument(route: Route): RouteDocument {
     distanceMeters: route.distanceMeters,
     etaSeconds: route.etaSeconds,
     createdAt: route.createdAt,
+    ...routeProgressFields(route),
   };
 }
+
+/** T13.3 alanlari: tanimsiz olan belgeye YAZILMAZ (Mongo'da null olmasin); tick yamasi da bundan. */
+export function routeProgressFields(source: RouteProgressFields): RouteProgressFields {
+  return {
+    ...(source.marketId === undefined ? {} : { marketId: source.marketId }),
+    ...(source.state === undefined ? {} : { state: source.state }),
+    ...(source.pickedUpAt === undefined ? {} : { pickedUpAt: source.pickedUpAt }),
+    ...(source.pickupPublished === undefined ? {} : { pickupPublished: source.pickupPublished }),
+    ...(source.deliveredAt === undefined ? {} : { deliveredAt: source.deliveredAt }),
+    ...(source.deliveryPublished === undefined
+      ? {}
+      : { deliveryPublished: source.deliveryPublished }),
+    ...(source.endedAt === undefined ? {} : { endedAt: source.endedAt }),
+  };
+}
+
+type RouteProgressFields = Pick<
+  RouteDocument,
+  | 'marketId'
+  | 'state'
+  | 'pickedUpAt'
+  | 'pickupPublished'
+  | 'deliveredAt'
+  | 'deliveryPublished'
+  | 'endedAt'
+>;
 
 export function fromRouteDocument(document: RouteDocument): Route {
   return {
@@ -65,5 +92,6 @@ export function fromRouteDocument(document: RouteDocument): Route {
     distanceMeters: document.distanceMeters,
     etaSeconds: document.etaSeconds,
     createdAt: document.createdAt,
+    ...routeProgressFields(document),
   };
 }
