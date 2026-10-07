@@ -91,10 +91,12 @@ describe('CreateOrder', () => {
     });
 
     expect(error?.code).toBe(GRPC_STATUS.ALREADY_EXISTS);
-    expect(appErrorOf(error)).toEqual({
+    expect(appErrorOf(error)).toMatchObject({
       code: ERROR_CODES.RESERVATION_ACTIVE,
       details: { activeOrderId: orderId },
     });
+    // inventory'nin ayrintisi aynen: kilidin kalan omru da istemciye gider (T15.3).
+    expect(appErrorOf(error)?.details).toHaveProperty('activeExpiresInMs');
   });
 
   it('MEDIUM + kapida odeme: FAILED_PRECONDITION + PAYMENT_METHOD_NOT_ALLOWED', async () => {

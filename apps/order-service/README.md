@@ -254,6 +254,8 @@ değişken), süre sınırı 1 sn.
 | Taslak, kullanıcının ödeme bekleyen siparişi | dokunulmaz (B22: kullanıcı başına tek aktif kilit)                                         | `RESERVATION_ACTIVE` (`activeOrderId`)     |
 | Taslak, saga'nın bırakamadığı eski kilit     | durmuş siparişin (iptal, ret, inceleme, ödeme hatası) kilidi şimdi bırakılır               | yeni taslak                                |
 | Taslak yazılamadı                            | kilit hemen bırakılır (`draft_not_saved`)                                                  | depo hatası                                |
+| Taslak, Reserve cevabı belirsiz (T15.3)      | aynı sipariş için telafi Release (`draft_not_saved`); taslak açılmaz                       | Reserve'in hatası (`SERVICE_UNAVAILABLE`)  |
+| Taslak, kilidin sipariş kaydı yok (yetim)    | yaşı > 30 sn ve aynı markette ise bırakılır (`stale_lock`), yeni sepet kilitlenir          | yeni taslak; değilse `RESERVATION_ACTIVE`  |
 | `CreateOrder`, kilit süresi dolmuş taslak    | `CANCELLED` (`RESERVATION_EXPIRED`), kilit bırakılır; risk sorulmaz, ödeme alınmaz         | `RESERVATION_EXPIRED` (REST 410)           |
 | Risk `REVIEW` / `REJECTED`, kart reddi       | kilit bırakılır (`risk_review`, `risk_rejected`, `payment_failed`)                         | adımın kendi hatası                        |
 | Ödeme alındı                                 | `Commit`, sonra `PAID`                                                                     | —                                          |
@@ -268,6 +270,14 @@ değişken), süre sınırı 1 sn.
 - **Bırakma en iyi gayretle:** başarısızsa WARN yazılır, saga sonucunu yine döner; kilit süresi
   dolunca inventory'nin süpürücüsü stoku geri verir. Bu arada kullanıcı yeni sepet açarsa eski
   kilit orada bulunup bırakılır (tablonun beşinci satırı).
+- **Yetim kilit (T15.3, iş 126):** Reserve inventory'de uygulanıp cevabı kaybolursa kilit order'ın
+  bilmediği sipariş adına kalır. İki savunma: belirsiz Reserve hatasında aynı sipariş hemen bırakılır;
+  kaçarsa (gecikmiş yazım) kullanıcının sonraki sepeti kilidi bırakır. Yaş = kilit ömrü − inventory'nin
+  bildirdiği kalan ömür (`activeExpiresInMs`); eşik `ORPHAN_LOCK_MIN_AGE_SECONDS` (30 sn), daha genç
+  kilit eşzamanlı ikinci sekmenin olabilir. Yaşı bilinmeyen (eski inventory) ya da başka marketteki
+  yetim (bekleyen iş 132) bırakılmaz. Bırakma WARN satırı (`orphanOrderId`, `ageMs`) ve
+  `order_orphan_locks_released_total` sayacıyla görünür. Kilit süresi yayılım sırasında artırılırsa
+  taze kilit eski görünebilir.
 - **Neden önce `Commit`:** "ödendi ama stok kesinleşmedi" durumu oluşmasın. Kesinleşmiş stok için
   ödeme her zaman alınmıştır ya da iade yolundadır.
 - **T11.2 öncesi kayıtlar:** kilidi olmayan taslak `CreateOrder`'da süresi dolmuş sayılır (kilitsiz
@@ -519,7 +529,7 @@ src/
 │   ├── create-draft-order.ts, create-order.ts, confirm-payment.ts, cancel-order.ts
 │   ├── get-order.ts, list-my-orders.ts
 │   ├── risk-step.ts, payment-step.ts  # saga adımları (T7.1), use-case'ler paylaşır
-│   ├── draft-reservation.ts     # taslağın stok kilidi: kilitle / yetmedi / sepeti yenile (T11.2)
+│   ├── draft-reservation.ts     # taslağın stok kilidi: kilitle / yetmedi / sepeti yenile (T11.2), yetim kilit (T15.3)
 │   ├── stock-step.ts            # saga'nın kesinleştirme ve en iyi gayretle bırakma adımı (T11.2)
 │   ├── lock-timing.ts           # kilidin süresi: orta bantta kısaltma, ödeme öncesi uzatma, düşmüş kilit (T11.3)
 │   ├── lapsed-order.ts          # kilidi düşmüş siparişi kapatma tablosu: saga ve süpürücü (T15.3)
@@ -551,6 +561,7 @@ src/
 │   ├── schemas.ts     # Zod istek şemaları (sayfa boyutu kırpma, jeton çözme)
 │   ├── page-token.ts  # imleç ↔ opak sayfa jetonu
 │   ├── mappers.ts     # domain → proto (durum, Order)
+│   ├── orphan-lock-metrics.ts  # bırakılan yetim kilit sayacı (T15.3)
 │   └── order-handlers.ts
 ├── interfaces/workers/outbox-publisher.ts  # zamanlayıcı: turu aralıkla çalıştırır, kapanışta bekler
 ├── interfaces/workers/outbox-metrics.ts    # yayın, hata ve gecikme metrikleri (T10.5)

@@ -58,6 +58,17 @@ export const DEFAULT_INVENTORY_GRPC_ADDR = 'localhost:50052';
  */
 export const INVENTORY_CALL_TIMEOUT_MS = 1_000;
 
+/**
+ * Kaydi olmayan (yetim) stok kilidinin birakilabilmesi icin en kucuk yasi (sn),
+ * T15.3; bekleyen is 126. Daha genc kilit es zamanli ikinci istegin (baska
+ * sekme) henuz yazilmamis taslagina ait olabilir: kilit Reserve'de alinir, taslak
+ * en gec inventory (1 sn) + Mongo yazimi (MONGO_OPERATION_TIMEOUT_MS, 2 sn;
+ * transaction tekrariyla en kotu ~4 sn) icinde yazilir. Order gateway'in 5 sn'sinden
+ * sonra da isini bitirir (iptal tasinmaz); 30 sn bu ~5 sn'nin 6 kati. Yas = kilit
+ * omru (RESERVATION_TTL_SECONDS) - inventory'nin bildirdigi kalan omur.
+ */
+export const ORPHAN_LOCK_MIN_AGE_SECONDS = 30;
+
 /** Kurye servisinin varsayilan adresi (roadmap port haritasi: courier 50056). */
 export const DEFAULT_COURIER_GRPC_ADDR = 'localhost:50056';
 
