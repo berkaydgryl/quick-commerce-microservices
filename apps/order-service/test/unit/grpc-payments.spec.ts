@@ -217,6 +217,7 @@ describe('GrpcPayments.charge', () => {
       amount: { amountMinor: 7_990, currency: 'TRY' },
       method: paymentV1.PaymentMethod.PAYMENT_METHOD_CARD,
       cardToken: 'tok_onay',
+      cardId: '',
       idempotencyKey: 'charge-ord_1',
       requireThreeDs: true,
     });

@@ -14,6 +14,7 @@ const request = (overrides: Partial<paymentV1.ChargeRequest> = {}): paymentV1.Ch
   amount: { amountMinor: 4599, currency: '' },
   method: paymentV1.PaymentMethod.PAYMENT_METHOD_CARD,
   cardToken: 'tok_test_4242',
+  cardId: '',
   idempotencyKey: 'anahtar-0001',
   requireThreeDs: false,
   ...overrides,

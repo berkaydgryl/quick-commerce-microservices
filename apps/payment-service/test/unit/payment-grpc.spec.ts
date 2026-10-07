@@ -35,6 +35,7 @@ function chargeRequest(cardToken: string): paymentV1.ChargeRequest {
     amount: { amountMinor: 12_990, currency: 'TRY' },
     method: paymentV1.PaymentMethod.PAYMENT_METHOD_CARD,
     cardToken,
+    cardId: '',
     idempotencyKey: `anahtar-${sequence}-000`,
     requireThreeDs: false,
   };

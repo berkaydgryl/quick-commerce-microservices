@@ -31,7 +31,8 @@ packages/contracts/
 │   │                  #   Ödeme Yöntemlerim, karşılama kökü (welcome); ortak metin ve görsel adresi
 │   ├── geo.ts         # harita adres çözümleme ve arama (T11.8)
 │   ├── cart.ts        # sepet girdisi, rezervasyon, serbest bırakma, adres defteri ve ekleme
-│   ├── order.ts       # sipariş, adres, 3DS, kurye özeti
+│   ├── order.ts       # sipariş, adres, 3DS, kurye özeti; kayıtlı kartla ödeme (T12.4)
+│   ├── checkout-rules.ts  # sipariş ayrıntıları (T12.4): hediye, not, zili çalma, sözleşme onayı; sınırlar ve cümleler
 │   ├── card-rules.ts  # kart kasası kuralları (T11.17): marka, Luhn, CVV, son kullanma, ad, kart adı; alan cümleleri
 │   ├── cards.ts       # kart kasası şemaları (T11.17): ekleme isteği, maskeli kart ve liste
 │   ├── socket.ts      # oda adları, olay payload'ları, olay sözlüğü
