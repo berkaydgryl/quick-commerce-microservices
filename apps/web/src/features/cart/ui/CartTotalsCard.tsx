@@ -16,8 +16,15 @@ interface CartTotalsCardProps {
     CartPageContent,
     'totalsTitle' | 'subtotalLabel' | 'freeDeliveryRemainingLabel' | 'checkoutLabel'
   >;
-  /** "Minimum sepet tutarına kalan" ve "Market şu an kapalı" (sepet paneliyle ayni metinler). */
-  readonly cartTexts: Pick<MarketListCartContent, 'minBasketRemainingLabel' | 'closedNotice'>;
+  /** Sepet paneliyle ayni metinler: notlar, "Teslimat Ücreti", "Ücretsiz", "Toplam". */
+  readonly cartTexts: Pick<
+    MarketListCartContent,
+    | 'minBasketRemainingLabel'
+    | 'closedNotice'
+    | 'deliveryLabel'
+    | 'freeDeliveryLabel'
+    | 'totalLabel'
+  >;
   /** Odeme sayfasi (T17.1); sayfa verir: sepet odeme sayfasini tanimaz. */
   readonly checkoutHref: string;
   /** Sepetin marketi kapali (07.10): not ve "Ödemeye Geç" PASIF. */
@@ -25,7 +32,9 @@ interface CartTotalsCardProps {
 }
 
 /**
- * "Sepet Toplamı" (T16.3; referans getircarsi): "Sepet Tutarı" ve mor tutar;
+ * "Sepet Toplamı" (T16.3; referans getircarsi; F15'te odeme ozetiyle ayni duzen):
+ * "Sepet Tutarı", "Teslimat Ücreti" (esik gecildiyse "Ücretsiz") ve "Toplam"
+ * (tanim listesi; kurallar gelmeden satirlar bos durur, dugme kaymaz);
  * altinda minimum sepete ve ucretsiz teslimata kalan (T16.3 olcutu), sonra mor
  * "Ödemeye Geç": odeme sayfasina (T17.1) baglanti. Minimum sepet tutmazsa ya
  * da kurallar gelmediyse PASIF (aria-disabled): odeme sayfasinda da siparis
@@ -47,12 +56,30 @@ export function CartTotalsCard({
         {texts.totalsTitle}
       </h2>
       <div className={styles['c-cart-totals__card']}>
-        <p className={styles['c-cart-totals__row']}>
-          <span>{texts.subtotalLabel}</span>
-          {totals !== undefined && (
-            <span className={styles['c-cart-totals__amount']}>{money(totals.subtotalMinor)}</span>
-          )}
-        </p>
+        <dl className={styles['c-cart-totals__lines']}>
+          <div className={styles['c-cart-totals__row']}>
+            <dt>{texts.subtotalLabel}</dt>
+            <dd className={styles['c-cart-totals__nowrap']}>
+              {totals === undefined ? null : money(totals.subtotalMinor)}
+            </dd>
+          </div>
+          <div className={styles['c-cart-totals__row']}>
+            <dt>{cartTexts.deliveryLabel}</dt>
+            <dd className={styles['c-cart-totals__nowrap']}>
+              {totals === undefined
+                ? null
+                : totals.deliveryFeeMinor === 0
+                  ? cartTexts.freeDeliveryLabel
+                  : money(totals.deliveryFeeMinor)}
+            </dd>
+          </div>
+          <div className={`${styles['c-cart-totals__row']} ${styles['c-cart-totals__row--total']}`}>
+            <dt>{cartTexts.totalLabel}</dt>
+            <dd className={styles['c-cart-totals__nowrap']}>
+              {totals === undefined ? null : money(totals.totalMinor)}
+            </dd>
+          </div>
+        </dl>
         {closed && (
           <p id={closedId} className={styles['c-cart-totals__notice']}>
             {cartTexts.closedNotice}

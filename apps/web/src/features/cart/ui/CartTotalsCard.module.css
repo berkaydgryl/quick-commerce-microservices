@@ -28,10 +28,17 @@
   justify-content: space-between;
 }
 
-.c-cart-totals__amount {
+.c-cart-totals__lines {
+  display: grid;
+  gap: var(--space-3);
+}
+
+/* Toplam (F15): odeme ozetindeki "Ödenecek Tutar" gibi ince cizginin altinda, kalin mor. */
+.c-cart-totals__row--total {
+  padding-block-start: var(--space-2);
   font-weight: var(--font-weight-bold);
   color: var(--color-brand-primary);
-  white-space: nowrap;
+  border-block-start: var(--border-width-thin) solid var(--border-faint);
 }
 
 .c-cart-totals__notice {
