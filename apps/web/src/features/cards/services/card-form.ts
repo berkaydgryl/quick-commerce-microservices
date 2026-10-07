@@ -170,18 +170,23 @@ const duplicateCardSchema = z.object({ cardId: z.string().min(1) });
 /**
  * Sunucu hatasi -> form. Alan cumleleri alanlarin altina; alani olmayan cumle
  * (dolu kasa: "En fazla 10 kart kaydedebilirsin") formun ustune, oldugu gibi.
- * Ayni kart (CONFLICT + cardId, QA C4) icerigin cumlesiyle; diger CONFLICT,
- * saglayici reddi (PAYMENT_DECLINED) ve gerisi sozlugun cumlesiyle ustte.
+ * Ayni kart (CONFLICT + cardId, QA C4) icerigin cumlesiyle; saglayici reddi
+ * (PAYMENT_DECLINED) kart eklemede "Ödeme alınamadı" DEGIL, icerigin kart cumlesiyle
+ * (F14; kart eklemek odeme degildir; odeme sayfasinin cumlesi degismez); diger
+ * CONFLICT ve gerisi sozlugun cumlesiyle ustte.
  */
 export function cardFormFeedback(
   error: unknown,
-  duplicateNotice: string,
+  notices: { readonly duplicate: string; readonly declined: string },
 ): FormFeedback<CardFormField> {
   if (!(error instanceof AppError)) {
     return formFeedback(error, CARD_FORM_FIELDS);
   }
   if (error.code === ERROR_CODES.CONFLICT && duplicateCardSchema.safeParse(error.details).success) {
-    return { fields: {}, message: duplicateNotice };
+    return { fields: {}, message: notices.duplicate };
+  }
+  if (error.code === ERROR_CODES.PAYMENT_DECLINED) {
+    return { fields: {}, message: notices.declined };
   }
   const reasons = error.code === ERROR_CODES.VALIDATION_FAILED ? fieldReasons(error.details) : null;
   if (reasons === null) {

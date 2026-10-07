@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { cardvaultV1, catalogV1, commonV1, inventoryV1, orderV1 } from '../../gen/ts/index.js';
+import {
+  cardvaultV1,
+  catalogV1,
+  commonV1,
+  courierV1,
+  inventoryV1,
+  orderV1,
+} from '../../gen/ts/index.js';
 
 /**
  * Bu dosya ELLE YAZILMIS KOD test etmez; T2.3'un kapisidir: ".proto dosyalarindan
@@ -178,6 +185,8 @@ describe('kart kasasi sozlesmesi (T11.17)', () => {
       cardvaultV1.AddCardResponse.fromPartial({ card: {} }).card,
       cardvaultV1.ListCardsRequest.fromPartial({}),
       cardvaultV1.DeleteCardRequest.fromPartial({}),
+      cardvaultV1.UpdateCardNicknameRequest.fromPartial({}),
+      cardvaultV1.UpdateCardNicknameResponse.fromPartial({ card: {} }).card,
     ]) {
       expect(Object.keys(message ?? {})).not.toContain('number');
       expect(Object.keys(message ?? {})).not.toContain('cvv');
@@ -202,6 +211,29 @@ describe('kart kasasi sozlesmesi (T11.17)', () => {
     const decoded = cardvaultV1.SavedCard.decode(cardvaultV1.SavedCard.encode(card).finish());
 
     expect(decoded).toEqual(card);
+  });
+
+  it('kart adi duzenleme (#148): UpdateCardNickname yolu; istek yalnizca kullanici, kart ve ad tasir', () => {
+    expect(cardvaultV1.CardVaultServiceService.updateCardNickname.path).toBe(
+      '/getir.cardvault.v1.CardVaultService/UpdateCardNickname',
+    );
+    const request = cardvaultV1.UpdateCardNicknameRequest.fromPartial({
+      userId: 'usr_1',
+      cardId: 'crd_0123456789abcdef0123456789abcdef',
+      nickname: 'Maaş kartım',
+    });
+
+    expect(Object.keys(request).sort()).toEqual(['cardId', 'nickname', 'userId']);
+    const roundTrip = (message: cardvaultV1.UpdateCardNicknameRequest) =>
+      cardvaultV1.UpdateCardNicknameRequest.decode(
+        cardvaultV1.UpdateCardNicknameRequest.encode(message).finish(),
+      );
+    expect(roundTrip(request)).toEqual(request);
+    // optional: eksik alan telde de eksik (kart adi degismez), bos metin bos
+    // metin (kart adi kaldirilir). Ikisi ayrilir.
+    const { nickname: _dropped, ...withoutNickname } = request;
+    expect(roundTrip(withoutNickname).nickname).toBeUndefined();
+    expect(roundTrip({ ...request, nickname: '' }).nickname).toBe('');
   });
 });
 
@@ -247,5 +279,39 @@ describe('uretilen TypeScript - cok dosyali paket (#135, D18)', () => {
     );
 
     expect(decoded).toEqual(request);
+  });
+});
+
+describe('kurye takibi sozlesmesi (T13.3)', () => {
+  it('GetTracking yolu ve asamalar; cevap telden bozulmadan gelir', () => {
+    expect(courierV1.CourierServiceService.getTracking.path).toBe(
+      '/getir.courier.v1.CourierService/GetTracking',
+    );
+    expect(courierV1.TrackingPhase.TRACKING_PHASE_TO_MARKET).toBe(1);
+    expect(courierV1.TrackingPhase.TRACKING_PHASE_TO_CUSTOMER).toBe(2);
+    expect(courierV1.TrackingPhase.TRACKING_PHASE_DELIVERED).toBe(3);
+    const tracking = courierV1.GetTrackingResponse.fromPartial({
+      courierId: 'crr_0123456789abcdef0123456789abcdef',
+      courierName: 'Mehmet K.',
+      phase: courierV1.TrackingPhase.TRACKING_PHASE_TO_CUSTOMER,
+      location: { lat: 40.985, lng: 29.0275 },
+      at: new Date('2026-10-07T13:00:02.000Z'),
+      remainingMeters: 840,
+      etaSeconds: 68,
+      route: [
+        { lat: 40.985, lng: 29.0275 },
+        { lat: 40.9885, lng: 29.0262 },
+      ],
+      marketLocation: { lat: 40.985, lng: 29.0275 },
+      deliveryLocation: { lat: 40.9885, lng: 29.0262 },
+      pickedUpAt: new Date('2026-10-07T12:59:30.000Z'),
+    });
+
+    const decoded = courierV1.GetTrackingResponse.decode(
+      courierV1.GetTrackingResponse.encode(tracking).finish(),
+    );
+
+    expect(decoded).toEqual(tracking);
+    expect(decoded.deliveredAt).toBeUndefined();
   });
 });

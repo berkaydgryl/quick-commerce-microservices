@@ -16,8 +16,7 @@
 import { RISK_BANDS, silentLogger } from '@getir/core';
 import type { RiskBand } from '@getir/core';
 import type { EventEnvelope, EventOutcome } from '@getir/event-bus';
-import type { MongoEnv } from '@getir/mongo-kit';
-import { afterEach, expect } from 'vitest';
+import { expect } from 'vitest';
 
 import { InMemoryPaymentStore } from '../../../payment-service/src/infrastructure/memory/in-memory-payment-store.js';
 import { createRelayOutbox } from '../../src/application/relay-outbox.js';
@@ -27,6 +26,7 @@ import type {
 } from '../../src/application/risk-assessment.js';
 import type { SweepRound } from '../../src/application/sweep-expired-reservations.js';
 import type { OrderRiskContext } from '../../src/domain/checkout-risk.js';
+import type { ExpiredOrderFinder } from '../../src/domain/expired-order-finder.js';
 import type { OrderRepository } from '../../src/domain/order-repository.js';
 import { openOrderStore } from '../../src/infrastructure/order-store.js';
 import type { OrderStore } from '../../src/infrastructure/order-store.js';
@@ -35,11 +35,12 @@ import type { Gate } from './qa-grpc-faults.js';
 import { nextUser } from './qa-order-calls.js';
 import type { OrderCalls } from './qa-order-calls.js';
 import {
-  closeAll,
   deliverTo,
   paymentHandlers,
   startOrderCopy,
   startPayment,
+  testMongoEnv,
+  useFreshPerTest,
 } from './qa-order-copy.js';
 import type { Closers } from './qa-order-copy.js';
 import { PaymentFaults } from './qa-payment-faults.js';
@@ -103,6 +104,8 @@ export interface ClusterOptions {
    * cagrinin ARKASINDAN baska istek kosan senaryo genis verir: sonuc saate degil kapiya bagli.
    */
   readonly paymentTimeoutMs?: number;
+  /** Supurucunun is kuyrugunu sarar (OQ4: iki supurucu ayni partiyi okuyup bulusur). */
+  readonly expired?: (finder: ExpiredOrderFinder) => ExpiredOrderFinder;
 }
 
 let databases = 0;
@@ -111,15 +114,10 @@ let databases = 0;
 export function useOrderClusters(
   world: InventoryWorld,
 ): (options?: ClusterOptions) => Promise<OrderCluster> {
-  const opened: (() => Promise<void>)[] = [];
-  afterEach(async () => {
-    await closeAll(opened.splice(0));
-  });
-  return async (options = {}) => {
-    const closers: Closers = [];
-    opened.push(() => closeAll(closers.splice(0).reverse()));
-    return startOrderCluster(world, options, closers);
-  };
+  const open = useFreshPerTest((closers: Closers, options: ClusterOptions) =>
+    startOrderCluster(world, options, closers),
+  );
+  return (options = {}) => open(options);
 }
 
 async function startOrderCluster(
@@ -128,12 +126,7 @@ async function startOrderCluster(
   closers: Closers,
 ): Promise<OrderCluster> {
   databases += 1;
-  const env: MongoEnv = {
-    uri: world.mongoUri(),
-    dbName: `qa_orders_${String(databases)}`,
-    serverSelectionTimeoutMs: 5_000,
-    operationTimeoutMs: 5_000,
-  };
+  const env = testMongoEnv(world.mongoUri(), `qa_orders_${String(databases)}`);
   const stream: Published[] = [];
   const risk = new BandByUser();
   const payments = new InMemoryPaymentStore();
@@ -147,7 +140,7 @@ async function startOrderCluster(
     const started = await startOrderCopy({
       name: `qa-order-${String(index)}`,
       clock: world.clock,
-      store,
+      store: { ...store, expired: options.expired?.(store.expired) ?? store.expired },
       risk,
       paymentAddress,
       inventoryAddress: world.address(),

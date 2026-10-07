@@ -70,8 +70,8 @@ Ek adlandırma kuralları:
 | `order/v1/checkout.proto`       | Sipariş girdileri: ödeme, ayrıntı, sinyaller     | T12.4, D18 |
 | `payment/v1/payment.proto`      | Ödeme yetkilendirme ve iade                      | T2.1       |
 | `risk/v1/risk.proto`            | Risk/fraud değerlendirmesi                       | T2.1       |
-| `courier/v1/courier.proto`      | Kurye atama ve rota                              | T2.1       |
-| `cardvault/v1/card_vault.proto` | Kart kasası (payment-svc'de): ekle, listele, sil | T11.17     |
+| `courier/v1/courier.proto`      | Kurye atama, rota ve takip                       | T2.1       |
+| `cardvault/v1/card_vault.proto` | Kart kasası (payment-svc): ekle, liste, adı, sil | T11.17     |
 
 **B27 kararı — `catalog.proto` stok döndürmez.** Stok sorgusu **toplu** yapılır ve stok
 RPC'leri `inventory.proto` dosyasına aittir. Katalog yalnızca ürün, kategori ve depo

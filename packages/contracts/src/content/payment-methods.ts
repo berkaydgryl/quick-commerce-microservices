@@ -18,8 +18,8 @@ export const cardBrandLabelsSchema = z.object({
  * Odeme Yontemlerim (T11.17; /hesabim/odeme-yontemlerim; duzen kullanicinin
  * referansi getircarsi): kayitli kartlar satir satir (marka logosu, ad,
  * maskeli numara, cop kutusu, sonda "Kredi/Banka Kartı"), "Kart Ekle"
- * sayfasi (Guvenlik kutusu, alanlar, Ay/Yil, zorunlu kosul onayi, Devam;
- * yaninda tasarim B'nin kart animasyonu) ve silme onayi. Kural cumleleri
+ * sayfasi (en ustte tasarim B'nin kart animasyonu, alanlar, Ay/Yil, zorunlu kosul
+ * onayi, Devam ve altinda kucuk guvenlik cumlesi; F14) ve silme onayi. Kural cumleleri
  * (numara, son kullanma, CVV, ad, kart adi) icerikte DEGIL, sozlesmede
  * (CARD_FIELD_MESSAGES). `*Suffix` metinleri kartin adinin arkasina eklenir.
  */
@@ -43,8 +43,7 @@ export const paymentMethodsContentSchema = z.object({
   /** Kart ekle sayfasi (referans getircarsi "Kart Ekle"). */
   backToListLabel: contentTextSchema,
   addTitle: contentTextSchema,
-  /** Guvenlik kutusu: kendi metnimiz (Masterpass yok). */
-  securityTitle: contentTextSchema,
+  /** Guvenlik cumlesi (F14): sayfada Devam'in altinda kucuk satir; kendi metnimiz (Masterpass yok). */
   securityText: contentTextSchema,
   nicknameLabel: contentTextSchema,
   numberLabel: contentTextSchema,
@@ -68,6 +67,11 @@ export const paymentMethodsContentSchema = z.object({
   retryWaitLabel: contentTextSchema,
   /** Ayni kart (CONFLICT, details.cardId; QA C4). */
   duplicateCardNotice: contentTextSchema,
+  /**
+   * Kart eklemede saglayici reddi (PAYMENT_DECLINED; F14): kart eklemek odeme degil,
+   * "Ödeme alınamadı" denmez. Odeme sayfasinin cumlesi sozlukte, degismez.
+   */
+  addDeclinedMessage: contentTextSchema,
   /** Basarida bildirimin basi: "Kart eklendi:" + " Visa •••• 4242". */
   addedToastPrefix: contentTextSchema,
   /** Formun altindaki marka logolarinin erisilebilir adi. */

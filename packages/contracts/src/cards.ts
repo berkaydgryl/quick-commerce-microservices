@@ -1,7 +1,7 @@
 /**
- * Kart kasasi (T11.17): GET /v1/me/cards, POST /v1/me/cards, DELETE
- * /v1/me/cards/{cardId}. Kasa payment-svc'dedir (getir/cardvault/v1); gateway
- * istegi iletir.
+ * Kart kasasi (T11.17): GET /v1/me/cards, POST /v1/me/cards, PATCH
+ * /v1/me/cards/{cardId} (kart adi, #148), DELETE /v1/me/cards/{cardId}. Kasa
+ * payment-svc'dedir (getir/cardvault/v1); gateway istegi iletir.
  *
  * KART NUMARASI VE CVV yalnizca ekleme isteginde ve bir kez gecer; saklanmaz,
  * gunluge ve ize yazilmaz. Cevaplar MASKELIDIR: ilk 4 ve son 4 hane, marka, son
@@ -37,6 +37,41 @@ function addProblem(context: z.RefinementCtx, problem: string | null): void {
     context.addIssue({ code: z.ZodIssueCode.custom, message: problem });
   }
 }
+
+/**
+ * Kart adi kurallari (ekleme ve duzenleme AYNI): NFC'ye cevrilir ve kirpilir,
+ * cardNicknameProblem'den gecer. Bos ya da yalnizca bosluk kart adi "kart adi
+ * yok"tur: cikista undefined (QA S4; proto'daki bos metin de ayni anlam).
+ * Iki alan yalnizca tur hatasinin cumlesinde ayrilir.
+ */
+function withNicknameRules(text: z.ZodString) {
+  return text
+    .transform(normalizeCardText)
+    .superRefine((value, context) => addProblem(context, cardNicknameProblem(value)))
+    .transform((value) => (value === '' ? undefined : value));
+}
+
+/** Eklemede istege bagli kart adi: metin olmayan deger uzunluk cumlesini alir. */
+const addNicknameSchema = withNicknameRules(
+  z.string({ invalid_type_error: CARD_FIELD_MESSAGES.nickname }),
+);
+
+/**
+ * Duzenlemede ZORUNLU kart adi: alan yoksa ya da null ise "Kart adı
+ * gönderilmedi" (null adi KALDIRMAZ; kaldirmak bos metindir). Gateway JSON
+ * null'u da eksik alan olarak iletir (proto optional), cumle ayni kalir.
+ */
+const updateNicknameSchema = withNicknameRules(
+  z.string({
+    errorMap: (issue) => ({
+      message:
+        issue.code === z.ZodIssueCode.invalid_type &&
+        (issue.received === z.ZodParsedType.undefined || issue.received === z.ZodParsedType.null)
+          ? CARD_FIELD_MESSAGES.nicknameMissing
+          : CARD_FIELD_MESSAGES.nickname,
+    }),
+  }),
+);
 
 /**
  * POST /v1/me/cards: kart ekleme. Kalici kayit: Idempotency-Key ister
@@ -86,14 +121,7 @@ export const addCardRequestSchema = z
       })
       .transform(normalizeCardText)
       .superRefine((value, context) => addProblem(context, cardHolderNameProblem(value))),
-    // Bos ya da yalnizca bosluk kart adi "kart adi yok"tur: alan cikista
-    // undefined olur (QA S4; proto'daki bos metin de ayni anlam).
-    nickname: z
-      .string({ invalid_type_error: CARD_FIELD_MESSAGES.nickname })
-      .transform(normalizeCardText)
-      .superRefine((value, context) => addProblem(context, cardNicknameProblem(value)))
-      .transform((value) => (value === '' ? undefined : value))
-      .optional(),
+    nickname: addNicknameSchema.optional(),
   })
   .superRefine(({ number, cvv }, context) => {
     // Yalnizca numara ve CVV bicimi gecerliyken: ayni alana ikinci cumle yazilmaz.
@@ -111,12 +139,32 @@ export const addCardRequestSchema = z
   });
 
 /**
+ * PATCH /v1/me/cards/{cardId} (#148): YALNIZCA kart adi degisir; numara, son
+ * kullanma ve CVV degismez (yeni kart icin sil + ekle). Kalici kayit:
+ * Idempotency-Key ister (ADR-08). Cevap 200 ve guncel kart (savedCardSchema).
+ *
+ * `nickname` ZORUNLU: bos ya da yalnizca bosluk adi KALDIRIR (cikista
+ * undefined); alan yoksa ya da null ise "Kart adı gönderilmedi" (bos govde adi
+ * silmesin). Kurallar eklemedekiyle ayni. SIKI sema: bilinmeyen alan (numara,
+ * CVV, son kullanma) reddedilir; gateway de 400 doner. Kasa (payment) bu
+ * semayi kullanicinin ve kartin kimligiyle genisletir; proto alani optional
+ * oldugu icin eksik alan kasaya kadar eksik gider. Kasanin denetledigi: kart bu
+ * kullanicinin ve silinmemis (yoksa NOT_FOUND; uc durum ayirt edilemez).
+ * Suresi gecmis kartin adi da degisebilir.
+ */
+export const updateCardNicknameRequestSchema = z
+  .object({
+    nickname: updateNicknameSchema,
+  })
+  .strict();
+
+/**
  * Kayitli kart: MASKELI gorunum (proto SavedCard). Tam numara ve CVV yoktur.
  * `expired`: son kullanma ayi gecti mi (okuma anina gore); suresi gecen kart
  * listede kalir, odemede kullanilamaz (T12.4).
  */
 export const savedCardSchema = z.object({
-  /** crd_ + 32 onaltilik: silmede ve (T12.4) odemede tasinir. */
+  /** crd_ + 32 onaltilik: silmede, kart adi duzenlemede (#148) ve (T12.4) odemede tasinir. */
   id: cardIdSchema,
   brand: cardBrandSchema,
   first4: z.string().regex(/^\d{4}$/),
@@ -140,5 +188,7 @@ export const savedCardListSchema = z.object({
 });
 
 export type AddCardRequest = z.infer<typeof addCardRequestSchema>;
+/** Istemcinin gonderdigi govde: kart adi METIN, bos metin adi kaldirir. */
+export type UpdateCardNicknameRequest = z.input<typeof updateCardNicknameRequestSchema>;
 export type SavedCard = z.infer<typeof savedCardSchema>;
 export type SavedCardList = z.infer<typeof savedCardListSchema>;

@@ -12,7 +12,9 @@
 import { silentLogger } from '@getir/core';
 import type { Clock } from '@getir/core';
 import type { EventEnvelope, EventHandler, EventOutcome } from '@getir/event-bus';
+import type { MongoEnv } from '@getir/mongo-kit';
 import { startTestGrpcServer } from '@getir/service-kit/testing';
+import { afterEach } from 'vitest';
 
 import {
   buildPaymentService,
@@ -152,6 +154,29 @@ export async function deliverTo(
     });
   }
   return outcomes;
+}
+
+/**
+ * Her test icin taze kurulum: `open` testin icinde cagrilir, kurdugu kapatmalar test sonunda ters
+ * sirayla kapanir (kume, risk dukkani).
+ */
+export function useFreshPerTest<T, O>(
+  open: (closers: Closers, options: O) => Promise<T>,
+): (options: O) => Promise<T> {
+  const opened: (() => Promise<void>)[] = [];
+  afterEach(async () => {
+    await closeAll(opened.splice(0));
+  });
+  return (options) => {
+    const closers: Closers = [];
+    opened.push(() => closeAll(closers.splice(0).reverse()));
+    return open(closers, options);
+  };
+}
+
+/** Test veritabaninin Mongo ortami (kisa sinirlar; konteyner dosya sonunda silinir). */
+export function testMongoEnv(uri: string, dbName: string): MongoEnv {
+  return { uri, dbName, serverSelectionTimeoutMs: 5_000, operationTimeoutMs: 5_000 };
 }
 
 /** Hepsini kapatir; biri dusse de digerleri kapanir, ilk hata sonda firlar. */

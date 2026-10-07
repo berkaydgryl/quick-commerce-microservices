@@ -51,6 +51,8 @@ export const CARD_FIELD_MESSAGES = {
   nickname: `Kart adı en fazla ${CARD_NICKNAME_MAX_LENGTH} karakter olabilir`,
   nicknameCharacters: `Kart adında yalnızca harf, rakam, boşluk ve . , ' - olabilir`,
   nicknameDigits: `Kart adında ${CARD_NICKNAME_MAX_DIGIT_RUN + 1} ya da daha fazla rakam yan yana olamaz`,
+  // Kart adi duzenlemede (#148) alan hic yoksa: bos metin adi kaldirir, eksik alan kaldirmaz.
+  nicknameMissing: 'Kart adı gönderilmedi',
   cards: `En fazla ${SAVED_CARDS_MAX} kart kaydedebilirsin`,
 } as const;
 

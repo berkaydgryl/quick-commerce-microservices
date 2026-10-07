@@ -7,7 +7,7 @@ import {
   normalizeCardText,
 } from '@getir/contracts';
 import type { AddCardRequest, PaymentMethodsContent, SavedCard } from '@getir/contracts';
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Controller } from 'react-hook-form';
 
 import { AuthField } from '../../auth/ui/AuthField';
@@ -23,15 +23,14 @@ import { CardVisual } from './CardVisual';
 import type { CardFocus } from './CardVisual';
 import { ExpirySelects } from './ExpirySelects';
 import { FormAlert } from './FormAlert';
-import { SecurityNotice } from './SecurityNotice';
 import { TermsDialog } from './TermsDialog';
 import { TermsField } from './TermsField';
 
 /**
- * Yerlesim (T17.1; F5): "page" Odeme Yontemlerim'in Kart Ekle sayfasi
- * (Guvenlik kutusu ve yaninda kart); "checkout" odeme penceresinin adimi
- * (Guvenlik kutusu YOK, kart animasyonu en ustte, tek sutun, kutusuz).
- * Parcalar ve kurallar AYNI; yalnizca yerlesim degisir.
+ * Yerlesim (T17.1; F5; F14): iki turde de kart animasyonu en ustte, tek sutun.
+ * "page" Odeme Yontemlerim'in Kart Ekle sayfasi (beyaz kutu; Devam'in altinda
+ * guvenlik cumlesi, Devam ona bagli); "checkout" odeme penceresinin adimi
+ * (kutusuz; guvenlik cumlesi yok). Parcalar ve kurallar AYNI.
  */
 export type AddCardFormVariant = 'page' | 'checkout';
 
@@ -54,11 +53,12 @@ const DEFAULT_CVV_LENGTH = 3;
 
 /**
  * Kart Ekle formu (T11.17; duzen kullanicinin referansi getircarsi "Kart
- * Ekle"; mantik useCardForm'da). Beyaz kutuda sirayla: Guvenlik kutusu, kart
- * adi, numara, kart uzerindeki isim, son kullanma (Ay, Yil) ve CVV, zorunlu
- * kosul onayi, Devam ve kabul edilen kartlar. Bizim ekstramiz tasarim B'nin
- * kart animasyonu: dar ekranda Guvenlik kutusunun altinda, genis ekranda
- * kutunun saginda yapiskan; canli guncellenir, CVV'de doner.
+ * Ekle"; mantik useCardForm'da; F14'te sadelesti). Iki turde de (sayfa ve odeme
+ * penceresi) en ustte kart animasyonu (Guvenlik kutusunun yerine; canli
+ * guncellenir, CVV'de doner), sonra kart adi, numara, kart uzerindeki isim,
+ * son kullanma (Ay, Yil) ve CVV, zorunlu kosul onayi, Devam; sayfada Devam'in
+ * altinda kucuk guvenlik satiri (pencerede yok: odeme sayfasinin kendi notu
+ * var) ve kabul edilen kartlar.
  *
  * Numara ve CVV YALNIZCA bu formun durumunda yasar (M7): kart gorseline
  * maskeli gider, onbellege yazilmaz; form kapaninca gider.
@@ -80,6 +80,7 @@ export function AddCardForm({
   const [focus, setFocus] = useState<FormFocus>(null);
   const [termsOpen, setTermsOpen] = useState(false);
   const years = useMemo(() => cardExpiryYears(new Date()), []);
+  const securityId = useId();
   const brand = typingBrand(values.number);
   const nickname = normalizeCardText(values.nickname);
   const cvvLength = brand === null ? DEFAULT_CVV_LENGTH : cvvLengthOf(brand);
@@ -99,9 +100,6 @@ export function AddCardForm({
         noValidate
         onSubmit={(event) => void submit(event)}
       >
-        {variant === 'page' && (
-          <SecurityNotice title={texts.securityTitle} text={texts.securityText} />
-        )}
         <div className={styles['c-add-card__stage']}>
           <div className={styles['c-add-card__card']}>
             <CardVisual
@@ -268,9 +266,16 @@ export function AddCardForm({
           className={styles['c-add-card__submit']}
           disabled={formState.isSubmitting || waitSeconds > 0}
           aria-busy={formState.isSubmitting}
+          // Ekran okuyucu guvenlik cumlesini gondermeden ONCE duyar (cumle dugmenin altinda).
+          aria-describedby={variant === 'page' ? securityId : undefined}
         >
           {formState.isSubmitting ? texts.savingLabel : texts.saveLabel}
         </button>
+        {variant === 'page' && (
+          <p id={securityId} className={styles['c-add-card__security']}>
+            {texts.securityText}
+          </p>
+        )}
         <AcceptedBrands
           label={texts.acceptedBrandsLabel}
           labels={texts.brandLabels}

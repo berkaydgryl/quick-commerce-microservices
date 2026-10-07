@@ -70,6 +70,8 @@ export interface InventoryWorld {
   address(): string;
   /** Ayni Mongo konteyneri (order QA'si kendi veritabaniyla kullanir, ikinci konteyner acilmaz). */
   mongoUri(): string;
+  /** Ayni Redis konteyneri (OQ7: order'in gercek sureci olay yayinini buraya yapar). */
+  redisUrl(): string;
   /** inventory'nin supurucusu bir tur (kilidi dolan rezervasyonun stogu doner). */
   sweepInventory(): Promise<void>;
 }
@@ -88,6 +90,7 @@ export function useInventoryWorld(dbName: string, onHand = ON_HAND): InventoryWo
   let server: TestGrpcServer | undefined;
 
   const mongoUri = () => `${need(mongo, 'mongo').getConnectionString()}?directConnection=true`;
+  const redisUrl = () => need(redis, 'redis').getConnectionUrl();
   const storesEnv = (): StockStoresEnv => ({
     mongo: {
       uri: mongoUri(),
@@ -95,7 +98,7 @@ export function useInventoryWorld(dbName: string, onHand = ON_HAND): InventoryWo
       serverSelectionTimeoutMs: 5_000,
       operationTimeoutMs: 5_000,
     },
-    redis: { REDIS_URL: need(redis, 'redis').getConnectionUrl(), REDIS_CONNECT_TIMEOUT_MS: 5_000 },
+    redis: { REDIS_URL: redisUrl(), REDIS_CONNECT_TIMEOUT_MS: 5_000 },
   });
 
   beforeAll(async () => {
@@ -133,6 +136,7 @@ export function useInventoryWorld(dbName: string, onHand = ON_HAND): InventoryWo
     },
     address: () => `127.0.0.1:${need(server, 'inventory sunucusu').handle.port}`,
     mongoUri,
+    redisUrl,
     sweepInventory: async () => {
       const opened = need(source, 'stok kaynagi');
       await buildSweepExpired({
