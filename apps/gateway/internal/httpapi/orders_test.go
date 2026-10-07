@@ -36,6 +36,8 @@ type fakeOrders struct {
 	// calls, adaptorun kac kez cagrildigi (tekrar korumasi: ayni anahtar tek cagri).
 	calls int
 	err   error
+	// details, GetDetailed'in dondurdugu ayrinti (T12.4); nil = ayrintisiz.
+	details *order.DetailsView
 }
 
 func (f *fakeOrders) Reserve(ctx context.Context, input order.ReserveInput) (order.Reservation, error) {
@@ -61,6 +63,11 @@ func (f *fakeOrders) Release(ctx context.Context, input order.ReleaseInput) (ord
 func (f *fakeOrders) Get(ctx context.Context, userID, orderID string) (order.Order, error) {
 	f.called, f.ctx, f.getUserID, f.getOrderID = true, ctx, userID, orderID
 	return order.Order{ID: orderID, Status: "PAID", Lines: []order.Line{}, Timeline: []order.TimelineEntry{}}, f.err
+}
+
+func (f *fakeOrders) GetDetailed(ctx context.Context, userID, orderID string) (order.OrderDetail, error) {
+	found, err := f.Get(ctx, userID, orderID)
+	return order.OrderDetail{Order: found, Details: f.details}, err
 }
 
 func (f *fakeOrders) List(ctx context.Context, userID string, pageSize int32, pageToken string) (orderhistory.List, error) {
@@ -114,7 +121,9 @@ const validReserveBody = `{"marketId":"mkt_migros-jet-moda","items":[{"productId
 	`"address":{"line":"Kadikoy","location":{"lat":40.99,"lng":29.02}},` +
 	`"expectedTotal":{"amountMinor":19360,"currency":"TRY"},"couponCode":"ILK10"}`
 
-const validPlaceBody = `{"orderId":"` + testOrderID + `","payment":{"method":"CARD","cardToken":"tok_test_4242"}}`
+// validPlaceBody: ayrinti T12.4'ten beri zorunlu (hediyesiz, notsuz, onayli).
+const validPlaceBody = `{"orderId":"` + testOrderID + `","payment":{"method":"CARD","cardToken":"tok_test_4242"},` +
+	`"details":{"note":"","doNotRingBell":false,"agreementsAccepted":true}}`
 
 // orderRequest, gecerli kimlik ve anahtarla bir istek kurar; headers ile
 // degistirilir (bos deger basligi SILER).

@@ -12,8 +12,8 @@ import {
   cancelOrderRequestSchema,
   confirmPaymentRequestSchema,
   createDraftOrderRequestSchema,
-  createOrderRequestSchema,
 } from '../../../src/interfaces/grpc/schemas.js';
+import { createOrderRequestSchema } from '../../../src/interfaces/grpc/create-order-schema.js';
 import {
   cancelOrderRequest,
   confirmPaymentRequest,

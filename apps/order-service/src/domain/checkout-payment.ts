@@ -38,6 +38,8 @@ export interface PaymentResult {
   readonly failureCode?: ErrorCode;
   /** Yalnizca REQUIRES_3DS'te dolu: istemci ConfirmPayment'a geri verir. */
   readonly challengeId?: string;
+  /** challengeId ile birlikte: 3DS kodunun gecerlilik bitisi (T12.4). */
+  readonly challengeExpiresAt?: Date;
 }
 
 /** Odeme sonucunun siparise etkisi. */

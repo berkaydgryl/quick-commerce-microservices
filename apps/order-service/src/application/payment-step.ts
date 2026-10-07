@@ -57,10 +57,19 @@ export interface CheckoutResult {
   readonly order: Order;
   /** Yalnizca 3DS bekleniyorsa dolu; istemci ConfirmPayment'a geri verir. */
   readonly challengeId?: string;
+  /** 3DS kodunun gecerlilik bitisi (T12.4); payment-svc'nin penceresi. */
+  readonly challengeExpiresAt?: Date;
 }
 
+/**
+ * Kart kaynagi (T12.4): kasadaki kart (cardId) ya da eski test jetonu
+ * (cardToken, DEPRECATED); kartli odemede TAM biri, kapida odemede hicbiri.
+ * Kayitli kart yoksa payment-svc NOT_FOUND doner ve kayit yazmaz: siparis
+ * AWAITING_PAYMENT kalir, ayni siparis baska kartla yeniden verilebilir.
+ */
 export interface PaymentChoice {
   readonly method: PaymentMethod;
+  readonly cardId?: string;
   readonly cardToken?: string;
 }
 
@@ -87,6 +96,7 @@ export async function chargeOrder(
       amountMinor: windowed.pricing.totalMinor,
       currency: windowed.pricing.currency,
       method: choice.method,
+      ...(choice.cardId === undefined ? {} : { cardId: choice.cardId }),
       ...(choice.cardToken === undefined ? {} : { cardToken: choice.cardToken }),
       idempotencyKey: chargeIdempotencyKey(windowed.id),
       requireThreeDs: policy.requireThreeDs,
@@ -107,7 +117,13 @@ export async function settleOrderPayment(
   const decision = decidePayment(order.id, method, result);
   switch (decision.kind) {
     case 'awaiting-3ds':
-      return { order, challengeId: decision.challengeId };
+      return {
+        order,
+        challengeId: decision.challengeId,
+        ...(result.challengeExpiresAt === undefined
+          ? {}
+          : { challengeExpiresAt: result.challengeExpiresAt }),
+      };
     case 'failed':
       await failPayment(deps, order, decision.code, scope);
       throw new AppError(decision.code, 'Odeme alinamadi', {

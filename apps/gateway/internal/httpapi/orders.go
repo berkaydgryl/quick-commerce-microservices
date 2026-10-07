@@ -135,14 +135,14 @@ func confirmThreeDSHandler(confirmer ThreeDSConfirmer) fiber.Handler {
 	}
 }
 
-// getOrderHandler, GET /v1/orders/{id}: kullanicinin tek siparisi. Kisisel
-// veridir (adres, urunler): onbelleklenmez (T11.16, L8).
+// getOrderHandler, GET /v1/orders/{id}: kullanicinin tek siparisi ve ayrintisi
+// (T12.4: hediye alicisi, not). Kisisel veridir: onbelleklenmez (T11.16, L8).
 func getOrderHandler(getter OrderGetter) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if err := rejectUnknownQuery(c); err != nil {
 			return err
 		}
-		found, err := getter.Get(outgoingContext(c), userIDOf(c), c.Params(orderIDParam))
+		found, err := getter.GetDetailed(outgoingContext(c), userIDOf(c), c.Params(orderIDParam))
 		if err != nil {
 			return err
 		}

@@ -27,10 +27,10 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `GET /v1/search?lat&lng&q` | ✅ Genel arama (T9.6): yakındaki marketlerde ürün ya da market adı; mesafe sırası, kapalılar sonda; market başına ilk 3 ürün + toplam; stok market başına, paralel |
 | `POST /v1/cart/reserve` | ✅ order `CreateDraftOrder` (T7.5): taslak, fiyat sunucuda; stok kilitlenir (T11.2); cevapta `expiresAt` ve sunucunun saatiyle `ttlSeconds` (T11.4) |
 | `DELETE /v1/cart/reserve/{orderId}` | ✅ order `CancelOrder` (T11.4): taslağı ya da ödeme bekleyen siparişi bırakır, stok döner; zaten bırakılmışsa 200 `released:false`; parası alınmışsa 409 `REQUEST_IN_PROGRESS`; başkasının siparişi 404 |
-| `POST /v1/orders`    | ✅ order `CreateOrder` (saga): 201 `PAID` ya da `AWAITING_PAYMENT` + `threeDs` |
+| `POST /v1/orders`    | ✅ order `CreateOrder` (saga): 201 `PAID` ya da `AWAITING_PAYMENT` + `threeDs` (sunucunun saatiyle `ttlSeconds`, T12.4); kart `payment.cardId` (kayıtlı kart) ya da eski `cardToken`, tam biri; `details` (hediye, not, "Zili Çalma", sözleşme onayı) zorunlu, kuralları `internal/order/details.go` (T12.4); kasada olmayan kart 404 `resource: card` |
 | `POST /v1/orders/{id}/3ds` | ✅ order `ConfirmPayment`; yanlış kod 402 + kalan hak |
 | `GET /v1/orders` | ✅ Geçmiş siparişler (T11.16, `internal/orderhistory`): order `ListMyOrders` + market adları sayfa başına TEK `BatchGetMarkets` (katalog hatasında adsız, sipariş yine listelenir); yeniden eskiye, imleçle; `DRAFT` ve hiç ilerlemeden süresi dolan `EXPIRED` süzülür, eksik kadar en fazla 3 tur (sunucu tarafı süzme #101); `CANCELLED` + geçmişte `PAID` = `refunded`; sayfa 20, en fazla 50 (kırpılır); önbelleğe alınmaz |
-| `GET /v1/orders/{id}` | ✅ order `GetOrder`; başkasının siparişi 404; kilit canlıyken `reservationExpiresAt` ve `reservationTtlSeconds` (T11.4); T11.16'dan beri önbelleğe alınmaz (`no-store`) |
+| `GET /v1/orders/{id}` | ✅ order `GetOrder`; başkasının siparişi 404; kilit canlıyken `reservationExpiresAt` ve `reservationTtlSeconds` (T11.4); sipariş ayrıntısı `details` yalnızca burada, sahibine (T12.4; liste ve geçmiş taşımaz); T11.16'dan beri önbelleğe alınmaz (`no-store`) |
 | `GET /v1/orders/{id}/token` | ✅ T12.2: sahiplik order `GetOrder` ile (başkasınınki 404, bitmiş sipariş 200); `order:{id}` odası için 60 sn'lik oda jetonu (`internal/roomtoken`, `REALTIME_TOKEN_SECRET`) |
 | `POST /v1/auth/register` | ✅ Kayıt + oturum (201); telefon benzersiz, şifre bcrypt (T8.1) |
 | `POST /v1/auth/login` | ✅ Giriş (200); yanlış şifre ile kayıtsız numara aynı cevabı alır |
@@ -481,7 +481,18 @@ order-service'tedir.
   olarak order'a gider; istemcinin yazabildiği `X-Forwarded-For` okunmaz (güvenilir vekil yok).
 - **Alan adları:** servisin proto yolu REST adına çevrilir: `lines.0.quantity` →
   `items.0.quantity`, `deliveryLocation.lat` → `address.location.lat`, `code` → `otp`,
-  `idempotencyKey` → `Idempotency-Key`.
+  `cardId` → `payment.cardId`, `idempotencyKey` → `Idempotency-Key`. Ayrıntı yolları
+  (`details.gift.recipientPhone`) REST'tekiyle aynıdır.
+- **Sipariş ayrıntısı ve kart (T12.4):** sınırlar, cümleler ve kart kimliği biçimi
+  `@getir/contracts` ile aynı (`checkout-rules.ts`, `cardIdSchema`; metin JavaScript trim'iyle
+  kırpılır, uzunluk UTF-16 birimi); `internal/order/details_contract_test.go` karşılaştırır.
+  Gönderilen alan sayılır: boş `cardId` biçimsizdir, "yok" değil. Hatalı istek risk sinyali
+  okumadan reddedilir. Hata cevabı ve günlük değeri yankılamaz (ad, telefon, not kişisel
+  veridir); siparişin tekrar koruması kaydı yalnızca HMAC parmak izi ve ayrıntısız cevabı tutar.
+  Ayrıntı ayrı cevap tipindedir (`order.OrderDetail`, yalnızca `GET /v1/orders/{id}`): liste ve
+  sahiplik denetimi (oda jetonu) onu taşıyamaz. 3DS `ttlSeconds` payment'ın bitiş anından,
+  gateway'in saatiyle; hiçbir zaman negatif değil. Tekrar edilen cevaptaki `ttlSeconds` ilk
+  cevabınkidir (rezervasyonla aynı).
 
 ```bash
 # TOKEN: yukaridaki giris komutundan. Basliklar her komutta acikca yazilir.
@@ -493,7 +504,11 @@ curl -s localhost:8080/v1/cart/reserve -H 'Content-Type: application/json' -H "A
   "expectedTotal":{"amountMinor":19360,"currency":"TRY"}}' | jq
 curl -s localhost:8080/v1/orders -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
   -H 'Idempotency-Key: siparis-0001' \
-  -d '{"orderId":"<taslak>","payment":{"method":"CARD","cardToken":"tok_test_4242"}}' | jq
+  -d '{"orderId":"<taslak>","payment":{"method":"CARD","cardToken":"tok_test_4242"},
+       "details":{"note":"","doNotRingBell":false,"agreementsAccepted":true}}' | jq
+# Kayitli kartla: "payment":{"method":"CARD","cardId":"<crd_... GET /v1/me/cards'tan>"}.
+# Hediye: "details":{"gift":{"enabled":true,"message":"","senderName":"","recipientName":"Ad",
+#   "recipientPhone":"+905321234567"},"note":"","doNotRingBell":true,"agreementsAccepted":true}
 curl -s localhost:8080/v1/orders/<taslak>/3ds -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
   -H 'Idempotency-Key: onay-0001' -d '{"challengeId":"<tds_...>","otp":"123456"}' | jq   # 3DS istendiyse
 curl -s localhost:8080/v1/orders/<taslak> -H "Authorization: Bearer $TOKEN" | jq

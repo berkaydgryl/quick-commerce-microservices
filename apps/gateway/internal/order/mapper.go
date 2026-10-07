@@ -40,6 +40,10 @@ type ReservationRelease struct {
 // ThreeDSChallenge, 3DS bekleyen siparisin dogrulama jetonu.
 type ThreeDSChallenge struct {
 	ChallengeID string `json:"challengeId"`
+	// Kodun kalan gecerliligi, gateway'in saatiyle saniye (T12.4): payment'in
+	// bitis anindan; dolmussa ya da saat kaymissa 0 (negatif olmaz). Bitis
+	// gelmediyse alan HIC yazilmaz.
+	TTLSeconds *int64 `json:"ttlSeconds,omitempty"`
 }
 
 // Placement, POST /v1/orders ve POST /v1/orders/{id}/3ds cevabi
@@ -158,18 +162,26 @@ func toReservation(response *orderv1.CreateDraftOrderResponse, now time.Time) (R
 	}, nil
 }
 
-// toPlacement, siparis ve 3DS cevabini kurar. Sozlesme: challengeId bos
-// DEGILSE 3DS bekleniyor demektir; bos ise threeDs alani hic yazilmaz.
-func toPlacement(orderID string, status orderv1.OrderStatus, challengeID string) (Placement, error) {
+// toPlacement, siparis ve 3DS cevabini kurar. challenge nil ise threeDs
+// alani hic yazilmaz.
+func toPlacement(orderID string, status orderv1.OrderStatus, challenge *ThreeDSChallenge) (Placement, error) {
 	name, err := statusName(status)
 	if err != nil {
 		return Placement{}, err
 	}
-	placement := Placement{OrderID: orderID, Status: name}
-	if challengeID != "" {
-		placement.ThreeDS = &ThreeDSChallenge{ChallengeID: challengeID}
+	return Placement{OrderID: orderID, Status: name, ThreeDS: challenge}, nil
+}
+
+// challengeOf, CreateOrder cevabinin 3DS bekleyisi. Sozlesme: challengeId bos
+// DEGILSE 3DS bekleniyor demektir; kalan sure bitis anindan, gateway'in saatiyle.
+func challengeOf(response *orderv1.CreateOrderResponse, now time.Time) *ThreeDSChallenge {
+	if response.GetChallengeId() == "" {
+		return nil
 	}
-	return placement, nil
+	return &ThreeDSChallenge{
+		ChallengeID: response.GetChallengeId(),
+		TTLSeconds:  remainingSeconds(response.GetChallengeExpiresAt(), now),
+	}
 }
 
 func toOrder(order *orderv1.Order, now time.Time) (Order, error) {

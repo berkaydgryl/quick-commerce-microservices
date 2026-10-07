@@ -2,9 +2,11 @@
  * Domain <-> Mongo belgesi cevirisi. Tek yer: alan adi degisirse tek dosya degisir.
  */
 
+import type { OrderDetails } from '../../domain/order-details.js';
 import type { OrderItem, OrderPricing } from '../../domain/order-item.js';
 import type { Order, TimelineEntry } from '../../domain/order.js';
 import type {
+  OrderDetailsDocument,
   OrderDocument,
   OrderItemDocument,
   OrderPricingDocument,
@@ -69,6 +71,29 @@ function fromPricingDocument(document: OrderPricingDocument): OrderPricing {
   return document.couponCode === undefined ? base : { ...base, couponCode: document.couponCode };
 }
 
+/** Alanlar tek tek kopyalanir: domain nesnesine eklenen alan belgeye kendiliginden girmez. */
+function toDetailsDocument(details: OrderDetails): OrderDetailsDocument {
+  const { gift } = details;
+  return {
+    ...(gift === undefined
+      ? {}
+      : {
+          gift: {
+            message: gift.message,
+            senderName: gift.senderName,
+            recipientName: gift.recipientName,
+            recipientPhone: gift.recipientPhone,
+          },
+        }),
+    note: details.note,
+    doNotRingBell: details.doNotRingBell,
+    agreementsAcceptedAt: details.agreementsAcceptedAt,
+  };
+}
+
+/** Belge sekli domain'inkiyle ayni; ayri ad, tasimada ayrilabilsin diye. */
+const fromDetailsDocument: (document: OrderDetailsDocument) => OrderDetails = toDetailsDocument;
+
 export function toOrderDocument(order: Order): OrderDocument {
   return {
     _id: order.id,
@@ -94,6 +119,7 @@ export function toOrderDocument(order: Order): OrderDocument {
       : {
           courier: { courierId: order.courier.courierId, assignedAt: order.courier.assignedAt },
         }),
+    ...(order.details === undefined ? {} : { details: toDetailsDocument(order.details) }),
     ...(order.courierRetryAt === undefined ? {} : { courierRetryAt: order.courierRetryAt }),
     ...(order.courierQueuedAt === undefined ? {} : { courierQueuedAt: order.courierQueuedAt }),
     createdAt: order.createdAt,
@@ -130,6 +156,7 @@ export function fromOrderDocument(document: OrderDocument): Order {
             assignedAt: document.courier.assignedAt,
           },
         }),
+    ...(document.details === undefined ? {} : { details: fromDetailsDocument(document.details) }),
     ...(document.courierRetryAt === undefined ? {} : { courierRetryAt: document.courierRetryAt }),
     ...(document.courierQueuedAt === undefined
       ? {}

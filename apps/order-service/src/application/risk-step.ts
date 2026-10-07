@@ -13,6 +13,8 @@
  *     siparis CANCELLED + 410 (lock-timing.ts).
  *  5. Karar (ve kilidin yeni bitisi) tek yazmayla (surum kontrollu) kaydedilir;
  *     durdurulan siparis (REVIEW, REJECTED) kaydedildikten SONRA hata doner.
+ *     Siparis ayrintilari (T12.4) ayni yazimda siparise girer; sozlesme
+ *     onayinin ani bu adimin SUNUCU saatidir.
  */
 
 import { AppError, ORDER_STATUS } from '@getir/core';
@@ -25,6 +27,8 @@ import {
   riskContextOf,
 } from '../domain/checkout-risk.js';
 import type { CheckoutSignals } from '../domain/checkout-risk.js';
+import { acceptDetails } from '../domain/order-details.js';
+import type { OrderDetailsInput } from '../domain/order-details.js';
 import { statusChangedEvents } from '../domain/order-events.js';
 import type { OrderHistoryReader } from '../domain/order-history-reader.js';
 import { assertTransition } from '../domain/order-state-machine.js';
@@ -41,12 +45,18 @@ export interface RiskStepDeps extends LockTimingDeps {
   readonly risk: RiskAssessment;
 }
 
+export interface RiskStepInput {
+  readonly method: PaymentMethod;
+  readonly signals: CheckoutSignals;
+  /** Siparise yazilacak ayrinti (T12.4); verilmezse siparis ayrintisiz kalir. */
+  readonly details?: OrderDetailsInput | undefined;
+}
+
 /** @returns Odeme bekleyen (AWAITING_PAYMENT) siparis. */
 export async function passRiskStep(
   deps: RiskStepDeps,
   order: Order,
-  method: PaymentMethod,
-  signals: CheckoutSignals,
+  { method, signals, details }: RiskStepInput,
   scope: RequestScope,
 ): Promise<Order> {
   assertTransition(order.id, order.status, ORDER_STATUS.RISK_CHECK);
@@ -63,7 +73,10 @@ export async function passRiskStep(
   const timed =
     decision.kind === 'proceed' ? await lockForBand(deps, order, evaluation.band, scope) : order;
 
-  const next = applyRiskDecision(timed, evaluation.band, decision, deps.clock);
+  const decided = applyRiskDecision(timed, evaluation.band, decision, deps.clock);
+  // Risk adimi yalnizca taslakta calisir: taslakta ayrinti yoktur, ilk yazim budur.
+  const next =
+    details === undefined ? decided : { ...decided, details: acceptDetails(details, deps.clock) };
   await deps.repository.update(next, order.version, statusChangedEvents(order, next));
   scope.logger.info(
     { orderId: order.id, band: evaluation.band, score: evaluation.score, status: next.status },
