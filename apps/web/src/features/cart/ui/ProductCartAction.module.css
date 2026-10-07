@@ -1,0 +1,40 @@
+/*
+ * Urunun sepet dugmesi (T16.2; referans getircarsi): beyaz kare kutuda mor "+",
+ * adet kutusunun bir hucresi buyuklugunde. Basilamayan durumlar gri etiket.
+ */
+.c-product-cart-action__add {
+  display: grid;
+  place-items: center;
+  width: var(--size-cart-stepper);
+  height: var(--size-cart-stepper);
+  padding: 0;
+  font: inherit;
+  font-size: var(--font-size-lg);
+  line-height: 1;
+  color: var(--color-brand-primary);
+  cursor: pointer;
+  background: var(--bg-surface);
+  border: none;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-product-cart-action__add:disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
+}
+
+.c-product-cart-action__add:hover:not(:disabled) {
+  background: var(--color-brand-primary-subtle);
+}
+
+/* Satista olmayan (T7.6) ya da stogu biten (T8.4) teklif: basilamayan metin, dugme degil. */
+.c-product-cart-action__unavailable {
+  display: inline-block;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-muted);
+  background: var(--bg-page);
+  border-radius: var(--radius-sm);
+}

@@ -28,3 +28,4 @@ export * from './content/profile.js';
 export * from './content/welcome.js';
 export * from './content/account-menu.js';
 export * from './content/payment-methods.js';
+export * from './content/market-page.js';

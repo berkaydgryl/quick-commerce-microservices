@@ -9,6 +9,9 @@ export type CartStepperTexts = Pick<
   'decreaseSuffix' | 'increaseSuffix' | 'removeSuffix' | 'quantitySuffix'
 >;
 
+/** Yatay: sepet paneli ve arama satiri; dikey: magaza sayfasinin urun karti (T16.2). */
+export type CartStepperOrientation = 'horizontal' | 'vertical';
+
 interface CartQuantityStepperProps {
   /** Urunun adi: dugmelerin erisilebilir adlarinin basi ("Saksıda Küçük Ağaç adedini azalt"). */
   readonly name: string;
@@ -19,13 +22,17 @@ interface CartQuantityStepperProps {
   readonly onIncrement: () => void;
   /** Bir azaltir; adet 1'de kalem kalkar (azaltmak silmek demektir). */
   readonly onDecrement: () => void;
+  readonly orientation?: CartStepperOrientation | undefined;
 }
 
 /**
  * Sepet adet kutusu (T16.3; referans getircarsi): beyaz kutuda solda "−",
  * ortada mor kutuda adet, sagda "+". Adet 1'de "−" yerine cop kutusu cikar:
  * azaltmak zaten silmektir. "+"nin acik olup olmadigina cagiran karar verir
- * (sepet panelinde kalemin siniri).
+ * (sepet panelinde kalemin siniri, urun kartinda canAdd).
+ *
+ * Dikey kutu (urun karti) ustte "+", ortada adet, altta "−": DOM sirasi da
+ * gorunen sira, Tab sirasi gozun sirasiyla ayni kalir.
  */
 export function CartQuantityStepper({
   name,
@@ -34,34 +41,46 @@ export function CartQuantityStepper({
   texts,
   onIncrement,
   onDecrement,
+  orientation = 'horizontal',
 }: CartQuantityStepperProps) {
   const last = quantity === 1;
+  const vertical = orientation === 'vertical';
+  const decrease = (
+    <button
+      type="button"
+      className={styles['c-cart-stepper__step']}
+      aria-label={`${name} ${last ? texts.removeSuffix : texts.decreaseSuffix}`}
+      onClick={onDecrement}
+    >
+      {last ? <TrashIcon /> : <span aria-hidden="true">−</span>}
+    </button>
+  );
+  const increase = (
+    <button
+      type="button"
+      className={styles['c-cart-stepper__step']}
+      aria-label={`${name} ${texts.increaseSuffix}`}
+      disabled={!canIncrement}
+      onClick={onIncrement}
+    >
+      <span aria-hidden="true">+</span>
+    </button>
+  );
   return (
     <div
-      className={styles['c-cart-stepper']}
+      className={
+        vertical
+          ? `${styles['c-cart-stepper']} ${styles['c-cart-stepper--vertical']}`
+          : styles['c-cart-stepper']
+      }
       role="group"
       aria-label={`${name} ${texts.quantitySuffix}`}
     >
-      <button
-        type="button"
-        className={styles['c-cart-stepper__step']}
-        aria-label={`${name} ${last ? texts.removeSuffix : texts.decreaseSuffix}`}
-        onClick={onDecrement}
-      >
-        {last ? <TrashIcon /> : <span aria-hidden="true">−</span>}
-      </button>
+      {vertical ? increase : decrease}
       <span className={styles['c-cart-stepper__quantity']} aria-live="polite">
         {quantity}
       </span>
-      <button
-        type="button"
-        className={styles['c-cart-stepper__step']}
-        aria-label={`${name} ${texts.increaseSuffix}`}
-        disabled={!canIncrement}
-        onClick={onIncrement}
-      >
-        <span aria-hidden="true">+</span>
-      </button>
+      {vertical ? decrease : increase}
     </div>
   );
 }

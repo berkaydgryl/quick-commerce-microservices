@@ -6,6 +6,7 @@ import type {
   OrdersContent,
   ProfileContent,
 } from './content.js';
+import { MARKET_PAGE_FALLBACK } from './content/market-page-fallback.js';
 import { PAYMENT_METHODS_FALLBACK } from './content/payment-methods-fallback.js';
 
 /**
@@ -249,6 +250,8 @@ export const CONTENT_FALLBACK = {
   orders: ORDERS_FALLBACK,
   /** paymentMethods: bloğun tamami (T11.17). */
   paymentMethods: PAYMENT_METHODS_FALLBACK,
+  /** marketPage: bloğun tamami (T16.2). */
+  marketPage: MARKET_PAGE_FALLBACK,
 } as const;
 
 export type ContentFallback = typeof CONTENT_FALLBACK;

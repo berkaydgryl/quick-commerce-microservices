@@ -62,6 +62,8 @@ type Welcome struct {
 	Orders Orders `json:"orders"`
 	// PaymentMethods, Odeme Yontemlerim (T11.17).
 	PaymentMethods PaymentMethods `json:"paymentMethods"`
+	// MarketPage, magaza sayfasi (T16.2).
+	MarketPage MarketPage `json:"marketPage"`
 }
 
 // Header, ust bar: logonun iki parcasi ve iki dugme.
