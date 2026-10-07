@@ -2,7 +2,8 @@
  * Siparis akisinin adimlari (T12.4). Arayuzden bagimsiz: istemci, saat ve
  * anahtarlar disaridan verilir (testte sahte istemci). Kararlar:
  *   - rezervasyon: niyet anahtari (ayni sepet + adres + tutar = ayni anahtar;
- *     belirsiz sonuc ayni rezervasyonu doner);
+ *     belirsiz sonuc ayni rezervasyonu doner); sonuc KESIN bitince niyet
+ *     yenilenir (reserve-intent.ts; QA K9 F1);
  *   - siparis: deneme anahtari (belirsiz sonucta korunur, cevap gelince yenilenir);
  *   - 3DS: her kod denemesi YENI anahtar (sozlesme kurali); kod sirdir:
  *     yalnizca istek govdesinde gider, saklanmaz;
@@ -15,19 +16,21 @@ import type { ReserveCartRequest } from '@getir/contracts';
 import { z } from 'zod';
 
 import type { HttpClient } from '../../../shared/api/http-client';
+import { isUnknownOutcome } from '../../cards/services/attempt-key';
 import type { AttemptKeys } from '../../cards/services/attempt-key';
 import { fetchOrder } from '../../orders/api/orders.api';
 import { confirmThreeDs, placeOrder, releaseReservation, reserveCart } from '../api/checkout.api';
 
 import { challengeDeadline } from './countdown';
 import type { PlaceOrderDraft } from './order-draft';
+import type { ReserveIntent } from './reserve-intent';
 
 export interface OrderFlowDeps {
   readonly client: HttpClient;
   /** Monotonik saat (ms). */
   readonly now: () => number;
-  /** Rezervasyonun niyet anahtari (createIntentKeys). */
-  readonly reserveKey: (request: ReserveCartRequest) => string;
+  /** Rezervasyonun niyet anahtari; kesin sonucta yenilenir (createReserveIntent). */
+  readonly reserveIntent: ReserveIntent;
   /** Siparisin deneme anahtari (createAttemptKeys). */
   readonly orderAttempts: AttemptKeys;
   /** Her cagrida yeni anahtar (3DS, birakma). */
@@ -55,31 +58,51 @@ const attemptsDetailsSchema = z.object({ attemptsLeft: z.number().int().min(0) }
 const isCode = (error: unknown, code: string): error is AppError =>
   error instanceof AppError && error.code === code;
 
+/** Kesin sonuc: niyet biter (sonraki rezervasyon yeni anahtarla); belirsizse korunur. */
+function settleIntent(deps: OrderFlowDeps, error?: unknown): void {
+  if (error === undefined || !isUnknownOutcome(error)) {
+    deps.reserveIntent.renew();
+  }
+}
+
 /**
  * Rezervasyon, sonra siparis. 3DS istenirse geri sayimin son ani kurulur
- * (rezervasyonun sunucu ttl'i ve kodun suresi). RISK_REVIEW (202) siparis
- * olustu ama incelemede demektir (N3): hata degil.
+ * (rezervasyonun sunucu ttl'i ve kodun suresi); niyet 3DS bitene kadar surer.
+ * RISK_REVIEW (202) siparis olustu ama incelemede demektir (N3): hata degil.
+ * Taslak govde kurulamazsa (form gecersiz) alinan rezervasyon en iyi cabayla
+ * birakilir (QA K9 dusuk not).
  */
 export async function startOrder(
   deps: OrderFlowDeps,
   request: ReserveCartRequest,
   draft: (orderId: string) => PlaceOrderDraft,
 ): Promise<PlaceOutcome> {
-  const reservation = await reserveCart(deps.client, request, deps.reserveKey(request));
+  let reservation;
+  try {
+    reservation = await reserveCart(deps.client, request, deps.reserveIntent.key(request));
+  } catch (error) {
+    settleIntent(deps, error);
+    throw error;
+  }
   const reservationReceivedAt = deps.now();
+  let body;
+  try {
+    body = draft(reservation.orderId);
+  } catch (error) {
+    await releaseSafely(deps, reservation.orderId);
+    throw error;
+  }
   let placement;
   try {
-    placement = await placeOrder(
-      deps.client,
-      draft(reservation.orderId),
-      deps.orderAttempts.start(),
-    );
+    placement = await placeOrder(deps.client, body, deps.orderAttempts.start());
     deps.orderAttempts.settle();
   } catch (error) {
     deps.orderAttempts.settle(error);
     if (isCode(error, ERROR_CODES.RISK_REVIEW)) {
+      settleIntent(deps);
       return { kind: 'review', orderId: reservation.orderId };
     }
+    settleIntent(deps, error);
     throw error;
   }
   if (placement.threeDs !== undefined) {
@@ -94,6 +117,7 @@ export async function startOrder(
       }),
     };
   }
+  settleIntent(deps);
   return { kind: placement.status === 'PAID' ? 'paid' : 'review', orderId: placement.orderId };
 }
 
@@ -114,6 +138,7 @@ export async function submitCode(
       { challengeId, otp },
       deps.newKey(),
     );
+    settleIntent(deps);
     return { kind: placement.status === 'PAID' ? 'paid' : 'review' };
   } catch (error) {
     if (isCode(error, ERROR_CODES.THREEDS_FAILED)) {
@@ -130,8 +155,10 @@ export async function submitCode(
  * Rezervasyonu en iyi cabayla birakir (Vazgeç, sure doldu, hak bitti). Hata
  * gostermez: 404 zaten yok; 409 REQUEST_IN_PROGRESS parasi alinmis olabilir:
  * siparis okunur, PAID ise basari akisi ("paid"); okunamazsa "open".
+ * Birakma niyetin kesin sonudur: sonraki rezervasyon yeni anahtarla (QA K9 F1).
  */
 export async function releaseSafely(deps: OrderFlowDeps, orderId: string): Promise<ReleaseOutcome> {
+  deps.reserveIntent.renew();
   try {
     await releaseReservation(deps.client, orderId, deps.newKey());
     return 'released';

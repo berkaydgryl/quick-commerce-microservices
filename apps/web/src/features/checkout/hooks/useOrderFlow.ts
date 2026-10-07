@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { createIdempotencyKey, createIntentKeys } from '../../../shared/api/idempotency-key';
+import { createIdempotencyKey } from '../../../shared/api/idempotency-key';
 import { authorizedClient } from '../../../shared/session/session';
 import { useToastStore } from '../../../shared/toast/toast-store';
 import { useCartStore } from '../../cart/stores/useCartStore';
@@ -15,6 +15,7 @@ import { orderPath } from '../../orders/routes';
 import type { PlaceOrderDraft } from '../services/order-draft';
 import { releaseSafely, startOrder, submitCode } from '../services/place-order';
 import type { OrderFlowDeps } from '../services/place-order';
+import { createReserveIntent } from '../services/reserve-intent';
 
 export type OrderFlowState =
   | { readonly kind: 'idle' | 'busy' | 'done' }
@@ -53,7 +54,7 @@ export function useOrderFlow(marketId: string | undefined, texts: FlowTexts) {
   const [deps] = useState<OrderFlowDeps>(() => ({
     client: authorizedClient,
     now: () => performance.now(),
-    reserveKey: createIntentKeys(),
+    reserveIntent: createReserveIntent(),
     orderAttempts: createAttemptKeys(),
     newKey: createIdempotencyKey,
   }));

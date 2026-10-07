@@ -21,6 +21,7 @@ import {
   submitCode,
 } from '../../src/features/checkout/services/place-order';
 import type { OrderFlowDeps } from '../../src/features/checkout/services/place-order';
+import { createReserveIntent } from '../../src/features/checkout/services/reserve-intent';
 
 const ORDER_ID = `ord_${'c'.repeat(32)}`;
 const CARD_ID = `crd_${'a'.repeat(32)}`;
@@ -70,12 +71,13 @@ const error = (code: ErrorCode, details?: unknown) =>
   new AppError(code, `mesaj ${code}`, { details });
 
 function deps(client: HttpClient, clock = { value: 1_000 }): OrderFlowDeps {
+  let intent = 0;
   let attempt = 0;
   let fresh = 0;
   return {
     client,
     now: () => clock.value,
-    reserveKey: () => 'niyet-anahtari-1',
+    reserveIntent: createReserveIntent(() => `niyet-${(intent += 1)}`),
     orderAttempts: createAttemptKeys(() => `deneme-${(attempt += 1)}`),
     newKey: () => `yeni-${(fresh += 1)}`,
   };
@@ -95,7 +97,7 @@ describe('startOrder (T12.4)', () => {
       orderId: ORDER_ID,
     });
     expect(calls.map((call) => [call.method, call.path, call.key])).toEqual([
-      ['POST', '/v1/cart/reserve', 'niyet-anahtari-1'],
+      ['POST', '/v1/cart/reserve', 'niyet-1'],
       ['POST', '/v1/orders', 'deneme-1'],
     ]);
     expect(calls[1]?.body).toEqual(DRAFT(ORDER_ID));
@@ -247,5 +249,99 @@ describe('releaseSafely (N2, PM ek sart 1)', () => {
 
     const other = fakeClient([{ error: error(ERROR_CODES.INTERNAL) }]);
     await expect(releaseSafely(deps(other.client), ORDER_ID)).resolves.toBe('open');
+  });
+});
+
+describe('rezervasyonun niyeti (QA K9 F1): kesin sonucta yeni, belirsizde ayni anahtar', () => {
+  const ORDER_2 = `ord_${'f'.repeat(32)}`;
+  const placed = (orderId: string) => ({ data: { orderId, status: 'PAID' } });
+  const reserved = (orderId: string) => ({ data: { ...RESERVATION, orderId } });
+  const challenge = {
+    data: { orderId: ORDER_ID, status: 'AWAITING_PAYMENT', threeDs: { challengeId: 'ch_1' } },
+  };
+  const released = {
+    data: { orderId: ORDER_ID, released: true, releasedAt: '2026-10-07T05:00:00.000Z' },
+  };
+  const reserveKeys = (calls: readonly Call[]) =>
+    calls
+      .filter((call) => call.method === 'POST' && call.path === '/v1/cart/reserve')
+      .map((call) => call.key);
+
+  it('(1) 3DS -> Vazgeç (birakma) -> Sipariş Ver: ikinci rezervasyon YENI anahtarla, yeni siparis', async () => {
+    const { client, calls } = fakeClient([
+      reserved(ORDER_ID),
+      challenge,
+      released,
+      reserved(ORDER_2),
+      placed(ORDER_2),
+    ]);
+    const flow = deps(client);
+
+    await startOrder(flow, REQUEST, DRAFT);
+    await releaseSafely(flow, ORDER_ID);
+    const second = await startOrder(flow, REQUEST, DRAFT);
+
+    expect(reserveKeys(calls)).toEqual(['niyet-1', 'niyet-2']);
+    expect(second).toEqual({ kind: 'paid', orderId: ORDER_2 });
+  });
+
+  it('(2) odeme reddi (402) sonrasi Sipariş Ver: YENI anahtar', async () => {
+    const { client, calls } = fakeClient([
+      reserved(ORDER_ID),
+      { error: error(ERROR_CODES.PAYMENT_DECLINED) },
+      reserved(ORDER_2),
+      placed(ORDER_2),
+    ]);
+    const flow = deps(client);
+
+    await expect(startOrder(flow, REQUEST, DRAFT)).rejects.toBeInstanceOf(AppError);
+    await startOrder(flow, REQUEST, DRAFT);
+
+    expect(reserveKeys(calls)).toEqual(['niyet-1', 'niyet-2']);
+  });
+
+  it('(3) belirsiz sonuc (503: siparis ya da rezervasyon) sonrasi Sipariş Ver: AYNI anahtar', async () => {
+    const { client, calls } = fakeClient([
+      reserved(ORDER_ID),
+      { error: error(ERROR_CODES.SERVICE_UNAVAILABLE) },
+      { error: error(ERROR_CODES.SERVICE_UNAVAILABLE) },
+      reserved(ORDER_ID),
+      placed(ORDER_ID),
+    ]);
+    const flow = deps(client);
+
+    await expect(startOrder(flow, REQUEST, DRAFT)).rejects.toBeInstanceOf(AppError);
+    await expect(startOrder(flow, REQUEST, DRAFT)).rejects.toBeInstanceOf(AppError);
+    await startOrder(flow, REQUEST, DRAFT);
+
+    expect(reserveKeys(calls)).toEqual(['niyet-1', 'niyet-1', 'niyet-1']);
+  });
+
+  it('basarili siparisten sonraki niyet YENI anahtar (onceki niyet bitti)', async () => {
+    const { client, calls } = fakeClient([
+      reserved(ORDER_ID),
+      placed(ORDER_ID),
+      reserved(ORDER_2),
+      placed(ORDER_2),
+    ]);
+    const flow = deps(client);
+
+    await startOrder(flow, REQUEST, DRAFT);
+    await startOrder(flow, REQUEST, DRAFT);
+
+    expect(reserveKeys(calls)).toEqual(['niyet-1', 'niyet-2']);
+  });
+
+  it('taslak govde kurulamazsa alinan rezervasyon birakilir (DELETE), siparis istegi atilmaz', async () => {
+    const { client, calls } = fakeClient([reserved(ORDER_ID), released]);
+    const broken = () => {
+      throw new Error('gecersiz form');
+    };
+
+    await expect(startOrder(deps(client), REQUEST, broken)).rejects.toThrow('gecersiz form');
+    expect(calls.map((call) => [call.method, call.path])).toEqual([
+      ['POST', '/v1/cart/reserve'],
+      ['DELETE', `/v1/cart/reserve/${ORDER_ID}`],
+    ]);
   });
 });

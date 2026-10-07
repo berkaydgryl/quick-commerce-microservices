@@ -420,7 +420,8 @@ sepet tutmazsa pasif). Oturum ister; sepet boşsa `/sepet`'e döner. Sade bar ve
 - **Sözleşme metinleri demo** yer tutucu (`checkout.preInfoParagraphs`, `distanceSalesParagraphs`); gerçek metin
   içerikten değişir.
 - **Sipariş akışı (T12.4):** "Sipariş Ver" ilk eksik koşul varken pasif ve altında o koşul yazar. İstekten hemen önce
-  koşullar yeniden denetlenir. Akış: `POST /v1/cart/reserve` (niyet anahtarı), `POST /v1/orders` (deneme anahtarı;
+  koşullar yeniden denetlenir. Akış: `POST /v1/cart/reserve` (niyet anahtarı; belirsiz sonuçta korunur, sonuç kesin
+  bitince — başarı, ret, Vazgeç, süre, hak — yenilenir), `POST /v1/orders` (deneme anahtarı;
   **taslak gövde** `payment.cardId` + `details`, B1/B2 backend'e gelince `order-draft.ts` sözleşmeye taşınır),
   3DS gerekirse `POST /v1/orders/:id/3ds` (her kod yeni anahtar). Vazgeç, süre ya da hak bitince
   `DELETE /v1/cart/reserve/:id` (yeni anahtar; 404 sessiz; 409'da sipariş okunur, ödendiyse başarı).
