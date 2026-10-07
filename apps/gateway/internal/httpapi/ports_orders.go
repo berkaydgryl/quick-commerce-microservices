@@ -7,6 +7,7 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/orderhistory"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/roomtoken"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/tracking"
 )
 
 // CartReserver, POST /v1/cart/reserve.
@@ -43,6 +44,12 @@ type OrderGetter interface {
 // kisa omurlu jetonu; gercegi roomtoken.Service (sahiplik + imza).
 type OrderRoomTokenIssuer interface {
 	Issue(ctx context.Context, userID, orderID string) (roomtoken.Token, error)
+}
+
+// OrderTracker, GET /v1/orders/{id}/tracking (T14.2): kurye takibi, SAHIBINE;
+// gercegi tracking.Service (sahiplik order'dan, takip courier'dan).
+type OrderTracker interface {
+	Track(ctx context.Context, userID, orderID string) (tracking.Tracking, error)
 }
 
 // CheckoutSignalReader, POST /v1/orders'in risk sinyalleri (T8.1): oturum ve
