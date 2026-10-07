@@ -20,6 +20,7 @@ func TestPrefixesMatchCore(t *testing.T) {
 		"ADDRESS": Address,
 		"CARD":    Card,
 		"ORDER":   Order,
+		"COURIER": Courier,
 	} {
 		coreValue, found := core[key]
 		if !found {

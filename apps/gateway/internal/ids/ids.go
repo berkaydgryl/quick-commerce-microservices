@@ -26,6 +26,9 @@ const (
 	// Order, siparis; order-service uretir, gateway yol kimliginin bicimini
 	// RPC'den once denetler (kurye takibi, T14.2).
 	Order = "ord"
+	// Courier, kurye; courier-service uretir, gateway takip cevabinda bicimini
+	// denetler (#179).
+	Courier = "crr"
 )
 
 // bodyBytes, kimlik govdesinin rastgele bayt sayisi: 16 bayt = 32 onaltilik.

@@ -635,15 +635,32 @@ denetlenir:
 Geçerli biçimli kimlikte bütün 404'ler aynıdır (`NOT_FOUND`, ayrıntı `{orderId}`): sahiplik,
 durum ve takip yokluğu dışarıdan ayırt edilemez. `status` order'ın kaydıdır, `phase` courier'in.
 Gizlilik kuralları cevap istemciye çıkmadan burada son kez uygulanır: `TO_MARKET`'ta courier konum
-gönderse de cevaba girmez (kurye önceki müşterinin adresinde olabilir) ve varış tahmini dakikaya
-yukarı yuvarlanır (kalanın azalışı kuryenin markete uzaklığını ele vermesin). Sözleşmenin zorunlu
-alanları (an, 1–40 noktalı rota, market ve adres konumu; paket alındıktan sonra kurye konumu) yoksa ya
-da aşama bilinmiyorsa cevap 500'dür: sözleşmeyi bozan gövde istemciye gitmez. Aşamaların diğer
-tutarlılık kuralları courier'dedir. Courier'in doğrulama hatasındaki `orderId` yol adıyla (`id`)
-döner. Courier `GetTracking`'i uygulamadıysa uç 501 döner (D5). Konum,
-rota ve adres kişisel veridir: cevap `no-store`, günlüğe koordinat yazılmaz (test:
-`TestOrderTrackingLogsNoCoordinates`). Alan adları, aşamalar ve takip edilen durumlar sözleşmeyle
-`internal/tracking/contract_test.go`'da karşılaştırılır.
+gönderse de cevaba girmez (kurye önceki müşterinin adresinde olabilir), varış tahmini dakikaya
+yukarı yuvarlanır (kalanın azalışı kuryenin markete uzaklığını ele vermesin; `int64`, `int32`
+sınırında taşmaz) ve kurye adı kısaltılır (#183, `ShortCourierName`: ilk ad + son soyadın ilk harfi,
+"Mehmet Kaya" -> "Mehmet K."; baş harf Türkçe kuralla büyür, "i" -> "İ"; soyadda harf yoksa yalnızca ilk
+ad kalır; tam ad gateway'den çıkmaz).
+
+Courier'in cevabı şu sözleşme kurallarıyla denetlenir (#179, `internal/tracking/invariants.go`); bunlara
+aykırı cevap istemciye gitmez, ayrıntısız 500 olur (koordinat aralığı courier'in girdisinde,
+`geoPointSchema` ile denetlenir):
+
+- zorunlu parçalar: an, 1–40 noktalı rota, market ve adres konumu, `crr_` biçimli kurye kimliği, boş
+  olmayan ad, negatif olmayan kalan yol ve tahmin;
+- rota market -> adres parçasıdır: ilk nokta market, son nokta adres (enlem ve boylam tam eşit; courier
+  iki konumu rotanın uçlarından üretir). Paket alınmadan rotaya kurye -> market bacağı girerse kuryenin
+  önceki müşterinin adresindeki konumu sızardı;
+- aşamanın anları: `TO_MARKET`'ta alma ve teslim anı yok, `TO_CUSTOMER`'da alma anı var, teslim anı yok,
+  `DELIVERED`'da ikisi var ve kalan yol ile tahmin 0; paket alındıktan sonra kurye konumu zorunlu.
+
+Hatanın günlüğe giden nedeni yalnızca alan adlarını taşır. Courier hatasının mesaj metni de günlüğe
+gitmez (adı ya da konumu taşıyabilir): neden yalnızca servis, metot ve gRPC durum kodudur.
+Courier'in doğrulama hatasındaki `orderId` yol adıyla (`id`) döner. Courier `GetTracking`'i
+uygulamadıysa uç 501 döner (D5). Konum, rota, adres ve kurye adı kişisel veridir: `no-store` rotanın
+ilk ara katmanıdır (`noStoreRoute`, kart uçlarıyla aynı), 401, 404, 429, 500 ve 503 cevapları da
+önbelleğe girmez; günlüğe koordinat ve ad yazılmaz (testler: `internal/httpapi/tracking_errors_test.go`,
+`TestOrderTrackingLogsNoCoordinates`). Alan adları, aşamalar, takip edilen durumlar ve sayıların üst
+sınırsız tamsayı kuralı sözleşmeyle `internal/tracking/contract_test.go`'da karşılaştırılır.
 
 ## `/healthz` sözleşmesi
 
