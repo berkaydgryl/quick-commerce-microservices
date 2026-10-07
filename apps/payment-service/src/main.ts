@@ -101,7 +101,7 @@ const { handle, store, events } = await startOrExit(
       logger,
       // Kart kasasi (T11.17) ayni sunucuda; saglayici ikisinde de mock.
       services: [
-        buildPaymentService({ logger, repository: opened.repository }),
+        buildPaymentService({ logger, repository: opened.repository, cards: opened.cards }),
         buildCardVaultService({ logger, repository: opened.cards }),
       ],
       // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti kesilmesin.

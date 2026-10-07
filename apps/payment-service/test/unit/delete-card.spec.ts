@@ -50,6 +50,10 @@ class NoReadAfterDelete implements CardRepository {
     return this.inner.listActive(userId);
   }
 
+  findActive(userId: string, cardId: string): Promise<Card | null> {
+    return this.inner.findActive(userId, cardId);
+  }
+
   async softDelete(userId: string, cardId: string, at: Date): Promise<boolean> {
     const result = await this.inner.softDelete(userId, cardId, at);
     this.deleted = result;

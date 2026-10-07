@@ -14,21 +14,31 @@ import { THREEDS_CHALLENGE_TTL_MS } from '../../src/config/constants.js';
 import { PAYMENT_METHOD, PAYMENT_STATUS } from '../../src/domain/payment.js';
 import type { Payment } from '../../src/domain/payment.js';
 import type { PaymentProvider } from '../../src/domain/payment-provider.js';
+import { InMemoryCardStore } from '../../src/infrastructure/memory/in-memory-card-store.js';
 import { InMemoryPaymentStore } from '../../src/infrastructure/memory/in-memory-payment-store.js';
 import { MockPaymentProvider } from '../../src/infrastructure/mock-provider/mock-payment-provider.js';
 
 const NOW = Date.UTC(2026, 8, 23, 12, 0, 0);
 
-const cardCharge = (overrides: Partial<ChargeInput> = {}): ChargeInput => ({
-  orderId: 'ord_1',
-  userId: 'usr_1',
-  amount: { amountMinor: 12_990, currency: 'TRY' },
-  method: PAYMENT_METHOD.CARD,
-  cardToken: 'tok_test_4242',
-  idempotencyKey: 'anahtar-0001',
-  requireThreeDs: false,
-  ...overrides,
-});
+/** Eski jetonla (card_token) cekim; `cardToken: undefined` kart yok demektir. */
+type CardChargeOverrides = Partial<Omit<ChargeInput, 'card'>> & {
+  readonly cardToken?: string | undefined;
+};
+
+const cardCharge = (overrides: CardChargeOverrides = {}): ChargeInput => {
+  const { cardToken, ...rest } = overrides;
+  const token = 'cardToken' in overrides ? cardToken : 'tok_test_4242';
+  return {
+    orderId: 'ord_1',
+    userId: 'usr_1',
+    amount: { amountMinor: 12_990, currency: 'TRY' },
+    method: PAYMENT_METHOD.CARD,
+    idempotencyKey: 'anahtar-0001',
+    requireThreeDs: false,
+    ...rest,
+    card: token === undefined ? undefined : { cardToken: token },
+  };
+};
 
 /** Cagrinin gunlukcusu bagli use-case: testler yalnizca girdiyle cagirir. */
 type ChargeCall = (input: ChargeInput) => Promise<Payment>;
@@ -42,6 +52,7 @@ function build(
 ): ChargeCall {
   const useCase = createCharge({
     repository,
+    cards: new InMemoryCardStore(),
     provider,
     clock: fixedClock(NOW),
     challengeTtlMs: THREEDS_CHALLENGE_TTL_MS,

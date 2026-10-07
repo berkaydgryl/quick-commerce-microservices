@@ -140,6 +140,23 @@ export function describeCardStoreContract(name: string, getStore: () => CardRepo
       expect((await store.listActive(owner)).map((listed) => listed.id)).toEqual([again.id]);
     });
 
+    it('odeme icin kart (T12.4): yalnizca SAHIBININ silinmemis karti jetonuyla; digerleri null', async () => {
+      const store = getStore();
+      const owner = newUser();
+      const saved = card(owner);
+      await store.add(saved, SAVED_CARDS_MAX);
+
+      expect(await store.findActive(owner, saved.id)).toMatchObject({
+        id: saved.id,
+        userId: owner,
+        providerToken: 'tok_test_4242',
+      });
+      expect(await store.findActive(newUser(), saved.id)).toBeNull();
+      expect(await store.findActive(owner, newId(ID_PREFIX.CARD))).toBeNull();
+      await store.softDelete(owner, saved.id, new Date(START_MS + 5_000));
+      expect(await store.findActive(owner, saved.id)).toBeNull();
+    });
+
     it('es zamanli: ayni karta iki ekleme tek kart birakir; kaybeden CONFLICT ve kazananin kimligi (QA P4)', async () => {
       const store = getStore();
       const userId = newUser();

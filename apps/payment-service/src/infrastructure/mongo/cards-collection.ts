@@ -48,6 +48,11 @@ export class CardsCollection extends MongoRepository<CardDocument> {
     );
   }
 
+  /** Kullanicinin silinmemis karti, kimligiyle (T12.4 odeme); yoksa null. */
+  async findActive(userId: string, cardId: string): Promise<CardDocument | null> {
+    return this.findOne({ _id: cardId, userId, status: CARD_STATUS.ACTIVE });
+  }
+
   async findActiveByKey(key: CardKey, options: SessionOption = {}): Promise<CardDocument | null> {
     return this.findOne(
       {

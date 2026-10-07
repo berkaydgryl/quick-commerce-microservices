@@ -18,6 +18,7 @@ import {
 import { PAYMENT_METHOD, PAYMENT_STATUS } from '../../src/domain/payment.js';
 import type { Payment } from '../../src/domain/payment.js';
 import type { PaymentProvider } from '../../src/domain/payment-provider.js';
+import { InMemoryCardStore } from '../../src/infrastructure/memory/in-memory-card-store.js';
 import { InMemoryPaymentStore } from '../../src/infrastructure/memory/in-memory-payment-store.js';
 import { MockPaymentProvider } from '../../src/infrastructure/mock-provider/mock-payment-provider.js';
 
@@ -45,6 +46,7 @@ function build(
 async function chargeWith3Ds(orderId = 'ord_1'): Promise<Payment> {
   const charge = createCharge({
     repository,
+    cards: new InMemoryCardStore(),
     provider: new MockPaymentProvider(),
     clock,
     challengeTtlMs: THREEDS_CHALLENGE_TTL_MS,
@@ -55,7 +57,7 @@ async function chargeWith3Ds(orderId = 'ord_1'): Promise<Payment> {
       userId: 'usr_1',
       amount: { amountMinor: 12_990, currency: 'TRY' },
       method: PAYMENT_METHOD.CARD,
-      cardToken: 'tok_test_3184',
+      card: { cardToken: 'tok_test_3184' },
       idempotencyKey: `anahtar-${orderId}`,
       requireThreeDs: false,
     },

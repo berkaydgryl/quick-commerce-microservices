@@ -17,6 +17,12 @@ export interface CardRepository {
   /** Kullanicinin silinmemis kartlari, yeniden eskiye (esit anda kimlik azalan). */
   listActive(userId: string): Promise<readonly Card[]>;
   /**
+   * Kayitli kartla odeme (T12.4): kart BU kullanicinin ve ACTIVE ise saglayici
+   * jetonuyla doner; yoksa, baskasininsa ya da silinmisse null (ucu ayni).
+   * userId cagrinin dogrulanmis kullanicisidir (ChargeRequest.user_id).
+   */
+  findActive(userId: string, cardId: string): Promise<Card | null>;
+  /**
    * Karti yumusak siler (deletedCard) ve kasada bir yer acar; tek atomik adim.
    * @returns silindi mi? (false: kart yok, baska kullanicinin ya da zaten silinmis)
    */

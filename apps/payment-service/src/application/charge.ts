@@ -1,9 +1,11 @@
 /**
  * Charge use-case: siparis tutarini ceker.
  *
- * Akis: (1) ayni anahtarla gelen tekrar istek ilk kaydi doner, (2) siparisin
- * baska bir odemesi varsa CONFLICT, (3) PENDING kayit yazilir - siparisi ve
- * anahtari SAHIPLENIR, (4) kartsa saglayiciya gidilir, (5) karar kayda islenir.
+ * Akis: (1) ayni anahtarla gelen tekrar istek ilk kaydi doner (kart ARANMAZ:
+ * kart sonradan silinmis olsa da ilk sonuc), (2) siparisin baska bir odemesi
+ * varsa CONFLICT, (3) kayitli kart cozulur (charge-card.ts; yoksa NOT_FOUND,
+ * kayit YAZILMAZ), (4) PENDING kayit yazilir - siparisi ve anahtari
+ * SAHIPLENIR, (5) kartsa saglayiciya gidilir, (6) karar kayda islenir.
  *
  * Kayit saglayicidan ONCE yazildigi icin ayni anahtarla es zamanli iki istekte
  * ikincisi insert'te CONFLICT alir, tekrar-istek yoluna duser ve saglayiciya
@@ -26,8 +28,10 @@ import type { Payment } from '../domain/payment.js';
 import type { PaymentProvider } from '../domain/payment-provider.js';
 import type { PaymentRepository } from '../domain/payment-repository.js';
 import { paymentAlreadyExists } from '../domain/payment-repository.js';
+import { resolveChargeCard, withoutProviderToken } from './charge-card.js';
+import type { CardSource, ChargeCardDeps } from './charge-card.js';
 
-export interface ChargeDeps {
+export interface ChargeDeps extends ChargeCardDeps {
   readonly repository: PaymentRepository;
   /** Yalnizca cekim karari; 3DS dogrulamasi bu use-case'in isi degil. */
   readonly provider: Pick<PaymentProvider, 'authorize'>;
@@ -36,8 +40,11 @@ export interface ChargeDeps {
 }
 
 export interface ChargeInput extends ChargeCommand {
-  /** Kartli odemede zorunlu, kapida odemede bos (sema dogrular). */
-  readonly cardToken: string | undefined;
+  /**
+   * Kartli odemede tam biri (sema dogrular): kasadaki kart ya da eski jeton;
+   * kapida odemede yok. Cekim NIYETININ parcasi degil (isSameCharge'a girmez).
+   */
+  readonly card: CardSource | undefined;
   /**
    * Risk'in "3DS zorunlu" karari (T7.1). Cekim NIYETININ parcasi degil,
    * politikadir: tekrar-istek karsilastirmasina (isSameCharge) girmez ve
@@ -54,7 +61,7 @@ export interface ChargeInput extends ChargeCommand {
 export type Charge = (input: ChargeInput, logger: Logger) => Promise<Payment>;
 
 export function createCharge(deps: ChargeDeps): Charge {
-  return async ({ cardToken, requireThreeDs, ...command }, logger) => {
+  return async ({ card, requireThreeDs, ...command }, logger) => {
     const replay = await findReplay(deps.repository, command);
     if (replay !== null) {
       return replay;
@@ -63,7 +70,12 @@ export function createCharge(deps: ChargeDeps): Charge {
       throw paymentAlreadyExists(command.orderId);
     }
 
-    const pending = startPayment(command, deps.clock);
+    // Kayitli kart kayittan ONCE: kart yoksa kayit yazilmaz, anahtar harcanmaz.
+    const resolved =
+      card === undefined ? undefined : await resolveChargeCard(deps, command.userId, card);
+    const started = startPayment(command, deps.clock);
+    const pending =
+      resolved?.cardId === undefined ? started : { ...started, cardId: resolved.cardId };
     try {
       await deps.repository.insert(pending);
     } catch (error) {
@@ -76,11 +88,16 @@ export function createCharge(deps: ChargeDeps): Charge {
     }
 
     // Kapida odemede saglayiciya gidilmez: tutar teslimatta alinir. (Kartli
-    // odemede jetonun varligini sema garanti eder; ikinci kosul tip daraltmadir.)
-    if (command.method === PAYMENT_METHOD.CASH_ON_DELIVERY || cardToken === undefined) {
+    // odemede kartin varligini sema garanti eder; ikinci kosul tip daraltmadir.)
+    if (command.method === PAYMENT_METHOD.CASH_ON_DELIVERY || resolved === undefined) {
       return pending;
     }
-    const settled = await authorizeAndSettle(deps, pending, { cardToken, requireThreeDs }, logger);
+    const settled = await authorizeAndSettle(
+      deps,
+      pending,
+      { cardToken: resolved.providerToken, requireThreeDs },
+      logger,
+    );
     await deps.repository.update(settled, pending.version);
     return settled;
   };
@@ -117,8 +134,12 @@ async function authorizeAndSettle(
     const effective = withRequiredThreeDs(decision, card.requireThreeDs);
     return settlePayment(pending, effective, deps.clock, deps.challengeTtlMs);
   } catch (error) {
-    // Hata istemciye degil gunluge: tutar cekilmedi, kayit FAILED olur.
-    logger.error({ err: error, orderId: pending.orderId }, 'odeme saglayicisina ulasilamadi');
+    // Hata istemciye degil gunluge: tutar cekilmedi, kayit FAILED olur. Saglayicinin
+    // hata metni jetonu yankilayabilir: gunluge jetonsuz kopyasi (T12.4).
+    logger.error(
+      { err: withoutProviderToken(error, card.cardToken), orderId: pending.orderId },
+      'odeme saglayicisina ulasilamadi',
+    );
     return failUnreachableProvider(pending, deps.clock);
   }
 }

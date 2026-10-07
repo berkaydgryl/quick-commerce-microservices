@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest';
 import { PAYMENT_METHOD } from '../../src/domain/payment.js';
 import { chargeRequestSchema, refundRequestSchema } from '../../src/interfaces/grpc/schemas.js';
 
+const CARD_ID = 'crd_0123456789abcdef0123456789abcdef';
+
 const request = (overrides: Partial<paymentV1.ChargeRequest> = {}): paymentV1.ChargeRequest => ({
   orderId: 'ord_1',
   userId: 'usr_1',
@@ -26,15 +28,21 @@ describe('chargeRequestSchema', () => {
 
     expect(parsed.amount).toEqual({ amountMinor: 4599, currency: 'TRY' });
     expect(parsed.method).toBe(PAYMENT_METHOD.CARD);
-    expect(parsed.cardToken).toBe('tok_test_4242');
+    expect(parsed.card).toEqual({ cardToken: 'tok_test_4242' });
   });
 
-  it('kapida odemede jeton undefined olur', () => {
+  it('kapida odemede kart yok (undefined)', () => {
     const parsed = chargeRequestSchema.parse(
       request({ method: paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY, cardToken: '' }),
     );
     expect(parsed.method).toBe(PAYMENT_METHOD.CASH_ON_DELIVERY);
-    expect(parsed.cardToken).toBeUndefined();
+    expect(parsed.card).toBeUndefined();
+  });
+
+  it('kayitli kart (T12.4): card_id kart kaynagi olur', () => {
+    const parsed = chargeRequestSchema.parse(request({ cardToken: '', cardId: CARD_ID }));
+
+    expect(parsed.card).toEqual({ cardId: CARD_ID });
   });
 
   it.each([
@@ -43,7 +51,17 @@ describe('chargeRequestSchema', () => {
     ['tutar sifir', { amount: { amountMinor: 0, currency: 'TRY' } }],
     ['kesirli tutar (kurus tam sayi)', { amount: { amountMinor: 45.99, currency: 'TRY' } }],
     ['baska para birimi', { amount: { amountMinor: 100, currency: 'EUR' } }],
-    ['kartli odemede jeton yok', { cardToken: '' }],
+    ['kartli odemede kart yok', { cardToken: '' }],
+    ['card_id ile card_token birlikte (T12.4)', { cardId: CARD_ID }],
+    ['card_id bicimsiz', { cardToken: '', cardId: 'crd_1' }],
+    [
+      'kapida odemede card_id var',
+      {
+        method: paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY,
+        cardToken: '',
+        cardId: CARD_ID,
+      },
+    ],
     [
       'kapida odemede jeton var',
       { method: paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY },
