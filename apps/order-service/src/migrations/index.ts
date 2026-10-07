@@ -10,5 +10,6 @@
 import type { Migration } from '@getir/mongo-kit';
 
 import { courierQueue } from './0001-kurye-sirasi.js';
+import { historyVisibility } from './0002-gecmis-gorunurlugu.js';
 
-export const MIGRATIONS: readonly Migration[] = [courierQueue];
+export const MIGRATIONS: readonly Migration[] = [courierQueue, historyVisibility];

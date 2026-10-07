@@ -4,8 +4,9 @@
  * Sahte istemciyle dogrulanamayan seyler burada sinanir:
  *   1. Sozlesme testleri: bellek uygulamasiyla AYNI senaryolar gercek sorguda
  *      (surum kosullu replaceOne, _id tekil ihlali, imlec filtresi).
- *   2. Indeks: ListMyOrders sorgusu bellekte SIRALAMA yapmadan indeksten okur;
- *      kurye iscisinin talep ve bekleyen (#92) sorgulari kismi indekslerinden.
+ *   2. Indeks: ListMyOrders sorgusu kismi gecmis indeksinden (#101) bellekte
+ *      SIRALAMA yapmadan ve gizli siparis okumadan; kurye iscisinin talep ve
+ *      bekleyen (#92) sorgulari kismi indekslerinden.
  *   3. T4.5 "bitti sayilir": gRPC ile acilan siparis `orders` koleksiyonunda gorulur.
  */
 
@@ -27,12 +28,19 @@ import { FakePayments, TEST_CARD } from '../support/fake-payments.js';
 import { FakeStockReservations } from '../support/fake-stock-reservations.js';
 import { FakeRiskAssessment } from '../support/fake-risk-assessment.js';
 import { DRAFT_TOTAL_MINOR, draftRequest } from '../support/order-fixtures.js';
+import type { OrderHistoryCursor } from '../../src/domain/order-history-cursor.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
+import type { OrderDocument } from '../../src/infrastructure/mongo/documents.js';
+import {
+  findHistoryCursor,
+  HISTORY_INDEX_NAME,
+} from '../../src/infrastructure/mongo/history-query.js';
 import { MongoOrderOutbox } from '../../src/infrastructure/mongo/mongo-order-outbox.js';
 import { OrderMongoStore } from '../../src/infrastructure/mongo/order-mongo-store.js';
 import { OrdersCollection } from '../../src/infrastructure/mongo/orders-collection.js';
 import { OutboxCollection } from '../../src/infrastructure/mongo/outbox-collection.js';
 import { describeOrderStoreContract } from '../support/order-store-contract.js';
+import { insertHistoryPlanOrders } from '../support/history-plan-orders.js';
 
 /** infra/docker/docker-compose.dev.yml ile ayni surum. */
 const MONGO_IMAGE = 'mongo:7';
@@ -47,7 +55,11 @@ const GIFT: orderV1.GiftDetails = {
 
 const explainSchema = z.object({ queryPlanner: z.object({ winningPlan: z.unknown() }) });
 const statsSchema = explainSchema.extend({
-  executionStats: z.object({ nReturned: z.number(), totalKeysExamined: z.number() }),
+  executionStats: z.object({
+    nReturned: z.number(),
+    totalKeysExamined: z.number(),
+    totalDocsExamined: z.number(),
+  }),
 });
 
 let container: StartedMongoDBContainer;
@@ -80,18 +92,64 @@ describeOrderStoreContract('mongo', () => store);
 // Outbox'in Mongo sozlesmesi, es zamanlilik ve indeks plani: test/integration/outbox.spec.ts.
 
 describe('indeks', () => {
-  it('gecmis sorgusu indeksten sirali okunur, bellekte SORT asamasi yok', async () => {
-    const plan: Document = await connection.db
-      .collection(COLLECTIONS.ORDERS)
-      .find({ userId: 'usr_plan' })
-      .sort({ createdAt: -1, _id: -1 })
-      .explain('queryPlanner');
-
+  /** orders-collection.ts findHistory'nin AYNI imleci (#101), calistirilmadan explain. */
+  const explainHistory = async (
+    userId: string,
+    after: OrderHistoryCursor | undefined,
+    limit: number,
+  ) => {
+    const orders = connection.db.collection<OrderDocument>(COLLECTIONS.ORDERS);
+    const plan: Document = await findHistoryCursor(orders, userId, after, limit).explain(
+      'executionStats',
+    );
     // explain ciktisi suruceden gelen serbest bicimli belge: semadan gecirilir.
-    const { queryPlanner } = explainSchema.parse(plan);
-    const winning = JSON.stringify(queryPlanner.winningPlan);
-    expect(winning).toContain('userId_createdAt_id');
+    const { queryPlanner, executionStats } = statsSchema.parse(plan);
+    return { winning: JSON.stringify(queryPlanner.winningPlan), stats: executionStats };
+  };
+
+  it('gecmis indeksi (#101) KISMI: yalnizca gecmiste gorunenler (inHistory true) girer', async () => {
+    const indexes = await connection.db.collection(COLLECTIONS.ORDERS).indexes();
+
+    expect(indexes.find((index) => index.name === HISTORY_INDEX_NAME)).toMatchObject({
+      key: { userId: 1, createdAt: -1, _id: -1 },
+      partialFilterExpression: { inHistory: true },
+    });
+    // Tam indeks userId onekli diger okumalar (risk gecmisi, ILK10) icin kalir.
+    expect(indexes.map((index) => index.name)).toContain('userId_createdAt_id');
+  });
+
+  it('gecmis sorgusu (#101) kismi indeksten: COLLSCAN ve SORT yok, okunan belge = donen satir (taslaklar arada)', async () => {
+    const { userId, listedNewestFirst } = await insertHistoryPlanOrders(store, 'usr_plan_gecmis');
+    // Sayfa 2 + "sonraki var mi" icin bir fazlasi: depo boyle okur.
+    const { winning, stats } = await explainHistory(userId, undefined, 3);
+
+    expect(winning).toContain(HISTORY_INDEX_NAME);
+    expect(winning).not.toContain('COLLSCAN');
     expect(winning).not.toContain('"stage":"SORT"');
+    expect(stats.nReturned).toBe(3);
+    // Gizli taslaklar indekste yok: belgesi okunup atilmaz (tam indeksten okusa 6 olurdu).
+    expect(listedNewestFirst.length).toBeGreaterThan(stats.nReturned);
+    expect(stats.totalDocsExamined).toBe(stats.nReturned);
+    expect(stats.totalKeysExamined).toBeLessThanOrEqual(stats.nReturned + 1);
+  });
+
+  it('gecmis sorgusu imlecli sayfada da kismi indeksten; onceki sayfalar ve taslaklar okunmaz', async () => {
+    const { userId, listedNewestFirst } = await insertHistoryPlanOrders(store, 'usr_plan_imlec');
+    const [, second] = listedNewestFirst;
+    if (second === undefined) throw new Error('plan verisi eksik');
+    const { winning, stats } = await explainHistory(
+      userId,
+      { createdAt: second.createdAt, orderId: second.id },
+      3,
+    );
+
+    expect(winning).toContain(HISTORY_INDEX_NAME);
+    expect(winning).not.toContain('COLLSCAN');
+    expect(winning).not.toContain('"stage":"SORT"');
+    expect(stats.nReturned).toBe(Math.min(3, listedNewestFirst.length - 2));
+    // Sinirdaki imlec belgesinin kendisi en fazla bir kez daha okunabilir.
+    expect(stats.totalDocsExamined).toBeLessThanOrEqual(stats.nReturned + 1);
+    expect(stats.totalKeysExamined).toBeLessThanOrEqual(stats.nReturned + 1);
   });
 
   it('supurucu sorgusu (T11.2 PR 2) durum + kilit bitisi indeksinden, bellekte SORT yok', async () => {

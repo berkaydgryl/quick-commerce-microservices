@@ -1,6 +1,10 @@
 /**
  * Kullanicinin siparis gecmisi (ListMyOrders) okuma portu.
  *
+ * KAPSAM (#101): yalnizca gecmiste gorunen siparisler (order-history-listing.ts
+ * isListedInHistory); sepet taslaklari ve odenmeden kapananlar listeye girmez.
+ * Suzme depoda yapilir: sayfa tam dolar, gizli siparis okunup atilmaz.
+ *
  * SIRA: yeniden eskiye (createdAt azalan; esitlikte kimlik azalan). Sayfalama
  * imlecle yapilir, offset ile degil: kullanici listeyi gezerken yeni siparis
  * verirse offset kayar ve ayni siparis iki sayfada gorunur.
@@ -62,6 +66,7 @@ export interface RiskHistory {
 }
 
 export interface OrderHistoryReader {
+  /** Gecmiste gorunen siparisler (isListedInHistory), yeniden eskiye, imlecle. */
   listByUser(query: OrderHistoryQuery): Promise<OrderHistoryPage>;
   /** Kullanicinin PAID_ORDER_STATUSES'ta en az bir siparisi var mi? (ILK10) */
   hasPaidOrder(userId: string): Promise<boolean>;

@@ -5,14 +5,15 @@
  * kullanicisini (benzersiz userId) acar ve yalnizca onu sorgular.
  */
 
-import { fixedClock } from '@getir/core';
+import { fixedClock, ORDER_STATUS } from '@getir/core';
+import type { OrderStatus } from '@getir/core';
 
 import type { AwaitingCourierFinder } from '../../src/domain/awaiting-courier-finder.js';
 import type { ExpiredOrderFinder } from '../../src/domain/expired-order-finder.js';
 import type { OrderHistoryReader } from '../../src/domain/order-history-reader.js';
 import type { OrderRepository } from '../../src/domain/order-repository.js';
 import type { Order } from '../../src/domain/order.js';
-import { createDraftOrder } from '../../src/domain/order.js';
+import { createDraftOrder, transitionOrder } from '../../src/domain/order.js';
 import { sampleDraftInput } from './order-builders.js';
 
 export type OrderStoreUnderTest = OrderRepository &
@@ -41,4 +42,28 @@ export function createOrderStoreFixtures(suiteName: string): OrderStoreFixtures 
     draftAt: (userId, epochMs) =>
       createDraftOrder(sampleDraftInput({ userId }), fixedClock(epochMs)),
   };
+}
+
+/** Taslaktan odemeye: risk, kilit, odeme bekleme, odendi. */
+export const TO_PAID: readonly OrderStatus[] = [
+  ORDER_STATUS.RISK_CHECK,
+  ORDER_STATUS.RESERVED,
+  ORDER_STATUS.AWAITING_PAYMENT,
+  ORDER_STATUS.PAID,
+];
+
+export const TO_DELIVERED: readonly OrderStatus[] = [
+  ...TO_PAID,
+  ORDER_STATUS.PREPARING,
+  ORDER_STATUS.ON_THE_WAY,
+  ORDER_STATUS.DELIVERED,
+];
+
+/**
+ * Siparisi tablodaki yoldan verilen durumlara yurutur. Saat siparisin acilis
+ * ani: zaman cizelgesi olusturma anindan geriye gitmez.
+ */
+export function walk(order: Order, steps: readonly OrderStatus[]): Order {
+  const clock = fixedClock(order.createdAt.getTime());
+  return steps.reduce((current, status) => transitionOrder(current, status, clock), order);
 }
