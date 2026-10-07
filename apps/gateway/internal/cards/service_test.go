@@ -14,6 +14,7 @@ import (
 	cardvaultv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/cardvault/v1"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/testkit"
 )
 
 // fakeVault, kasanin sahtesi: gelen istegi saklar, verilen cevabi ya da
@@ -27,11 +28,7 @@ type fakeVault struct {
 }
 
 func (f *fakeVault) answer(opts []grpc.CallOption) {
-	for _, option := range opts {
-		if trailer, ok := option.(grpc.TrailerCallOption); ok && f.trailer != nil {
-			*trailer.TrailerAddr = f.trailer
-		}
-	}
+	testkit.SetTrailer(opts, f.trailer)
 }
 
 func (f *fakeVault) AddCard(_ context.Context, in *cardvaultv1.AddCardRequest, opts ...grpc.CallOption) (*cardvaultv1.AddCardResponse, error) {

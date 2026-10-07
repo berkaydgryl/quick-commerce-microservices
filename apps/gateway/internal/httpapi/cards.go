@@ -89,17 +89,11 @@ func registerCardRoutes(v1 fiber.Router, routes CardRoutes, deps cardRouteDeps) 
 	}
 	add := idempotent(deps.idempotency, cardAddPolicy, deps.logger, deps.recorder)
 	remove := idempotent(deps.idempotency, cardDeletePolicy, deps.logger, deps.recorder)
-	v1.Get("/me/cards", noStoreCards, deps.user, deps.general, listCardsHandler(routes.Lister))
+	v1.Get("/me/cards", noStoreRoute, deps.user, deps.general, listCardsHandler(routes.Lister))
 	// Sira: deneme siniri (bakma, IP) -> tekrar korumasi (tekrar istek kasaya
 	// gitmez) -> tek dogrulama kilidi -> uc (sonucu sayaca yazar, sonra kilit birakilir).
-	v1.Post("/me/cards", noStoreCards, deps.user, deps.general, attempts.admit, add, attempts.single, addCardHandler(routes.Adder, attempts))
-	v1.Delete("/me/cards/:"+cardIDParam, noStoreCards, deps.user, deps.general, remove, deleteCardHandler(routes.Deleter))
-}
-
-// noStoreCards, kart uclarinin HER cevabina (hata dahil) no-store yazar (QA G7).
-func noStoreCards(c fiber.Ctx) error {
-	c.Set(fiber.HeaderCacheControl, noStore)
-	return c.Next()
+	v1.Post("/me/cards", noStoreRoute, deps.user, deps.general, attempts.admit, add, attempts.single, addCardHandler(routes.Adder, attempts))
+	v1.Delete("/me/cards/:"+cardIDParam, noStoreRoute, deps.user, deps.general, remove, deleteCardHandler(routes.Deleter))
 }
 
 // addCardBody, POST /v1/me/cards govdesi (@getir/contracts addCardRequestSchema).

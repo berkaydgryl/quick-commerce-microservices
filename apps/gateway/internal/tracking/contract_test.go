@@ -58,13 +58,8 @@ func TestTrackedStatusesMatchContract(t *testing.T) {
 func TestTrackingFieldsMatchContract(t *testing.T) {
 	// orderTrackingSchema'nin ust duzey alanlari (4 bosluk girintili `ad:`
 	// satirlari) ve .optional() olanlar; Go tarafinda json adlari ve omitempty.
-	source := testkit.ReadContract(t, contractTrackingPath)
-	block := regexp.MustCompile(`(?s)export const orderTrackingSchema = z\s*\.object\(\{(.*?)\n  \}\)`).FindStringSubmatch(source)
-	if block == nil {
-		t.Fatal("orderTrackingSchema sozlesmede bulunamadi")
-	}
 	contract := map[string]bool{}
-	for _, match := range regexp.MustCompile(`(?m)^    ([a-zA-Z]+): (.*)$`).FindAllStringSubmatch(block[1], -1) {
+	for _, match := range trackingSchemaFields(t) {
 		contract[match[1]] = strings.Contains(match[2], ".optional()")
 	}
 
@@ -78,4 +73,37 @@ func TestTrackingFieldsMatchContract(t *testing.T) {
 	if !reflect.DeepEqual(contract, gateway) {
 		t.Errorf("alanlar (ad -> istege bagli):\nsozlesme %v\ngateway  %v", contract, gateway)
 	}
+}
+
+func TestTrackingNumbersHaveNoUpperBoundInContract(t *testing.T) {
+	// #179 N6: EtaSeconds int64 (TO_MARKET yuvarlamasi int32 sinirinda
+	// tasmasin). Sozlesmede kalan yol ve tahmin yalnizca negatif olmayan
+	// tamsayidir; ust sinir (.max) yok, tasmasiz yuvarlanan en buyuk deger
+	// (2147483700) semayi gecer. Go o degeri JSON'da tirnaksiz SAYI yazar.
+	fields := map[string]string{}
+	for _, match := range trackingSchemaFields(t) {
+		fields[match[1]] = match[2]
+	}
+	for _, name := range []string{"remainingMeters", "etaSeconds"} {
+		if rule := fields[name]; rule != "z.number().int().min(0)," {
+			t.Errorf("%s: sozlesme kurali %q; gateway negatif olmayan, ust sinirsiz tamsayi bekler", name, rule)
+		}
+	}
+
+	body := testkit.JSON(t, Tracking{EtaSeconds: 2147483700})
+	if !strings.Contains(body, `"etaSeconds":2147483700,`) {
+		t.Errorf("etaSeconds JSON'da sayi olmali: %s", body)
+	}
+}
+
+// trackingSchemaFields, orderTrackingSchema'nin ust duzey alan satirlari
+// (4 bosluk girintili `ad: kural`): [satir, ad, kural].
+func trackingSchemaFields(t *testing.T) [][]string {
+	t.Helper()
+	source := testkit.ReadContract(t, contractTrackingPath)
+	block := regexp.MustCompile(`(?s)export const orderTrackingSchema = z\s*\.object\(\{(.*?)\n  \}\)`).FindStringSubmatch(source)
+	if block == nil {
+		t.Fatal("orderTrackingSchema sozlesmede bulunamadi")
+	}
+	return regexp.MustCompile(`(?m)^    ([a-zA-Z]+): (.*)$`).FindAllStringSubmatch(block[1], -1)
 }

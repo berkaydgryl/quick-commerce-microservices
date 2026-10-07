@@ -18,16 +18,19 @@
 // Bicimsiz kimlik ayrintisiz 404'tur (girdi yankilanmaz; o kimlikte siparis
 // olamayacagi icin ayirt edilmesi bir sey sizdirmaz).
 //
-// GIZLILIK: konum, rota ve adres kisisel veridir. Bu paket gunluge yazmaz;
-// hata nedeni (Cause) yalnizca servis, metot ve gRPC durumunu tasir.
+// GIZLILIK: konum, rota, adres ve kurye adi kisisel veridir. Bu paket gunluge
+// yazmaz; courier hatasinin nedeni (Cause) yalnizca servis, metot ve gRPC durum
+// kodunu tasir (courier'in mesaj metni atilir).
 package tracking
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 
 	courierv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/courier/v1"
 
@@ -82,9 +85,24 @@ func (s *Service) Track(ctx context.Context, userID, orderID string) (Tracking, 
 	request := &courierv1.GetTrackingRequest{OrderId: orderID}
 	response, err := rpc.Invoke(ctx, s.timeout, service, "GetTracking", s.courier.GetTracking, request)
 	if err != nil {
-		return Tracking{}, rpc.RenameFields(sameNotFound(err, orderID), courierFieldNames)
+		return Tracking{}, rpc.RenameFields(sameNotFound(withoutCourierText(err), orderID), courierFieldNames)
 	}
 	return toTracking(orderID, found.Status, response)
+}
+
+// withoutCourierText, courier hatasinin METNINI gunlukten cikarir (#179):
+// mesajda kurye adi ya da konum olabilir. Neden yalnizca servis, metot ve gRPC
+// durum kodunu tasir; kod ve ayrinti (istemciye giden) degismez.
+func withoutCourierText(err error) error {
+	var appErr *apperror.Error
+	if !errors.As(err, &appErr) {
+		return err
+	}
+	return &apperror.Error{
+		Code:    appErr.Code,
+		Details: appErr.Details,
+		Cause:   fmt.Errorf("%s GetTracking: %s", service, status.Code(appErr.Cause)),
+	}
 }
 
 // notFound, ucun TEK 404 cevabi (openapi OrderNotFound: ayrinti {orderId}).
