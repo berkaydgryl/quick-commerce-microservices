@@ -21,6 +21,24 @@ export const DEFAULT_MONGO_DB = 'getir_risk';
  */
 export const RULE_TIMEOUT_MS = 200;
 
+/**
+ * risk_events kaydinin en fazla beklenecegi sure (#167). Kurallar paralel
+ * kosar (en fazla RULE_TIMEOUT_MS), ardindan kayit: karar en kotu ~400 ms'de
+ * doner, order'in risk butcesinin (RISK_CALL_TIMEOUT_MS, 1 sn) altinda. Sinir
+ * asilinca kayit beklenmez (WARN + metrik), karar yine doner.
+ */
+export const RISK_EVENT_RECORD_TIMEOUT_MS = 200;
+
+/**
+ * Kapanista arka planda suren kayitlarin en fazla beklenecegi sure (#167):
+ * gRPC durduktan sonra, Mongo kapanmadan once. Mongo'nun islem siniri
+ * (MONGO_OPERATION_TIMEOUT_MS) kadar: o surede kayit ya biter ya surucu keser.
+ * Ust sinir: kapanis kancasinin 10 sn butcesinde Mongo kapanisina pay kalsin.
+ * Mongo yoksa (MOCK) varsayilan. Bitmeyen kayit `failed` sayilir.
+ */
+export const RISK_EVENT_DRAIN_DEFAULT_MS = 2_000;
+export const RISK_EVENT_DRAIN_MAX_MS = 8_000;
+
 // ---------------------------------------------------------------------------
 // Cekirdek kural esikleri (T6.2). Agirliklar config/risk.rules.json'da;
 // burada yalnizca "ne zaman tetiklenir" sinirlari durur.

@@ -32,6 +32,22 @@ Risk servisi: sipariş bağlamını puanlar ve bir **bant önerir**. Kararı uyg
 **Kayıt yazılamazsa karar yine döner** ve `error` günlüğü yazılır: risk siparişin kritik yolunda; kayıp,
 o tek değerlendirmenin "neden" kaydıdır.
 
+**Kayıt süre sınırlıdır (#167):** kayıt en çok `RISK_EVENT_RECORD_TIMEOUT_MS` (200 ms) beklenir. Kurallar
+paralel (her biri en çok 200 ms), ardından kayıt: karar en kötü ~400 ms'de, order'ın risk bütçesinin (1 sn)
+altında döner. Mongo yavaşlar ya da donarsa karar yine bütçede gelir (eskiden order `SERVICE_UNAVAILABLE`
+alıyor, devre kesicisi açılabiliyordu). Sınır aşılınca kayıt **beklenmez**, arka planda sürer:
+
+- WARN günlük + `risk_event_record_timeouts_total`;
+- sonradan yazılırsa `risk_event_records_total{outcome="late"}`; düşerse `error` + `outcome="failed"`;
+  zamanında yazılırsa `outcome="recorded"`. Sonuç kayıt başına **tek**: toplamı değerlendirme sayısıdır.
+- Bu yüzden `Evaluate` döndüğünde kayıt yazılmış **olmayabilir**: hemen ardından `GetLastEvaluation`
+  önceki değerlendirmeyi görebilir.
+- Kapanışta gRPC durduktan sonra arka plandaki kayıtlar Mongo'nun işlem sınırı kadar (en çok 8 sn)
+  beklenir, Mongo en son kapanır; bitmeyen kayıt `error` + `failed`, sessiz kaybolmaz.
+  **KABUL:** kapanışta bırakılan kayıt sunucuda yine de uygulanmış olabilir (yanıt gelmeden bağlantı
+  kapandı); kayıp sayılır. Kapanıştaki `failed` artışı `/metrics` kancadan önce kapandığı için okunmaz
+  (bekleyen iş #180); kalıcı sinyal `error` günlüğüdür. Arka plandaki kayıtlara üst sınır: #181.
+
 **`risk_events` belgesi:** `_id (rev_…)`, `userId`, `orderId?`, `marketId?`, `score`, `band`,
 `vetoedByRuleId?`, `rules[]` (altı kuralın sonucu), `createdAt`. **Ham bağlam yok:** IP, konum, cihaz
 kimliği yazılmaz; gerekçeler kişisel veri içermez. İndeksler: `userId+createdAt`, kısmi

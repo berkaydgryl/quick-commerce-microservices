@@ -22,9 +22,11 @@ import {
   startOrExit,
 } from '@getir/service-kit';
 
+import { PendingRecords } from './application/pending-records.js';
 import { buildRiskService } from './bootstrap.js';
 import { SERVICE_NAME } from './config/constants.js';
 import { loadServiceEnv } from './config/env.js';
+import { drainThenClose, recordDrainTimeoutMs } from './infrastructure/record-shutdown.js';
 import { openRiskEventStore } from './infrastructure/risk-event-store.js';
 
 const env = loadServiceEnv();
@@ -35,6 +37,8 @@ const logger = createLogger({ name: SERVICE_NAME, level: env.LOG_LEVEL });
 const { handle, store } = await startOrExit(
   async () => {
     const opened = await openRiskEventStore(env.mongo, logger);
+    // Sure sinirini asip arka planda suren kayitlar (#167): kapanista beklenir.
+    const pendingRecords = new PendingRecords();
     const server = await startGrpcServer({
       serviceName: SERVICE_NAME,
       host: env.GRPC_HOST,
@@ -43,9 +47,16 @@ const { handle, store } = await startOrExit(
       // Izler (D15): adres yoksa olusur ve tasinir, disari gonderilmez.
       otlpEndpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
       logger,
-      services: [buildRiskService({ logger, events: opened.repository })],
+      services: [buildRiskService({ logger, events: opened.repository, pendingRecords })],
       // Sunucu kapandiktan SONRA: devam eden cagrilar bitmeden baglanti kesilmesin.
-      onShutdown: () => opened.close(),
+      // Once arka plandaki kayitlar (sinirli bekleme), Mongo EN SON (#167).
+      onShutdown: () =>
+        drainThenClose({
+          pending: pendingRecords,
+          timeoutMs: recordDrainTimeoutMs(env.mongo),
+          close: () => opened.close(),
+          logger,
+        }),
     });
     return { handle: server, store: opened };
   },

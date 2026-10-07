@@ -10,10 +10,16 @@ import type { GrpcServiceRegistration } from '@getir/service-kit';
 import { createEvaluateAndRecord } from './application/evaluate-and-record.js';
 import { createEvaluateRisk } from './application/evaluate-risk.js';
 import { createGetLastEvaluation } from './application/get-last-evaluation.js';
-import { RISK_SERVICE_FULL_NAME, RULE_TIMEOUT_MS } from './config/constants.js';
+import { PendingRecords } from './application/pending-records.js';
+import {
+  RISK_EVENT_RECORD_TIMEOUT_MS,
+  RISK_SERVICE_FULL_NAME,
+  RULE_TIMEOUT_MS,
+} from './config/constants.js';
 import { riskRulesConfig } from './config/risk-rules.js';
 import type { RiskEventRepository } from './domain/risk-event-repository.js';
 import { InMemoryRiskEventStore } from './infrastructure/memory/in-memory-risk-event-store.js';
+import { recordRiskEvent } from './infrastructure/metrics/risk-event-metrics.js';
 import { createRiskImplementation } from './interfaces/grpc/risk-handlers.js';
 import { createCoreRules } from './rules/index.js';
 import { createRuleRegistry } from './rules/registry.js';
@@ -24,6 +30,10 @@ export interface BootstrapOptions {
   readonly events?: RiskEventRepository;
   /** Saat; testte sabitlenebilsin diye disaridan verilebilir. */
   readonly clock?: Clock;
+  /** Kaydin sure siniri (ms); verilmezse RISK_EVENT_RECORD_TIMEOUT_MS (testte kisaltilir). */
+  readonly recordTimeoutMs?: number;
+  /** Arka planda suren kayitlar; main.ts verir ve kapanista bekler (drain). Verilmezse yeni (testler). */
+  readonly pendingRecords?: PendingRecords;
 }
 
 export function buildRiskService(options: BootstrapOptions = {}): GrpcServiceRegistration {
@@ -42,7 +52,13 @@ export function buildRiskService(options: BootstrapOptions = {}): GrpcServiceReg
     name: RISK_SERVICE_FULL_NAME,
     definition: riskV1.RiskServiceService,
     implementation: createRiskImplementation({
-      evaluate: createEvaluateAndRecord({ evaluateRisk, events }),
+      evaluate: createEvaluateAndRecord({
+        evaluateRisk,
+        events,
+        recordTimeoutMs: options.recordTimeoutMs ?? RISK_EVENT_RECORD_TIMEOUT_MS,
+        pending: options.pendingRecords ?? new PendingRecords(),
+        onRecord: recordRiskEvent,
+      }),
       getLastEvaluation: createGetLastEvaluation(events),
       ...(logger === undefined ? {} : { logger }),
     }),
