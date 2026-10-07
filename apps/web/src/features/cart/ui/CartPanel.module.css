@@ -76,6 +76,7 @@
 }
 
 .c-cart-panel__store-name {
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--text-default);
   overflow-wrap: anywhere;
@@ -149,6 +150,7 @@
 }
 
 .c-cart-panel__item-price {
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-bold);
   color: var(--color-brand-primary);
   white-space: nowrap;
@@ -167,11 +169,17 @@
   border-radius: var(--radius-sm);
 }
 
-/* Alt dugme: solda mor "Sepete git", sagda beyaz kutuda tutar; tek baglanti. Sigmazsa tutar alta iner. */
+/*
+ * Alt dugme: solda mor "Sepete git", sagda beyaz kutuda tutar; tek baglanti. Sigmazsa
+ * tutar alta iner. Yazi panelin satirlariyla ayni boy (07.10 kullanici istegi: panel ici
+ * metin tek boy sm: magaza adi, urun adi ve tutari, notlar, bu dugme; basliklar ve
+ * sayfanin ana dugmeleri kendi boyunda).
+ */
 .c-cart-panel__go {
   display: flex;
   flex-wrap: wrap;
   overflow: hidden;
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-bold);
   text-decoration: none;
   border: var(--border-width-cart-panel) solid var(--color-brand-primary);

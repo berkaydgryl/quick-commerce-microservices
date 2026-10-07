@@ -1,8 +1,9 @@
 /*
  * Magaza sayfasinin katalogu (T16.2; referans getircarsi). Mobil oncelikli:
- * kategori seridi ustte, izgara altta (iki sutun). Genis ekranda (64rem)
- * solda kategoriler, sagda baslik ve izgara (1:2). Kartlar beyaz, aralarinda
- * ince cizgi: izgaranin zemini cizgi rengidir, aralik cizgi kalinligi kadar.
+ * kategori seridi ustte, izgara altta. Kartlar yuzdesel ve satiri doldurur;
+ * sutun sayisi (2, 3, en cok 4) katalog sutununun genisligine gore. Genis
+ * ekranda (64rem) solda kategoriler, sagda baslik ve izgara (1:2). Kartlar beyaz,
+ * aralarinda ince cizgi (kartin golgesi; aralik cizgi kalinligi kadar).
  */
 .c-market-catalog {
   display: grid;
@@ -25,12 +26,21 @@
   font-size: var(--font-size-md);
 }
 
+/*
+ * Kartlar yuzdesel ve satiri doldurur (07.10 kullanici karari): sutun sayisini katalog
+ * sutununun genisligi belirler (ekran degil; yandaki kategoriler ve sepet paneli alani
+ * degistirir). Iz en az kart tokeni ya da genisligin dortte biri (hangisi buyukse):
+ * satirda en cok 4; sigmayinca 3, 2. Bos hucre beyaz (cizgiler kartlarin golgesinden).
+ */
 .c-market-catalog__grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(max(var(--size-product-card-min), calc((100% - var(--border-width-thin) * 3) / 4)), 1fr)
+  );
   gap: var(--border-width-thin);
   overflow: hidden;
-  background: var(--border-faint);
+  background: var(--bg-surface);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-surface);
 }
@@ -56,12 +66,6 @@
 .c-market-catalog__more:disabled {
   cursor: progress;
   opacity: var(--opacity-disabled);
-}
-
-@media (--bp-md) {
-  .c-market-catalog__grid {
-    grid-template-columns: repeat(auto-fill, minmax(var(--size-product-card-min), 1fr));
-  }
 }
 
 @media (--bp-lg) {

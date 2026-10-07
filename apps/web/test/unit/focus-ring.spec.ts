@@ -5,20 +5,9 @@
  * bu bildirimlerin yerinde kaldigini denetler (tarayicida canli olculur).
  */
 
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-
 import { describe, expect, it } from 'vitest';
 
-const css = (path: string): string =>
-  readFileSync(fileURLToPath(new URL(`../../src/${path}`, import.meta.url)), 'utf8');
-
-/** Bir sinifin ilk kural blogunun icerigi. */
-function block(source: string, selector: string): string {
-  const start = source.indexOf(`${selector} {`);
-  expect(start, `${selector} bulunamadi`).toBeGreaterThanOrEqual(0);
-  return source.slice(start, source.indexOf('}', start));
-}
+import { block, css } from './css-test-support';
 
 describe('ust bar icindeki beyaz yuzeylerde odak halkasi', () => {
   it('bar halkayi beyaza ceker (mor zemin)', () => {
