@@ -5,6 +5,7 @@
 
 import { paymentV1 } from '@getir/proto';
 
+import type { PaymentRead } from '../../application/get-payment.js';
 import type { Payment, PaymentMethod, PaymentStatus } from '../../domain/payment.js';
 
 const STATUS_TO_PROTO: Readonly<Record<PaymentStatus, paymentV1.PaymentStatus>> = {
@@ -45,5 +46,24 @@ export function toProtoChargeResponse(payment: Payment): paymentV1.ChargeRespons
     payment: toProtoPayment(payment),
     challengeId: payment.challenge?.id ?? '',
     ...(payment.challenge === undefined ? {} : { challengeExpiresAt: payment.challenge.expiresAt }),
+  };
+}
+
+/**
+ * GetPayment cevabi: odeme ve 3DS durumu (#163 B1). Jeton yalnizca dogrulama
+ * acikken dolu (bos metin = kapali); bitis ve kalan hak her zaman.
+ */
+export function toProtoGetPaymentResponse(read: PaymentRead): paymentV1.GetPaymentResponse {
+  return {
+    payment: toProtoPayment(read.payment),
+    ...(read.threeDs === undefined
+      ? {}
+      : {
+          threeDs: {
+            challengeId: read.threeDs.challengeId ?? '',
+            expiresAt: read.threeDs.expiresAt,
+            attemptsLeft: read.threeDs.attemptsLeft,
+          },
+        }),
   };
 }
