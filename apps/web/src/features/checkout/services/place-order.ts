@@ -78,14 +78,14 @@ function settleIntent(deps: OrderFlowDeps, error?: unknown): void {
 }
 
 /**
- * Rezervasyon, sonra siparis (placeReserved). Rezervasyon hatasinda niyet
- * kesin sonucta yenilenir, belirsizde korunur.
+ * Rezervasyon (niyet anahtariyla). Hatada niyet kesin sonucta yenilenir,
+ * belirsizde korunur. Erken rezervasyon (odeme sayfasi acilinca) ve "Sipariş
+ * Ver"in yedek yolu ayni fonksiyonu kullanir.
  */
-export async function startOrder(
+export async function reserveOrder(
   deps: OrderFlowDeps,
   request: ReserveCartRequest,
-  orderBody: (orderId: string) => CreateOrderRequest,
-): Promise<PlaceOutcome> {
+): Promise<HeldOrder> {
   let reservation;
   try {
     reservation = await reserveCart(deps.client, request, deps.reserveIntent.key(request));
@@ -93,13 +93,21 @@ export async function startOrder(
     settleIntent(deps, error);
     throw error;
   }
-  const held: HeldOrder = {
+  return {
     orderId: reservation.orderId,
     fingerprint: heldFingerprint(request),
     reservationReceivedAt: deps.now(),
     reservationTtlSeconds: reservation.ttlSeconds,
   };
-  return placeReserved(deps, held, orderBody);
+}
+
+/** Rezervasyon, sonra siparis (placeReserved): erken rezervasyon yoksa ya da gecersizse. */
+export async function startOrder(
+  deps: OrderFlowDeps,
+  request: ReserveCartRequest,
+  orderBody: (orderId: string) => CreateOrderRequest,
+): Promise<PlaceOutcome> {
+  return placeReserved(deps, await reserveOrder(deps, request), orderBody);
 }
 
 /**

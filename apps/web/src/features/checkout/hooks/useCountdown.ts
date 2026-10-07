@@ -1,9 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { remainingSeconds } from '../services/countdown';
-
-/** Tarayicinin monotonik saati (duvar saati kaysa da geri sayim kaymaz). */
-const monotonicNow = () => performance.now();
+import { monotonicNow } from '../services/monotonic-clock';
 
 /** Saniyede bir yeterli; yarim saniye, gorunen sayinin gec donmesini onler. */
 const TICK_MS = 500;

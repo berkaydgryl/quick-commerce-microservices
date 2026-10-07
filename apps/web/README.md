@@ -443,12 +443,23 @@ sepet tutmazsa pasif). Oturum ister; sepet boşsa `/sepet`'e döner. Sade bar ve
   `createOrderRequestSchema`'sıyla kurulur: `payment.cardId` + `details`; B1/B2), 3DS gerekirse
   `POST /v1/orders/:id/3ds` (her kod yeni anahtar). Vazgeç, süre ya da hak bitince `DELETE /v1/cart/reserve/:id`
   (yeni anahtar; 404 sessiz; 409'da sipariş okunur, ödendiyse başarı).
+- **Erken rezervasyon (T12.4; PM K4):** ödeme sayfası açıkken, koşullar sağlanınca (hesap adresi, dolu sepet, açık
+  market, minimum tutar) sepet ayrılır; "Sipariş Ver" yalnızca siparişi verir (risk `checkout-dwell` sayfada geçen
+  gerçek süreyi ölçer). Özet kartında "Ürünlerin 9:41 boyunca senin için ayrıldı." (süre sunucunun `ttlSeconds`'ı,
+  son 60 sn uyarı rengi, ekran okuyucuya bir kez "Son 1 dakika"). Sepet, adres ya da tutar değişince eskisi bırakılıp
+  yenisi alınır; süre dolunca sessizce yeniden ayrılır (bildirim); hata (stok, satışta değil) özet kartında sunucunun
+  cümlesi ve "Tekrar dene" ile görünür, "Sipariş Ver" pasif olur. Sayfadan ayrılınca sipariş verilmemiş rezervasyon
+  bırakılır; **siparişi verilmiş (ödendi, incelemede, 3DS sürüyor) rezervasyon asla bırakılmaz.** Rezervasyonun ve
+  3DS'in geri sayımları aynı monotonik saatten (`monotonic-clock.ts`). Sepet sayfasında süre yoktur (rezervasyon
+  yalnız ödeme sayfasında alınır). Kural `services/reservation-plan.ts`, işletim `hooks/useEarlyReservation.ts`.
+  **Bilinen sınır:** iki sekmede ödeme sayfası açıksa her sekme kendi niyetiyle ayrı kilit alır (en çok 10 dk).
 - **Sipariş hataları:** kesin hatada (ödeme reddi, durum uygun değil…) rezervasyon en iyi çabayla bırakılır, niyet
   yenilenir: her denemede yeni stok kilidi birikmez. Belirsiz sonuçta (503, REQUEST_IN_PROGRESS) hiçbir şey bırakılmaz.
   **Kart 404'ü** (ayrıntı `resource: card`; kart silinmiş ya da başkasının): sipariş TUTULUR, rezervasyon ve niyet
   korunur; "Bu kart artık kayıtlı değil, başka kart seç." bildirimi ve kart listesi yeniden okunur. Sonraki "Sipariş
   Ver" sepet, adres ve tutar aynıysa ve rezervasyon süresi dolmadıysa aynı siparişi yeni kartla verir (reserve yok);
-  değilse tutulan rezervasyonu bırakıp baştan başlar. Sayfadan ayrılınca tutulan rezervasyon bırakılır.
+  ödeme yöntemi ya da ayrıntılar (hediye, not, zil) değiştiyse aynı sipariş kullanılmaz, rezervasyon bırakılıp yeniden
+  alınır (QA #176 N2, bekleyen iş #150). Sayfadan ayrılınca tutulan rezervasyon bırakılır.
 - **Geri sayım** rezervasyonun ve kodun SUNUCU sürelerinden (`ttlSeconds`, `threeDs.ttlSeconds`) kısa olanla,
   monotonik saatle; istemci süre tahmin etmez: ikisi de gelmezse sayaç gösterilmez (süreyi sunucu uygular).
   Son 30 saniyede uyarı rengi ve ekran okuyucuya tek duyuru. **3DS kodu sırdır**: yalnız pencerenin alanında, her

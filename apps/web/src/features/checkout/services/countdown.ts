@@ -5,8 +5,11 @@
  * (T11.4 kurali): rezervasyonun ve kodun ttlSeconds'i, alindiklari andan sayilir.
  */
 
-/** Bu kadar saniye ve altinda uyari durumu. */
+/** 3DS: bu kadar saniye ve altinda uyari durumu. */
 export const COUNTDOWN_WARNING_SECONDS = 30;
+
+/** Rezervasyonun kalan suresi: son 60 saniyede uyari (erken rezervasyon). */
+export const RESERVATION_WARNING_SECONDS = 60;
 
 const MS_PER_SECOND = 1000;
 const SECONDS_PER_MINUTE = 60;
@@ -48,9 +51,14 @@ export function remainingSeconds(deadline: number, now: number): number {
   return Math.max(0, Math.ceil((deadline - now) / MS_PER_SECOND));
 }
 
-/** Son 30 saniye (0 dahil degil: sure doldu durumu ayridir). */
+/** 3DS'in son 30 saniyesi (0 dahil degil: sure doldu durumu ayridir). */
 export function isCountdownWarning(seconds: number): boolean {
   return seconds > 0 && seconds <= COUNTDOWN_WARNING_SECONDS;
+}
+
+/** Rezervasyonun son 60 saniyesi (0 dahil degil: sure doldu, yeniden ayrilir). */
+export function isReservationWarning(seconds: number): boolean {
+  return seconds > 0 && seconds <= RESERVATION_WARNING_SECONDS;
 }
 
 /** "1:00", "0:29". */
