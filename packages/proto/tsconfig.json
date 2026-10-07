@@ -1,6 +1,6 @@
 {
-  // Editor + typecheck projesi. Bu pakette ELLE YAZILMIS TypeScript yoktur;
-  // denetlenen sey tamamen uretilen koddur (gen/ts). Amac su soruyu yanitlamak:
+  // Editor + typecheck projesi. Denetlenen: uretilen kod (gen/ts), testler ve
+  // uretim betikleri (scripts, JSDoc tipleriyle checkJs). Asil soru:
   // ".proto dosyalarindan cikan tipler projenin strict ayarlariyla derleniyor mu?"
   //
   // Not: gevsetilmis hicbir derleyici secenegi YOK. tsconfig.base.json'daki tum
@@ -11,11 +11,14 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
+    // Betikler .mjs (node dogrudan kosar); testler onlari import eder (#135, D18).
+    "allowJs": true,
+    "checkJs": true,
 
     // paths BILEREK BOSALTILDI: tsconfig.base.json "@getir/proto" adini bu paketin
     // kendi gen/ts/index.ts dosyasina esler. Burada birakilsaydi paket kendi kendini
     // takma adla import edebilir, ayni dosya iki ayri modul kimligiyle gorunurdu.
     "paths": {}
   },
-  "include": ["gen/ts", "test"]
+  "include": ["gen/ts", "test", "scripts"]
 }

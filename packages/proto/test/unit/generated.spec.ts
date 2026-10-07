@@ -204,3 +204,48 @@ describe('kart kasasi sozlesmesi (T11.17)', () => {
     expect(decoded).toEqual(card);
   });
 });
+
+describe('uretilen TypeScript - cok dosyali paket (#135, D18)', () => {
+  it('orderV1 hem order.proto hem checkout.proto mesajlarini tek ad alaninda verir', () => {
+    // checkout.proto'ya tasinanlar: CheckoutSignals, OrderDetails, GiftDetails,
+    // OrderPayment, DeliveryPaymentKind. Tuketici yolu (orderV1.X) degismez.
+    for (const name of [
+      'Order',
+      'CreateOrderRequest',
+      'OrderServiceClient',
+      'CheckoutSignals',
+      'OrderDetails',
+      'GiftDetails',
+      'OrderPayment',
+      'DeliveryPaymentKind',
+    ]) {
+      expect(Object.keys(orderV1)).toContain(name);
+    }
+    expect(orderV1.protobufPackage).toBe('getir.order.v1');
+  });
+
+  it('dosyalar arasi tipler tasiyan istek bozulmadan gidip gelir', () => {
+    const request = orderV1.CreateOrderRequest.fromPartial({
+      orderId: 'ord_1',
+      onDelivery: orderV1.DeliveryPaymentKind.DELIVERY_PAYMENT_KIND_POS,
+      details: {
+        note: 'Zili calma',
+        doNotRingBell: true,
+        agreementsAccepted: true,
+        gift: {
+          recipientName: 'Ali',
+          recipientPhone: '+905321234567',
+          message: '',
+          senderName: '',
+        },
+      },
+      signals: { ipAddress: '85.105.1.20', sessionLocation: { lat: 41, lng: 29 } },
+    });
+
+    const decoded = orderV1.CreateOrderRequest.decode(
+      orderV1.CreateOrderRequest.encode(request).finish(),
+    );
+
+    expect(decoded).toEqual(request);
+  });
+});

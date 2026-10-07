@@ -22,6 +22,7 @@ syntax = "proto3";
 package getir.order.v1;
 
 import "getir/common/v1/common.proto";
+import "getir/order/v1/checkout.proto";
 import "getir/payment/v1/payment.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -199,23 +200,6 @@ message Order {
   OrderPayment payment = 18;
 }
 
-// Siparisin odeme secimi: kurye kapida neyle tahsil edecegini bilir.
-message OrderPayment {
-  getir.payment.v1.PaymentMethod method = 1;
-  // Yalnizca kapida odemede dolu; kartla odemede UNSPECIFIED.
-  DeliveryPaymentKind on_delivery = 2;
-}
-
-// Kapida odemenin turu (T12.4). Tahsilat kaydi teslimde tutulmaz (T13.3).
-enum DeliveryPaymentKind {
-  DELIVERY_PAYMENT_KIND_UNSPECIFIED = 0;
-  // Nakit.
-  DELIVERY_PAYMENT_KIND_CASH = 1;
-  // Kapida kredi ya da banka karti, kuryenin POS cihazi. Adi POS: odeme
-  // yonteminin CARD'i (cevrimici cekim) ile karismasin.
-  DELIVERY_PAYMENT_KIND_POS = 2;
-}
-
 message CreateDraftOrderRequest {
   string user_id = 1;
   // DEPRECATED (ADR-15): market_id kullanin. Alan silinmez; numara ve JSON adi
@@ -319,79 +303,6 @@ message CreateOrderRequest {
   // CONFLICT (cekimi degistirir; ayrinti farki ise sessizce yok sayilir). Taslakta
   // kalan siparis (orta bantta kapida odeme reddi) baska yontemle verilebilir.
   DeliveryPaymentKind on_delivery = 9;
-}
-
-// Siparis ayrintilari (T12.4). Kurallar (@getir/contracts checkout-rules.ts;
-// uzunluk UTF-16 kod birimi): not ve hediye mesaji en fazla 250, adlar en fazla
-// 60; alici adi bosluktan ibaret olamaz; alici telefonu E.164 (PHONE_PATTERN);
-// sozlesme onayi true olmalidir. Disi VALIDATION_FAILED; hata ayrintisi degeri
-// YANKILAMAZ.
-message OrderDetails {
-  // Hediye: yoksa siparis hediye degildir.
-  GiftDetails gift = 1;
-
-  // Kuryeye not; bos olabilir. Gunlukte maskelenir.
-  string note = 2;
-
-  // "Zili calma": kurye kapiyi calmaz, arar.
-  bool do_not_ring_bell = 3;
-
-  // Mesafeli satis sozlesmesi ve on bilgilendirme onayi. Istekte true olmalidir.
-  bool agreements_accepted = 4;
-
-  // Onayin sunucu saatiyle ani. YALNIZCA cevapta (Order.details) doludur;
-  // istekte gonderilirse yok sayilir.
-  google.protobuf.Timestamp agreements_accepted_at = 5;
-}
-
-// Hediye bilgileri (T12.4). Alici adi ve telefonu kisisel veridir: gunluge,
-// ize ve olaylara yazilmaz; mesaj gunlukte maskelenir.
-message GiftDetails {
-  // Hediye kartindaki mesaj; bos olabilir.
-  string message = 1;
-
-  // Gonderici adi; bos olabilir.
-  string sender_name = 2;
-
-  string recipient_name = 3;
-
-  // E.164 ("+905321234567").
-  string recipient_phone = 4;
-}
-
-// Gateway'in bildigi, istemcinin GONDEREMEDIGI risk sinyalleri (T7.5).
-//
-// Alanlar getir.risk.v1.RiskContext'te gateway'e ait olan alanlarin birebir
-// karsiligidir; order-svc onlari degistirmeden RiskContext'e tasir. "Bos = yok"
-// sozlesmesi de oradakiyle aynidir (bos metin, 0 sayi, gonderilmeyen mesaj):
-// eksik sinyal kurali TETIKLEMEZ.
-//
-// T7.5'te gateway yalnizca ip_address'i doldurur (kimlik dogrulamasi henuz
-// yok); digerleri T8.1'de oturum ve kullanici kaydindan gelir. Butun alanlar
-// simdiden tanimli: T8.1 sozlesmeye dokunmadan yalnizca doldurur.
-message CheckoutSignals {
-  // Istegin geldigi IP. Gateway TCP baglantisindan okur; istemcinin
-  // yazabildigi bir basliga (X-Forwarded-For) guvenilir vekil yoksa bakmaz.
-  string ip_address = 1;
-
-  // IP'nin sehri (ip-device kurali).
-  string ip_city = 2;
-
-  // Oturumun cihaz kimligi (ip-device kurali).
-  string device_id = 3;
-
-  // Ayni cihazda gorulmus hesap sayisi; 3 ve ustu kesin kuraldir (veto).
-  // 0 = olculmedi (RiskContext sozlesmesiyle ayni).
-  int32 accounts_on_device = 4;
-
-  // Kullanicinin bir onceki oturumundaki IP ("IP degisimi" sinyali).
-  string previous_ip_address = 5;
-
-  // Oturumun acildigi konum (geofence kurali).
-  getir.common.v1.GeoPoint session_location = 6;
-
-  // Hesabin acilis ani (account-age kurali).
-  google.protobuf.Timestamp account_created_at = 7;
 }
 
 // Siparis olusturma cevabi.
