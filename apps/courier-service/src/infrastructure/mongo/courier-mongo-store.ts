@@ -6,11 +6,16 @@
 
 import { COURIER_CLAIM_CANDIDATES } from '../../config/constants.js';
 import type { Courier, GeoPoint } from '../../domain/courier.js';
-import type { CourierRepository, NearestClaimRequest } from '../../domain/courier-repository.js';
+import type {
+  CourierBatchReader,
+  CourierRepository,
+  NearestClaimRequest,
+  ReleaseOptions,
+} from '../../domain/courier-repository.js';
 import type { MarketLocator } from '../../domain/market-locator.js';
 import type { CouriersCollection } from './couriers-collection.js';
 import type { CourierDocument } from './documents.js';
-import { fromCourierDocument, fromGeoJson } from './mappers.js';
+import { fromCourierDocument, fromGeoJson, toGeoJson } from './mappers.js';
 import type { MarketsCollection } from './markets-collection.js';
 
 const toCourier = (document: CourierDocument | null): Courier | null =>
@@ -22,7 +27,7 @@ export interface ClaimTuning {
   readonly candidates: number;
 }
 
-export class CourierMongoStore implements CourierRepository, MarketLocator {
+export class CourierMongoStore implements CourierRepository, CourierBatchReader, MarketLocator {
   constructor(
     private readonly couriers: CouriersCollection,
     private readonly markets: MarketsCollection,
@@ -35,6 +40,10 @@ export class CourierMongoStore implements CourierRepository, MarketLocator {
 
   async findByOrder(orderId: string): Promise<Courier | null> {
     return toCourier(await this.couriers.findByOrder(orderId));
+  }
+
+  async findByIds(ids: readonly string[]): Promise<readonly Courier[]> {
+    return (await this.couriers.findByIds(ids)).map(fromCourierDocument);
   }
 
   /**
@@ -68,8 +77,18 @@ export class CourierMongoStore implements CourierRepository, MarketLocator {
     }
   }
 
-  async releaseByOrder(orderId: string, at: Date): Promise<Courier | null> {
-    return toCourier(await this.couriers.releaseByOrder(orderId, at));
+  async releaseByOrder(
+    orderId: string,
+    at: Date,
+    options: ReleaseOptions = {},
+  ): Promise<Courier | null> {
+    const { location, courierId } = options;
+    return toCourier(
+      await this.couriers.releaseByOrder(orderId, at, {
+        ...(location === undefined ? {} : { location: toGeoJson(location) }),
+        ...(courierId === undefined ? {} : { courierId }),
+      }),
+    );
   }
 
   async locate(marketId: string): Promise<GeoPoint | null> {

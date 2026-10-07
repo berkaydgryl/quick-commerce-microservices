@@ -2,13 +2,14 @@
 
 Kurye servisi: `couriers` koleksiyonunun **tek sahibi** (ADR-05). Siparişe kurye atar ve bırakır.
 Siparişin durumunu değiştirmez; atamayı order ister, sonucu kendi belgesine yazar ve `PREPARING`'e
-geçer (T13.1 PR 2). Canlı konum bu servisin RPC'lerinden geçmez (`courier.proto` başı).
+geçer (T13.1 PR 2). Canlı konum akışı bu servisin RPC'lerinden geçmez (`courier.proto` başı);
+aşama 1'de web siparişin takibini `GetTracking` ile gateway üzerinden yoklar (T13.3).
 
 **Kurye havuzu (T13.2):** kurye bir markete bağlı değildir. Siparişin marketinin **3 km**
 çevresindeki boş kuryelerden biri atanır; demo verisinde Kadıköy ve Beşiktaş iki ayrı havuzdur
 (iki semtin en yakın marketleri 4,9 km ayrı; semt içinde en uzak çift 2,6 km). Teslimattan sonra kurye olduğu yerde boşa çıkar, markete dönmez.
 
-## Bugünkü durum (T13.2 — kurye havuzu, rota ve varış tahmini)
+## Bugünkü durum (T13.3 aşama 1 — kurye hareketi ve takip)
 
 | Parça                     | Durum                                                                                       |
 | ------------------------- | ------------------------------------------------------------------------------------------- |
@@ -18,16 +19,19 @@ geçer (T13.1 PR 2). Canlı konum bu servisin RPC'lerinden geçmez (`courier.pro
 | Okuma, bırakma            | ✅ `GetCourier`, `ReleaseCourier` (kurye olduğu yerde boşa çıkar)                           |
 | Demo kuryeleri            | ✅ `pnpm seed`: her marketin 40-150 m yakınına 3 kurye, 99 (Kadıköy 48, Beşiktaş 51)        |
 | Rota ve ETA, `StartRoute` | ✅ atamada kurye -> market -> adres, 20-40 eşit aralıklı nokta; `routes` (T13.2 PR 3)       |
-| GPS, canlı ETA            | ⏳ T13.3 (tick, `courier.location`)                                                         |
+| Hareket, kilometre taşı   | ✅ tick (tek lider), `courier.picked_up` / `courier.delivered`, teslimde kurye `IDLE`       |
+| Takip, `GetTracking`      | ✅ zamandan konum, kalan yol ve ETA; paket alınmadan konum yok (gizlilik)                   |
+| Konum yayını, iz          | ⏳ T13.3 aşama 2 (`courier.location`, iz tamponu, soket)                                    |
 
 ## RPC'ler
 
-| RPC              | Ne yapar                                                                                 |
-| ---------------- | ---------------------------------------------------------------------------------------- |
-| `AssignCourier`  | Marketin çevresindeki boş kuryeyi bağlar, rotasını üretir, ETA döner; yoksa `NOT_FOUND`  |
-| `GetCourier`     | Kuryenin durumu ve son bilinen konumu; yoksa `NOT_FOUND`                                 |
-| `ReleaseCourier` | Siparişi taşıyan kuryeyi yerinde `IDLE` yapar; taşıyan yoksa hata değil `released=false` |
-| `StartRoute`     | Atamanın rotasını döner (`already_started = true`); bu kuryeyle rotası yoksa `NOT_FOUND` |
+| RPC              | Ne yapar                                                                                        |
+| ---------------- | ----------------------------------------------------------------------------------------------- |
+| `AssignCourier`  | Marketin çevresindeki boş kuryeyi bağlar, rotasını üretir, ETA döner; yoksa `NOT_FOUND`         |
+| `GetCourier`     | Kuryenin durumu ve son bilinen konumu; yoksa `NOT_FOUND`                                        |
+| `ReleaseCourier` | Siparişi taşıyan kuryeyi yerinde `IDLE` yapar; taşıyan yoksa hata değil `released=false`        |
+| `StartRoute`     | Atamanın rotasını döner (`already_started = true`); bu kuryeyle rotası yoksa `NOT_FOUND`        |
+| `GetTracking`    | Siparişin takibi: aşama, konum, kalan yol, ETA, rota; rota yoksa ya da bırakıldıysa `NOT_FOUND` |
 
 Girdi sözleşme biçimiyle denetlenir: sipariş `ord_<32 hex>`, market `mkt_…`, kurye `crr_<32 hex>`,
 teslimat konumu zorunlu. Kullanımdan kalkan `dark_store_id` okunmaz (ADR-15). Cevaptaki kuryenin
@@ -68,12 +72,58 @@ idleSince silinir)`. Aday o arada başka siparişe gittiyse koşul tutmaz, sıra
 - **`StartRoute` (karar K a):** rota atamada başlar (kurye hemen markete yürür); `StartRoute` aynı
   rotayı `already_started = true` ve `started_at` = atama anıyla döner, yeni rota üretmez. Kurye
   `BUSY` değilse ya da siparişi taşımıyorsa (bıraktıysa) `NOT_FOUND`; rota belgesi geçmiş olarak
-  kalır. Order bu PR'da `StartRoute`'u çağırmaz; `ON_THE_WAY` ve canlı konum T13.3'te.
+  kalır. Order `StartRoute`'u çağırmaz; `ON_THE_WAY` ve `DELIVERED` geçişleri bu servisin
+  `courier.picked_up` ve `courier.delivered` olaylarıyla olur (T13.3, order T14.3).
 - **Yeniden atama:** sipariş bırakılıp başka kuryeye ya da aynı kuryeye yeniden atanırsa (bugün
   akışta yok) rota yenisiyle değiştirilir: saklanan rota kuryenin son atamasından eskiyse o atamanın
   değildir.
 - **Bırakma:** kurye olduğu yerde `IDLE` olur, `idleSince` bırakma anı; `lastAssignedAt` geçmiş
-  bilgisi olarak kalır. Konum Mongo'da durum değişiminde yazılır: teslimat bitince adres (T13.3/T14.3).
+  bilgisi olarak kalır. Konum Mongo'da yalnızca durum değişiminde yazılır: teslimatta kurye
+  **teslimat adresinde** boşa çıkar (T13.3). Yolda iptalde (`ReleaseCourier`) kuryenin ilerleyen
+  rotası hemen `ENDED` yazılır (karar M6 a); kurye bugün atandığı yerde kalır, yoldaki anlık
+  konumda bırakma bekleyen iş #174.
+
+## Hareket ve takip (T13.3, aşama 1)
+
+- **Zamandan konum:** konum her tick'te Mongo'ya yazılmaz; rotanın üretildiği andan geçen süreden
+  her an yeniden hesaplanır (`domain/route-progress.ts`). 1. bacak kurye → market, kurye
+  hazırlık bitmeden varırsa markette bekler (`ORDER_PREP_SECONDS`), 2. bacak market → adres.
+  Alma anı `max(1. bacak / hız, hazırlık)`, varış anı `alma + 2. bacak / hız`. İlerleme nokta
+  başına değil **mesafeyle** (QA B3); sınırlar milisaniyede.
+- **Tick (`interfaces/workers/route-ticker.ts`, karar M5 a):** her `COURIER_TICK_MS`'de lider
+  kilidi alınır ya da yenilenir (`lock:courier-tick`, `lua/leader.lua` = inventory'nin kopyası,
+  ADR-01 kapsam notu). Süreler tek yerden (`config/tick-timing.ts`): kilit ömrü
+  `max(tick × 5, 10 sn)`, turun süre bütçesi ömrün yarısı (dolunca kalan rotalar sonraki turda,
+  WARN), canlı konum ömrü `max(30 sn, tick × 3)`. Yalnızca lider, bitmemiş rotaları eskiden
+  yeniye (en çok 200, `state_createdAt_id` indeksi) okur, kuryelerini **tek toplu okumayla** alır
+  ve her rotayı bu ana getirir (`application/advance-route.ts`):
+  1. kurye siparişi artık taşımıyorsa (iptal) rota `ENDED`: ilerlemez, olay yok (karar M6 a);
+  2. alma anı geldiyse `pickedUpAt` **bir kez** yazılır, `courier.picked_up` yayınlanır, sonra
+     `pickupPublished`;
+  3. varış anı geldiyse `deliveredAt` yazılır, kurye adreste `IDLE` olur (yalnızca siparişi hâlâ
+     **bu kurye** taşıyorsa), `courier.delivered` yayınlanır, rota `DONE`;
+  4. aksi halde canlı konum `courier:{id}:last`'a yazılır (okuyan aşama 2). Yazım hatası günlüğe
+     konum taşımaz (ioredis hatası komut argümanlarını taşır; argümansız hataya çevrilir).
+
+  Her yazım koşulludur (`_id`, kurye, atama anı, bitmemiş): yeniden atama ya da başka ölçek
+  araya girerse tur bırakılır. İşaret yayından **sonra** yazılır: yayın düşerse sonraki tur
+  yeniden yayınlar (en az bir kez). Olay kimliği **belirlenimcidir** (sipariş, rota anı, konu):
+  yeniden yayın aynı `eventId`'yi taşır, tüketici tekilleştirir (ADR-04). Olayın anı kilometre
+  taşının anıdır. Bilinen sınırlar: hep hata veren rota partinin başında kalır (#171); tick/kilit
+  döngüsü inventory'nin kopyası (#172).
+
+- **`GetTracking` (`application/get-tracking.ts`):** değerler çağrı anında aynı fonksiyondan
+  hesaplanır; aşama tek yönlüdür (yazılmış kilometre taşı aşamayı geri götürmez). **Gizlilik:**
+  kurye önceki müşterinin kapısında boşa çıkar ve oradan atanır; bu yüzden paket alınmadan
+  (`TO_MARKET`) konum **verilmez**, kalan yol yalnızca market → adres bacağıdır, ETA dakikaya
+  yukarı yuvarlanır ve rota yalnızca market → adres parçasıdır (`@getir/contracts`
+  `enforceTrackingPhase` ile aynı kural; test her anı o şemadan geçirir). Kayıtlı alma anı hesabın
+  ilerisindeyse (hız ayarı değişti) konum market, ETA yine yuvarlı. Bilinen sınır: alma anı
+  (`pickedUpAt`) gösterildiği için kurye → market süresi, dolayısıyla yönsüz bir uzaklık
+  çıkarılabilir; sözleşme bunu kabul eder. Sahiplik (sipariş kimin) gateway'dedir. Koordinatlar
+  kişisel veridir: günlüğe yazılmaz.
+- **MOCK:** Redis yok: tek örnek hep lider, olaylar şemadan geçer ama yayınlanmaz, canlı konum
+  bellekte.
 
 ## `couriers`, `markets` ve `routes` belgeleri
 
@@ -95,8 +145,10 @@ ve 21 marketin konumunu yazar. Açılışta kendiliğinden uygulanır; `down` ge
 marketten). Transaction'sız ve yeniden çalıştırılabilir (indeks düşürmek transaction'da yapılamaz).
 
 `routes` (T13.2): `_id (ord_…)`, `courierId`, `points` (`{lat, lng}` dizisi, 20-40), `pickupIndex`
-(market noktasının sırası), `distanceMeters`, `etaSeconds`, `createdAt` (atama anı). Yalnızca `_id`
-ile okunur, ek indeks yok. Göç gerekmez: koleksiyon ilk rotayla oluşur.
+(market noktasının sırası), `distanceMeters`, `etaSeconds`, `createdAt` (atama anı). T13.3 alanları
+(hepsi isteğe bağlı): `marketId`, `state` (`MOVING | DONE | ENDED`), `pickedUpAt`, `pickupPublished`,
+`deliveredAt`, `deliveryPublished`, `endedAt`. `state` alanı olmayan eski rota `MOVING` sayılır
+(sorgu `state: { $nin: [DONE, ENDED] }`), göç gerekmez. İndeks: `state_createdAt_id` (tick).
 
 Kuryenin adı istemcide görünür, **günlüğe yazılmaz**; günlükte kimlik yeter.
 
@@ -111,19 +163,25 @@ pnpm --filter @getir/courier-service migrate status
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/courier/v1/courier.proto \
   -d '{"order_id":"ord_0123456789abcdef0123456789abcdef","market_id":"mkt_migros-jet-moda","delivery_location":{"lat":40.99,"lng":29.03}}' \
   localhost:50056 getir.courier.v1.CourierService/AssignCourier
+grpcurl -plaintext -import-path packages/proto/proto -proto getir/courier/v1/courier.proto \
+  -d '{"order_id":"ord_0123456789abcdef0123456789abcdef"}' \
+  localhost:50056 getir.courier.v1.CourierService/GetTracking
 ```
 
 Metrikler `:51056/metrics` (gRPC portu + 1000).
 
 ## Ortam
 
-| Değişken            | Varsayılan      | Not                                                     |
-| ------------------- | --------------- | ------------------------------------------------------- |
-| `COURIER_GRPC_PORT` | `50056`         |                                                         |
-| `COURIER_MONGO_URI` | —               | `MOCK=false` iken zorunlu; kendi kullanıcısı (D14)      |
-| `COURIER_MONGO_DB`  | `getir_courier` |                                                         |
-| `MOCK`              | `false`         | `true`: demo kuryeleri ve marketler bellekte, Mongo yok |
-| `COURIER_SPEED_KMH` | `20`            | Kurye hızı (km/sa, tam sayı 1-120): rotanın ETA'sı      |
+| Değişken             | Varsayılan      | Not                                                           |
+| -------------------- | --------------- | ------------------------------------------------------------- |
+| `COURIER_GRPC_PORT`  | `50056`         |                                                               |
+| `COURIER_MONGO_URI`  | —               | `MOCK=false` iken zorunlu; kendi kullanıcısı (D14)            |
+| `COURIER_MONGO_DB`   | `getir_courier` |                                                               |
+| `MOCK`               | `false`         | `true`: demo kuryeleri ve marketler bellekte, Mongo/Redis yok |
+| `COURIER_SPEED_KMH`  | `20`            | Kurye hızı (km/sa, tam sayı 1-120): rotanın ETA'sı            |
+| `COURIER_TICK_MS`    | `2000`          | Tick aralığı (ms, 200-60000)                                  |
+| `ORDER_PREP_SECONDS` | `300`           | Markette hazırlık (sn, 0-3600); demo `.env.example` 30        |
+| `REDIS_URL`          | —               | `MOCK=false` iken zorunlu: tick kilidi, olaylar, canlı konum  |
 
 **Yerel Mongo'da kullanıcı:** `infra/docker/mongo/init/service-users.js` kullanıcıları yalnızca **boş
 hacimde** oluşturur. Daha önce kurulmuş bir `getir-mongo`'da `courier` kullanıcısı kendiliğinden

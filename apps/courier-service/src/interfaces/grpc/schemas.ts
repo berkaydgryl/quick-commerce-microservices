@@ -8,16 +8,11 @@
  * reddedilir.
  */
 
-import { geoPointSchema, marketIdSchema, orderIdSchema } from '@getir/contracts';
-import { ID_PREFIX, isId } from '@getir/core';
+import { courierIdSchema, geoPointSchema, marketIdSchema, orderIdSchema } from '@getir/contracts';
 import { z } from 'zod';
 
 import type { AssignCourierCommand } from '../../application/assign-courier.js';
 import type { StartRouteCommand } from '../../application/start-route.js';
-
-const courierIdSchema = z
-  .string()
-  .refine((value) => isId(ID_PREFIX.COURIER, value), { message: 'kurye kimligi bekleniyor' });
 
 export const assignCourierRequestSchema = z
   .object({
@@ -40,5 +35,9 @@ export const startRouteRequestSchema = z
   .transform(({ orderId, courierId }): StartRouteCommand => ({ orderId, courierId }));
 
 export const releaseCourierRequestSchema = z
+  .object({ orderId: orderIdSchema })
+  .transform(({ orderId }) => orderId);
+
+export const getTrackingRequestSchema = z
   .object({ orderId: orderIdSchema })
   .transform(({ orderId }) => orderId);

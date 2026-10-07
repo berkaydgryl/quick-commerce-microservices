@@ -212,6 +212,50 @@ export function describeCourierStoreContract(name: string, setup: StoreSetup): v
       expect(await store.releaseByOrder(orderId(), at(10))).toBeNull();
     });
 
+    it('teslimatta birakma (T13.3): kurye TESLIMAT NOKTASINDA bosa cikar, konum ani teslim ani', async () => {
+      const order = orderId();
+      const dropoff = northOf(MARKET_LOCATION, 1_200);
+      const store = await setup([
+        courier(1, {
+          status: COURIER_STATUS.BUSY,
+          currentOrderId: order,
+          lastAssignedAt: at(3),
+          lastLocation: MARKET_LOCATION,
+        }),
+      ]);
+
+      const released = await store.releaseByOrder(order, at(9), { location: dropoff });
+
+      expect(released).toEqual(
+        courier(1, {
+          lastAssignedAt: at(3),
+          idleSince: at(9),
+          lastLocation: dropoff,
+          lastLocationAt: at(9),
+        }),
+      );
+      expect(await store.findById(courierId(1))).toEqual(released);
+    });
+
+    it('kurye kimligiyle birakma (T13.3 tick): siparisi BASKA kurye tasiyorsa birakilmaz, konum degismez', async () => {
+      const order = orderId();
+      const store = await setup([
+        courier(1, { status: COURIER_STATUS.BUSY, currentOrderId: order, lastAssignedAt: at(3) }),
+      ]);
+      const before = await store.findById(courierId(1));
+
+      const other = await store.releaseByOrder(order, at(9), {
+        courierId: courierId(2),
+        location: MARKET_LOCATION,
+      });
+
+      expect(other).toBeNull();
+      expect(await store.findById(courierId(1))).toEqual(before);
+      expect((await store.releaseByOrder(order, at(9), { courierId: courierId(1) }))?.status).toBe(
+        COURIER_STATUS.IDLE,
+      );
+    });
+
     it('birakilan kurye diliminin sonuna gecer (#88); ayni siparis yeniden atanabilir', async () => {
       const store = await setup([idleAt(1, 100, 0), idleAt(2, 150, 1)]);
       const first = orderId();
