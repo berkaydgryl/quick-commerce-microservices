@@ -37,8 +37,16 @@ export type ReserveOutcome =
   | { readonly status: 'reserved'; readonly expiresAt: number }
   /** Bu siparis zaten rezerve; sayaclar TEKRAR dusmedi (ADR-08). */
   | { readonly status: 'already-reserved'; readonly expiresAt: number }
-  /** Kullanicinin baska bir siparis icin aktif rezervasyonu var (B22). */
-  | { readonly status: 'user-has-active'; readonly activeOrderId: string }
+  /**
+   * Kullanicinin baska bir siparis icin aktif rezervasyonu var (B22).
+   * `activeExpiresInMs`: o kilidin kalan omru (T15.3, bekleyen is 126); kilidin
+   * suresi yoksa ya da okunamadiysa negatif.
+   */
+  | {
+      readonly status: 'user-has-active';
+      readonly activeOrderId: string;
+      readonly activeExpiresInMs: number;
+    }
   /**
    * Bir kalem yetmedi (ilk yetmeyen). `counter` sayacin degeridir: negatifse
    * fazla satis izidir. Sayaci hic yoksa `counterMissing` (bekleyen #36): bu

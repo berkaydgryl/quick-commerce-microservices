@@ -17,7 +17,8 @@
 -- Doner (ilk eleman durum):
 --   {'reserved', bitis}         rezerve edildi
 --   {'already', bitis}          bu siparis zaten rezerve; sayaclara DOKUNULMADI (ADR-08)
---   {'user-active', siparis}    kullanicinin baska aktif rezervasyonu var (B22)
+--   {'user-active', siparis, kalan}  kullanicinin baska aktif rezervasyonu var (B22);
+--                               kalan: kilidinin kalan omru (ms, PTTL; T15.3, bekleyen is 126)
 --   {'insufficient', i, sayac}  i. kalem yetmiyor
 --   {'missing', i}              i. kalemin sayaci yok (bu markette satilmiyor ya da Redis bosaldi)
 --   {'corrupt', i}              i. kalemin sayaci tam sayi degil
@@ -36,7 +37,9 @@ end
 -- 1. Kullanicinin baska aktif rezervasyonu varsa yenisi acilmaz.
 local active = redis.call('GET', userKey)
 if active and active ~= orderId then
-  return { 'user-active', active }
+  -- Kullanici kilidi PX = kilit omruyle yazilir; uzatma ve kisaltma onu da
+  -- tasir. Kalan sure goreli: cagiran saat farkindan etkilenmeden yasi bulur.
+  return { 'user-active', active, redis.call('PTTL', userKey) }
 end
 
 -- 2. Hepsini kontrol et, hicbir sey yazma. Sayac tam sayi olmali: DECRBY
