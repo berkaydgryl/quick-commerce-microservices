@@ -18,6 +18,10 @@ type Orders struct {
 	LoadingMoreLabel   string `json:"loadingMoreLabel"`
 	DateLabel          string `json:"dateLabel"`
 	AddressLabel       string `json:"addressLabel"`
+	PaymentLabel       string `json:"paymentLabel"`
+	PaymentCardLabel   string `json:"paymentCardLabel"`
+	PaymentCashLabel   string `json:"paymentCashLabel"`
+	PaymentPosLabel    string `json:"paymentPosLabel"`
 	ItemsTitle         string `json:"itemsTitle"`
 	SubtotalLabel      string `json:"subtotalLabel"`
 	DeliveryFeeLabel   string `json:"deliveryFeeLabel"`

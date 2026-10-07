@@ -306,8 +306,10 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/inventory/v1/i
 
 ## Demo stoğu
 
-`src/infrastructure/fixtures/stock-levels.ts`: kataloğun 166 teklifinin **her birinin** stok kaydı var
-(`test/unit/stock-fixtures.spec.ts` kataloğun demo verisiyle karşılaştırır). Bilerek konanlar:
+`src/infrastructure/fixtures/stock-levels.ts`: kataloğun 1505 teklifinin **her birinin** stok kaydı var
+(`test/unit/stock-fixtures.spec.ts` kataloğun demo verisiyle karşılaştırır). İlk 166 satır açık tablodur
+(`stock-table.ts`, olduğu gibi); 07.10 çeşitliliğinin satırları marketin çeşidinden (`assortments.ts`,
+kataloğunkiyle aynı kopya) üretilir: market ve SKU'nun özetinden 20-60. Bilerek konanlar:
 
 - her markette bir **"tükendi"** (0) ve bir **"son 2 adet"** kalemi;
 - Migros Jet – Moda'da çikolata **1 adet**: yarış senaryosu (T11.1, "stok 1, 100 paralel istek");

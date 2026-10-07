@@ -218,7 +218,7 @@ describe('kalan sure ve kosul', () => {
   it('rezervasyon hatasi "Sipariş Ver"i durdurur (adresten sonra, sozlesmeden once)', () => {
     const ready = {
       form: { ...EMPTY_CHECKOUT_FORM, agreementsAccepted: true },
-      cardId: `crd_${'a'.repeat(32)}`,
+      hasPayment: true,
       hasAddress: true,
       canCheckout: true,
       marketOpen: true,

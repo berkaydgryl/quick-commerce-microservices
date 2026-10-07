@@ -23,25 +23,50 @@ import type {
   StockLedgerDocument,
 } from '../../../inventory-service/src/infrastructure/mongo/documents.js';
 import { ATTEMPT_KIND, ATTEMPT_OUTCOME } from '../../../payment-service/src/domain/payment.js';
+import type {
+  AttemptKind,
+  AttemptOutcome,
+  Payment,
+} from '../../../payment-service/src/domain/payment.js';
+import type { InMemoryPaymentStore } from '../../../payment-service/src/infrastructure/memory/in-memory-payment-store.js';
+import type { OrderRepository } from '../../src/domain/order-repository.js';
 import type { InventoryWorld, Shop } from './qa-payment-world.js';
 import { DRAFT_QUANTITY, MARKET, SKU } from './qa-payment-world.js';
+
+/** Paranin ve siparisin okundugu yer: tek kopyali dunya (Shop) ya da iki kopyali kume. */
+export interface Ledgers {
+  readonly payments: Pick<InMemoryPaymentStore, 'findByOrderId'>;
+  readonly orders: Pick<OrderRepository, 'findById'>;
+}
 
 export interface Money {
   readonly charged: number;
   readonly refunded: number;
 }
 
+/** Odeme kaydinda verilen tur ve sonuctaki deneme sayisi (kayit yoksa 0). */
+export function attemptCount(
+  payment: Pick<Payment, 'attempts'> | null | undefined,
+  kind: AttemptKind,
+  outcome: AttemptOutcome,
+): number {
+  return (payment?.attempts ?? []).filter(
+    (attempt) => attempt.kind === kind && attempt.outcome === outcome,
+  ).length;
+}
+
 /** Siparisin parasi: payment kaydinin deneme gecmisinden. */
-export async function moneyOf(shop: Shop, orderId: string): Promise<Money> {
-  const payment = await shop.payments.findByOrderId(orderId);
-  const attempts = payment?.attempts ?? [];
-  const count = (kind: string, outcome: string) =>
-    attempts.filter((attempt) => attempt.kind === kind && attempt.outcome === outcome).length;
+export async function moneyOf(ledgers: Ledgers, orderId: string): Promise<Money> {
+  return moneyIn(await ledgers.payments.findByOrderId(orderId));
+}
+
+/** Okunmus kaydin parasi (ikinci okuma gerekmez). */
+export function moneyIn(payment: Pick<Payment, 'attempts'> | null | undefined): Money {
   return {
     charged:
-      count(ATTEMPT_KIND.CHARGE, ATTEMPT_OUTCOME.APPROVED) +
-      count(ATTEMPT_KIND.THREEDS, ATTEMPT_OUTCOME.CODE_ACCEPTED),
-    refunded: count(ATTEMPT_KIND.REFUND, ATTEMPT_OUTCOME.REFUNDED),
+      attemptCount(payment, ATTEMPT_KIND.CHARGE, ATTEMPT_OUTCOME.APPROVED) +
+      attemptCount(payment, ATTEMPT_KIND.THREEDS, ATTEMPT_OUTCOME.CODE_ACCEPTED),
+    refunded: attemptCount(payment, ATTEMPT_KIND.REFUND, ATTEMPT_OUTCOME.REFUNDED),
   };
 }
 
@@ -81,16 +106,16 @@ export interface Settlement {
 /** Para ve stok degismezi; `before` taslak acildiktan SONRA alinir (kilit icinde). */
 export async function expectSettled(
   world: InventoryWorld,
-  shop: Shop,
+  ledgers: Ledgers,
   orderId: string,
   before: StockState,
   expected: Settlement,
 ): Promise<void> {
-  expect(await moneyOf(shop, orderId)).toEqual({
+  expect(await moneyOf(ledgers, orderId)).toEqual({
     charged: expected.charged,
     refunded: expected.refunded,
   });
-  expect((await shop.orders.findById(orderId))?.status).toBe(expected.status);
+  expect((await ledgers.orders.findById(orderId))?.status).toBe(expected.status);
   const after = await stockState(world, orderId);
   expect(after.onHand - before.onHand).toBe(expected.onHandDelta);
   expect(after.ledger.commit ?? 0).toBe(expected.committed ? 1 : 0);

@@ -42,9 +42,18 @@ export const checkoutContentSchema = z.object({
   doNotRingLabel: contentTextSchema,
   paymentTitle: contentTextSchema,
   changeLabel: contentTextSchema,
-  addCardLabel: contentTextSchema,
   cardsLoadingLabel: contentTextSchema,
+  /** Odeme yontemi secilmedi (kart yok ve kapida odeme secilmedi; F12). */
   noCardNotice: contentTextSchema,
+  /**
+   * Kapida odeme (F12; T12.4 sozlesmesi CASH_ON_DELIVERY + CASH|POS): pencerede
+   * "Online Ödeme"nin altindaki baslik ve iki secenek; sayfadaki secim ozeti.
+   */
+  onDeliveryTitle: contentTextSchema,
+  onDeliveryCashLabel: contentTextSchema,
+  onDeliveryPosLabel: contentTextSchema,
+  onDeliveryCashSummary: contentTextSchema,
+  onDeliveryPosSummary: contentTextSchema,
   /** Odeme yonteminin altindaki kendi guvenlik cumlemiz (Masterpass yok). */
   securityNote: contentTextSchema,
   summaryTitle: contentTextSchema,

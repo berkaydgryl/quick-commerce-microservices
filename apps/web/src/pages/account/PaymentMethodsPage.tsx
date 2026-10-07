@@ -83,7 +83,6 @@ function PaymentMethodsSection({ userId }: { readonly userId: string }) {
       {texts !== undefined && deleting !== undefined && (
         <DeleteCardDialog
           texts={texts}
-          closeLabel={texts.closeLabel}
           card={deleting}
           pending={removing.isPending}
           error={deleteError}

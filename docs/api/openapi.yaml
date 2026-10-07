@@ -3839,6 +3839,7 @@ components:
           cartPage,
           footer,
           checkout,
+          confirm,
         ]
       properties:
         header:
@@ -3900,6 +3901,18 @@ components:
           $ref: "#/components/schemas/FooterContent"
         checkout:
           $ref: "#/components/schemas/CheckoutContent"
+        confirm:
+          $ref: "#/components/schemas/ConfirmContent"
+
+    ConfirmContent:
+      type: object
+      description: |
+        Ortak onay penceresinin düğmeleri (F13): bütün silme onayları aynı pencere; solda
+        "Hayır", sağda "Evet". Soru silinen şeye göre ekranın kendi bloğunda.
+      required: [yesLabel, noLabel]
+      properties:
+        yesLabel: { $ref: "#/components/schemas/ContentText" }
+        noLabel: { $ref: "#/components/schemas/ContentText" }
 
     FavoritesContent:
       type: object
@@ -4112,12 +4125,8 @@ components:
           addOptions,
           editTitle,
           deleteLabel,
-          confirmTitle,
-          confirmQuestionSuffix,
-          confirmHint,
-          confirmLabel,
+          confirmQuestion,
           deletingLabel,
-          cancelLabel,
           deletedToastSuffix,
           updatedToast,
         ]
@@ -4141,12 +4150,10 @@ components:
               label: { $ref: "#/components/schemas/ContentText" }
         editTitle: { $ref: "#/components/schemas/ContentText" }
         deleteLabel: { $ref: "#/components/schemas/ContentText" }
-        confirmTitle: { $ref: "#/components/schemas/ContentText" }
-        confirmQuestionSuffix: { $ref: "#/components/schemas/ContentText" }
-        confirmHint: { $ref: "#/components/schemas/ContentText" }
-        confirmLabel: { $ref: "#/components/schemas/ContentText" }
+        confirmQuestion:
+          $ref: "#/components/schemas/ContentText"
+          description: Ortak onay penceresinin sorusu (F13).
         deletingLabel: { $ref: "#/components/schemas/ContentText" }
-        cancelLabel: { $ref: "#/components/schemas/ContentText" }
         deletedToastSuffix: { $ref: "#/components/schemas/ContentText" }
         updatedToast: { $ref: "#/components/schemas/ContentText" }
 
@@ -4319,9 +4326,13 @@ components:
           doNotRingLabel,
           paymentTitle,
           changeLabel,
-          addCardLabel,
           cardsLoadingLabel,
           noCardNotice,
+          onDeliveryTitle,
+          onDeliveryCashLabel,
+          onDeliveryPosLabel,
+          onDeliveryCashSummary,
+          onDeliveryPosSummary,
           securityNote,
           summaryTitle,
           subtotalLabel,
@@ -4397,9 +4408,15 @@ components:
         doNotRingLabel: { $ref: "#/components/schemas/ContentText" }
         paymentTitle: { $ref: "#/components/schemas/ContentText" }
         changeLabel: { $ref: "#/components/schemas/ContentText" }
-        addCardLabel: { $ref: "#/components/schemas/ContentText" }
         cardsLoadingLabel: { $ref: "#/components/schemas/ContentText" }
         noCardNotice: { $ref: "#/components/schemas/ContentText" }
+        onDeliveryTitle:
+          $ref: "#/components/schemas/ContentText"
+          description: Ödeme yöntemi penceresinde "Online Ödeme"nin altındaki kapıda ödeme başlığı (F12).
+        onDeliveryCashLabel: { $ref: "#/components/schemas/ContentText" }
+        onDeliveryPosLabel: { $ref: "#/components/schemas/ContentText" }
+        onDeliveryCashSummary: { $ref: "#/components/schemas/ContentText" }
+        onDeliveryPosSummary: { $ref: "#/components/schemas/ContentText" }
         securityNote: { $ref: "#/components/schemas/ContentText" }
         summaryTitle: { $ref: "#/components/schemas/ContentText" }
         subtotalLabel: { $ref: "#/components/schemas/ContentText" }
@@ -4470,12 +4487,8 @@ components:
           expiredLabel,
           lastFourLabel,
           deleteSuffix,
-          confirmTitle,
-          confirmQuestionSuffix,
-          confirmHint,
-          confirmLabel,
+          confirmQuestion,
           deletingLabel,
-          cancelLabel,
           deletedToastSuffix,
           closeLabel,
           backToListLabel,
@@ -4519,12 +4532,10 @@ components:
         expiredLabel: { $ref: "#/components/schemas/ContentText" }
         lastFourLabel: { $ref: "#/components/schemas/ContentText" }
         deleteSuffix: { $ref: "#/components/schemas/ContentText" }
-        confirmTitle: { $ref: "#/components/schemas/ContentText" }
-        confirmQuestionSuffix: { $ref: "#/components/schemas/ContentText" }
-        confirmHint: { $ref: "#/components/schemas/ContentText" }
-        confirmLabel: { $ref: "#/components/schemas/ContentText" }
+        confirmQuestion:
+          $ref: "#/components/schemas/ContentText"
+          description: Ortak onay penceresinin sorusu (F13).
         deletingLabel: { $ref: "#/components/schemas/ContentText" }
-        cancelLabel: { $ref: "#/components/schemas/ContentText" }
         deletedToastSuffix: { $ref: "#/components/schemas/ContentText" }
         closeLabel: { $ref: "#/components/schemas/ContentText" }
         backToListLabel: { $ref: "#/components/schemas/ContentText" }
@@ -4598,6 +4609,10 @@ components:
           loadingMoreLabel,
           dateLabel,
           addressLabel,
+          paymentLabel,
+          paymentCardLabel,
+          paymentCashLabel,
+          paymentPosLabel,
           itemsTitle,
           subtotalLabel,
           deliveryFeeLabel,
@@ -4621,6 +4636,12 @@ components:
         loadingMoreLabel: { $ref: "#/components/schemas/ContentText" }
         dateLabel: { $ref: "#/components/schemas/ContentText" }
         addressLabel: { $ref: "#/components/schemas/ContentText" }
+        paymentLabel:
+          $ref: "#/components/schemas/ContentText"
+          description: Sipariş detayında ödeme satırı (F12); `payment` olmayan eski siparişte satır yok.
+        paymentCardLabel: { $ref: "#/components/schemas/ContentText" }
+        paymentCashLabel: { $ref: "#/components/schemas/ContentText" }
+        paymentPosLabel: { $ref: "#/components/schemas/ContentText" }
         itemsTitle: { $ref: "#/components/schemas/ContentText" }
         subtotalLabel: { $ref: "#/components/schemas/ContentText" }
         deliveryFeeLabel: { $ref: "#/components/schemas/ContentText" }
@@ -4715,10 +4736,8 @@ components:
               goToCartLabel,
               clearLabel,
               clearConfirmQuestion,
-              clearConfirmHint,
-              clearConfirmLabel,
-              cancelLabel,
-              closeLabel,
+              switchConfirmPrefix,
+              switchConfirmSuffix,
               decreaseSuffix,
               increaseSuffix,
               removeSuffix,
@@ -4740,10 +4759,10 @@ components:
             goToCartLabel: { $ref: "#/components/schemas/ContentText" }
             clearLabel: { $ref: "#/components/schemas/ContentText" }
             clearConfirmQuestion: { $ref: "#/components/schemas/ContentText" }
-            clearConfirmHint: { $ref: "#/components/schemas/ContentText" }
-            clearConfirmLabel: { $ref: "#/components/schemas/ContentText" }
-            cancelLabel: { $ref: "#/components/schemas/ContentText" }
-            closeLabel: { $ref: "#/components/schemas/ContentText" }
+            switchConfirmPrefix:
+              $ref: "#/components/schemas/ContentText"
+              description: Başka marketten eklerken sepeti boşaltma sorusu (F13); önek + hedef market + sonek.
+            switchConfirmSuffix: { $ref: "#/components/schemas/ContentText" }
             decreaseSuffix: { $ref: "#/components/schemas/ContentText" }
             increaseSuffix: { $ref: "#/components/schemas/ContentText" }
             removeSuffix: { $ref: "#/components/schemas/ContentText" }

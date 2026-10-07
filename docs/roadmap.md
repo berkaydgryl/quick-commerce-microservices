@@ -809,33 +809,45 @@ infra/seed/
   README.md                    # kim neyi ne zaman yukler
 ```
 
-**Pazaryeri demo verisi (T4.8; T11.6'da 13 kategori; T11.11'de dükkân türleri):** 13 kategori (hepsinin ürünü var), 49 ortak ürün ve iki semtte toplam 21 market; her semtte her dükkân türünden (market, manav, kasap, şarküteri, kuruyemiş, fırın, pet shop, çiçekçi) en az bir market. Her market kendi fiyatı, kuralı ve çeşidiyle gelir; dükkân yalnızca türünün kategorilerini satar (manav meyve-sebze, kasap et-tavuk...), bir market kapalıdır ("Kapalı" rozeti ve STORE_CLOSED senaryosu). Logo yok (liste baş harf rozeti gösterir); kapak dükkân türünün görselidir.
+**Pazaryeri demo verisi (T4.8; T11.6'da 13 kategori; T11.11'de dükkân türleri):** 13 kategori (hepsinin ürünü var), 122 ortak ürün ve iki semtte toplam 33 market; her semtte her dükkân türünden (market, manav, kasap, şarküteri, kuruyemiş, fırın, pet shop, çiçekçi) en az bir market. Her market kendi fiyatı, kuralı ve çeşidiyle gelir; dükkân yalnızca türünün kategorilerini satar (manav meyve-sebze, kasap et-tavuk...), her semtte bir market kapalıdır ("Kapalı" rozeti ve STORE_CLOSED senaryosu). Logo markanın geçici yazı logosudur (07.10); kapak dükkân türünün görselidir. **07.10 çeşitliliği (kullanıcı isteği, T11.11):** var olan markaların 12 yeni şubesi (semt başına 6, eski marketlerin hepsinden uzak; Kadıköy'de Carrefour Express – Kadıköy kapalı), 73 yeni ürün (her kategoride 8-13), zincirlerde 60-100 ürün, 1505 teklif ve stok kaydı, 99 kurye. Yeni fiyat taban fiyat × marka endeksi (,90 ile biter), yeni stok market ve SKU özetinden 20-60; eski kimlik, fiyat ve stok aynen (sha256 sabitleme testi). Ürünlerin kendi görseli yok: ürün kartı kategorinin görselini gösterir (bekleyen iş).
 
-| Market                       | Semt     | Tür       | Min. tutar | Teslimat | Ücretsiz eşik | Süre     | Not                  |
-| ---------------------------- | -------- | --------- | ---------- | -------- | ------------- | -------- | -------------------- |
-| Migros Jet – Moda            | Kadıköy  | Market    | 40 TL      | 24,90 TL | 300 TL        | 15-25 dk | Geniş çeşit          |
-| A101 – Caferağa              | Kadıköy  | Market    | 100 TL     | 19,90 TL | 250 TL        | 20-30 dk | En düşük fiyatlar    |
-| Kardeşler Manavı             | Kadıköy  | Manav     | 60 TL      | 14,90 TL | 200 TL        | 10-20 dk | Yalnızca meyve-sebze |
-| ŞOK – Moda                   | Kadıköy  | Market    | 75 TL      | 19,90 TL | 250 TL        | 20-30 dk |                      |
-| Moda Kasabı                  | Kadıköy  | Kasap     | 300 TL     | 29,90 TL | 750 TL        | 20-30 dk |                      |
-| Moda Şarküteri               | Kadıköy  | Şarküteri | 200 TL     | 24,90 TL | 500 TL        | 15-25 dk |                      |
-| Altıyol Kuruyemiş            | Kadıköy  | Kuruyemiş | 150 TL     | 19,90 TL | 400 TL        | 15-25 dk |                      |
-| Bahariye Fırını              | Kadıköy  | Fırın     | 50 TL      | 9,90 TL  | 150 TL        | 10-20 dk |                      |
-| Pati Pet Shop – Kadıköy      | Kadıköy  | Pet shop  | 250 TL     | 29,90 TL | 600 TL        | 25-35 dk |                      |
-| Moda Çiçekçilik              | Kadıköy  | Çiçekçi   | 400 TL     | 49,90 TL | 1.000 TL      | 30-45 dk |                      |
-| Migros Jet – Beşiktaş        | Beşiktaş | Market    | 40 TL      | 24,90 TL | 300 TL        | 15-25 dk |                      |
-| Carrefour Express – Barbaros | Beşiktaş | Market    | 75 TL      | 29,90 TL | 250 TL        | 20-35 dk |                      |
-| A101 – Abbasağa              | Beşiktaş | Market    | 100 TL     | 19,90 TL | 250 TL        | —        | **Kapalı**           |
-| BİM – Sinanpaşa              | Beşiktaş | Market    | 100 TL     | 19,90 TL | 250 TL        | 20-35 dk |                      |
-| Çarşı Manavı                 | Beşiktaş | Manav     | 60 TL      | 14,90 TL | 200 TL        | 10-20 dk |                      |
-| Barbaros Kasabı              | Beşiktaş | Kasap     | 300 TL     | 29,90 TL | 750 TL        | 20-30 dk |                      |
-| Beşiktaş Şarküteri           | Beşiktaş | Şarküteri | 200 TL     | 24,90 TL | 500 TL        | 15-25 dk |                      |
-| Yıldız Kuruyemiş             | Beşiktaş | Kuruyemiş | 150 TL     | 19,90 TL | 400 TL        | 15-25 dk |                      |
-| Abbasağa Fırını              | Beşiktaş | Fırın     | 50 TL      | 9,90 TL  | 150 TL        | 10-20 dk |                      |
-| Pati Pet Shop – Beşiktaş     | Beşiktaş | Pet shop  | 250 TL     | 29,90 TL | 600 TL        | 25-35 dk |                      |
-| Lale Çiçekçilik              | Beşiktaş | Çiçekçi   | 400 TL     | 49,90 TL | 1.000 TL      | 30-45 dk |                      |
+| Market                         | Semt     | Tür       | Min. tutar | Teslimat | Ücretsiz eşik | Süre     | Not                  |
+| ------------------------------ | -------- | --------- | ---------- | -------- | ------------- | -------- | -------------------- |
+| Migros Jet – Moda              | Kadıköy  | Market    | 40 TL      | 24,90 TL | 300 TL        | 15-25 dk | Geniş çeşit          |
+| A101 – Caferağa                | Kadıköy  | Market    | 100 TL     | 19,90 TL | 250 TL        | 20-30 dk | En düşük fiyatlar    |
+| Kardeşler Manavı               | Kadıköy  | Manav     | 60 TL      | 14,90 TL | 200 TL        | 10-20 dk | Yalnızca meyve-sebze |
+| ŞOK – Moda                     | Kadıköy  | Market    | 75 TL      | 19,90 TL | 250 TL        | 20-30 dk |                      |
+| Moda Kasabı                    | Kadıköy  | Kasap     | 300 TL     | 29,90 TL | 750 TL        | 20-30 dk |                      |
+| Moda Şarküteri                 | Kadıköy  | Şarküteri | 200 TL     | 24,90 TL | 500 TL        | 15-25 dk |                      |
+| Altıyol Kuruyemiş              | Kadıköy  | Kuruyemiş | 150 TL     | 19,90 TL | 400 TL        | 15-25 dk |                      |
+| Bahariye Fırını                | Kadıköy  | Fırın     | 50 TL      | 9,90 TL  | 150 TL        | 10-20 dk |                      |
+| Pati Pet Shop – Kadıköy        | Kadıköy  | Pet shop  | 250 TL     | 29,90 TL | 600 TL        | 25-35 dk |                      |
+| Moda Çiçekçilik                | Kadıköy  | Çiçekçi   | 400 TL     | 49,90 TL | 1.000 TL      | 30-45 dk |                      |
+| BİM – Yeldeğirmeni             | Kadıköy  | Market    | 100 TL     | 19,90 TL | 250 TL        | 25-35 dk | Şube (07.10)         |
+| Carrefour Express – Kadıköy    | Kadıköy  | Market    | 75 TL      | 29,90 TL | 250 TL        | —        | **Kapalı** (07.10)   |
+| A101 – Hasanpaşa               | Kadıköy  | Market    | 100 TL     | 19,90 TL | 250 TL        | 20-30 dk | Şube (07.10)         |
+| ŞOK – Feneryolu                | Kadıköy  | Market    | 75 TL      | 19,90 TL | 250 TL        | 25-35 dk | Şube (07.10)         |
+| Kardeşler Manavı – Hasanpaşa   | Kadıköy  | Manav     | 60 TL      | 14,90 TL | 200 TL        | 15-25 dk | Şube (07.10)         |
+| Bahariye Fırını – Yeldeğirmeni | Kadıköy  | Fırın     | 50 TL      | 9,90 TL  | 150 TL        | 15-25 dk | Şube (07.10)         |
+| Migros Jet – Beşiktaş          | Beşiktaş | Market    | 40 TL      | 24,90 TL | 300 TL        | 15-25 dk |                      |
+| Carrefour Express – Barbaros   | Beşiktaş | Market    | 75 TL      | 29,90 TL | 250 TL        | 20-35 dk |                      |
+| A101 – Abbasağa                | Beşiktaş | Market    | 100 TL     | 19,90 TL | 250 TL        | —        | **Kapalı**           |
+| BİM – Sinanpaşa                | Beşiktaş | Market    | 100 TL     | 19,90 TL | 250 TL        | 20-35 dk |                      |
+| Çarşı Manavı                   | Beşiktaş | Manav     | 60 TL      | 14,90 TL | 200 TL        | 10-20 dk |                      |
+| Barbaros Kasabı                | Beşiktaş | Kasap     | 300 TL     | 29,90 TL | 750 TL        | 20-30 dk |                      |
+| Beşiktaş Şarküteri             | Beşiktaş | Şarküteri | 200 TL     | 24,90 TL | 500 TL        | 15-25 dk |                      |
+| Yıldız Kuruyemiş               | Beşiktaş | Kuruyemiş | 150 TL     | 19,90 TL | 400 TL        | 15-25 dk |                      |
+| Abbasağa Fırını                | Beşiktaş | Fırın     | 50 TL      | 9,90 TL  | 150 TL        | 10-20 dk |                      |
+| Pati Pet Shop – Beşiktaş       | Beşiktaş | Pet shop  | 250 TL     | 29,90 TL | 600 TL        | 25-35 dk |                      |
+| Lale Çiçekçilik                | Beşiktaş | Çiçekçi   | 400 TL     | 49,90 TL | 1.000 TL      | 30-45 dk |                      |
+| ŞOK – Türkali                  | Beşiktaş | Market    | 75 TL      | 19,90 TL | 250 TL        | 20-30 dk | Şube (07.10)         |
+| A101 – Dikilitaş               | Beşiktaş | Market    | 100 TL     | 19,90 TL | 250 TL        | 25-35 dk | Şube (07.10)         |
+| Migros Jet – Ortaköy           | Beşiktaş | Market    | 40 TL      | 24,90 TL | 300 TL        | 20-30 dk | Şube (07.10)         |
+| Carrefour Express – Akaretler  | Beşiktaş | Market    | 75 TL      | 29,90 TL | 250 TL        | 20-30 dk | Şube (07.10)         |
+| Çarşı Manavı – Ortaköy         | Beşiktaş | Manav     | 60 TL      | 14,90 TL | 200 TL        | 20-30 dk | Şube (07.10)         |
+| Barbaros Kasabı – Balmumcu     | Beşiktaş | Kasap     | 300 TL     | 29,90 TL | 750 TL        | 25-35 dk | Şube (07.10)         |
 
-Değerler seed'dedir ve market panelinin gireceği değerleri temsil eder; değiştirmek tek dosyadır.
+Değerler seed'dedir ve market panelinin gireceği değerleri temsil eder (`apps/catalog-service/src/infrastructure/fixtures/markets/`). Market eklemek üç servisi birlikte değiştirir: katalog, stoğun çeşit kopyası (inventory `assortments.ts`) ve kuryenin konum kopyası (courier `couriers.ts`); testler üçünü karşılaştırır. Yalnızca katalog seed'i yeni marketin stoğunu ve kuryesini yazmaz: kök `pnpm seed` gerekir.
 
 Stok (inventory, T9.1: `stock-levels.ts`) ve kuryeler (courier, T13.1) kendi servislerinin seed'iyle gelir.
 Görseller göreli yol olarak saklanır; mutlak URL'yi gateway `ASSET_BASE_URL` ile kurar.

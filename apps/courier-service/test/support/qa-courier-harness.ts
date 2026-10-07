@@ -22,10 +22,10 @@ export const COURIER_SERVICE = courierV1.CourierServiceService;
 
 /**
  * Katalogun demo marketlerinin sayisi ve her marketin YAKININA konan kurye
- * (21 x 3 = 63). T13.2'den beri kurye markete bagli degil: marketin 3 km
+ * (33 x 3 = 99). T13.2'den beri kurye markete bagli degil: marketin 3 km
  * cevresindeki bos kuryelerden biri atanir (semt havuzu).
  */
-export const DEMO_MARKET_COUNT = 21;
+export const DEMO_MARKET_COUNT = 33;
 export const DEMO_COURIERS_PER_MARKET = 3;
 export const DEMO_COURIER_COUNT = DEMO_MARKET_COUNT * DEMO_COURIERS_PER_MARKET;
 

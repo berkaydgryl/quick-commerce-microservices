@@ -26,6 +26,9 @@
   align-items: center;
   justify-content: space-between;
   min-height: var(--size-cart-bar);
+
+  /* Sepet paneliyle ayni boy (07.10: panel ve cubuk ici sm). */
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-bold);
   color: inherit;
   text-decoration: none;

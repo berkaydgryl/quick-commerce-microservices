@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 import { savedAddressSchema } from '@getir/contracts';
 import type { SavedAddress } from '@getir/contracts';
+import { expect } from 'vitest';
 import { z } from 'zod';
 
 import type { GeoPoint } from '../../src/domain/geo.js';
@@ -38,8 +39,10 @@ export function demoLocation(title: DemoAddressTitle): GeoPoint {
 
 /**
  * Adrese hizmet veren marketler ve mesafeleri (metre, yuvarlanmis), YAKINDAN
- * UZAGA. Haversine ile MongoDB'nin ekvator yaricapiyla olculdu; Mongo $geoNear
- * ile +-1 m icinde esit oldugu sozlesme testinde olculur.
+ * UZAGA, KLASIK demo kumesinde (classic-catalog.ts). Haversine ile MongoDB'nin
+ * ekvator yaricapiyla olculdu; Mongo $geoNear ile +-1 m icinde esit oldugu
+ * sozlesme testinde olculur. Guncel demo verisinde liste bununla baslar,
+ * EXPECTED_BRANCHES ile biter.
  */
 export const EXPECTED_NEARBY = {
   Ev: [
@@ -72,3 +75,54 @@ export const EXPECTED_NEARBY = {
   ],
   Yazlık: [],
 } as const satisfies Record<DemoAddressTitle, readonly { marketId: string; meters: number }[]>;
+
+/**
+ * 07.10 cesitliliginin yeni subeleri: adrese hizmet verirler ve klasik
+ * marketlerin HEPSINDEN uzaktirlar (liste basi degismez). Yakindan uzaga;
+ * olcum EXPECTED_NEARBY ile ayni.
+ */
+export const EXPECTED_BRANCHES = {
+  Ev: [
+    { marketId: 'mkt_bim-yeldegirmeni', meters: 946 },
+    { marketId: 'mkt_bahariye-firini-yeldegirmeni', meters: 1018 },
+    // KAPALI: Kadikoy'un STORE_CLOSED senaryosu.
+    { marketId: 'mkt_carrefour-express-kadikoy', meters: 1077 },
+    { marketId: 'mkt_a101-hasanpasa', meters: 1203 },
+    { marketId: 'mkt_kardesler-manavi-hasanpasa', meters: 1661 },
+    { marketId: 'mkt_sok-feneryolu', meters: 1724 },
+  ],
+  İş: [
+    { marketId: 'mkt_sok-turkali', meters: 1016 },
+    { marketId: 'mkt_carrefour-express-akaretler', meters: 1053 },
+    { marketId: 'mkt_a101-dikilitas', meters: 1069 },
+    { marketId: 'mkt_migros-jet-ortakoy', meters: 1326 },
+    { marketId: 'mkt_barbaros-kasabi-balmumcu', meters: 1450 },
+    { marketId: 'mkt_carsi-manavi-ortakoy', meters: 1550 },
+  ],
+  Yazlık: [],
+} as const satisfies Record<DemoAddressTitle, readonly { marketId: string; meters: number }[]>;
+
+type ExpectedNearby = readonly { readonly marketId: string; readonly meters: number }[];
+
+/** GUNCEL demo verisinde adresin beklenen listesi: klasik liste, sonra yeni subeler. */
+export function expectedNearbyCurrent(title: DemoAddressTitle): ExpectedNearby {
+  return [...EXPECTED_NEARBY[title], ...EXPECTED_BRANCHES[title]];
+}
+
+/**
+ * Yakindaki market listesi beklenenle ayni mi: kimlikler sirayla esit, her
+ * mesafe beklenenden en fazla `toleranceMeters` farkli (bellek ham mesafe,
+ * Mongo $geoNear +-1 m).
+ */
+export function expectNearbyList(
+  nearby: readonly { readonly market: { readonly id: string }; readonly distanceMeters: number }[],
+  expected: ExpectedNearby,
+  toleranceMeters: number,
+): void {
+  expect(nearby.map((entry) => entry.market.id)).toEqual(expected.map((entry) => entry.marketId));
+  nearby.forEach((entry, index) => {
+    expect(
+      Math.abs(entry.distanceMeters - (expected[index]?.meters ?? Number.NaN)),
+    ).toBeLessThanOrEqual(toleranceMeters);
+  });
+}

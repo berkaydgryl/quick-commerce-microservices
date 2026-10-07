@@ -145,6 +145,7 @@ const welcome = {
   cartPage: CONTENT_FALLBACK.cartPage,
   footer: CONTENT_FALLBACK.footer,
   checkout: CONTENT_FALLBACK.checkout,
+  confirm: CONTENT_FALLBACK.confirm,
 };
 
 function clientReturning(body: unknown) {

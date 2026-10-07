@@ -8,8 +8,9 @@ import { describe, expect, it } from 'vitest';
 
 import { createListProducts } from '../../src/application/list-products.js';
 import { createInMemoryReaders } from '../../src/infrastructure/memory/in-memory-catalog.js';
+import { CLASSIC_SNAPSHOT } from '../support/classic-catalog.js';
 
-const { offers, markets } = createInMemoryReaders();
+const { offers, markets } = createInMemoryReaders(CLASSIC_SNAPSHOT);
 const listProducts = createListProducts({ offers, markets });
 
 describe('listProducts (ADR-15: bir marketin teklifleri)', () => {

@@ -6,13 +6,13 @@
 import { AppError } from '@getir/core';
 import { describe, expect, it } from 'vitest';
 
-import { CATALOG_SNAPSHOT } from '../../src/infrastructure/fixtures.js';
 import { createInMemoryReaders } from '../../src/infrastructure/memory/in-memory-catalog.js';
 import { describeCategoryReaderContract } from '../support/category-reader-contract.js';
 import { describeMarketReaderContract } from '../support/market-reader-contract.js';
 import { describeOfferReaderContract } from '../support/offer-reader-contract.js';
+import { CLASSIC_SNAPSHOT } from '../support/classic-catalog.js';
 
-const readers = createInMemoryReaders();
+const readers = createInMemoryReaders(CLASSIC_SNAPSHOT);
 
 describeCategoryReaderContract('bellek', () => readers.categories);
 describeMarketReaderContract('bellek', () => readers.markets);
@@ -21,7 +21,7 @@ describeOfferReaderContract('bellek', () => readers.offers);
 describe('bellek okuyuculari: veri hatasi', () => {
   it('olmayan urune isaret eden teklif acilista patlar (sessizce atlanmaz)', () => {
     const broken = {
-      ...CATALOG_SNAPSHOT,
+      ...CLASSIC_SNAPSHOT,
       offers: [
         { marketId: 'mkt_migros-jet-moda', productId: 'prd_yok', priceMinor: 100, isActive: true },
       ],

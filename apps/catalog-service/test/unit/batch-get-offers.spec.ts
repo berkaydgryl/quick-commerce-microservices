@@ -9,12 +9,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { createBatchGetOffers } from '../../src/application/batch-get-offers.js';
 import type { Offer } from '../../src/domain/catalog.js';
 import { createInMemoryReaders } from '../../src/infrastructure/memory/in-memory-catalog.js';
+import { CLASSIC_SNAPSHOT } from '../support/classic-catalog.js';
 
 const MIGROS = 'mkt_migros-jet-moda';
 const MANAV = 'mkt_kardesler-manavi';
 
 function build() {
-  const { offers, markets } = createInMemoryReaders();
+  const { offers, markets } = createInMemoryReaders(CLASSIC_SNAPSHOT);
   return createBatchGetOffers({ offers, markets });
 }
 

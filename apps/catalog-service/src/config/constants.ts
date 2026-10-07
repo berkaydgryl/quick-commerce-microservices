@@ -42,7 +42,9 @@ export const MAX_BATCH_MARKET_IDS = FAVORITE_MARKETS_MAX;
  * kapsayan marketler en yakinlar arasindadir. Pazaryerinde ayni semtte bircok
  * market olabildigi icin sinir, tek depo modelindeki 5'ten genistir.
  * VARSAYIM: hicbir marketin yaricapi, kendisinden yakin 20 marketi atlayacak
- * kadar buyuk degildir; bozulursa sinir artirilir, sorgu degismez.
+ * kadar buyuk degildir; bozulursa sinir artirilir, sorgu degismez. Demo
+ * verisinde (07.10) Ev'i 16, Is'i 17 market kapsar; en az 3'luk payi
+ * catalog-fixtures.spec denetler.
  */
 export const MARKET_CANDIDATE_LIMIT = 20;
 

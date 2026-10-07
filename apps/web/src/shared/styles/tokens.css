@@ -34,7 +34,6 @@
   --bg-toast: var(--palette-gray-900);
 
   /* Geri alinamaz eylemin dugmesi (T11.15 adres silme onayi). */
-  --bg-danger: var(--palette-red-600);
 
   /* Pencerenin (giris/kayit, T11.6) arkasindaki karartma. */
   --bg-overlay: rgb(25 25 25 / 55%);
@@ -199,8 +198,8 @@
   --size-market-hero-logo: 22%;
   --size-rating-star: 1rem;
   --size-category-nav-icon: 2.25rem;
-  --size-product-visual: 7.5rem;
-  --size-product-card-min: 13rem;
+  --size-product-visual: 6rem;
+  --size-product-card-min: 8.5rem;
 
   /* Sepet sayfasi (T16.3): satirin gorseli. */
   --size-cart-row-visual: 4rem;

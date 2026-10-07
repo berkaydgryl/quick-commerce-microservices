@@ -25,6 +25,11 @@
   box-shadow: var(--shadow-raised);
 }
 
+/* Onay turu (F13; referans #57): dar beyaz kutu, ortada tek soru; baslik satiri yok. */
+.c-dialog--confirm {
+  width: min(100% - var(--space-gutter) * 2, var(--container-max-dialog));
+}
+
 .c-dialog::backdrop {
   background: var(--bg-overlay);
 }
@@ -109,4 +114,9 @@ html:has(.c-dialog[open]) {
     opacity: 0;
     transform: translateY(var(--space-3));
   }
+}
+
+/* Onay turunde baslik yok: govde ustten de bosluklu. */
+.c-dialog--confirm .c-dialog__body {
+  padding-block-start: var(--space-6);
 }
