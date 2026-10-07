@@ -22,14 +22,15 @@ skor önerir.
 
 RPC'lerin yanında iki işçi çalışır: kilidi dolan siparişleri kapatan süpürücü (T11.2 PR 2) ve
 ödenen siparişe courier-svc'den kurye isteyen kurye işçisi (T13.1 PR 2; sırası T13.2 PR 2'de ödeme
-anına göre, aşağıda "Kurye ataması").
+anına göre, aşağıda "Kurye ataması"). Bir de olay tüketicisi: kuryenin paketi alması ve teslimi
+siparişi `ON_THE_WAY` ve `DELIVERED`'a taşır (T14.3, aşağıda "Kurye kilometre taşları").
 
 ## Veri kaynağı: Mongo ya da MOCK
 
-| `MOCK` | Kaynak                                                      | Gerekenler                                                                                               |
-| ------ | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `true` | Bellek (`infrastructure/memory`); olaylar bellekte          | Yok; yeniden başlayınca unutur, **olay yayını kapalı**; persona geçmişi açılışta yüklenir (T8.1)         |
-| değil  | `orders` + `outbox` koleksiyonları (`infrastructure/mongo`) | `ORDER_MONGO_URI` (kendi veritabanı `getir_order`, D14) ve `REDIS_URL` zorunlu (yayın `stream:events`'e) |
+| `MOCK` | Kaynak                                                      | Gerekenler                                                                                                  |
+| ------ | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `true` | Bellek (`infrastructure/memory`); olaylar bellekte          | Yok; yeniden başlayınca unutur, **olay yayını ve dinleme kapalı**; persona geçmişi açılışta yüklenir (T8.1) |
+| değil  | `orders` + `outbox` koleksiyonları (`infrastructure/mongo`) | `ORDER_MONGO_URI` (kendi veritabanı `getir_order`, D14) ve `REDIS_URL` zorunlu (yayın `stream:events`'e)    |
 
 İki uygulama **aynı sözleşme testinden** geçer (`test/support/order-store-contract.ts`): birim
 testinde bellek, entegrasyon testinde gerçek Mongo. Depoyu seçip açan tek yer
@@ -515,6 +516,52 @@ ister, ödeme isteği beklemez (`application/dispatch-couriers.ts` tek tur,
   kalır; sipariş son durumda olduğu için işçi onu bir daha görmez. Bugün ödenmiş siparişi iptal eden
   bir yol yok (`PREPARING` → `CANCELLED` geçişi yok); kalıcı telafi komutu iptal yolu gelince.
 
+## Kurye kilometre taşları (T14.3)
+
+Kurye paketi markette alınca courier-svc `courier.picked_up`, teslim edince `courier.delivered`
+yayınlar (T13.3; yük `@getir/contracts` `events.ts`). Order ikisini `stream:events`'ten `order`
+grubuyla dinler (`interfaces/workers/courier-milestones.ts`) ve siparişi ilerletir (use-case
+`application/record-courier-milestone.ts`, kural `domain/courier-milestone.ts`). Olaylar **en az bir
+kez** ve **sırasız** gelir: courier "yayınlandı" işaretine kadar her turda yeniden basar; teslim,
+paket alındı'dan önce işlenebilir. Karar bu yüzden siparişin şu anki halinden verilir:
+
+| Sipariş                                      | `courier.picked_up`    | `courier.delivered`                      | Olay hattı                 |
+| -------------------------------------------- | ---------------------- | ---------------------------------------- | -------------------------- |
+| `PREPARING`, kurye olayınki                  | → `ON_THE_WAY`         | → `ON_THE_WAY` → `DELIVERED` (tek yazım) | onaylanır                  |
+| `ON_THE_WAY`, kurye olayınki                 | tekrar, yok sayılır    | → `DELIVERED`                            | onaylanır                  |
+| `DELIVERED`, kurye olayınki                  | tekrar                 | tekrar                                   | onaylanır                  |
+| Kurye ya da (paket alındı'da) market uymuyor | eski olay, yok sayılır | eski olay, yok sayılır                   | onaylanır (WARN)           |
+| `PAID` ya da kuryesiz `PREPARING`            | kurye henüz yazılmadı  | kurye henüz yazılmadı                    | onaylanmaz, yeniden teslim |
+| Ödeme öncesi ya da kapanmış (`CANCELLED`...) | yok sayılır            | yok sayılır                              | onaylanır                  |
+| Sipariş yok / yük sözleşmeye uymuyor         | —                      | —                                        | reddedilir (ölü olay)      |
+
+- **Yazım:** sürüm kontrollü; geçiş(ler) ve `order.status_changed` olayları siparişle aynı
+  transaction'da outbox'a (T7.3): realtime değişikliği aynı hattan duyar. Sürüm çakışmasında
+  (kurye işçisi ya da ikinci order örneği aynı siparişi yazdı) sipariş yeniden okunur ve karar
+  güncel halden yeniden verilir; en çok 3 deneme (`COURIER_MILESTONE_WRITE_ATTEMPTS`), sonra olay
+  onaylanmaz ve yeniden teslim edilir.
+- **Kurye henüz yazılmadı:** atamanın `PREPARING` yazımı gecikti (courier atadı, order yazamadı ve
+  sonraki turda yazacak). Olay onaylanmaz, takılma süresinden (30 sn) sonra yeniden teslim edilir.
+  Pencere 10 dk, 20 teslim (`COURIER_EVENT_RETRY_WINDOW_MS`): kurye işçisinin yazım hatasındaki geri
+  çekilmesi 5 dk'ya kadar çıkar, varsayılan 5 teslim (~2,5 dk) olayı kurye yazılmadan ölü olaylara
+  atardı ve courier olayı bir daha basmaz. Pencere de dolarsa ölü olaylara gider, ERROR yazılır.
+  Kuryesiz `PREPARING`'de olayın kuryesi "eski" sayılmaz, beklenir: courier atamayı aynı kuryeyle
+  tekrarlar (B7), kurye bırakılıp başkası atanmaz.
+- **Zaman çizelgesi anı:** geçişin anı olayın anı (zarfın `occurredAt`'i: paketin alındığı ya da
+  teslim edildiği an); yeniden teslim ya da gecikme kaydırmaz. Şimdiden ileri ve çizelgenin son
+  kaydından geri olamaz (`milestoneTime`). Teslim önce geldiyse `ON_THE_WAY` ve `DELIVERED` aynı
+  anı taşır.
+- **Günlük:** yalnızca kimlikler (`orderId`, `courierId`), olay ve durum. Tekrar DEBUG (her turda
+  yeniden basılır), eski olay WARN, ilerleme ve yok sayma INFO. Yükün geri kalanı şemadan geçmez ve
+  günlüğe girmez: konum ve rota kişisel veridir.
+- **Grup:** `order`, akışın başından (ilk kurulumda): order kapalıyken gelen olay kaybolmaz.
+  Metrikler `@getir/event-bus`'ın (`event_consumer_events_total{group="order"}`, gecikme, bekleyen).
+  Grup ortak `stream:events`'i okur, dinlemediği konuları onaylayıp geçer (ADR-16, tek akış).
+- **İlk dağıtım:** grup ilk kurulduğunda akışta duran (MAXLEN ~ sınırında) eski kurye olayları da
+  işlenir: o güne kadar `PREPARING`'de kalan siparişler ilerler. Siparişi silinmiş olay (yerelde
+  seed ya da QA sıfırlaması) ölü olaylara gider ve ERROR yazar; bir kerelik.
+- **MOCK:** Redis yok, dinleme kapalı; sipariş `PREPARING`'de kalır.
+
 ## Outbox ile olay yayını (T7.3, ADR-04)
 
 "Önce yaz, sonra yayınla" iki adımı arasında çökülürse sipariş vardır ama kimse duymamıştır.
@@ -590,6 +637,7 @@ src/
 │   ├── expired-order-finder.ts  # port: kilidi dolmuş siparişler, süpürücünün kuyruğu (T11.2 PR 2)
 │   ├── courier-dispatch.ts      # kurye bekleyen sipariş, kuryeyle/kuryesiz PREPARING, telafi kararı (T13.1), kuyruk sırası (#92)
 │   ├── awaiting-courier-finder.ts  # port: kurye bekleyen siparişler, kurye işçisinin kuyruğu (T13.1)
+│   ├── courier-milestone.ts     # kurye olayı (paket alındı, teslim) → geçiş kararı (T14.3)
 │   ├── order-history-listing.ts # Geçmiş Siparişlerim'de görünürlük kuralı (#101)
 │   └── order-history-cursor.ts  # geçmiş sırası ve imleç
 ├── application/       # bir dosya = bir use-case
@@ -606,6 +654,7 @@ src/
 │   ├── dispatch-couriers.ts     # kurye işçisinin tek turu (T13.1 PR 2; kuyruk, kaynak, geri çekilme T13.2)
 │   ├── failure-backoff.ts       # atanamayan siparişin geri çekilmesi (D3, T13.2)
 │   ├── assign-courier-step.ts   # sipariş başına kurye adımı: ata, yaz, gerekirse geri ver (T13.1)
+│   ├── record-courier-milestone.ts  # kurye olayını siparişe işler: karar, sürümlü yazım (T14.3)
 │   ├── relay-outbox.ts          # tek yayın turu: bekleyenler → hat → işaret (T7.3)
 │   ├── own-order.ts             # "kendi siparişi değilse NOT_FOUND" tek yerde
 │   ├── catalog-pricing.ts       # port: marketRules, activeOffers (T7.2)
@@ -636,6 +685,7 @@ src/
 ├── interfaces/workers/sweeper-metrics.ts   # kapanan ve kapanamayan sipariş metrikleri
 ├── interfaces/workers/courier-dispatcher.ts  # kurye işçisi zamanlayıcısı (T13.1 PR 2)
 ├── interfaces/workers/dispatcher-metrics.ts   # kurye işçisinin sonuç ve hata metrikleri (kaynak etiketi T13.2)
+├── interfaces/workers/courier-milestones.ts   # kurye olayı tüketicileri: yük doğrulama → use-case → onay (T14.3)
 ├── migrations/        # göçler (ADR-19): 0001-kurye-sirasi (kurye kuyruğu anı, T13.2), 0002-gecmis-gorunurlugu (#101)
 ├── config/            # env.ts (process.env yalnızca burada) + constants.ts
 ├── bootstrap.ts
