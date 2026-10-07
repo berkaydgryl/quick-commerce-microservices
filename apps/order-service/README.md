@@ -16,7 +16,7 @@ skor önerir.
 | `CreateDraftOrder` | ✅ Fiyatı catalog'dan okur, sunucuda hesaplar, `expected_total` ile karşılaştırır; tutarı taslakta dondurur (T7.2); stoku kilitler (T11.2)             |
 | `CreateOrder`      | ✅ Saga (T7.1): risk-svc → bant kararı → payment-svc çekimi → stok kesinleşir (T11.2); `PAID`, `PAYMENT_FAILED`, 3DS ya da `REVIEW`/`REJECTED`         |
 | `ConfirmPayment`   | ✅ 3DS kodu (T7.1): doğruysa stok kesinleşir ve `PAID`; hak biter / süre dolarsa `PAYMENT_FAILED`, kilit bırakılır                                     |
-| `GetOrder`         | ✅ Tek sipariş, zaman çizelgesi dahil; başkasının siparişi `NOT_FOUND`                                                                                 |
+| `GetOrder`         | ✅ Tek sipariş, zaman çizelgesi dahil; başkasının siparişi `NOT_FOUND`; `AWAITING_PAYMENT`'ta bekleyen 3DS durumu `three_ds` (#163 B1, aşağıda)        |
 | `ListMyOrders`     | ✅ Yeniden eskiye, imleçle sayfalı; yalnızca geçmişte görünen siparişler (#101, aşağıda "Geçmiş kapsamı"); sipariş yoksa boş liste                     |
 | `CancelOrder`      | ✅ Kullanıcı iptali: yalnızca `DRAFT`, `RESERVED`, `AWAITING_PAYMENT` (B29); Idempotency-Key zorunlu (D4); kilit bırakılır; parası alınmışsa iptal yok |
 
@@ -313,7 +313,8 @@ Yalnızca idempotent çağrılar yeniden denenir (en fazla 2 kez, ~100/200 ms ar
 sınırı içinde):
 
 - catalog `GetMarket` ve `BatchGetOffers`;
-- payment `Charge` (anahtarlı), `Refund` ve `GetPayment`;
+- payment `Charge` (anahtarlı), `Refund` ve `GetPayment` (GetOrder'ın 3DS okuması hariç: o ne
+  denenir ne de devreye sayılır, aşağıda "3DS sürdürme");
 - inventory `Reserve`, `Commit` ve `Release`.
 
 Denenmeyenler:
@@ -322,6 +323,18 @@ Denenmeyenler:
 - payment `Confirm3Ds`: tekrar, 3DS hakkını boşa yakabilir.
 
 Süre bütçesi değişmedi: denemeler çağrının kendi sınırını paylaşır.
+
+**3DS sürdürme (`GetOrder`, #163 B1):** sipariş `AWAITING_PAYMENT` ise payment `GetPayment` okunur
+ve `three_ds` olduğu gibi döner; açık/kapalı kararı ve kalan süre gateway'dedir (tek saat). Bu okuma
+en iyi çabadır ve kritik ödeme yolundan AYRIDIR: kendi kısa sınırı (`THREE_DS_READ_TIMEOUT_MS`, 1 sn),
+yeniden deneme yok, payment devresine hata saymaz (web'in sipariş yoklaması payment yavaşken
+`Charge`/`Confirm3Ds`'in devresini açmaz). Sahiplik ÖNCE denetlenir: başkasının siparişi `NOT_FOUND`,
+payment'a gidilmez. Başka durumda payment çağrılmaz. Kaydın sahibi siparişinki değilse, payment
+ulaşılamazsa, süre dolarsa ya da sözleşmeyi bozarsa (kayıtsız cevap, bitişsiz doğrulama) alan gelmez ve
+`WARN` yazılır; sipariş okuması düşmez (`application/pending-three-ds.ts`). Günlük yalnızca `orderId`
+ve hata kodunu taşır: `challenge_id` yetenek jetonudur; hiçbir satıra, hata ayrıntısına, sipariş
+belgesine ve outbox'a girmez, `getPayment` anlık görüntüsü (süpürücü, iptal) onu tutmaz. En kötü
+süre: Mongo okuması (2 sn) + 3DS okuması (1 sn) = 3 sn, gateway'in 5 sn'sinin altında.
 
 ## Stok kilidi (T11.2)
 
