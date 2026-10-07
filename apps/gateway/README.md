@@ -32,6 +32,7 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `GET /v1/orders` | ✅ Geçmiş siparişler (T11.16, `internal/orderhistory`): order `ListMyOrders` + market adları sayfa başına TEK `BatchGetMarkets` (katalog hatasında adsız, sipariş yine listelenir); yeniden eskiye, imleçle; `DRAFT` ve hiç ilerlemeden süresi dolan `EXPIRED` süzülür, eksik kadar en fazla 3 tur (sunucu tarafı süzme #101); `CANCELLED` + geçmişte `PAID` = `refunded`; sayfa 20, en fazla 50 (kırpılır); önbelleğe alınmaz |
 | `GET /v1/orders/{id}` | ✅ order `GetOrder`; başkasının siparişi 404; kilit canlıyken `reservationExpiresAt` ve `reservationTtlSeconds` (T11.4); sipariş ayrıntısı `details` yalnızca burada, sahibine (T12.4; liste ve geçmiş taşımaz); ödeme seçimi `payment` (`method`, kapıda ödemede `onDelivery`; seçimsiz eski siparişte yok); T11.16'dan beri önbelleğe alınmaz (`no-store`) |
 | `GET /v1/orders/{id}/token` | ✅ T12.2: sahiplik order `GetOrder` ile (başkasınınki 404, bitmiş sipariş 200); `order:{id}` odası için 60 sn'lik oda jetonu (`internal/roomtoken`, `REALTIME_TOKEN_SECRET`) |
+| `GET /v1/orders/{id}/tracking` | ✅ T14.2: kurye takibi (`internal/tracking`, aşağıda "Kurye takibi"); önce sahiplik order `GetOrder`, sonra courier `GetTracking`; `no-store` |
 | `POST /v1/auth/register` | ✅ Kayıt + oturum (201); telefon benzersiz, şifre bcrypt (T8.1) |
 | `POST /v1/auth/login` | ✅ Giriş (200); yanlış şifre ile kayıtsız numara aynı cevabı alır |
 | `POST /v1/auth/password-reset` | ✅ Demo şifre yenileme (T11.9): telefon + yeni şifre, kod yok; eski oturumlar kapanır, yeni oturum açılır. **Yalnızca `NODE_ENV` production değilken bağlanır**; IP başına kimlik sınırı, anahtar istemez |
@@ -105,6 +106,7 @@ docker run --rm -p 8080:8080 \
   -e CATALOG_GRPC_ADDR=host.docker.internal:50051 \
   -e INVENTORY_GRPC_ADDR=host.docker.internal:50052 \
   -e ORDER_GRPC_ADDR=host.docker.internal:50053 \
+  -e COURIER_GRPC_ADDR=host.docker.internal:50056 \
   getir/gateway
 ```
 
@@ -342,7 +344,7 @@ bellek içi sayaç sınırı örnek sayısı kadar gevşetirdi (proje kuralları
 | `POST /v1/auth/refresh`, `/v1/auth/logout` (T8.5)         | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
 | `POST`/`DELETE /v1/cart/reserve`, `/v1/orders`, `/v1/orders/{id}/3ds` | `RATE_LIMIT_ORDER_MAX_REQUESTS` (20) | kullanıcı   |
 | Katalog, market ve genel arama uçları                     | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
-| `GET /v1/me`, `/v1/me/addresses`, `GET /v1/orders` (T11.16), `GET /v1/orders/{id}` (`/token` dahil) | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
+| `GET /v1/me`, `/v1/me/addresses`, `GET /v1/orders` (T11.16), `GET /v1/orders/{id}` (`/token` ve `/tracking` dahil) | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
 | `POST`/`PUT`/`DELETE /v1/me/addresses…`, `/v1/geo/*` (T11.8, T11.15) | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
 | `/v1/me/cards…` (T11.17); `POST`'a ek deneme sınırı: "Kart uçları" | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
 | `/healthz`                                                | sınırsız                         | —           |
@@ -568,6 +570,7 @@ curl -s "localhost:8080/v1/search?lat=40.9885&lng=29.0262&q=s%C3%BCt" \
 | `CATALOG_GRPC_ADDR`          | `localhost:50051` | catalog-service adresi (`host:port`)            |
 | `INVENTORY_GRPC_ADDR`        | `localhost:50052` | inventory-service adresi (ürün listesi ve genel aramadaki stok, T8.4, T9.6) |
 | `ORDER_GRPC_ADDR`            | `localhost:50053` | order-service adresi                            |
+| `COURIER_GRPC_ADDR`          | `localhost:50056` | courier-service adresi (kurye takibi, T14.2)    |
 | `PAYMENT_GRPC_ADDR`          | `localhost:50054` | payment-service (kart kasası, T11.17); production'da okunmaz |
 | `GATEWAY_REQUEST_TIMEOUT_MS` | `5000`            | Tek bir servis çağrısının üst sınırı            |
 | `GATEWAY_STOCK_TIMEOUT_MS`   | `300`             | Stok sorgusunun üst sınırı (genel aramada market başına, paralel); aşılırsa ürünler stoksuz döner (T8.4, T9.6) |
@@ -616,6 +619,32 @@ kararlaştırılmadı; bir varsayılan bu kararı koda gömer ve canlıda unutul
 ortam degiskenleri gecersiz: ASSET_BASE_URL: zorunlu, ornek: http://localhost:5173
 ```
 
+## Kurye takibi (T14.2, `internal/tracking`)
+
+`GET /v1/orders/{id}/tracking` web'in 3 adımlı takibini ve "Kuryem nerede" haritasını besler
+(sözleşme `@getir/contracts` `tracking.ts`, openapi `getOrderTracking`). Aşama 1'de web 2 sn'de
+bir yoklar. Courier kullanıcıyı bilmez; sahiplik gateway'dedir ve courier'e gitmeden önce
+denetlenir:
+
+1. Yol kimliği `ord_` + 32 onaltılık değilse RPC'ye gidilmez: ayrıntısız 404.
+2. order `GetOrder(kimlik, jetonun kullanıcısı)`. Başkasının siparişi ve olmayan sipariş order'da
+   aynı NOT_FOUND. Her hatada durulur (fail-closed): order'a ulaşılamazsa 503, courier'e gidilmez.
+3. Takip yalnızca `PREPARING`, `ON_THE_WAY` ve `DELIVERED` siparişte; iptal ve ödeme öncesi 404.
+4. courier `GetTracking`: takip yoksa (kurye atanmadı, rota bırakıldı) 404, ulaşılamazsa 503.
+
+Geçerli biçimli kimlikte bütün 404'ler aynıdır (`NOT_FOUND`, ayrıntı `{orderId}`): sahiplik,
+durum ve takip yokluğu dışarıdan ayırt edilemez. `status` order'ın kaydıdır, `phase` courier'in.
+Gizlilik kuralları cevap istemciye çıkmadan burada son kez uygulanır: `TO_MARKET`'ta courier konum
+gönderse de cevaba girmez (kurye önceki müşterinin adresinde olabilir) ve varış tahmini dakikaya
+yukarı yuvarlanır (kalanın azalışı kuryenin markete uzaklığını ele vermesin). Sözleşmenin zorunlu
+alanları (an, 1–40 noktalı rota, market ve adres konumu; paket alındıktan sonra kurye konumu) yoksa ya
+da aşama bilinmiyorsa cevap 500'dür: sözleşmeyi bozan gövde istemciye gitmez. Aşamaların diğer
+tutarlılık kuralları courier'dedir. Courier'in doğrulama hatasındaki `orderId` yol adıyla (`id`)
+döner. Courier `GetTracking`'i uygulamadıysa uç 501 döner (D5). Konum,
+rota ve adres kişisel veridir: cevap `no-store`, günlüğe koordinat yazılmaz (test:
+`TestOrderTrackingLogsNoCoordinates`). Alan adları, aşamalar ve takip edilen durumlar sözleşmeyle
+`internal/tracking/contract_test.go`'da karşılaştırılır.
+
 ## `/healthz` sözleşmesi
 
 ```json
@@ -624,12 +653,18 @@ ortam degiskenleri gecersiz: ASSET_BASE_URL: zorunlu, ornek: http://localhost:51
                 { "name": "inventory", "status": "SERVING", "latencyMs": 2 },
                 { "name": "mongo",     "status": "SERVING", "latencyMs": 1 },
                 { "name": "order",     "status": "SERVING", "latencyMs": 6 },
+                { "name": "courier",   "status": "SERVING", "latencyMs": 3 },
                 { "name": "redis",     "status": "SERVING", "latencyMs": 1 } ] } }
 ```
 
 `mongo` (T8.1) ve `redis` (T8.2) kalemleri yalnızca `MOCK=false` iken vardır; MOCK'ta hesaplar
 ve tekrar kayıtları bellekte tutulur. `inventory` T8.4'ten beri listede ve diğer servislerle aynı
 kurala tabidir: kapalıysa `/healthz` 503 döner. Ürün listesi ve genel arama o sırada da stoksuz çalışır.
+`courier` T14.2'den beri listede (kurye takibi gateway'in doğrudan bağımlılığı oldu; `inventory` ve
+kart kasası için `payment` ile aynı desen): kapalıysa `/healthz` 503 ve Docker sağlık durumu
+`unhealthy` görünür. Uçlar çalışmaya devam eder; yalnızca takip ucu 503 döner. Docker `unhealthy`
+kapsayıcıyı kendiliğinden yeniden başlatmaz (yeniden başlatma politikası süreç çıkışına bakar); sağlığa
+göre trafikten çıkaran bir yük dengeleyici eklenirse bu karar yeniden ele alınır.
 
 Bir servis düşükse **503** ve hata zarfı döner; rapor `error.details` içindedir. Servis
 durumu üç değerlidir: `SERVING`, `NOT_SERVING` (servis kendini hasta bildirdi) ve
