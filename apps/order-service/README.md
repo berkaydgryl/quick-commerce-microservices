@@ -277,7 +277,8 @@ değişken), süre sınırı 1 sn.
   aynı fonksiyonu kullandığı için komut unutulamaz ve siparişle aynı transaction'dadır. Kapıda
   ödemenin `PENDING`'ini ve 3DS bekleyen kartı payment `CANCELLED` yapar (payment README).
 - **Devre kesici (D17, PR 4):** inventory istemcisi de bağımlılık başına devreli; kısaltma tekrar
-  güvenli olduğu için yeniden denenir, uzatma denenmez (her çağrı bir hak harcar).
+  güvenli olduğu için yeniden denenir. Uzatma T15.3'ten beri (bekleyen iş 117, QA IQ3) beklenen bitişle
+  gider ve o da yeniden denenir: cevabı kaybolan uzatmanın tekrarı bitişi değişmiş bulur, hak harcamaz.
 
 ### Banda göre kilit ve ödeme öncesi uzatma (T11.3)
 
@@ -291,10 +292,15 @@ ayarlanır (`application/lock-timing.ts`; inventory `ShortenReservation`, `Exten
 | Risk `HIGH` / `CRITICAL`                         | kısaltılmaz; kilit bırakılır (`REVIEW` / `REJECTED`, değişmedi)                                           | `RISK_REVIEW` / `RISK_BLOCKED` |
 | Çekim ya da 3DS onayı öncesi, kalan süre ≥ 60 sn | inventory'ye gidilmez (CreateOrder'ın zaman bütçesi, #69, değişmez)                                       | —                              |
 | Aynı an, kalan süre < 60 sn                      | `RESERVATION_EXTEND_SECONDS` (60) uzatılır; yeni bitiş **hemen** yazılır (sürüm +1, olay yok)             | —                              |
+| Uzatmada bitiş siparişinkinden farklı (T15.3)    | hak harcanmaz; güncel bitiş yazılır; kalan süre hâlâ < 60 sn ise yeni beklenenle bir tur daha             | —                              |
 | Uzatma hakkı bitmiş (inventory'de 3)             | süre aynı, WARN; ödeme kalan süreyle (kesinleştirmede kilit düşmüşse iade, değişmedi)                     | —                              |
 | Kısaltma ya da uzatmada kilit düşmüş             | sipariş `CANCELLED` (`RESERVATION_EXPIRED`), kilit bırakılır; **para çekilmez**, 3DS kodu gönderilmez     | `RESERVATION_EXPIRED` (410)    |
 | inventory'ye ulaşılamadı                         | hiçbir şey yazılmaz; risk adımında sipariş `DRAFT`, ödemede `AWAITING_PAYMENT` kalır                      | `SERVICE_UNAVAILABLE`          |
 
+- **Beklenen bitiş (T15.3):** uzatma siparişin bildiği bitişle gider. Kilidin bitişi farklıysa (`moved`)
+  güncel bitiş yazılır ve en çok bir tur daha uzatılır; ikinci turda inventory'ye ulaşılamazsa ilk turda
+  yazılan güncel bitiş kalır, iki tur da `moved` dönerse WARN. inventory'nin cevabı tam pencere kadar
+  ileri değilse (eski sürüm denetimi uygulamamış olabilir) ERROR yazılır; önlem dağıtım sırasıdır (önce inventory).
 - **Neden hemen yazılıyor:** 3DS beklenirken (durum değişmez) süpürücü siparişi eski bitişe göre
   kapatmasın. Sürüm arttığı için eski kopyayla yazan süpürücü `CONFLICT` alır ve dokunmaz. Olay
   sürümleri artan kalır ama ardışık olmayabilir (uzatmanın olayı yok).

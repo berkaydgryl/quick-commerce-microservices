@@ -19,6 +19,7 @@ import { AppError, ERROR_CODES } from '@getir/core';
 import { SETTLEMENT } from '../../src/application/stock-reservations.js';
 import type {
   ExtendLockRequest,
+  ExtendTiming,
   LockTiming,
   ReleaseStockRequest,
   ReserveStockOutcome,
@@ -62,6 +63,8 @@ export class FakeStockReservations implements StockReservations {
   releaseFailure: AppError | undefined;
   extendFailure: AppError | undefined;
   shortenFailure: AppError | undefined;
+  /** true: beklenen bitis denetimini bilmeyen eski inventory gibi davranir (T15.3). */
+  ignoresExpectedExpiry = false;
 
   constructor(private readonly now: () => number = () => Date.now()) {}
 
@@ -133,7 +136,7 @@ export class FakeStockReservations implements StockReservations {
     return Promise.resolve(outcome);
   }
 
-  extend(request: ExtendLockRequest): Promise<LockTiming> {
+  extend(request: ExtendLockRequest): Promise<ExtendTiming> {
     this.extends.push(request);
     if (this.extendFailure !== undefined) {
       return Promise.reject(this.extendFailure);
@@ -141,6 +144,13 @@ export class FakeStockReservations implements StockReservations {
     const held = this.activeLock(request.orderId);
     if (held === undefined) {
       return Promise.resolve({ kind: 'lapsed' });
+    }
+    // Beklenen bitis (T15.3): inventory gibi aktiflikten sonra, hak sinirindan once.
+    if (
+      !this.ignoresExpectedExpiry &&
+      request.expectedExpiresAt.getTime() !== held.expiresAt.getTime()
+    ) {
+      return Promise.resolve({ kind: 'moved', expiresAt: held.expiresAt });
     }
     if (held.extensions >= this.maxExtensions) {
       return Promise.resolve({ kind: 'active', expiresAt: held.expiresAt, changed: false });
@@ -186,6 +196,21 @@ export class FakeStockReservations implements StockReservations {
   expire(orderId: string): void {
     this.held.delete(orderId);
     this.gone.add(orderId);
+  }
+
+  /**
+   * Kilidin bitisini siparisin HABERI OLMADAN degistirir (T15.3): cevabi
+   * kaybolan bir uzatmayi ya da kaydedilmemis bir kisaltmayi canlandirir.
+   */
+  forceExpiry(orderId: string, expiresAt: Date): void {
+    const held = this.held.get(orderId);
+    if (held !== undefined) {
+      held.expiresAt = expiresAt;
+    }
+  }
+
+  extensionsOf(orderId: string): number | undefined {
+    return this.held.get(orderId)?.extensions;
   }
 
   stateOf(orderId: string): Held['state'] | undefined {
