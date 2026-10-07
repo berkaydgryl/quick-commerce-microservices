@@ -17,6 +17,7 @@ import { createDeleteCard } from './application/delete-card.js';
 import { createGetPayment } from './application/get-payment.js';
 import { createListCards } from './application/list-cards.js';
 import { createRefund } from './application/refund.js';
+import { createUpdateCardNickname } from './application/update-card-nickname.js';
 import {
   CARD_VAULT_SERVICE_FULL_NAME,
   CONFIRM_3DS_MAX_WRITE_RETRIES,
@@ -118,6 +119,7 @@ export function buildCardVaultService(options: CardVaultOptions = {}): GrpcServi
       addCard: createAddCard({ repository, verifier, clock, maxCards: SAVED_CARDS_MAX }),
       listCards: createListCards({ repository }),
       deleteCard: createDeleteCard({ repository, clock }),
+      updateCardNickname: createUpdateCardNickname({ repository }),
       clock,
       ...(options.logger === undefined ? {} : { logger: options.logger }),
     }),

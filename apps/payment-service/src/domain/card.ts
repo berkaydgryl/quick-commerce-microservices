@@ -95,3 +95,17 @@ export function deletedCard(card: Card, at: Date): Card {
   const { providerToken: _providerToken, ...rest } = card;
   return { ...rest, status: CARD_STATUS.DELETED, deletedAt: at };
 }
+
+/**
+ * Ad kaldirma mi (#148): null ya da bos metin. "Ad yok" HER ZAMAN alan yok
+ * demektir; depo bos metin yazmaz.
+ */
+export function isNicknameRemoval(nickname: string | null): nickname is null | '' {
+  return nickname === null || nickname === '';
+}
+
+/** Adi degistirilmis kart (#148): null ya da bos metin ad alanini KALDIRIR. */
+export function renamedCard(card: Card, nickname: string | null): Card {
+  const { nickname: _previous, ...rest } = card;
+  return isNicknameRemoval(nickname) ? rest : { ...rest, nickname };
+}
