@@ -14,6 +14,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createConfirmPayment } from '../../src/application/confirm-payment.js';
 import { createCreateOrder } from '../../src/application/create-order.js';
+import type { ExtendTiming } from '../../src/application/stock-reservations.js';
 import { PAYMENT_METHOD } from '../../src/domain/checkout-payment.js';
 import type { Order } from '../../src/domain/order.js';
 import {
@@ -215,12 +216,124 @@ describe('odeme oncesi uzatma (T11.3, B21, #72)', () => {
     const { order } = await place(draft);
 
     expect(stock.extends).toEqual([
-      { orderId: draft.id, marketId: draft.marketId, additionalSeconds: 60 },
+      {
+        orderId: draft.id,
+        marketId: draft.marketId,
+        additionalSeconds: 60,
+        expectedExpiresAt: expiryOf(draft),
+      },
     ]);
     expect(expiryAtCharge).toEqual([extendedTo]);
     expect(order.status).toBe(ORDER_STATUS.PAID);
     expect(expiryOf(order)).toEqual(extendedTo);
     expect(logLines.map((line) => line.message)).toContain('odeme oncesi stok kilidi uzatildi');
+    // Cagiran denetimi saglikli uzatmada sessiz kalir (T15.3).
+    expect(logLines.filter((line) => line.level === 'error')).toEqual([]);
+  });
+
+  it('kaybolan cevapli uzatma (T15.3): kilit zaten ileride; hak HARCANMAZ, guncel bitis yazilir, cekim yapilir', async () => {
+    const draft = await lockedDraft();
+    clock.set(expiryOf(draft).getTime() - 30 * SECOND);
+    const alreadyExtendedTo = new Date(expiryOf(draft).getTime() + EXTEND_MS);
+    stock.forceExpiry(draft.id, alreadyExtendedTo);
+
+    const { order } = await place(draft);
+
+    expect(stock.extends.map((request) => request.expectedExpiresAt)).toEqual([expiryOf(draft)]);
+    expect(stock.extensionsOf(draft.id)).toBe(0);
+    expect(expiryOf(await stored(draft.id))).toEqual(alreadyExtendedTo);
+    expect(order.status).toBe(ORDER_STATUS.PAID);
+    expect(logLines.map((line) => line.message)).toContain(
+      'stok kilidinin bitisi siparistekinden farkliydi; guncel bitis yazildi',
+    );
+  });
+
+  it('kaydedilmemis kisaltma (T15.3): guncel bitis de kisa; yazilir ve yeni beklenenle bir tur daha uzatilir', async () => {
+    const draft = await lockedDraft();
+    clock.set(expiryOf(draft).getTime() - 30 * SECOND);
+    const shortenedTo = new Date(expiryOf(draft).getTime() - 10 * SECOND);
+    stock.forceExpiry(draft.id, shortenedTo);
+
+    const { order } = await place(draft);
+
+    expect(stock.extends.map((request) => request.expectedExpiresAt)).toEqual([
+      expiryOf(draft),
+      shortenedTo,
+    ]);
+    expect(stock.extensionsOf(draft.id)).toBe(1);
+    expect(expiryOf(order)).toEqual(new Date(shortenedTo.getTime() + EXTEND_MS));
+  });
+
+  it('cagiran denetimi (T15.3): beklenen bitisi uygulamayan (eski) inventory HATA gunlugune duser', async () => {
+    const draft = await lockedDraft();
+    clock.set(expiryOf(draft).getTime() - 30 * SECOND);
+    stock.forceExpiry(draft.id, new Date(expiryOf(draft).getTime() + EXTEND_MS));
+    stock.ignoresExpectedExpiry = true;
+
+    const { order } = await place(draft);
+
+    expect(logLines.find((line) => line.level === 'error')?.message).toBe(
+      'stok servisi beklenen bitis denetimini uygulamamis olabilir (eski surum?)',
+    );
+    // Uyari akisi durdurmaz: donen bitis yazilir, cekim yapilir.
+    expect(order.status).toBe(ORDER_STATUS.PAID);
+    expect(expiryOf(order)).toEqual(new Date(expiryOf(draft).getTime() + 2 * EXTEND_MS));
+  });
+
+  /** Ilk tur `moved` (kilit kisaltilmis, kalan 20 sn); ikinci turu `second` belirler. */
+  async function movedThen(second: () => Promise<ExtendTiming>) {
+    const draft = await lockedDraft();
+    clock.set(expiryOf(draft).getTime() - 30 * SECOND);
+    const shortenedTo = new Date(expiryOf(draft).getTime() - 10 * SECOND);
+    stock.forceExpiry(draft.id, shortenedTo);
+    const real = stock.extend.bind(stock);
+    vi.spyOn(stock, 'extend').mockImplementationOnce(real).mockImplementationOnce(second);
+    return { draft, shortenedTo };
+  }
+
+  it('moved sonra kilit dusmus: siparis GUNCEL surumle iptal edilir (CANCELLED), para cekilmez', async () => {
+    const { draft } = await movedThen(() => Promise.resolve({ kind: 'lapsed' }));
+
+    await expect(place(draft)).rejects.toMatchObject({ code: ERROR_CODES.RESERVATION_EXPIRED });
+    expect((await stored(draft.id)).status).toBe(ORDER_STATUS.CANCELLED);
+    expect(payments.charges).toEqual([]);
+  });
+
+  it('moved sonra hak bitmis: guncel bitis yazili kalir, UYARI; cekim kalan sureyle', async () => {
+    const { draft, shortenedTo } = await movedThen(() =>
+      Promise.resolve({ kind: 'active', expiresAt: shortenedTo, changed: false }),
+    );
+
+    const { order } = await place(draft);
+
+    expect(order.status).toBe(ORDER_STATUS.PAID);
+    expect(expiryOf(await stored(draft.id))).toEqual(shortenedTo);
+    expect(logLines.find((line) => line.level === 'warn')?.message).toBe(
+      'stok kilidi uzatilamadi: uzatma hakki bitti; odeme kalan sureyle',
+    );
+  });
+
+  it('moved sonra inventory ulasilamaz: hata yukari gider; ilk turda yazilan guncel bitis KALIR', async () => {
+    const { draft, shortenedTo } = await movedThen(() =>
+      Promise.reject(new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'inventory kapali')),
+    );
+
+    await expect(place(draft)).rejects.toMatchObject({ code: ERROR_CODES.SERVICE_UNAVAILABLE });
+    expect(expiryOf(await stored(draft.id))).toEqual(shortenedTo);
+  });
+
+  it('iki tur da moved: turlar biter, UYARI; cekim guncel bitisle', async () => {
+    const { draft, shortenedTo } = await movedThen(() =>
+      Promise.resolve({ kind: 'moved', expiresAt: new Date(shortenedTo.getTime() + SECOND) }),
+    );
+
+    const { order } = await place(draft);
+
+    expect(order.status).toBe(ORDER_STATUS.PAID);
+    expect(expiryOf(order)).toEqual(new Date(shortenedTo.getTime() + SECOND));
+    expect(logLines.find((line) => line.level === 'warn')?.message).toBe(
+      'stok kilidinin bitisi iki turda da kaydi; odeme guncel bitisle',
+    );
   });
 
   it('uzatma hakki bitmis: sure ayni, UYARI; cekim kalan sureyle yapilir', async () => {
@@ -268,9 +381,12 @@ describe('odeme oncesi uzatma (T11.3, B21, #72)', () => {
 
   it('3DS beklerken (durum degismez) uzatma kaydi surumu artirir: eski haliyle yazan supurucu CONFLICT alir', async () => {
     const awaiting = await insertAwaitingPayment(repository, clock, RISK_BANDS.MEDIUM);
+    // Kilit siparisin bildigi bitisle (T15.3): uzatma yolu sinanir, moved degil.
+    stock.hold(awaiting.id, awaiting.userId, lines, expiryOf(awaiting));
     clock.set(expiryOf(awaiting).getTime() - 30 * SECOND);
 
     const { order, challengeId } = await place(awaiting);
+    expect(stock.extensionsOf(awaiting.id)).toBe(1);
 
     expect(challengeId).toBeDefined();
     expect(order.status).toBe(ORDER_STATUS.AWAITING_PAYMENT);

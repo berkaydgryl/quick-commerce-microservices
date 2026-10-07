@@ -8,10 +8,15 @@
  *   - Odeme ve 3DS denemesinden ONCE: kalan sure RESERVATION_EXTEND_SECONDS'tan
  *     (60 sn) azsa kilit o kadar uzatilir (inventory'de en cok 3 kez) ve yeni
  *     bitis HEMEN kaydedilir: 3DS beklerken supurucu eski bitise gore siparisi
- *     kapatmasin. Kalan sure yetiyorsa inventory'ye gidilmez.
+ *     kapatmasin. Kalan sure yetiyorsa inventory'ye gidilmez. Uzatma siparisin
+ *     bildigi bitisle gider (T15.3; bekleyen is 117): kilidin bitisi farkliysa
+ *     (cevabi kaybolan uzatma ya da kaydedilmemis kisaltma) inventory hak
+ *     harcamaz, guncel bitisi doner; o yazilir ve kalan sure hala yetmiyorsa
+ *     yeni beklenenle bir tur daha uzatilir.
  *
  * Kilit dusmusse siparis CANCELLED + RESERVATION_EXPIRED (410): kilitsiz stokla
- * para CEKILMEZ. inventory'ye ulasilamazsa hata yukari gider, hicbir sey yazilmaz.
+ * para CEKILMEZ. inventory'ye ulasilamazsa hata yukari gider, hicbir sey yazilmaz;
+ * uzatmanin ikinci turunda ise ilk turda yazilan guncel bitis kalir.
  */
 
 import { AppError, ERROR_CODES, ORDER_STATUS } from '@getir/core';
@@ -88,6 +93,7 @@ export async function lockForBand(
  * Odeme ya da 3DS denemesinden once: kalan sure pencereden azsa kilidi uzatir
  * ve yeni bitisi YAZAR (surum artar). Uzatma hakki bitmisse kalan sureyle
  * devam edilir: kesinlestirmede kilit dusmusse para iade edilir (payment-step).
+ * Kilit `moved` donerse guncel bitis yazilir ve en cok bir tur daha denenir.
  */
 export async function securePaymentWindow(
   deps: LockTimingDeps,
@@ -95,29 +101,69 @@ export async function securePaymentWindow(
   scope: RequestScope,
 ): Promise<Order> {
   const { extendSeconds } = deps.lockPolicy;
-  if (!needsLockExtension(order, deps.clock.date(), extendSeconds * MS_PER_SECOND)) {
-    return order;
-  }
-  const timing = await deps.stock.extend(
-    { orderId: order.id, marketId: order.marketId, additionalSeconds: extendSeconds },
-    scope,
-  );
-  if (timing.kind === 'lapsed') {
-    return cancelLapsedOrder(deps, order, scope);
-  }
-  if (!timing.changed) {
-    scope.logger.warn(
-      { orderId: order.id, expiresAt: timing.expiresAt },
-      'stok kilidi uzatilamadi: uzatma hakki bitti; odeme kalan sureyle',
+  const windowMs = extendSeconds * MS_PER_SECOND;
+  let current = order;
+  for (let round = 1; round <= EXTEND_ROUNDS; round += 1) {
+    const expected = current.reservation?.expiresAt;
+    if (expected === undefined || !needsLockExtension(current, deps.clock.date(), windowMs)) {
+      return current;
+    }
+    const timing = await deps.stock.extend(
+      {
+        orderId: current.id,
+        marketId: current.marketId,
+        additionalSeconds: extendSeconds,
+        expectedExpiresAt: expected,
+      },
+      scope,
     );
-    return order;
+    if (timing.kind === 'lapsed') {
+      return cancelLapsedOrder(deps, current, scope);
+    }
+    if (timing.kind === 'moved') {
+      current = await recordExpiry(deps, current, timing.expiresAt);
+      scope.logger.info(
+        { orderId: current.id, expectedExpiresAt: expected, expiresAt: timing.expiresAt },
+        'stok kilidinin bitisi siparistekinden farkliydi; guncel bitis yazildi',
+      );
+      continue;
+    }
+    if (!timing.changed) {
+      scope.logger.warn(
+        { orderId: current.id, expiresAt: timing.expiresAt },
+        'stok kilidi uzatilamadi: uzatma hakki bitti; odeme kalan sureyle',
+      );
+      return current;
+    }
+    if (timing.expiresAt.getTime() !== expected.getTime() + windowMs) {
+      // Sozlesmenin cagiran denetimi: beklenen bitisi uygulayan inventory tam
+      // pencere kadar ileri alir. Tutmuyorsa sunucu denetimi uygulamamistir.
+      scope.logger.error(
+        { orderId: current.id, expectedExpiresAt: expected, expiresAt: timing.expiresAt },
+        'stok servisi beklenen bitis denetimini uygulamamis olabilir (eski surum?)',
+      );
+    }
+    const next = await recordExpiry(deps, current, timing.expiresAt);
+    scope.logger.info(
+      { orderId: current.id, expiresAt: timing.expiresAt },
+      'odeme oncesi stok kilidi uzatildi',
+    );
+    return next;
   }
-  const next = rescheduleReservation(order, timing.expiresAt, deps.clock.date());
-  await deps.repository.update(next, order.version, []);
-  scope.logger.info(
-    { orderId: order.id, expiresAt: timing.expiresAt },
-    'odeme oncesi stok kilidi uzatildi',
+  scope.logger.warn(
+    { orderId: current.id, expiresAt: current.reservation?.expiresAt },
+    'stok kilidinin bitisi iki turda da kaydi; odeme guncel bitisle',
   );
+  return current;
+}
+
+/** Odeme oncesi uzatmanin en cok tur sayisi: bir `moved` ve ardindan bir uzatma. */
+const EXTEND_ROUNDS = 2;
+
+/** Kilidin yeni bitisini siparise yazar (surum artar). */
+async function recordExpiry(deps: LockTimingDeps, order: Order, expiresAt: Date): Promise<Order> {
+  const next = rescheduleReservation(order, expiresAt, deps.clock.date());
+  await deps.repository.update(next, order.version, []);
   return next;
 }
 
