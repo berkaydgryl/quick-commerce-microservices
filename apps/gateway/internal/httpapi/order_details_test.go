@@ -11,6 +11,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/idempotency"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/testkit"
@@ -90,7 +91,7 @@ func TestPlaceOrderPassesSavedCardAndDetails(t *testing.T) {
 		Note:          "Kapı kodu 4417",
 		DoNotRingBell: true, AgreementsAccepted: true,
 	}
-	if input.CardID != testCardID || input.CardToken != "" || testkit.JSON(t, input.Details) != testkit.JSON(t, want) {
+	if input.Method != order.MethodCard || input.CardID != testCardID || input.CardToken != "" || testkit.JSON(t, input.Details) != testkit.JSON(t, want) {
 		t.Errorf("kart ve ayrinti tasinmali: %+v %+v", input, input.Details.Gift)
 	}
 }
@@ -214,5 +215,71 @@ func TestGetOrderReturnsDetailsToTheOwner(t *testing.T) {
 	details, isMap := data["details"].(map[string]any)
 	if !isMap || details["note"] != "Kapı kodu 4417" || details["agreementsAcceptedAt"] != "2026-10-07T12:00:00Z" {
 		t.Errorf("ayrinti cevapta olmali: %+v", data["details"])
+	}
+}
+
+func TestPlaceOrderCashOnDelivery(t *testing.T) {
+	// T12.4: kapida odeme (nakit ya da POS); kart alani yok, ayrinti yine zorunlu.
+	for _, kind := range []string{"CASH", "POS"} {
+		orders := &fakeOrders{}
+		body := placeBodyWith(`{"method":"CASH_ON_DELIVERY","onDelivery":"`+kind+`"}`, giftDetailsJSON)
+
+		status, envelope := send(t, orderApp(orders), orderRequest(t, http.MethodPost, "/v1/orders", body, nil))
+
+		input := orders.placeInput
+		if status != http.StatusCreated || input.Method != order.MethodCashOnDelivery || input.OnDelivery != kind ||
+			input.CardID != "" || input.CardToken != "" || !input.Details.AgreementsAccepted {
+			t.Errorf("%s: kapida odeme ve tur tasinmali: %d %+v %+v", kind, status, envelope, input)
+		}
+	}
+}
+
+func TestPlaceOrderCashOnDeliveryRejectsCardFields(t *testing.T) {
+	for field, payment := range map[string]string{
+		"payment.cardId":    `{"method":"CASH_ON_DELIVERY","onDelivery":"CASH","cardId":"` + testCardID + `"}`,
+		"payment.cardToken": `{"method":"CASH_ON_DELIVERY","onDelivery":"CASH","cardToken":"tok_test_4242"}`,
+	} {
+		orders := &fakeOrders{}
+
+		status, envelope := send(t, orderApp(orders), orderRequest(t, http.MethodPost, "/v1/orders", placeBodyWith(payment, giftDetailsJSON), nil))
+
+		if status != http.StatusBadRequest || detailsOf(t, envelope)[field] != "Bu ödeme yönteminde gönderilmez" || orders.called {
+			t.Errorf("%s: 400 + gonderilmez bekleniyordu: %d %+v", field, status, envelope)
+		}
+	}
+}
+
+func TestPlaceOrderCashOnDeliveryNotAllowedIs422WithUserMessage(t *testing.T) {
+	// MEDIUM bant: order PAYMENT_METHOD_NOT_ALLOWED -> 422, kullanici cumlesi kod tablosundan.
+	orders := &fakeOrders{err: apperror.New(apperror.CodePaymentMethodNotAllowed, nil)}
+	body := placeBodyWith(`{"method":"CASH_ON_DELIVERY","onDelivery":"POS"}`, giftDetailsJSON)
+
+	status, envelope := send(t, orderApp(orders), orderRequest(t, http.MethodPost, "/v1/orders", body, nil))
+
+	if status != http.StatusUnprocessableEntity || envelope.Error == nil ||
+		envelope.Error.Message != "Bu sipariş için kapıda ödeme kullanılamıyor. Kartla ödemeyi dener misin?" {
+		t.Errorf("422 + kullanici cumlesi bekleniyordu: %d %+v", status, envelope.Error)
+	}
+}
+
+func TestPaymentFieldsSentAsNullOrWrongTypeGetTheContractRule(t *testing.T) {
+	// Sozlesmede null "gonderilmedi" degil, gecersizdir: gateway de reddeder ve
+	// kuralin cumlesini verir (yonteme ait olmayan alan, kapida odemenin turu).
+	notAllowed, onDelivery := "Bu ödeme yönteminde gönderilmez", "Kapıda nasıl ödeyeceğini seç"
+	for _, tc := range []struct{ name, payment, field, reason string }{
+		{"kapida odemede null kart kimligi", `{"method":"CASH_ON_DELIVERY","onDelivery":"CASH","cardId":null}`, "payment.cardId", notAllowed},
+		{"kartta null tur", `{"method":"CARD","cardId":"` + testCardID + `","onDelivery":null}`, "payment.onDelivery", notAllowed},
+		{"kapida odemede null tur", `{"method":"CASH_ON_DELIVERY","onDelivery":null}`, "payment.onDelivery", onDelivery},
+		{"tur sayi", `{"method":"CASH_ON_DELIVERY","onDelivery":5}`, "payment.onDelivery", onDelivery},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			orders := &fakeOrders{}
+
+			status, envelope := send(t, orderApp(orders), orderRequest(t, http.MethodPost, "/v1/orders", placeBodyWith(tc.payment, giftDetailsJSON), nil))
+
+			if status != http.StatusBadRequest || detailsOf(t, envelope)[tc.field] != tc.reason || orders.called {
+				t.Errorf("400 + %s=%q bekleniyordu: %d %+v", tc.field, tc.reason, status, envelope.Error)
+			}
+		})
 	}
 }

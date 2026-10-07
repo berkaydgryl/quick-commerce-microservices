@@ -94,6 +94,8 @@ type Order struct {
 	// kalan saniye (T11.4, #68); diger durumlarda HIC yazilmaz.
 	ReservationExpiresAt  string `json:"reservationExpiresAt,omitempty"`
 	ReservationTTLSeconds *int64 `json:"reservationTtlSeconds,omitempty"`
+	// Odeme yontemi ve kapida odemenin turu (T12.4); secimsiz (eski) sipariste yok.
+	Payment *PaymentView `json:"payment,omitempty"`
 }
 
 // statusNames, proto durumu -> sozlesmedeki ad (@getir/core ORDER_STATUS).
@@ -216,6 +218,7 @@ func toOrder(order *orderv1.Order, now time.Time) (Order, error) {
 		UpdatedAt:             timeText(order.GetUpdatedAt()),
 		ReservationExpiresAt:  timeText(order.GetReservationExpiresAt()),
 		ReservationTTLSeconds: remainingSeconds(order.GetReservationExpiresAt(), now),
+		Payment:               toPaymentView(order.GetPayment()),
 	}, nil
 }
 

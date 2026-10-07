@@ -27,10 +27,10 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `GET /v1/search?lat&lng&q` | ✅ Genel arama (T9.6): yakındaki marketlerde ürün ya da market adı; mesafe sırası, kapalılar sonda; market başına ilk 3 ürün + toplam; stok market başına, paralel |
 | `POST /v1/cart/reserve` | ✅ order `CreateDraftOrder` (T7.5): taslak, fiyat sunucuda; stok kilitlenir (T11.2); cevapta `expiresAt` ve sunucunun saatiyle `ttlSeconds` (T11.4) |
 | `DELETE /v1/cart/reserve/{orderId}` | ✅ order `CancelOrder` (T11.4): taslağı ya da ödeme bekleyen siparişi bırakır, stok döner; zaten bırakılmışsa 200 `released:false`; parası alınmışsa 409 `REQUEST_IN_PROGRESS`; başkasının siparişi 404 |
-| `POST /v1/orders`    | ✅ order `CreateOrder` (saga): 201 `PAID` ya da `AWAITING_PAYMENT` + `threeDs` (sunucunun saatiyle `ttlSeconds`, T12.4); kart `payment.cardId` (kayıtlı kart) ya da eski `cardToken`, tam biri; `details` (hediye, not, "Zili Çalma", sözleşme onayı) zorunlu, kuralları `internal/order/details.go` (T12.4); kasada olmayan kart 404 `resource: card` |
+| `POST /v1/orders`    | ✅ order `CreateOrder` (saga): 201 `PAID` ya da `AWAITING_PAYMENT` + `threeDs` (sunucunun saatiyle `ttlSeconds`, T12.4); kart `payment.cardId` (kayıtlı kart) ya da eski `cardToken`, tam biri; kapıda ödeme `CASH_ON_DELIVERY` + `onDelivery` (`CASH` ya da `POS`), kart alanı yok, orta bantta 422 `PAYMENT_METHOD_NOT_ALLOWED`; `details` (hediye, not, "Zili Çalma", sözleşme onayı) zorunlu, kuralları `internal/order/details.go` (T12.4); kasada olmayan kart 404 `resource: card` |
 | `POST /v1/orders/{id}/3ds` | ✅ order `ConfirmPayment`; yanlış kod 402 + kalan hak |
 | `GET /v1/orders` | ✅ Geçmiş siparişler (T11.16, `internal/orderhistory`): order `ListMyOrders` + market adları sayfa başına TEK `BatchGetMarkets` (katalog hatasında adsız, sipariş yine listelenir); yeniden eskiye, imleçle; `DRAFT` ve hiç ilerlemeden süresi dolan `EXPIRED` süzülür, eksik kadar en fazla 3 tur (sunucu tarafı süzme #101); `CANCELLED` + geçmişte `PAID` = `refunded`; sayfa 20, en fazla 50 (kırpılır); önbelleğe alınmaz |
-| `GET /v1/orders/{id}` | ✅ order `GetOrder`; başkasının siparişi 404; kilit canlıyken `reservationExpiresAt` ve `reservationTtlSeconds` (T11.4); sipariş ayrıntısı `details` yalnızca burada, sahibine (T12.4; liste ve geçmiş taşımaz); T11.16'dan beri önbelleğe alınmaz (`no-store`) |
+| `GET /v1/orders/{id}` | ✅ order `GetOrder`; başkasının siparişi 404; kilit canlıyken `reservationExpiresAt` ve `reservationTtlSeconds` (T11.4); sipariş ayrıntısı `details` yalnızca burada, sahibine (T12.4; liste ve geçmiş taşımaz); ödeme seçimi `payment` (`method`, kapıda ödemede `onDelivery`; seçimsiz eski siparişte yok); T11.16'dan beri önbelleğe alınmaz (`no-store`) |
 | `GET /v1/orders/{id}/token` | ✅ T12.2: sahiplik order `GetOrder` ile (başkasınınki 404, bitmiş sipariş 200); `order:{id}` odası için 60 sn'lik oda jetonu (`internal/roomtoken`, `REALTIME_TOKEN_SECRET`) |
 | `POST /v1/auth/register` | ✅ Kayıt + oturum (201); telefon benzersiz, şifre bcrypt (T8.1) |
 | `POST /v1/auth/login` | ✅ Giriş (200); yanlış şifre ile kayıtsız numara aynı cevabı alır |
@@ -481,8 +481,10 @@ order-service'tedir.
   olarak order'a gider; istemcinin yazabildiği `X-Forwarded-For` okunmaz (güvenilir vekil yok).
 - **Alan adları:** servisin proto yolu REST adına çevrilir: `lines.0.quantity` →
   `items.0.quantity`, `deliveryLocation.lat` → `address.location.lat`, `code` → `otp`,
-  `cardId` → `payment.cardId`, `idempotencyKey` → `Idempotency-Key`. Ayrıntı yolları
-  (`details.gift.recipientPhone`) REST'tekiyle aynıdır.
+  `cardId` → `payment.cardId`, `onDelivery` → `payment.onDelivery`, `idempotencyKey` →
+  `Idempotency-Key`. Ayrıntı yolları (`details.gift.recipientPhone`) REST'tekiyle aynıdır.
+  Ödeme bekleyen siparişte yöntem ya da tür değişirse 409 `CONFLICT`; ayrıntıdaki `field` da
+  REST adıyla (`payment.method`, `payment.onDelivery`).
 - **Sipariş ayrıntısı ve kart (T12.4):** sınırlar, cümleler ve kart kimliği biçimi
   `@getir/contracts` ile aynı (`checkout-rules.ts`, `cardIdSchema`; metin JavaScript trim'iyle
   kırpılır, uzunluk UTF-16 birimi); `internal/order/details_contract_test.go` karşılaştırır.
@@ -509,6 +511,8 @@ curl -s localhost:8080/v1/orders -H 'Content-Type: application/json' -H "Authori
 # Kayitli kartla: "payment":{"method":"CARD","cardId":"<crd_... GET /v1/me/cards'tan>"}.
 # Hediye: "details":{"gift":{"enabled":true,"message":"","senderName":"","recipientName":"Ad",
 #   "recipientPhone":"+905321234567"},"note":"","doNotRingBell":true,"agreementsAccepted":true}
+# Kapida odeme (T12.4; dusuk riskte): "payment":{"method":"CASH_ON_DELIVERY","onDelivery":"CASH"}
+#   (POS icin "onDelivery":"POS"); kart alani gonderilmez. Orta bantta 422; yeni anahtarla kartla.
 curl -s localhost:8080/v1/orders/<taslak>/3ds -H 'Content-Type: application/json' -H "Authorization: Bearer $TOKEN" \
   -H 'Idempotency-Key: onay-0001' -d '{"challengeId":"<tds_...>","otp":"123456"}' | jq   # 3DS istendiyse
 curl -s localhost:8080/v1/orders/<taslak> -H "Authorization: Bearer $TOKEN" | jq

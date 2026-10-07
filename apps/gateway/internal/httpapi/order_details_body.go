@@ -1,6 +1,10 @@
 package httpapi
 
-import "github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
+import (
+	"encoding/json"
+
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
+)
 
 // POST /v1/orders ayrintisi ve kart secimi (T12.4; @getir/contracts
 // createOrderRequestSchema). Kurallar ve cumleleri order paketindedir; burasi
@@ -84,4 +88,30 @@ func collectUnder(errs fieldErrors, prefix string, problems map[string]string) {
 	for field, reason := range problems {
 		errs[prefix+"."+field] = reason
 	}
+}
+
+// sentText, JSON'da GONDERILEN metin alani. `null` ya da metin olmayan deger de
+// gonderilmis sayilir ve BOS metin gibi kurala girer: sozlesmede (zod) null
+// "gonderilmedi" degil, gecersizdir. Boylece kural kendi cumlesini verir
+// (yonteme ait olmayan alan "gönderilmez", tur "Kapıda nasıl..."), sozlesmeyle ayni.
+type sentText struct {
+	sent bool
+	text string
+}
+
+// UnmarshalJSON yalnizca alan govdede VARSA cagrilir; hicbir degeri reddetmez.
+func (s *sentText) UnmarshalJSON(data []byte) error {
+	s.sent = true
+	if json.Unmarshal(data, &s.text) != nil {
+		s.text = ""
+	}
+	return nil
+}
+
+// value, gonderilen metin; gonderilmediyse nil.
+func (s sentText) value() *string {
+	if !s.sent {
+		return nil
+	}
+	return &s.text
 }
