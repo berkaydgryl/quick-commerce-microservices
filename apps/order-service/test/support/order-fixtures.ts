@@ -3,8 +3,7 @@
  */
 
 import { MOCK_THREEDS_CODE } from '@getir/core';
-import { paymentV1 } from '@getir/proto';
-import type { orderV1 } from '@getir/proto';
+import { orderV1, paymentV1 } from '@getir/proto';
 
 export const IDEMPOTENCY_KEY = '4f1c3a2b-9d8e-11ee';
 
@@ -50,6 +49,8 @@ export function createOrderRequest(
     cardId: '',
     idempotencyKey: IDEMPOTENCY_KEY,
     details: ORDER_DETAILS,
+    // Kapida odemenin turu (T12.4): kartla odemede bos.
+    onDelivery: orderV1.DeliveryPaymentKind.DELIVERY_PAYMENT_KIND_UNSPECIFIED,
     ...overrides,
   };
 }
