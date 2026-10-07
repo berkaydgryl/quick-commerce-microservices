@@ -223,6 +223,7 @@ describe('gRPC -> Mongo (T4.5 bitti sayilir: siparis Mongo da gorulur)', () => {
       cardId: '',
       idempotencyKey: '4f1c3a2b-9d8e-11ef',
       details: { gift: GIFT, note: 'Zili çalma', doNotRingBell: true, agreementsAccepted: true },
+      onDelivery: orderV1.DeliveryPaymentKind.DELIVERY_PAYMENT_KIND_UNSPECIFIED,
     });
 
     const document = await connection.db

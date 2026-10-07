@@ -2586,9 +2586,14 @@ paths:
         çalıştırır (T7.1, order-service `CreateOrder`). Sepet ve adres TEKRAR
         GÖNDERİLMEZ: tutar ve konum taslakta dondurulmuştur.
 
-        * LOW bant: kart çekilir, sipariş `PAID`.
+        * LOW bant: kart çekilir, sipariş `PAID`. Kapıda ödeme (T12.4; nakit ya
+          da kapıda kart/POS) açıktır: çekim yok, sipariş `PAID`, tür siparişte
+          saklanır (teslimde tahsilat kaydı henüz yok, T13.3).
         * MEDIUM bant: kart + 3DS zorunlu; sipariş `AWAITING_PAYMENT` ve
           `threeDs.challengeId` ile döner, `/v1/orders/{id}/3ds` ile tamamlanır.
+          Kapıda ödeme `422 PAYMENT_METHOD_NOT_ALLOWED`; sipariş taslakta kalır,
+          kartla yeniden verilebilir (yeni `Idempotency-Key` ile: cevap anahtar
+          altında saklanır, farklı gövde aynı anahtarla `409` alır).
         * HIGH bant: manuel inceleme (`202 RISK_REVIEW`), ödeme alınmaz.
         * CRITICAL bant: ret (`403 RISK_BLOCKED`), ödeme alınmaz.
 
@@ -2657,15 +2662,15 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
               examples:
-                notCard:
-                  summary: VALIDATION_FAILED (REST'te tek yöntem kart)
+                onDeliveryMissing:
+                  summary: VALIDATION_FAILED (kapıda ödemede tür yok, T12.4)
                   value:
                     success: false
                     error:
                       code: VALIDATION_FAILED
                       message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
                       details:
-                        payment.method: CARD olmali
+                        payment.onDelivery: Kapıda nasıl ödeyeceğini seç
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
                 idempotencyKeyInvalid:
                   $ref: "#/components/examples/IdempotencyKeyInvalid"
@@ -2735,7 +2740,10 @@ paths:
             geçiş) ya da önceki ödeme denemesi hâlâ sonuçlanmadı
             (`REQUEST_IN_PROGRESS`). Aynı anahtarlı istek hâlâ işleniyorsa da
             `REQUEST_IN_PROGRESS` (ayrıntıda `Idempotency-Key`); anahtar farklı
-            bir gövdeyle kullanılmışsa `CONFLICT`.
+            bir gövdeyle kullanılmışsa `CONFLICT`. Ödeme bekleyen siparişin
+            tekrarında ödeme yöntemi ya da kapıda ödemenin türü değişmişse
+            `CONFLICT`, ayrıntıda alan (T12.4): çekimi değiştirir. Ayrıntı
+            (`details`) farkı ise sessizce yok sayılır, ilk yazılan geçerlidir.
           content:
             application/json:
               schema:
@@ -2757,6 +2765,15 @@ paths:
                   $ref: "#/components/examples/IdempotencyRequestInProgress"
                 keyReused:
                   $ref: "#/components/examples/IdempotencyKeyReused"
+        "422":
+          description: |
+            Kapıda ödeme bu sipariş için kapalı (orta risk bandı,
+            `PAYMENT_METHOD_NOT_ALLOWED`, T12.4). Sipariş taslakta kalır; aynı
+            sipariş kartla yeniden verilebilir, yeni `Idempotency-Key` ile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
         "429":
           $ref: "#/components/responses/RateLimited"
         "500":
@@ -5659,13 +5676,22 @@ components:
         payment:
           type: object
           description: |
-            `cardId` ya da (eski) `cardToken`: tam biri (T12.4). İkisi birden ya da
-            hiçbiri `400 VALIDATION_FAILED` ("Ödeme için bir kart seç").
+            Kartla: `cardId` ya da (eski) `cardToken`, tam biri (T12.4). İkisi
+            birden ya da hiçbiri `400 VALIDATION_FAILED` ("Ödeme için bir kart seç").
+            Kapıda ödeme (T12.4): `onDelivery` zorunlu ("Kapıda nasıl ödeyeceğini
+            seç"); kart alanı gönderilmez. Yönteme ait olmayan alan `400` ("Bu
+            ödeme yönteminde gönderilmez").
           required: [method]
           properties:
             method:
               type: string
-              enum: [CARD]
+              enum: [CARD, CASH_ON_DELIVERY]
+            onDelivery:
+              type: string
+              enum: [CASH, POS]
+              description: |
+                Kapıda ödemenin türü (T12.4): `CASH` nakit, `POS` kapıda kredi ya da
+                banka kartı (kuryenin POS cihazı). Yalnızca `CASH_ON_DELIVERY`'de.
             cardId:
               allOf:
                 - $ref: "#/components/schemas/CardId"
@@ -5732,6 +5758,21 @@ components:
           type: boolean
           enum: [true]
           description: Sözleşme onayı zorunlu ("Siparişi vermek için sözleşmeleri onayla").
+
+    OrderPaymentView:
+      type: object
+      description: |
+        Siparişin ödeme seçimi (T12.4): yöntem ve kapıda ödemenin türü. Kişisel veri
+        değildir. Bu alandan önce verilmiş siparişte yoktur.
+      required: [method]
+      properties:
+        method:
+          type: string
+          enum: [CARD, CASH_ON_DELIVERY]
+        onDelivery:
+          type: string
+          enum: [CASH, POS]
+          description: Yalnızca kapıda ödemede; `CASH` nakit, `POS` kapıda kart (POS).
 
     OrderDetailsView:
       type: object
@@ -5896,6 +5937,8 @@ components:
           description: Kilidin sunucunun saatiyle kalan saniyesi; `reservationExpiresAt` ile birlikte gelir.
         details:
           $ref: "#/components/schemas/OrderDetailsView"
+        payment:
+          $ref: "#/components/schemas/OrderPaymentView"
 
     OrderSummary:
       type: object

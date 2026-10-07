@@ -15,7 +15,10 @@ import {
   NOTE_LENGTH_MESSAGE,
   orderDetailsSchema,
   orderDetailsViewSchema,
+  orderPaymentViewSchema,
   PAYMENT_CARD_MESSAGE,
+  PAYMENT_FIELD_NOT_ALLOWED_MESSAGE,
+  PAYMENT_ON_DELIVERY_MESSAGE,
   PHONE_MESSAGE,
   RECIPIENT_NAME_MESSAGE,
 } from '../../src/index.js';
@@ -142,5 +145,66 @@ describe('createOrderRequestSchema odeme (T12.4)', () => {
     expect(
       request({ method: 'CARD', cardId: 'ord_0123456789abcdef0123456789abcdef' }).success,
     ).toBe(false);
+  });
+});
+
+describe('createOrderRequestSchema kapida odeme (T12.4)', () => {
+  const issuesIn = (request: Record<string, unknown>) =>
+    (createOrderRequestSchema.safeParse(request).error?.issues ?? []).map((issue) => [
+      issue.path.join('.'),
+      issue.message,
+    ]);
+  const issuesOf = (payment: Record<string, unknown>) =>
+    issuesIn({ orderId: ORDER_ID, payment, details: DETAILS });
+
+  it.each(['CASH', 'POS'])(
+    'tur %s gecerli; ayrinti yine zorunlu (details alaninda)',
+    (onDelivery) => {
+      const payment = { method: 'CASH_ON_DELIVERY', onDelivery };
+
+      expect(issuesOf(payment)).toEqual([]);
+      expect(issuesIn({ orderId: ORDER_ID, payment }).map(([path]) => path)).toEqual(['details']);
+    },
+  );
+
+  it.each([[{}], [{ onDelivery: 'CARD' }], [{ onDelivery: 'CHEQUE' }]])(
+    'tur yok ya da bilinmiyor %o: "Kapıda nasıl ödeyeceğini seç", deger yankilanmaz',
+    (kind) => {
+      const issues = issuesOf({ method: 'CASH_ON_DELIVERY', ...kind });
+
+      expect(issues).toEqual([['payment.onDelivery', PAYMENT_ON_DELIVERY_MESSAGE]]);
+      expect(JSON.stringify(issues)).not.toMatch(/CHEQUE|CARD/);
+    },
+  );
+
+  it.each([
+    [{ cardId: CARD_ID }, 'payment.cardId'],
+    [{ cardId: 'crd_1' }, 'payment.cardId'],
+    [{ cardToken: 'tok_test_4242' }, 'payment.cardToken'],
+    [{ cardToken: '' }, 'payment.cardToken'],
+  ])('kapida odemede kart alani %o: GONDERILEN alanda tek hata', (card, path) => {
+    expect(issuesOf({ method: 'CASH_ON_DELIVERY', onDelivery: 'CASH', ...card })).toEqual([
+      [path, PAYMENT_FIELD_NOT_ALLOWED_MESSAGE],
+    ]);
+  });
+
+  it('kartla odemede kapida tur gonderilmez', () => {
+    expect(issuesOf({ method: 'CARD', cardId: CARD_ID, onDelivery: 'CASH' })).toEqual([
+      ['payment.onDelivery', PAYMENT_FIELD_NOT_ALLOWED_MESSAGE],
+    ]);
+  });
+
+  it('cumle sozlesmede (web ve gateway ayni cumleyi gosterir)', () => {
+    expect(PAYMENT_ON_DELIVERY_MESSAGE).toBe('Kapıda nasıl ödeyeceğini seç');
+  });
+
+  it('cevaptaki odeme: yontem ve tur; tur yalnizca kapida odemede', () => {
+    expect(
+      orderPaymentViewSchema.safeParse({ method: 'CASH_ON_DELIVERY', onDelivery: 'POS' }).success,
+    ).toBe(true);
+    expect(orderPaymentViewSchema.safeParse({ method: 'CARD' }).success).toBe(true);
+    expect(orderPaymentViewSchema.safeParse({ method: 'CARD', onDelivery: 'CARD' }).success).toBe(
+      false,
+    );
   });
 });
