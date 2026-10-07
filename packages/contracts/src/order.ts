@@ -25,6 +25,7 @@ import { deliveryAddressSchema, reservationLineSchema } from './cart.js';
 import { orderDetailsSchema, orderDetailsViewSchema } from './checkout-rules.js';
 import { ORDER_HISTORY_PAGE_SIZE_MAX, OTP_PATTERN } from './constants.js';
 import { orderStatusSchema } from './order-status.js';
+import { orderThreeDsSchema } from './order-three-ds.js';
 
 /**
  * Odeme yontemi: kart ya da kapida odeme (T12.4). Kapida odeme yalnizca dusuk
@@ -209,6 +210,12 @@ export const orderSchema = z.object({
   details: orderDetailsViewSchema.optional(),
   /** Odeme yontemi ve kapida odemenin turu (T12.4). */
   payment: orderPaymentViewSchema.optional(),
+  /**
+   * Bekleyen 3DS dogrulamasinin durumu (#163 B1): yalnizca AWAITING_PAYMENT'ta
+   * ve sahibine. Yoklugu "bilinmiyor ya da dogrulama yok" demektir. Anlam,
+   * saat yarisi kurali ve ornekler: order-three-ds.ts.
+   */
+  threeDs: orderThreeDsSchema.optional(),
 });
 
 /**
