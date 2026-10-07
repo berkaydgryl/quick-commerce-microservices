@@ -65,6 +65,11 @@
   border: none;
 }
 
+/* Olagan secim (baska market uyarisinin "Evet"i): mor birincil. */
+.c-confirm-panel__confirm--primary {
+  background: var(--color-brand-primary);
+}
+
 .c-confirm-panel__cancel:disabled,
 .c-confirm-panel__confirm:disabled {
   cursor: progress;

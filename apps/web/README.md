@@ -288,18 +288,21 @@ Karar ve hesap **veri katmanında**, arayüz yalnızca çizer. Tasarım baştan 
 modal, çekmece, ayrı sepet sayfası) yalnızca `features/cart/ui/*` değişir; testlerin hepsi veri
 katmanındadır.
 
-| Katman       | Dosya                                                          | İş                                                                                     |
-| ------------ | -------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Saf kurallar | `features/cart/services/cart-state.ts`                         | Tek market + onay, adet (99 ya da stok) ve kalem (50) sınırı, satış durumu, `canAdd`   |
-| Kalıcılık    | `features/cart/services/cart-persistence.ts`                   | `getir.cart`: sürüm, 24 saat, okunan kaydın doğrulanması                               |
-| Toplam       | `features/cart/services/cart.service.ts`                       | `@getir/pricing` `calculateCart`; kurallar **sepetin marketinden**                     |
-| Depo         | `features/cart/stores/useCartStore.ts`                         | Zustand; saf fonksiyonları bağlar, kural yazmaz                                        |
-| Hook'lar     | `useCartTotals`, `useAddToCart`, `useCartStorageSync`          | Toplam; onay bekleyen market değişimi; sekmeler arası eşitleme                         |
-| Düğmeler     | `ProductCartAction`, `CartQuantityStepper`, `CartSwitchPrompt` | "+" ya da adet kutusu (ürün kartında dikey, arama satırında yatay; T16.2), onay satırı |
+| Katman       | Dosya                                                          | İş                                                                                        |
+| ------------ | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Saf kurallar | `features/cart/services/cart-state.ts`                         | Tek market + onay, adet (99 ya da stok) ve kalem (50) sınırı, satış durumu, `canAdd`      |
+| Kalıcılık    | `features/cart/services/cart-persistence.ts`                   | `getir.cart`: sürüm, 24 saat, okunan kaydın doğrulanması                                  |
+| Toplam       | `features/cart/services/cart.service.ts`                       | `@getir/pricing` `calculateCart`; kurallar **sepetin marketinden**                        |
+| Depo         | `features/cart/stores/useCartStore.ts`                         | Zustand; saf fonksiyonları bağlar, kural yazmaz                                           |
+| Hook'lar     | `useCartTotals`, `useAddToCart`, `useCartStorageSync`          | Toplam; onay bekleyen market değişimi; sekmeler arası eşitleme                            |
+| Düğmeler     | `ProductCartAction`, `CartQuantityStepper`, `CartSwitchDialog` | "+" ya da adet kutusu (ürün kartında dikey, arama satırında yatay; T16.2), onay penceresi |
 
-- **Tek market:** sepette Migros ürünü varken A101'den eklemede ekleme **yapılmaz**, onay istenir:
+- **Tek market:** sepette Migros ürünü varken A101'den eklemede ekleme **yapılmaz**, ekranın ortasında
+  onay penceresi açılır ("Sepeti boşalt" penceresinin kabuğu: karartma, odak pencerede, Esc ve X = Vazgeç):
   "Sepetinde Migros Jet – Moda ürünleri var. Sepeti boşaltıp A101 – Caferağa ile devam edilsin mi?"
-  ("-den/-dan/-ndan" eki ada göre değiştiği için "ile" kullanıldı.)
+  Mor "Evet" sepeti boşaltıp ürünü ekler, "Vazgeç" bir şey değiştirmez; açılınca odak "Vazgeç"te, kapanınca
+  tıklanan "+"ya (Evet'te aynı ürünün "adedini artır"ına) döner. Mağaza sayfası ve arama sonuçları aynı
+  pencereyi (`CartSwitchDialog`) kullanır. ("-den/-dan/-ndan" eki ada göre değiştiği için "ile" kullanıldı.)
 - **Kalem teklif kimliğiyle (`offerId`) tanınır**, ürün kimliğiyle değil: aynı ürünün her markette aynı
   `prd_` kimliği var. Ürün kimliğiyle tanımak A101 sayfasında Migros sepetindeki adedi gösteriyor ve "−"
   Migros kalemini azaltıyordu (canlı denemede bulundu, regresyon testi var).
