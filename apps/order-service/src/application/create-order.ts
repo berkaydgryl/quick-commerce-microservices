@@ -10,6 +10,10 @@
  * Kilidin suresi saga'da ayarlanir (T11.3, lock-timing.ts): orta bantta kisalir,
  * odeme oncesi gerekirse uzar.
  *
+ * ODEME SECIMI (T12.4): yontem ve kapida odemenin turu risk adiminda yazilir;
+ * odeme bekleyen siparisin tekrarinda degisirse CONFLICT (cekimi degistirir;
+ * denetim odeme adiminda, kilit durumu cozuldukten sonra).
+ *
  * TEKRAR DENEME: siparis odeme adimina yazildiktan sonra cekim cevabi
  * kaybolursa (payment-svc'ye ulasilamadi) siparis AWAITING_PAYMENT kalir.
  * Ayni CreateOrder tekrar gelince risk yeniden sorulmaz; cekim siparisten
@@ -20,6 +24,7 @@ import { ORDER_STATUS } from '@getir/core';
 
 import type { CheckoutSignals } from '../domain/checkout-risk.js';
 import { differsFromRecorded } from '../domain/order-details.js';
+import { paymentChoiceOf } from '../domain/order-payment.js';
 import type { OrderDetailsInput } from '../domain/order-details.js';
 import type { OrderHistoryReader } from '../domain/order-history-reader.js';
 import type { OrderOutbox } from '../domain/order-outbox.js';
@@ -78,7 +83,12 @@ export function createCreateOrder(deps: CreateOrderDeps): CreateOrder {
     }
     const awaitingPayment = retrying
       ? order
-      : await passRiskStep(deps, order, { method: choice.method, signals, details }, scope);
+      : await passRiskStep(
+          deps,
+          order,
+          { payment: paymentChoiceOf(choice.method, choice.onDelivery), signals, details },
+          scope,
+        );
 
     return chargeOrder(deps, awaitingPayment, choice, scope);
   };

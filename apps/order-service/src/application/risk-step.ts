@@ -13,13 +13,12 @@
  *     siparis CANCELLED + 410 (lock-timing.ts).
  *  5. Karar (ve kilidin yeni bitisi) tek yazmayla (surum kontrollu) kaydedilir;
  *     durdurulan siparis (REVIEW, REJECTED) kaydedildikten SONRA hata doner.
- *     Siparis ayrintilari (T12.4) ayni yazimda siparise girer; sozlesme
- *     onayinin ani bu adimin SUNUCU saatidir.
+ *     Siparis ayrintilari ve odeme secimi (T12.4) ayni yazimda siparise girer;
+ *     sozlesme onayinin ani bu adimin SUNUCU saatidir.
  */
 
 import { AppError, ORDER_STATUS } from '@getir/core';
 
-import type { PaymentMethod } from '../domain/checkout-payment.js';
 import {
   applyRiskDecision,
   assertPaymentMethodAllowed,
@@ -29,6 +28,7 @@ import {
 import type { CheckoutSignals } from '../domain/checkout-risk.js';
 import { acceptDetails } from '../domain/order-details.js';
 import type { OrderDetailsInput } from '../domain/order-details.js';
+import type { OrderPayment } from '../domain/order-payment.js';
 import { statusChangedEvents } from '../domain/order-events.js';
 import type { OrderHistoryReader } from '../domain/order-history-reader.js';
 import { assertTransition } from '../domain/order-state-machine.js';
@@ -46,7 +46,8 @@ export interface RiskStepDeps extends LockTimingDeps {
 }
 
 export interface RiskStepInput {
-  readonly method: PaymentMethod;
+  /** Odeme secimi (T12.4): yontem ve kapida odemenin turu. */
+  readonly payment: OrderPayment;
   readonly signals: CheckoutSignals;
   /** Siparise yazilacak ayrinti (T12.4); verilmezse siparis ayrintisiz kalir. */
   readonly details?: OrderDetailsInput | undefined;
@@ -56,7 +57,7 @@ export interface RiskStepInput {
 export async function passRiskStep(
   deps: RiskStepDeps,
   order: Order,
-  { method, signals, details }: RiskStepInput,
+  { payment, signals, details }: RiskStepInput,
   scope: RequestScope,
 ): Promise<Order> {
   assertTransition(order.id, order.status, ORDER_STATUS.RISK_CHECK);
@@ -68,15 +69,20 @@ export async function passRiskStep(
   );
   const decision = decideRisk(evaluation.band);
   if (decision.kind === 'proceed') {
-    assertPaymentMethodAllowed(order.id, method, decision.policy);
+    assertPaymentMethodAllowed(order.id, payment.method, decision.policy);
   }
   const timed =
     decision.kind === 'proceed' ? await lockForBand(deps, order, evaluation.band, scope) : order;
 
   const decided = applyRiskDecision(timed, evaluation.band, decision, deps.clock);
-  // Risk adimi yalnizca taslakta calisir: taslakta ayrinti yoktur, ilk yazim budur.
-  const next =
-    details === undefined ? decided : { ...decided, details: acceptDetails(details, deps.clock) };
+  // Risk adimi yalnizca taslakta calisir: ayrinti ve odeme secimi ilk kez burada
+  // yazilir. Secim yalnizca bant politikasi denetlenmisse (devam) yazilir; durdurulan
+  // siparis (REVIEW, REJECTED) secimsiz kalir.
+  const next = {
+    ...decided,
+    ...(decision.kind === 'proceed' ? { payment } : {}),
+    ...(details === undefined ? {} : { details: acceptDetails(details, deps.clock) }),
+  };
   await deps.repository.update(next, order.version, statusChangedEvents(order, next));
   scope.logger.info(
     { orderId: order.id, band: evaluation.band, score: evaluation.score, status: next.status },

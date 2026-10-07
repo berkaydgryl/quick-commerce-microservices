@@ -3,8 +3,7 @@
  * (Idempotency anahtari mutation-idempotency.spec.ts'te, tek tabloda.)
  */
 
-import type { orderV1 } from '@getir/proto';
-import { paymentV1 } from '@getir/proto';
+import { orderV1, paymentV1 } from '@getir/proto';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -44,14 +43,16 @@ describe('createOrderRequestSchema', () => {
     });
   });
 
-  it('kapida odeme: jeton alani HIC yazilmaz', () => {
+  it('kapida odeme: jeton alani HIC yazilmaz, tur domain sozlugune (T12.4)', () => {
     const parsed = createOrderRequestSchema.parse({
       ...request,
       paymentMethod: paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY,
       cardToken: '',
+      onDelivery: orderV1.DeliveryPaymentKind.DELIVERY_PAYMENT_KIND_CASH,
     });
 
     expect(parsed.paymentMethod).toBe('CASH_ON_DELIVERY');
+    expect(parsed.onDelivery).toBe('CASH');
     expect(parsed).not.toHaveProperty('cardToken');
   });
 
@@ -64,7 +65,10 @@ describe('createOrderRequestSchema', () => {
     // Kart kurali payment-svc'ninkiyle ayni (T12.4): card_id ya da card_token, TAM biri.
     [{ cardToken: '' }, 'cardId', 'kartli odemede card_id ya da card_token zorunlu'],
     [
-      { paymentMethod: paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY },
+      {
+        paymentMethod: paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY,
+        onDelivery: orderV1.DeliveryPaymentKind.DELIVERY_PAYMENT_KIND_CASH,
+      },
       'cardToken',
       'kapida odemede kart bos olmali',
     ],

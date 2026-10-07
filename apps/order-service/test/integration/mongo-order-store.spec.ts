@@ -293,6 +293,15 @@ describe('gRPC -> Mongo (T4.5 bitti sayilir: siparis Mongo da gorulur)', () => {
       .strict()
       .parse(document?.['details']);
     expect(details).toMatchObject({ gift: GIFT, note: 'Zili çalma', doNotRingBell: true });
+    // Odeme secimi (T12.4): kartta yalnizca yontem, tur alani yok (strict).
+    expect(
+      z
+        .object({ method: z.literal('CARD') })
+        .strict()
+        .parse(document?.['payment']),
+    ).toEqual({
+      method: 'CARD',
+    });
 
     // Ayni kayit GetOrder ve ListMyOrders ile de okunur (servis yeniden baslasa da).
     const got = await call(orderV1.OrderServiceService.getOrder, { orderId, userId: 'usr_grpc' });

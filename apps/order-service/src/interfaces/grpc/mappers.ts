@@ -8,9 +8,13 @@
 
 import { ORDER_STATUS } from '@getir/core';
 import type { OrderStatus } from '@getir/core';
-import { commonV1, orderV1 } from '@getir/proto';
+import { commonV1, orderV1, paymentV1 } from '@getir/proto';
 
+import { PAYMENT_METHOD } from '../../domain/checkout-payment.js';
+import type { PaymentMethod } from '../../domain/checkout-payment.js';
 import type { OrderDetails } from '../../domain/order-details.js';
+import { DELIVERY_PAYMENT_KIND } from '../../domain/order-payment.js';
+import type { DeliveryPaymentKind, OrderPayment } from '../../domain/order-payment.js';
 import { ITEM_UNIT } from '../../domain/order-item.js';
 import type { ItemUnit, OrderItem } from '../../domain/order-item.js';
 import type { Order, TimelineEntry } from '../../domain/order.js';
@@ -108,6 +112,28 @@ export function toProtoOrder(
     ...(withDetails && order.details !== undefined
       ? { details: toProtoDetails(order.details) }
       : {}),
+    // Odeme secimi (T12.4) kisisel veri degil: liste de tasir.
+    ...(order.payment === undefined ? {} : { payment: toProtoPayment(order.payment) }),
+  };
+}
+
+const METHOD_TO_PROTO: Readonly<Record<PaymentMethod, paymentV1.PaymentMethod>> = {
+  [PAYMENT_METHOD.CARD]: paymentV1.PaymentMethod.PAYMENT_METHOD_CARD,
+  [PAYMENT_METHOD.CASH_ON_DELIVERY]: paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY,
+};
+
+const KIND_TO_PROTO: Readonly<Record<DeliveryPaymentKind, orderV1.DeliveryPaymentKind>> = {
+  [DELIVERY_PAYMENT_KIND.CASH]: orderV1.DeliveryPaymentKind.DELIVERY_PAYMENT_KIND_CASH,
+  [DELIVERY_PAYMENT_KIND.POS]: orderV1.DeliveryPaymentKind.DELIVERY_PAYMENT_KIND_POS,
+};
+
+function toProtoPayment(payment: OrderPayment): orderV1.OrderPayment {
+  return {
+    method: METHOD_TO_PROTO[payment.method],
+    onDelivery:
+      payment.onDelivery === undefined
+        ? orderV1.DeliveryPaymentKind.DELIVERY_PAYMENT_KIND_UNSPECIFIED
+        : KIND_TO_PROTO[payment.onDelivery],
   };
 }
 

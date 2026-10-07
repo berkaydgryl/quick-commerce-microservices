@@ -8,7 +8,9 @@
 import type { EventName, OrderStatus, RiskBand } from '@getir/core';
 import type { BaseDocument } from '@getir/mongo-kit';
 
+import type { PaymentMethod } from '../../domain/checkout-payment.js';
 import type { ItemUnit } from '../../domain/order-item.js';
+import type { DeliveryPaymentKind } from '../../domain/order-payment.js';
 
 /** Koleksiyon adlari - roadmap "MongoDB Veri Modeli" tablosuyla ayni. */
 export const COLLECTIONS = {
@@ -79,6 +81,8 @@ export interface OrderDocument extends BaseDocument {
   courier?: { courierId: string; assignedAt: Date };
   /** Risk adiminda yazilir (T12.4); ayrintisiz ve T12.4 oncesi sipariste HIC yok. */
   details?: OrderDetailsDocument;
+  /** Odeme secimi (T12.4): yontem ve kapida odemenin turu; eski sipariste HIC yok. */
+  payment?: { method: PaymentMethod; onDelivery?: DeliveryPaymentKind };
   /** Kuryesiz PREPARING'in yeniden deneme ani; yalnizca o durumda var. */
   courierRetryAt?: Date;
   /** Kurye kuyrugundaki yer: odeme ani (#92); kurye ataninca silinir. */

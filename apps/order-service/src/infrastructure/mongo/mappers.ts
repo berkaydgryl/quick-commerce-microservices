@@ -4,6 +4,8 @@
 
 import type { OrderDetails } from '../../domain/order-details.js';
 import type { OrderItem, OrderPricing } from '../../domain/order-item.js';
+import { paymentChoiceOf } from '../../domain/order-payment.js';
+import type { OrderPayment } from '../../domain/order-payment.js';
 import type { Order, TimelineEntry } from '../../domain/order.js';
 import type {
   OrderDetailsDocument,
@@ -94,6 +96,12 @@ function toDetailsDocument(details: OrderDetails): OrderDetailsDocument {
 /** Belge sekli domain'inkiyle ayni; ayri ad, tasimada ayrilabilsin diye. */
 const fromDetailsDocument: (document: OrderDetailsDocument) => OrderDetails = toDetailsDocument;
 
+/** Odeme secimi: domain'in normallestirmesiyle (kartta tur yok, tur yalnizca varsa). */
+function copyPayment(payment: OrderPayment): NonNullable<OrderDocument['payment']> {
+  const { method, onDelivery } = paymentChoiceOf(payment.method, payment.onDelivery);
+  return onDelivery === undefined ? { method } : { method, onDelivery };
+}
+
 export function toOrderDocument(order: Order): OrderDocument {
   return {
     _id: order.id,
@@ -120,6 +128,7 @@ export function toOrderDocument(order: Order): OrderDocument {
           courier: { courierId: order.courier.courierId, assignedAt: order.courier.assignedAt },
         }),
     ...(order.details === undefined ? {} : { details: toDetailsDocument(order.details) }),
+    ...(order.payment === undefined ? {} : { payment: copyPayment(order.payment) }),
     ...(order.courierRetryAt === undefined ? {} : { courierRetryAt: order.courierRetryAt }),
     ...(order.courierQueuedAt === undefined ? {} : { courierQueuedAt: order.courierQueuedAt }),
     createdAt: order.createdAt,
@@ -157,6 +166,7 @@ export function fromOrderDocument(document: OrderDocument): Order {
           },
         }),
     ...(document.details === undefined ? {} : { details: fromDetailsDocument(document.details) }),
+    ...(document.payment === undefined ? {} : { payment: copyPayment(document.payment) }),
     ...(document.courierRetryAt === undefined ? {} : { courierRetryAt: document.courierRetryAt }),
     ...(document.courierQueuedAt === undefined
       ? {}

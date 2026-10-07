@@ -32,6 +32,8 @@ import {
 import type { PaymentMethod, PaymentResult } from '../domain/checkout-payment.js';
 import { assertPaymentMethodAllowed, paymentPolicyOf } from '../domain/checkout-risk.js';
 import type { OrderOutbox } from '../domain/order-outbox.js';
+import { assertSamePayment, paymentChoiceOf } from '../domain/order-payment.js';
+import type { DeliveryPaymentKind } from '../domain/order-payment.js';
 import type { OrderRepository } from '../domain/order-repository.js';
 import type { Order } from '../domain/order.js';
 import { transitionOrder } from '../domain/order.js';
@@ -71,6 +73,11 @@ export interface PaymentChoice {
   readonly method: PaymentMethod;
   readonly cardId?: string;
   readonly cardToken?: string;
+  /**
+   * Kapida odemenin turu (T12.4). Odeme servisine GITMEZ; kayitli secimle
+   * karsilastirilir (tekrar denemede degisemez).
+   */
+  readonly onDelivery?: DeliveryPaymentKind | undefined;
 }
 
 /** Odeme bekleyen siparisin tutarini ceker. Tekrar denemede ayni anahtar gider. */
@@ -88,6 +95,9 @@ export async function chargeOrder(
     // (bekleyen is 124): siparis PAID yazildi, tekrar cekilmez.
     return { order: windowed };
   }
+  // Odeme secimi cekimi belirler (T12.4): kayitlidan farkliysa CONFLICT. Kilit
+  // durumu cozuldukten SONRA: dusmus kilit once dusus kurallarina gider (410).
+  assertSamePayment(windowed, paymentChoiceOf(choice.method, choice.onDelivery));
 
   const result = await deps.payments.charge(
     {
