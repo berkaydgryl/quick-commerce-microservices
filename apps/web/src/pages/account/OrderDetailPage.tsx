@@ -1,3 +1,4 @@
+import { useId, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
 import { RequireAuth } from '../../features/auth/ui/RequireAuth';
@@ -5,6 +6,7 @@ import { useOrdersContent } from '../../features/content/hooks/useOrdersContent'
 import { useMarket } from '../../features/markets/hooks/useMarket';
 import { useOrderDetail } from '../../features/orders/hooks/useOrderDetail';
 import { ORDERS_PATH } from '../../features/orders/routes';
+import { CourierTracking } from '../../features/tracking/ui/CourierTracking';
 import { useSessionStore } from '../../shared/session/session-store';
 import { PageLayout } from '../../shared/ui/page-layout/PageLayout';
 
@@ -33,7 +35,8 @@ function SignedInOrderDetail() {
 /**
  * Sayfa BAGLAR: siparis (GET /v1/orders/{id}) ve market adi (katalog,
  * GET /v1/markets/{id}; siparis gelince istenir). Market bulunamazsa ya da
- * katalog cevap vermezse genel ad ("Market"): siparis yine gorunur.
+ * katalog cevap vermezse genel ad ("Market"): siparis yine gorunur. Kurye
+ * takibi (F22): "Kuryem nerede" penceresi ve yaklasma bildirimi.
  */
 function OrderDetailSection({
   userId,
@@ -47,6 +50,8 @@ function OrderDetailSection({
   const market = useMarket(order.data?.marketId);
   const marketName =
     market.data?.name ?? (market.error === null ? undefined : texts?.unknownMarketLabel);
+  const [courierOpen, setCourierOpen] = useState(false);
+  const courierButtonId = useId();
 
   return (
     <AccountLayout userId={userId} variant="nested">
@@ -58,6 +63,19 @@ function OrderDetailSection({
           error={order.error}
           onRetry={() => void order.refetch()}
           listHref={ORDERS_PATH}
+          onWhereIsCourier={() => setCourierOpen(true)}
+          courierButtonId={courierButtonId}
+        />
+      )}
+      {order.data !== undefined && (
+        <CourierTracking
+          userId={userId}
+          orderId={order.data.id}
+          status={order.data.status}
+          addressLine={order.data.address.line}
+          open={courierOpen}
+          onOpenChange={setCourierOpen}
+          returnFocusId={courierButtonId}
         />
       )}
     </AccountLayout>

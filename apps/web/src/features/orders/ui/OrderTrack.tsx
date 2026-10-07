@@ -22,6 +22,8 @@ interface OrderTrackProps {
   readonly texts: OrderTrackTexts;
   /** "Kuryem nerede" penceresini acar (F22); verilmezse dugme pasif kalir. */
   readonly onWhereIsCourier?: () => void;
+  /** Dugmenin kimligi: pencere kapaninca odak buraya donebilsin (F22). */
+  readonly courierButtonId?: string;
 }
 
 const LABEL_KEY: Readonly<Record<TrackStep, keyof OrderTrackTexts>> = {
@@ -49,7 +51,7 @@ const PROGRESS_CLASS: Readonly<Record<TrackStep, string | undefined>> = {
  * (kurye isi bitti; PM 07.10). Cizgi disi durumda (odeme
  * oncesi, inceleme, iptal) hicbir sey cizilmez. Durumsuz.
  */
-export function OrderTrack({ status, texts, onWhereIsCourier }: OrderTrackProps) {
+export function OrderTrack({ status, texts, onWhereIsCourier, courierButtonId }: OrderTrackProps) {
   const titleId = useId();
   const hintId = useId();
   const current = trackStep(status);
@@ -82,6 +84,7 @@ export function OrderTrack({ status, texts, onWhereIsCourier }: OrderTrackProps)
       {current !== 'delivered' && (
         <div className={styles['c-order-track__actions']}>
           <button
+            id={courierButtonId}
             type="button"
             className={styles['c-order-track__courier']}
             disabled={current !== 'onTheWay' || onWhereIsCourier === undefined}

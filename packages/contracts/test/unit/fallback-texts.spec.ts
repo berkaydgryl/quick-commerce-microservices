@@ -35,6 +35,7 @@ const WELCOME = JSON.parse(
   footer: unknown;
   checkout: unknown;
   confirm: unknown;
+  courierTracking: unknown;
 };
 
 /** Yapidaki butun metinler (dizi ve ic nesneler dahil). */
@@ -106,6 +107,10 @@ describe('CONTENT_FALLBACK', () => {
 
   it('Gecmis Siparislerim metinleri (T11.16) welcome.json orders ile birebir', () => {
     expect(CONTENT_FALLBACK.orders).toEqual(WELCOME.orders);
+  });
+
+  it('kurye takibi metinleri (F22) welcome.json courierTracking ile birebir', () => {
+    expect(CONTENT_FALLBACK.courierTracking).toEqual(WELCOME.courierTracking);
   });
 
   it('ust bar ve adres penceresi (F21): appHeader, addressSetup ve "Kapat" welcome.json ile ayni', () => {

@@ -87,6 +87,11 @@
   --size-map-pin: 2.75rem;
   --size-map-pin-icon: 1.25rem;
 
+  /* Kurye haritasi (F22): kurye ve market isareti, rota kalinligi. Harita
+     adres haritasinin olcusunde (--size-address-map), ev pimi --size-map-pin. */
+  --size-tracking-marker: 2.25rem;
+  --size-tracking-route: 0.25rem;
+
   /* Market listesi (T11.12; referans getircarsi): sol menunun kucuk gorseli
      ve oku, kart kapaginin orani, kapaktaki rozet ya da 2:1 logo (sol ortada,
      soldan yuzde; 07.10), puan yildizi, Sepetim'in bos durum ikonu ve telefondaki

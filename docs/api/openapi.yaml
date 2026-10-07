@@ -3893,6 +3893,7 @@ components:
           footer,
           checkout,
           confirm,
+          courierTracking,
         ]
       properties:
         header:
@@ -3956,6 +3957,8 @@ components:
           $ref: "#/components/schemas/CheckoutContent"
         confirm:
           $ref: "#/components/schemas/ConfirmContent"
+        courierTracking:
+          $ref: "#/components/schemas/CourierTrackingContent"
 
     ConfirmContent:
       type: object
@@ -3966,6 +3969,56 @@ components:
       properties:
         yesLabel: { $ref: "#/components/schemas/ContentText" }
         noLabel: { $ref: "#/components/schemas/ContentText" }
+
+    CourierTrackingContent:
+      type: object
+      description: |
+        Kurye takibi (F22; T13.3 aşama 1): "Kuryem nerede" penceresi (başlık, "Kuryen" ve
+        kısaltılmış ad, harita, tahmini varış "~8 dk", kalan mesafe "1,2 km" / "300 m",
+        teslimat adresi, aşama cümleleri) ve kurye yaklaşınca sağ üstteki bildirim
+        ("Konumu gör" aynı pencereyi açar). Konum, süre ve mesafe takip ucundan.
+      required:
+        [
+          title,
+          closeLabel,
+          courierLabel,
+          mapLabel,
+          etaLabel,
+          etaPrefix,
+          minuteSuffix,
+          distanceLabel,
+          kilometerSuffix,
+          meterSuffix,
+          addressLabel,
+          loadingLabel,
+          pickupNotice,
+          deliveredNotice,
+          unavailableNotice,
+          retryLabel,
+          approachTitle,
+          approachActionLabel,
+          approachCloseLabel,
+        ]
+      properties:
+        title: { $ref: "#/components/schemas/ContentText" }
+        closeLabel: { $ref: "#/components/schemas/ContentText" }
+        courierLabel: { $ref: "#/components/schemas/ContentText" }
+        mapLabel: { $ref: "#/components/schemas/ContentText" }
+        etaLabel: { $ref: "#/components/schemas/ContentText" }
+        etaPrefix: { $ref: "#/components/schemas/ContentText" }
+        minuteSuffix: { $ref: "#/components/schemas/ContentText" }
+        distanceLabel: { $ref: "#/components/schemas/ContentText" }
+        kilometerSuffix: { $ref: "#/components/schemas/ContentText" }
+        meterSuffix: { $ref: "#/components/schemas/ContentText" }
+        addressLabel: { $ref: "#/components/schemas/ContentText" }
+        loadingLabel: { $ref: "#/components/schemas/ContentText" }
+        pickupNotice: { $ref: "#/components/schemas/ContentText" }
+        deliveredNotice: { $ref: "#/components/schemas/ContentText" }
+        unavailableNotice: { $ref: "#/components/schemas/ContentText" }
+        retryLabel: { $ref: "#/components/schemas/ContentText" }
+        approachTitle: { $ref: "#/components/schemas/ContentText" }
+        approachActionLabel: { $ref: "#/components/schemas/ContentText" }
+        approachCloseLabel: { $ref: "#/components/schemas/ContentText" }
 
     FavoritesContent:
       type: object
