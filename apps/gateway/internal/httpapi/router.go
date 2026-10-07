@@ -26,6 +26,7 @@ package httpapi
 //   cards.go      - /v1/me/cards uclari (kart kasasi, T11.17)
 //   card_attempts.go - kart ekleme deneme siniri (T11.17, K2)
 //   realtime.go   - GET /v1/orders/{id}/token (siparis odasi jetonu, T12.2)
+//   tracking.go   - GET /v1/orders/{id}/tracking (kurye takibi, T14.2)
 //   identity.go   - kullanici kimligi (Bearer erisim jetonu, T8.1)
 //   device.go     - cihaz cerezi (risk sinyali, T8.1)
 //   idempotency.go- Idempotency-Key basligi ve tekrar korumasi (ADR-08, T8.2)
