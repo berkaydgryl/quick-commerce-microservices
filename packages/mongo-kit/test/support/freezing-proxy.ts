@@ -41,10 +41,22 @@ function forward(to: Socket, chunk: Chunk): void {
   }
 }
 
-export async function startFreezingProxy(target: {
-  readonly host: string;
-  readonly port: number;
-}): Promise<FreezingProxy> {
+export interface FreezingProxyOptions {
+  /**
+   * Donukken istemcinin yazdigi her parca vekilde bekletildikten SONRA cagrilir: test, beklenen
+   * istegin (orn. bir koleksiyona yazim) Mongo'nun kapisina geldigini uykusuz bilir. Bir komut
+   * birden cok parcaya bolunebilir; gozlemci parcalari biriktirip aramalidir.
+   */
+  readonly onHeld?: (chunk: Buffer) => void;
+}
+
+export async function startFreezingProxy(
+  target: {
+    readonly host: string;
+    readonly port: number;
+  },
+  options: FreezingProxyOptions = {},
+): Promise<FreezingProxy> {
   let frozen = false;
   const relays = new Set<Relay>();
 
@@ -77,7 +89,12 @@ export async function startFreezingProxy(target: {
       },
     };
     relays.add(relay);
-    client.on('data', (chunk: Buffer) => send(toUpstream, upstream, chunk));
+    client.on('data', (chunk: Buffer) => {
+      const holding = frozen;
+      send(toUpstream, upstream, chunk);
+      // Once kuyruga, sonra gozlemciye: gozlemci hata firlatsa da parca kaybolmaz.
+      if (holding) options.onHeld?.(chunk);
+    });
     client.on('end', () => send(toUpstream, upstream, END));
     upstream.on('data', (chunk: Buffer) => send(toClient, client, chunk));
     upstream.on('end', () => send(toClient, client, END));
