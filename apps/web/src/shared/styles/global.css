@@ -1,7 +1,8 @@
 /*
  * global.css YALNIZCA reset, token ve temel tipografi tasir (proje kurali).
  * Bilesene ozel stil bilesenin kendi modulundedir (*.module.css).
- * Yukleme sirasi main.tsx'tedir: tokens.css -> breakpoints.css -> global.css.
+ * Yukleme sirasi main.tsx'tedir: tokens.css -> layout/tokens.css ->
+ * payment-card/tokens.css -> global.css (breakpoints.css derlemede).
  */
 
 /* --- Reset --- */
