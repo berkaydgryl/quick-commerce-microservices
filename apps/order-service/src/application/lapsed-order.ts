@@ -34,12 +34,13 @@
 import { ERROR_CODES, ORDER_STATUS } from '@getir/core';
 import type { Clock } from '@getir/core';
 
-import { REFUND_REASON, refundIdempotencyKey } from '../domain/checkout-payment.js';
+import { PAYMENT_STATUS, REFUND_REASON, refundIdempotencyKey } from '../domain/checkout-payment.js';
 import type { PaymentStatus, RefundReason } from '../domain/checkout-payment.js';
 import { refundRequestedEvent, statusChangedEvents } from '../domain/order-events.js';
 import type { RefundRequest } from '../domain/order-events.js';
 import type { Order } from '../domain/order.js';
 import { transitionOrder } from '../domain/order.js';
+import { PAYMENT_ALREADY_REFUNDED, withRefund } from '../domain/order-refund.js';
 import { PAYMENT_STANDING, paymentStandingOf } from '../domain/payment-standing.js';
 import { RELEASE_REASON } from '../domain/stock-reservation.js';
 import { isConflict, paidOrder, tryWriteTransition } from './order-transition.js';
@@ -95,7 +96,15 @@ export async function closeLapsedOrder(
     return { kind: 'in-flight', paymentStatus: payment.status };
   }
   if (standing !== PAYMENT_STANDING.CHARGED) {
-    return closeWithoutStock(deps, order, false, scope);
+    // Para alinip baska yolda iade edilmisse (odeme cakismasinda dogrudan iade,
+    // siparis o an acikti) kapatma isareti yazar: siparis gecmiste kalir (#166).
+    return closeWithoutStock(
+      deps,
+      order,
+      false,
+      scope,
+      payment?.status === PAYMENT_STATUS.REFUNDED,
+    );
   }
   return completeOrRefund(deps, order, scope);
 }
@@ -103,18 +112,21 @@ export async function closeLapsedOrder(
 /**
  * Kilitsiz kapatma: CANCELLED (RESERVATION_EXPIRED), para alinmissa iade komutu
  * ayni yazimda; sonra kilit birakilir ve dogrudan iade denenir. Odeme adimi da
- * kullanir: Commit kilidi bulamadiysa (payment-step.ts).
+ * kullanir: Commit kilidi bulamadiysa (payment-step.ts). `alreadyRefunded`:
+ * para alinmis ve baska yolda zaten iade edilmis; komut yazilmaz, yalnizca
+ * kalici iade isareti (#166).
  */
 export async function closeWithoutStock(
   deps: LapseDeps,
   order: Order,
   charged: boolean,
   scope: RequestScope,
+  alreadyRefunded = false,
 ): Promise<StocklessClose> {
   const refund: RefundRequest | undefined = charged
     ? { reason: REFUND_REASON.RESERVATION_EXPIRED, idempotencyKey: refundIdempotencyKey(order.id) }
     : undefined;
-  if (!(await cancelLapsed(deps, order, refund, scope))) {
+  if (!(await cancelLapsed(deps, order, refund, alreadyRefunded, scope))) {
     if (refund !== undefined) {
       const latest = await deps.repository.findById(order.id);
       await refundIfCancelledElsewhere(
@@ -198,26 +210,32 @@ async function refundIfCancelledElsewhere(
 
 /**
  * Siparisi CANCELLED (RESERVATION_EXPIRED) yazar - para alinmissa iade komutu
- * ayni yazimda - sonra kilidi birakir.
+ * ve kalici iade isareti (#166, gecmiste kalir) ayni yazimda - sonra kilidi
+ * birakir.
  * @returns yazildi mi? (false: surum cakismasi, siparis baska yolda ilerledi)
  */
 async function cancelLapsed(
   deps: LapseDeps,
   order: Order,
   refund: RefundRequest | undefined,
+  alreadyRefunded: boolean,
   scope: RequestScope,
 ): Promise<boolean> {
-  const cancelled = transitionOrder(
+  const closed = transitionOrder(
     order,
     ORDER_STATUS.CANCELLED,
     deps.clock,
     ERROR_CODES.RESERVATION_EXPIRED,
   );
+  // Isaretin ani ve iade komutunun ani ayni (goc 0003 isareti komutun anindan yazar).
+  const at = deps.clock.date();
+  const reason = refund?.reason ?? (alreadyRefunded ? PAYMENT_ALREADY_REFUNDED : undefined);
+  const cancelled = reason === undefined ? closed : withRefund(closed, { reason, requestedAt: at });
   const statusEvents = statusChangedEvents(order, cancelled);
   const events =
     refund === undefined
       ? statusEvents
-      : [...statusEvents, refundRequestedEvent(cancelled, refund, deps.clock.date())];
+      : [...statusEvents, refundRequestedEvent(cancelled, refund, at)];
   try {
     await deps.repository.update(cancelled, order.version, events);
   } catch (error: unknown) {

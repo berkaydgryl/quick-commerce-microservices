@@ -92,6 +92,11 @@ export interface OrderDocument extends BaseDocument {
   details?: OrderDetailsDocument;
   /** Odeme secimi (T12.4): yontem ve kapida odemenin turu; eski sipariste HIC yok. */
   payment?: { method: PaymentMethod; onDelivery?: DeliveryPaymentKind };
+  /**
+   * Alinan paranin iadesi baslatildi (#166): gerekce ve an; tutar YOK. Iade
+   * isaretsiz sipariste HIC yazilmaz; #166 oncesi kayitlari goc 0003 doldurur.
+   */
+  refund?: { reason: string; requestedAt: Date };
   /** Kuryesiz PREPARING'in yeniden deneme ani; yalnizca o durumda var. */
   courierRetryAt?: Date;
   /** Kurye kuyrugundaki yer: odeme ani (#92); kurye ataninca silinir. */
