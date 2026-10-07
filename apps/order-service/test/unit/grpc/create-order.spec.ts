@@ -105,6 +105,7 @@ describe('CreateOrder', () => {
     const { error } = await createOrder({
       paymentMethod: paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY,
       cardToken: '',
+      onDelivery: orderV1.DeliveryPaymentKind.DELIVERY_PAYMENT_KIND_CASH,
     });
 
     expect(error?.code).toBe(GRPC_STATUS.FAILED_PRECONDITION);
@@ -131,7 +132,10 @@ describe('CreateOrder', () => {
     ['kartli odemede kart yok', { cardToken: '' }, 'cardId'],
     [
       'kapida odemede jeton dolu',
-      { paymentMethod: paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY },
+      {
+        paymentMethod: paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY,
+        onDelivery: orderV1.DeliveryPaymentKind.DELIVERY_PAYMENT_KIND_CASH,
+      },
       'cardToken',
     ],
     ['ayrinti yok (T12.4)', { details: undefined }, 'details'],

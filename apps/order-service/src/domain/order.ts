@@ -14,6 +14,7 @@ import { ID_PREFIX, newId, ORDER_STATUS } from '@getir/core';
 import type { Clock, OrderStatus, RiskBand } from '@getir/core';
 
 import type { OrderDetails } from './order-details.js';
+import type { OrderPayment } from './order-payment.js';
 import type { OrderItem, OrderPricing } from './order-item.js';
 import { assertTransition } from './order-state-machine.js';
 
@@ -135,6 +136,11 @@ export interface Order {
    * yaziminda (risk adimi) kaydedilir, sonra degismez. Ayrintisiz sipariste yok.
    */
   readonly details?: OrderDetails;
+  /**
+   * Odeme secimi (T12.4): yontem ve kapida odemenin turu; risk adiminin
+   * yaziminda kaydedilir, odeme bekleyen sipariste degismez. Eski sipariste yok.
+   */
+  readonly payment?: OrderPayment;
   readonly createdAt: Date;
   readonly updatedAt: Date;
   /**

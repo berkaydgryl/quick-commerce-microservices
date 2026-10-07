@@ -23,7 +23,7 @@ import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-or
 import { FakePayments, TEST_CARD } from '../support/fake-payments.js';
 import { FakeStockReservations, TEST_LOCK_POLICY } from '../support/fake-stock-reservations.js';
 import { FakeRiskAssessment } from '../support/fake-risk-assessment.js';
-import { insertDraft } from '../support/order-builders.js';
+import { insertAwaitingPayment, insertDraft } from '../support/order-builders.js';
 
 const clock = fixedClock(1_760_000_000_000);
 const byCard = (cardToken: string) => ({ method: PAYMENT_METHOD.CARD, cardToken }) as const;
@@ -120,10 +120,8 @@ describe('CreateOrder - tekrar deneme (cekim cevabi kayboldu)', () => {
     ]);
   });
 
-  it('tekrar denemede kayitli bandin kurali gecerli: MEDIUM siparis kapida odemeye donemez', async () => {
-    risk.band = RISK_BANDS.MEDIUM;
-    const { id } = await insertDraft(repository, clock);
-    await create({ orderId: id, userId: 'usr_1', ...byCard(TEST_CARD.APPROVED) }, scopeWith());
+  it('tekrar denemede kayitli bandin kurali gecerli: secimi kayitsiz (eski) MEDIUM siparis kapida odemeye donemez', async () => {
+    const { id } = await insertAwaitingPayment(repository, clock, RISK_BANDS.MEDIUM);
 
     await expect(
       create(
@@ -131,6 +129,27 @@ describe('CreateOrder - tekrar deneme (cekim cevabi kayboldu)', () => {
         scopeWith(),
       ),
     ).rejects.toMatchObject({ code: ERROR_CODES.PAYMENT_METHOD_NOT_ALLOWED });
+    expect(payments.charges).toEqual([]);
+  });
+
+  it('odeme bekleyen sipariste yontem degisirse CONFLICT (T12.4): kartla baslayan kapida odemeye donemez', async () => {
+    const { id } = await insertDraft(repository, clock);
+    payments.chargeFailure = new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'payment kapali');
+    await create(
+      { orderId: id, userId: 'usr_1', ...byCard(TEST_CARD.APPROVED) },
+      scopeWith(),
+    ).catch(() => undefined);
+    payments.chargeFailure = undefined;
+
+    await expect(
+      create(
+        { orderId: id, userId: 'usr_1', method: PAYMENT_METHOD.CASH_ON_DELIVERY },
+        scopeWith(),
+      ),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.CONFLICT,
+      details: { orderId: id, field: 'paymentMethod' },
+    });
     expect(payments.charges).toHaveLength(1);
   });
 

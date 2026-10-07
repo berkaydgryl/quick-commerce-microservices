@@ -49,3 +49,26 @@ describe('Mongo eslemesi: siparis ayrintisi', () => {
     expect(fromOrderDocument(toOrderDocument(order))).not.toHaveProperty('details');
   });
 });
+
+describe('Mongo eslemesi: odeme secimi (T12.4)', () => {
+  it.each([[{ method: 'CASH_ON_DELIVERY', onDelivery: 'POS' }], [{ method: 'CARD' }]] as const)(
+    '%o: belgede birebir, geri okuma ayni',
+    async (payment) => {
+      const order = { ...(await insertDraft(new InMemoryOrderStore(), clock)), payment };
+
+      const document = toOrderDocument(order);
+
+      expect(document.payment).toEqual(payment);
+      expect(fromOrderDocument(document)).toEqual(order);
+    },
+  );
+
+  it('kartta tur alani belgede HIC yok; secimsiz (eski) sipariste payment yok', async () => {
+    const draft = await insertDraft(new InMemoryOrderStore(), clock);
+
+    expect(toOrderDocument({ ...draft, payment: { method: 'CARD' } }).payment).not.toHaveProperty(
+      'onDelivery',
+    );
+    expect(toOrderDocument(draft)).not.toHaveProperty('payment');
+  });
+});
