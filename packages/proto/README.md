@@ -15,26 +15,27 @@ packages/proto/
 ├── buf.gen.ts.yaml       # TypeScript üretimi (ts-proto)   — eklenti node_modules'ten
 ├── buf.gen.go.yaml       # Go üretimi (protoc-gen-go[-grpc]) — eklenti `go install`'dan
 ├── package.json          # @getir/proto — npm paketi olarak dışarı verilen yüzey
-├── tsconfig.json         # üretilen TS'in tip denetimi (gen/ts + test)
+├── tsconfig.json         # tip denetimi: gen/ts + test + scripts (checkJs)
 ├── tsconfig.build.json   # gen/ts -> dist derlemesi
 ├── go.mod / go.sum       # üretilen Go kodunun modülü
 ├── tools.go              # `go mod tidy`'nin require satırlarını silmesini engeller
 ├── scripts/
-│   └── write-barrel.mjs  # gen/ts/index.ts üreteci (paketin tek giriş noktası)
+│   ├── write-barrel.mjs  # gen/ts/index.ts üreteci (paketin tek giriş noktası; okur, yazar)
+│   └── barrel-render.mjs # barrel ve paket index'inin saf üretimi (test edilir)
 ├── proto/                # <-- import kökü
 │   └── getir/
 │       ├── common/v1/common.proto    # package getir.common.v1
 │       └── catalog/v1/catalog.proto  # package getir.catalog.v1
 ├── test/unit/            # üretilen kodun çalışma zamanı testleri
 ├── gen/                  # ÜRETİLEN kod — commit EDİLMEZ (aşağıya bakın)
-│   ├── ts/               #   index.ts + getir/**/*.ts
+│   ├── ts/               #   index.ts + getir/**/*.ts (+ package-index.ts)
 │   └── go/               #   getir/**/*.pb.go
 └── dist/                 # gen/ts'in derlenmiş hâli — commit EDİLMEZ
 ```
 
-> **Bu pakette elle yazılmış TypeScript yoktur.** `src/` klasörü bilerek yoktur: paketin
-> TypeScript yüzeyinin tamamı `.proto` dosyalarından üretilir. Elle yazılan tek TS, üretilen
-> kodu sınayan `test/unit/generated.spec.ts` dosyasıdır.
+> **Paketin TypeScript yüzeyi elle yazılmaz.** `src/` klasörü bilerek yoktur: dışarı verilen
+> her şey `.proto` dosyalarından üretilir. Elle yazılanlar yalnızca testler (`test/unit/`) ve
+> üretim betikleridir (`scripts/*.mjs`, JSDoc tipleriyle `checkJs` altında denetlenir).
 
 ### Paket adı = dizin yolu
 
@@ -66,6 +67,7 @@ Ek adlandırma kuralları:
 | `catalog/v1/catalog.proto`      | Market, ürün, teklif, kategori (ADR-15)          | T1.6, T4.7 |
 | `inventory/v1/inventory.proto`  | Stok ve rezervasyon RPC'leri                     | T2.1       |
 | `order/v1/order.proto`          | Sipariş yaşam döngüsü                            | T2.1       |
+| `order/v1/checkout.proto`       | Sipariş girdileri: ödeme, ayrıntı, sinyaller     | T12.4, D18 |
 | `payment/v1/payment.proto`      | Ödeme yetkilendirme ve iade                      | T2.1       |
 | `risk/v1/risk.proto`            | Risk/fraud değerlendirmesi                       | T2.1       |
 | `courier/v1/courier.proto`      | Kurye atama ve rota                              | T2.1       |
@@ -290,6 +292,19 @@ verir. Düz `export *` ile yedi dosyanın yedisi aynı adı verir ve paket hiç 
 `Money` ve `GeoPoint` gibi ortak tipler birden çok dosyadan yeniden dışarı verilebilir.
 Ad alanı bu sınıfın tamamını kökten çözer ve çağrı yerinde tipin hangi sözleşmeden geldiğini
 okunur kılar.
+
+**Çok dosyalı paket (#135, D18):** bir proto paketi (klasör) birden çok `.proto` taşıyabilir;
+örneğin `getir.order.v1` = `order.proto` (servis ve sipariş) + `checkout.proto` (CheckoutSignals,
+OrderDetails, GiftDetails, OrderPayment, DeliveryPaymentKind). Üreteç o klasöre
+`package-index.ts` yazar (dosyaların hepsi `export *`; tireli ad bir `.proto` dosyasından
+üretilemez, çakışmaz) ve ad alanını ondan verir. ts-proto'nun her dosyada tekrarladığı yardımcılar
+(`protobufPackage`, `DeepPartial`, `MessageFns`) onları dışa veren alfabetik ilk dosyadan
+**açıkça** yeniden dışarı verilir, çünkü iki `export *` aynı adı belirsiz bırakır (TS2308).
+Yardımcı dışında bir ad iki dosyada varsa üretim durur; buf şablonlarındaki `clean: true` silinen
+ya da taşınan `.proto`'nun eski çıktısını bırakmaz. Tüketici yolu (`orderV1.X`) değişmez. Çıktı deterministiktir: aynı girdi bayt bayt aynı dosyaları üretir (sıralama kod birimi
+sırasıyla, yerel ayara bağlı değil). Kural `scripts/barrel-render.mjs`'te, testi
+`test/unit/barrel-render.spec.ts`. Dosya bölmek tel ve JSON biçimini değiştirmez (buf `WIRE_JSON`):
+mesaj adları, alan numaraları ve tam nitelikli adlar aynı kalır.
 
 ### Zod şemaları ile ilişkisi
 

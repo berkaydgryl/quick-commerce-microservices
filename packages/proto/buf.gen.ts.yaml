@@ -13,6 +13,12 @@
 # ailesini yapilandirir.
 version: v2
 
+# clean: true  (#135, D18)
+# Uretimden once gen/ts silinir. Bir .proto silinir ya da tasinirsa eski ciktisi
+# klasorde KALMAZ; kalsaydi barrel onu yeniden disa verir, cok dosyali pakette
+# ayni mesaj iki dosyadan gelirdi (write-barrel.mjs bunu hata sayar).
+clean: true
+
 # Managed mode kapali. Gerekcesi buf.gen.go.yaml icinde (go_package elle yazilir);
 # TypeScript tarafini ilgilendiren bir ayar degil, ama iki sablonun ayni sekilde
 # davranmasi icin burada da acikca kapatiliyor.
