@@ -3,6 +3,9 @@
  * migrate). Surec yalnizca ortam degiskenleriyle yonetilir; sonuc cikis kodundan ve JSON gunluk
  * satirlarindan okunur. CI'da `pnpm build` entegrasyon testlerinden once kosar; yerelde once
  * derleyin.
+ *
+ * Genel baslatici (startProcess) servisten bagimsizdir: order'in devre kesici kaniti da kullanir
+ * (D17, #123). Ortak test yardimcisina tasinmasi bekleyen is #106.
  */
 
 import { spawn } from 'node:child_process';
@@ -60,18 +63,17 @@ const INHERITED_ENV = ['PATH', 'HOME', 'TMPDIR'] as const;
  * Alt surecin ortami SIFIRDAN kurulur: gelistiricinin kabugundaki ya da CI'daki servis
  * degiskenleri (SWEEPER_*, MONGO_*, NODE_OPTIONS...) sonucu degistirmesin.
  */
-function baseEnv(
-  stores: StoresAddress,
-  extra: Readonly<Record<string, string>>,
-): NodeJS.ProcessEnv {
-  const inherited = Object.fromEntries(
+function inheritedEnv(): Record<string, string> {
+  return Object.fromEntries(
     INHERITED_ENV.flatMap((key) => {
       const value = process.env[key];
       return value === undefined ? [] : [[key, value]];
     }),
   );
+}
+
+function inventoryEnv(stores: StoresAddress): Record<string, string> {
   return {
-    ...inherited,
     MOCK: 'false',
     NODE_ENV: 'development',
     LOG_LEVEL: 'info',
@@ -79,11 +81,22 @@ function baseEnv(
     INVENTORY_MONGO_DB: stores.mongoDb,
     REDIS_URL: stores.redisUrl,
     REDIS_CONNECT_TIMEOUT_MS: '3000',
-    ...extra,
   };
 }
 
-export interface RunningInventory {
+/** Gercek surec olarak acilacak servis. */
+export interface ProcessSpec {
+  /** Calistirilacak giris (dist/main.js). */
+  readonly entry: string;
+  /** "Hazir" gunluk satirinin msg'si. */
+  readonly readyMessage: string;
+  /** gRPC portunun ortam degiskeni (orn. ORDER_GRPC_PORT); port testte bos porttan secilir. */
+  readonly portEnv: string;
+  /** Servisin ortami; kabuktan yalnizca PATH, HOME ve TMPDIR gelir. */
+  readonly env: Readonly<Record<string, string>>;
+}
+
+export interface RunningProcess {
   readonly child: ChildProcess;
   readonly port: number;
   readonly ready: boolean;
@@ -94,6 +107,9 @@ export interface RunningInventory {
   /** stdout + stderr; surec yasadikca buyur. */
   output(): string;
 }
+
+/** Stok servisinin sureci (eski ad; genel tip RunningProcess). */
+export type RunningInventory = RunningProcess;
 
 const running: ChildProcess[] = [];
 
@@ -121,30 +137,41 @@ async function freePort(): Promise<number> {
   throw new Error('bos port bulunamadi');
 }
 
+/** Stok servisini acar (startProcess). */
+export function startInventory(
+  stores: StoresAddress,
+  extra: Readonly<Record<string, string>> = {},
+): Promise<RunningInventory> {
+  return startProcess({
+    entry: ENTRY.MAIN,
+    readyMessage: READY_MESSAGE,
+    portEnv: 'INVENTORY_GRPC_PORT',
+    env: { ...inventoryEnv(stores), ...extra },
+  });
+}
+
 /**
  * Servisi acar; "hazir" satirini ya da cikisi bekler. Port arada baskasina gectiyse (EADDRINUSE)
  * yeni portla tekrar dener; acilmayan servis (ready false) oldugu gibi doner.
  */
-export async function startInventory(
-  stores: StoresAddress,
-  extra: Readonly<Record<string, string>> = {},
-): Promise<RunningInventory> {
+export async function startProcess(spec: ProcessSpec): Promise<RunningProcess> {
   for (let attempt = 1; ; attempt += 1) {
-    const started = await startOn(await freePort(), stores, extra);
+    const started = await startOn(await freePort(), spec);
     if (started.ready || !started.output().includes(PORT_IN_USE) || attempt === START_ATTEMPTS) {
       return started;
     }
   }
 }
 
-function startOn(
-  port: number,
-  stores: StoresAddress,
-  extra: Readonly<Record<string, string>>,
-): Promise<RunningInventory> {
+function startOn(port: number, spec: ProcessSpec): Promise<RunningProcess> {
   const startedAt = Date.now();
-  const child = spawn(process.execPath, [ENTRY.MAIN], {
-    env: baseEnv(stores, { GRPC_HOST: ANY_HOST, INVENTORY_GRPC_PORT: String(port), ...extra }),
+  const child = spawn(process.execPath, [spec.entry], {
+    env: {
+      ...inheritedEnv(),
+      GRPC_HOST: ANY_HOST,
+      [spec.portEnv]: String(port),
+      ...spec.env,
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   running.push(child);
@@ -164,7 +191,7 @@ function startOn(
     // Sure dolarsa olur; ardindan gelen 'close' sonucu yazar.
     const timer = setTimeout(() => child.kill('SIGKILL'), START_TIMEOUT_MS);
     const onData = (): void => {
-      if (logLines(output, READY_MESSAGE).length > 0) finish(true);
+      if (logLines(output, spec.readyMessage).length > 0) finish(true);
     };
     // 'exit' degil 'close' (#135, courier QA ile ayni): exit geldiginde cikti borusu henuz
     // okunmamis olabilir; son satir (fatal, EADDRINUSE) kacarsa ne tekrar ne de denetim gorur.
@@ -194,7 +221,7 @@ function startOn(
 }
 
 /** Acik kalan butun surecleri kapatir (SIGKILL: test temizligi zarif kapanisi sinamaz). */
-export async function stopAllInventories(): Promise<void> {
+export async function stopAllProcesses(): Promise<void> {
   await Promise.all(
     running.splice(0).map(
       (child) =>
@@ -236,7 +263,7 @@ export function runCli(
 ): Promise<CliRun> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [entry, ...args], {
-      env: baseEnv(stores, extra),
+      env: { ...inheritedEnv(), ...inventoryEnv(stores), ...extra },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let output = '';
@@ -289,3 +316,6 @@ export async function waitUntil(
   }
   return condition();
 }
+
+/** Eski ad (stok testleri). */
+export const stopAllInventories = stopAllProcesses;
