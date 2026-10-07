@@ -70,6 +70,9 @@
   /* Logo yazisinin harf araligi: yazi boyutuna gore (em). */
   --letter-spacing-logo: -0.02em;
 
+  /* 3DS kodu (T12.4): alti rakam birbirinden ayrik okunsun. */
+  --letter-spacing-otp: 0.3em;
+
   /* Akiskan yazi olcegi: dar ekranda alt sinir, genis ekranda ust sinir, arada
      ekran genisligiyle orantili (roadmap P6). */
   --font-size-xs: clamp(0.75rem, 0.72rem + 0.15vw, 0.8125rem);

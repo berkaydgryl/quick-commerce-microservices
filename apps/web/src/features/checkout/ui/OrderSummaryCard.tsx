@@ -15,21 +15,32 @@ interface OrderSummaryCardProps {
   readonly agreementsAccepted: boolean;
   readonly onAgreementsChange: (accepted: boolean) => void;
   readonly texts: CheckoutContent;
+  /** Ilk eksik kosulun cumlesi (N1); varken dugme pasif ve cumle altinda. */
+  readonly blocker: string | undefined;
+  /** Istek suruyor: dugme "Sipariş veriliyor…" ve pasif. */
+  readonly busy: boolean;
+  readonly onPlace: () => void;
 }
 
 /**
  * Odeme Ozeti (T17.1; referans getircarsi #33; KAMPANYA YOK): "Sepet Tutarı",
  * "Teslimat Ücreti" (PM karari M5) ve "Ödenecek Tutar"; altinda ayri kartta
- * sozlesme onayi; en altta "Sipariş Ver" ve tutari. Dugme siparis akisi (F4b) gelene kadar PASIF.
- * Hesap @getir/pricing'te; durumsuz.
+ * sozlesme onayi; en altta "Sipariş Ver" ve tutari. Eksik kosul varken ya da
+ * istek surerken dugme PASIF (aria-disabled: odaklanir, basilmaz) ve altinda
+ * ilk eksik yazar (aria-describedby). Hesap @getir/pricing'te; durumsuz.
  */
 export function OrderSummaryCard({
   totals,
   agreementsAccepted,
   onAgreementsChange,
   texts,
+  blocker,
+  busy,
+  onPlace,
 }: OrderSummaryCardProps) {
   const titleId = useId();
+  const hintId = useId();
+  const disabled = blocker !== undefined || busy;
   return (
     <section className={styles['c-order-summary']} aria-labelledby={titleId}>
       <h2 id={titleId} className={styles['c-order-summary__title']}>
@@ -62,14 +73,29 @@ export function OrderSummaryCard({
       <div className={styles['c-order-summary__card']}>
         <AgreementField checked={agreementsAccepted} onChange={onAgreementsChange} texts={texts} />
       </div>
-      <button type="button" className={styles['c-order-summary__place']} aria-disabled="true">
-        <span className={styles['c-order-summary__place-label']}>{texts.placeOrderLabel}</span>
+      <button
+        type="button"
+        className={styles['c-order-summary__place']}
+        aria-disabled={disabled}
+        aria-describedby={blocker === undefined ? undefined : hintId}
+        onClick={() => {
+          if (!disabled) onPlace();
+        }}
+      >
+        <span className={styles['c-order-summary__place-label']}>
+          {busy ? texts.placingLabel : texts.placeOrderLabel}
+        </span>
         {totals !== undefined && (
           <span className={styles['c-order-summary__place-amount']}>
             {money(totals.totalMinor)}
           </span>
         )}
       </button>
+      {blocker !== undefined && (
+        <p id={hintId} className={styles['c-order-summary__hint']}>
+          {blocker}
+        </p>
+      )}
     </section>
   );
 }

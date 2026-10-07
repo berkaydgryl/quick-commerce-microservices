@@ -4170,7 +4170,7 @@ components:
       description: |
         Ödeme sayfası (T17.1; `/odeme`; referans getirçarşı ödeme sayfası; kampanya yok): hediye bilgileri,
         teslimat yöntemi, sipariş notu ve "Zili Çalma", ödeme yöntemi, ödeme özeti, sözleşme onayı ve
-        pencereleri, "Sipariş Ver". Sözleşme paragrafları bugün demo yer tutucu.
+        pencereleri, "Sipariş Ver"; sipariş akışı ve 3DS penceresi (T12.4). Sözleşme paragrafları bugün demo.
       required:
         [
           title,
@@ -4213,6 +4213,26 @@ components:
           distanceSalesParagraphs,
           closeLabel,
           placeOrderLabel,
+          placingLabel,
+          orderPlacedToast,
+          orderInReviewToast,
+          blockerGiftNotice,
+          blockerAgreementNotice,
+          blockerCardNotice,
+          blockerAddressNotice,
+          blockerMinBasketNotice,
+          blockerClosedNotice,
+          threeDsTitle,
+          threeDsDescription,
+          threeDsCodeLabel,
+          threeDsSubmitLabel,
+          threeDsSubmittingLabel,
+          threeDsCancelLabel,
+          threeDsRemainingLabel,
+          threeDsLastSecondsNotice,
+          threeDsAttemptsLeftSuffix,
+          threeDsExpiredToast,
+          threeDsCancelledToast,
         ]
       properties:
         title: { $ref: "#/components/schemas/ContentText" }
@@ -4264,6 +4284,26 @@ components:
           items: { $ref: "#/components/schemas/ContentText" }
         closeLabel: { $ref: "#/components/schemas/ContentText" }
         placeOrderLabel: { $ref: "#/components/schemas/ContentText" }
+        placingLabel: { $ref: "#/components/schemas/ContentText" }
+        orderPlacedToast: { $ref: "#/components/schemas/ContentText" }
+        orderInReviewToast: { $ref: "#/components/schemas/ContentText" }
+        blockerGiftNotice: { $ref: "#/components/schemas/ContentText" }
+        blockerAgreementNotice: { $ref: "#/components/schemas/ContentText" }
+        blockerCardNotice: { $ref: "#/components/schemas/ContentText" }
+        blockerAddressNotice: { $ref: "#/components/schemas/ContentText" }
+        blockerMinBasketNotice: { $ref: "#/components/schemas/ContentText" }
+        blockerClosedNotice: { $ref: "#/components/schemas/ContentText" }
+        threeDsTitle: { $ref: "#/components/schemas/ContentText" }
+        threeDsDescription: { $ref: "#/components/schemas/ContentText" }
+        threeDsCodeLabel: { $ref: "#/components/schemas/ContentText" }
+        threeDsSubmitLabel: { $ref: "#/components/schemas/ContentText" }
+        threeDsSubmittingLabel: { $ref: "#/components/schemas/ContentText" }
+        threeDsCancelLabel: { $ref: "#/components/schemas/ContentText" }
+        threeDsRemainingLabel: { $ref: "#/components/schemas/ContentText" }
+        threeDsLastSecondsNotice: { $ref: "#/components/schemas/ContentText" }
+        threeDsAttemptsLeftSuffix: { $ref: "#/components/schemas/ContentText" }
+        threeDsExpiredToast: { $ref: "#/components/schemas/ContentText" }
+        threeDsCancelledToast: { $ref: "#/components/schemas/ContentText" }
 
     PaymentMethodsContent:
       type: object

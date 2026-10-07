@@ -46,4 +46,25 @@ type Checkout struct {
 	DistanceSalesParagraphs []string `json:"distanceSalesParagraphs"`
 	CloseLabel              string   `json:"closeLabel"`
 	PlaceOrderLabel         string   `json:"placeOrderLabel"`
+	// Siparis akisi ve 3DS penceresi (T12.4).
+	PlacingLabel              string `json:"placingLabel"`
+	OrderPlacedToast          string `json:"orderPlacedToast"`
+	OrderInReviewToast        string `json:"orderInReviewToast"`
+	BlockerGiftNotice         string `json:"blockerGiftNotice"`
+	BlockerAgreementNotice    string `json:"blockerAgreementNotice"`
+	BlockerCardNotice         string `json:"blockerCardNotice"`
+	BlockerAddressNotice      string `json:"blockerAddressNotice"`
+	BlockerMinBasketNotice    string `json:"blockerMinBasketNotice"`
+	BlockerClosedNotice       string `json:"blockerClosedNotice"`
+	ThreeDsTitle              string `json:"threeDsTitle"`
+	ThreeDsDescription        string `json:"threeDsDescription"`
+	ThreeDsCodeLabel          string `json:"threeDsCodeLabel"`
+	ThreeDsSubmitLabel        string `json:"threeDsSubmitLabel"`
+	ThreeDsSubmittingLabel    string `json:"threeDsSubmittingLabel"`
+	ThreeDsCancelLabel        string `json:"threeDsCancelLabel"`
+	ThreeDsRemainingLabel     string `json:"threeDsRemainingLabel"`
+	ThreeDsLastSecondsNotice  string `json:"threeDsLastSecondsNotice"`
+	ThreeDsAttemptsLeftSuffix string `json:"threeDsAttemptsLeftSuffix"`
+	ThreeDsExpiredToast       string `json:"threeDsExpiredToast"`
+	ThreeDsCancelledToast     string `json:"threeDsCancelledToast"`
 }
