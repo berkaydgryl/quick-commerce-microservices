@@ -178,6 +178,8 @@ describe('kart kasasi sozlesmesi (T11.17)', () => {
       cardvaultV1.AddCardResponse.fromPartial({ card: {} }).card,
       cardvaultV1.ListCardsRequest.fromPartial({}),
       cardvaultV1.DeleteCardRequest.fromPartial({}),
+      cardvaultV1.UpdateCardNicknameRequest.fromPartial({}),
+      cardvaultV1.UpdateCardNicknameResponse.fromPartial({ card: {} }).card,
     ]) {
       expect(Object.keys(message ?? {})).not.toContain('number');
       expect(Object.keys(message ?? {})).not.toContain('cvv');
@@ -202,6 +204,29 @@ describe('kart kasasi sozlesmesi (T11.17)', () => {
     const decoded = cardvaultV1.SavedCard.decode(cardvaultV1.SavedCard.encode(card).finish());
 
     expect(decoded).toEqual(card);
+  });
+
+  it('kart adi duzenleme (#148): UpdateCardNickname yolu; istek yalnizca kullanici, kart ve ad tasir', () => {
+    expect(cardvaultV1.CardVaultServiceService.updateCardNickname.path).toBe(
+      '/getir.cardvault.v1.CardVaultService/UpdateCardNickname',
+    );
+    const request = cardvaultV1.UpdateCardNicknameRequest.fromPartial({
+      userId: 'usr_1',
+      cardId: 'crd_0123456789abcdef0123456789abcdef',
+      nickname: 'Maaş kartım',
+    });
+
+    expect(Object.keys(request).sort()).toEqual(['cardId', 'nickname', 'userId']);
+    const roundTrip = (message: cardvaultV1.UpdateCardNicknameRequest) =>
+      cardvaultV1.UpdateCardNicknameRequest.decode(
+        cardvaultV1.UpdateCardNicknameRequest.encode(message).finish(),
+      );
+    expect(roundTrip(request)).toEqual(request);
+    // optional: eksik alan telde de eksik (kart adi degismez), bos metin bos
+    // metin (kart adi kaldirilir). Ikisi ayrilir.
+    const { nickname: _dropped, ...withoutNickname } = request;
+    expect(roundTrip(withoutNickname).nickname).toBeUndefined();
+    expect(roundTrip({ ...request, nickname: '' }).nickname).toBe('');
   });
 });
 
