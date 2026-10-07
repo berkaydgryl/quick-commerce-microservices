@@ -54,7 +54,7 @@ const MARKET_LIST_FALLBACK: MarketListContent = {
     emptyHint: 'Sipariş vermek için sepetine ürün ekle',
     itemCountLabel: 'ürün',
     subtotalLabel: 'Ara toplam',
-    deliveryLabel: 'Teslimat',
+    deliveryLabel: 'Teslimat Ücreti',
     freeDeliveryLabel: 'Ücretsiz',
     totalLabel: 'Toplam',
     minBasketRemainingLabel: 'Minimum sepet tutarına kalan',

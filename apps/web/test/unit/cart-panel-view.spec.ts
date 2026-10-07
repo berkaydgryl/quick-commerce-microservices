@@ -3,7 +3,7 @@
  * satiri (ad magazaya gider, cop kutusu onay ister), satirlarda ad ve mor
  * kalem tutari, adet kutusu (adet 1'de "−" yerine cop kutusu ve satir sonundaki
  * cop gizli; adet 2+'da "−" ve satir sonunda cop), minimum sepete kalan notu ve
- * "Sepete git" + sepet tutari. Metinler icerik yedeginden.
+ * "Sepete git" + TOPLAM (teslimat dahil; F15). Metinler icerik yedeginden.
  */
 
 import { CONTENT_FALLBACK } from '@getir/contracts';
@@ -116,13 +116,19 @@ describe('CartPanelView (T16.3)', () => {
     expect(gul).toMatch(/aria-label="Ambalajda Tekli Kırmızı Gül adedini artır" disabled=""/);
   });
 
-  it('"Sepete git" ve sagda sepet tutari; minimum sepete kalan notu', () => {
+  it('"Sepete git" ve sagda TOPLAM (teslimat dahil, F15); minimum sepete kalan notu', () => {
     const markup = render({
-      totals: { ...TOTALS, canCheckout: false, amountToMinBasketMinor: 135_002 },
+      totals: {
+        ...TOTALS,
+        deliveryFeeMinor: 1_990,
+        totalMinor: TOTALS.subtotalMinor + 1_990,
+        canCheckout: false,
+        amountToMinBasketMinor: 135_002,
+      },
     });
 
     expect(markup).toMatch(
-      /<a[^>]*href="\/markets\/mkt_kelebek"[^>]*><span[^>]*>Sepete git<\/span><span[^>]*>2\.399,98 TL<\/span><\/a>/,
+      /<a[^>]*href="\/markets\/mkt_kelebek"[^>]*><span[^>]*>Sepete git<\/span><span[^>]*>2\.419,88 TL<\/span><\/a>/,
     );
     expect(markup.replace(/<[^>]+>/g, '')).toContain(
       `${TEXTS.minBasketRemainingLabel}: 1.350,02 TL`,

@@ -44,8 +44,10 @@ export interface CartPanelViewProps {
  * Sepetim paneli (T16.3; referans getircarsi): sari cerceveli kart. Bossa
  * canta ikonu ve "Sepetin şu an boş". Doluysa ustte magaza ikonu ve adi
  * (magazaya gider) ile cop kutusu (onayla bosaltir); satirlarda ad, mor tutar
- * ve adet kutusu; minimum sepete kalan varsa notu; altta "Sepete git" ve
- * sepet tutari. Hesap @getir/pricing ve cart-state'tedir; bilesen durumsuzdur.
+ * ve adet kutusu; altinda "Teslimat Ücreti" (esik gecildiyse "Ücretsiz"; F15),
+ * minimum sepete kalan varsa notu; altta "Sepete git" ve TOPLAM (teslimat
+ * dahil; telefon cubugu ve odeme sayfasiyla ayni sayi). Hesap @getir/pricing
+ * ve cart-state'tedir; bilesen durumsuzdur.
  */
 export function CartPanelView({
   texts,
@@ -121,6 +123,16 @@ export function CartPanelView({
                 />
               ))}
             </ul>
+            {totals !== undefined && (
+              <p className={styles['c-cart-panel__fee']}>
+                <span>{texts.deliveryLabel}</span>
+                <span className={styles['c-cart-panel__amount']}>
+                  {totals.deliveryFeeMinor === 0
+                    ? texts.freeDeliveryLabel
+                    : money(totals.deliveryFeeMinor)}
+                </span>
+              </p>
+            )}
             {closed && <p className={styles['c-cart-panel__notice']}>{texts.closedNotice}</p>}
             {!closed && totals !== undefined && !totals.canCheckout && (
               <p className={styles['c-cart-panel__notice']}>
@@ -135,7 +147,7 @@ export function CartPanelView({
                 <span className={styles['c-cart-panel__go-label']}>{texts.goToCartLabel}</span>
                 {totals !== undefined && (
                   <span className={styles['c-cart-panel__go-amount']}>
-                    {money(totals.subtotalMinor)}
+                    {money(totals.totalMinor)}
                   </span>
                 )}
               </Link>
