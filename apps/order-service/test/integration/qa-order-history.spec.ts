@@ -4,8 +4,12 @@
  *
  *   H1 sayfalama surerken yeni siparisler (imlecle AYNI anda, imlecin IKI yanina da dusen
  *      esitlikler dahil): tekrar ve atlama yok; ilk sayfadan sonrasi, imlecin gerisinde kalan butun
- *      siparisler, sirasiyla. Sayfalar iki
- *      kopyadan donusumlu (jeton kopyadan bagimsiz).
+ *      siparisler, sirasiyla. Sayfalar iki kopyadan donusumlu (jeton kopyadan bagimsiz). Imlecin
+ *      iki yanindaki esitlik BELIRLENIMCI: kimligi imlec +-1 olan, imlecle ayni anli iki kayit
+ *      (neden: imlec uc rastgele kimligin en buyugu, Beta(3,1); 40 rastgele esitligin hicbiri ustune
+ *      dusmeme olasiligi 3/43 ~ %7, CI titremesi #176). Bu iki kayit gRPC'den degil, uretimin
+ *      deposuyla dogrudan yazilir (kimlik kaynagi enjekte edilemiyor); gorunurlukleri ve yerleri
+ *      bastan okunan tam listede denetlenir.
  *   H2 jeton: bozuk ya da bicimsiz -> INVALID_ARGUMENT; baska kullanicinin jetonu yalniz KONUMDUR
  *      (MEVCUT: jeton kullaniciya bagli degil), cevapta yalniz kendi siparisleri; asiri buyuk zaman
  *      damgasi INTERNAL'a dusmez.
@@ -21,7 +25,7 @@
  */
 
 import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from '@getir/contracts';
-import { ERROR_CODES, GRPC_STATUS, ORDER_STATUS, RISK_BANDS } from '@getir/core';
+import { ERROR_CODES, GRPC_STATUS, ID_PREFIX, isId, ORDER_STATUS, RISK_BANDS } from '@getir/core';
 import { orderV1 } from '@getir/proto';
 import { appErrorOf, appErrorPayloadOf } from '@getir/service-kit/testing';
 import type { ServiceError } from '@grpc/grpc-js';
@@ -36,8 +40,13 @@ const world = useInventoryWorld('qa_order_gecmis');
 const openCluster = useOrderClusters(world);
 
 const PAGE = 4;
-/** Imlecin iki yanina esit-anli siparis dusurmek icin en fazla deneme (her biri ~1/4 olasilikla ust yana). */
-const TIE_LIMIT = 40;
+/** Imlecle ayni anda tam akistan gelen rastgele kimlikli siparisler (kopyalar donusumlu); yan sarti yok. */
+const RANDOM_TIES = 2;
+const ORDER_ID_BODY_LENGTH = 32;
+/** Tam listeyi tek sayfada okumak icin (H1'de 15 siparis). */
+const FULL_PAGE = PAGE_SIZE_MAX;
+/** Jetonla gezilen en cok sayfa (H1-H3'un siparis sayilari bunun cok altinda kalir). */
+const MAX_PAGES = 50;
 const SECOND_MS = 1_000;
 
 /**
@@ -79,6 +88,23 @@ function newestFirst(orders: readonly Order[]): string[] {
     .map((order) => order.id);
 }
 
+/**
+ * Imlecin kaydinin kopyasi, kimligi imlecin hemen ustu (+1) ya da alti (-1): ayni kullanici, ayni
+ * an, ayni durum (REVIEW, gorunur). Uretimin deposuyla yazilir (gecmis alani eslemede kurulur);
+ * olay yok. Siralamada (ayni anda buyuk kimlik once) ust kimlik imlecin ONUNE, alt kimlik hemen
+ * ARKASINA duser; aralarinda baska kimlik olamaz. Kopya imlecin rezervasyon alanlarini da tasir
+ * (inventory bu kimligi bilmez): H1 yalniz listeyi okur; supurucu ve kurye iscisi REVIEW'e bakmaz.
+ * Govde UUIDv4 oldugu icin +-1 tasmaz; sonuc UUIDv4 olmayabilir, bicim yine [0-9a-f]{32}.
+ */
+async function tieBeside(cluster: OrderCluster, cursor: Order, step: bigint): Promise<string> {
+  const prefix = `${ID_PREFIX.ORDER}_`;
+  const value = BigInt(`0x${cursor.id.slice(prefix.length)}`) + step;
+  const id = `${prefix}${value.toString(16).padStart(ORDER_ID_BODY_LENGTH, '0')}`;
+  if (!isId(ID_PREFIX.ORDER, id)) throw new Error(`imlecin yaninda kimlik yok: ${cursor.id}`);
+  await cluster.orders.insert({ ...cursor, id }, []);
+  return id;
+}
+
 async function recordsOf(cluster: OrderCluster, ids: readonly string[]): Promise<Order[]> {
   const records: Order[] = [];
   for (const id of ids) {
@@ -105,11 +131,16 @@ async function page(
   };
 }
 
-/** Jetonun sonuna kadar butun sayfalar (kopyalar donusumlu). */
+/**
+ * Jetonun sonuna kadar butun sayfalar (kopyalar donusumlu). Sayfa sayisi sinirli: imlec kendini
+ * tekrar ederse (dongu) test zaman asimina degil, acik bir hataya duser.
+ */
 async function rest(cluster: OrderCluster, userId: string, token: string): Promise<string[]> {
   const ids: string[] = [];
   let next = token;
   for (let copy = 1; next !== ''; copy += 1) {
+    if (copy > MAX_PAGES)
+      throw new Error(`sayfalama ${String(MAX_PAGES)} sayfada bitmedi (imlec dongusu)`);
     const current = await page(cluster, copy % 2, userId, PAGE, next);
     ids.push(...current.ids);
     next = current.next;
@@ -142,18 +173,17 @@ describe('QA OQ5 ListMyOrders ve GetOrder (iki kopya, gercek Mongo)', () => {
     const first = await page(cluster, 0, userId, PAGE);
     expect(first.ids).toEqual(newestFirst(await recordsOf(cluster, originals)).slice(0, PAGE));
 
-    // Sayfalar arasinda imlecle AYNI anda yeni siparisler. Kimlikler rastgele: imlecin iki yanina
-    // da (esitlikte buyuk kimlik once) en az biri dusene kadar, sinirli sayida.
-    const cursor = first.ids.at(-1) ?? '';
-    world.clock.set(t0 + SECOND_MS);
-    const ties: string[] = [];
-    const bothSides = () => ties.some((id) => id > cursor) && ties.some((id) => id < cursor);
-    while (!bothSides() && ties.length < TIE_LIMIT) {
-      ties.push(await reviewed(cluster, ties.length % 2, userId));
+    // Sayfalar arasinda imlecle AYNI anda yeni siparisler: imlecin iki yaninda birer belirlenimci
+    // kimlik ve tam akistan iki kopyadan rastgele kimlikliler.
+    const cursor = await cluster.orders.findById(first.ids.at(-1) ?? '');
+    if (cursor === null) throw new Error('imlec kaydi yok');
+    const above = await tieBeside(cluster, cursor, 1n);
+    const below = await tieBeside(cluster, cursor, -1n);
+    world.clock.set(cursor.createdAt.getTime());
+    const ties: string[] = [above, below];
+    for (let index = 0; index < RANDOM_TIES; index += 1) {
+      ties.push(await reviewed(cluster, index % 2, userId));
     }
-    expect(bothSides(), `${String(TIE_LIMIT)} esit-anli sipariste imlecin iki yani dolmadi`).toBe(
-      true,
-    );
     // Ayrica en yeni ve en eski grupta birer siparis.
     const inserted = [
       ...ties,
@@ -165,8 +195,18 @@ describe('QA OQ5 ListMyOrders ve GetOrder (iki kopya, gercek Mongo)', () => {
     const remaining = await rest(cluster, userId, first.next);
 
     const all = newestFirst(await recordsOf(cluster, [...originals, ...inserted]));
-    const cursorAt = all.indexOf(first.ids.at(-1) ?? '');
+    // Iki kayit gercekten gorunur ve yerinde: bastan okunan tam liste ust, imlec, alt sirasinda.
+    const fresh = await page(cluster, 1, userId, FULL_PAGE);
+    expect(fresh.ids).toEqual(all);
+    const cursorAt = all.indexOf(cursor.id);
+    expect(all.slice(cursorAt - 1, cursorAt + 2), 'ust, imlec, alt').toEqual([
+      above,
+      cursor.id,
+      below,
+    ]);
     expect(remaining).toEqual(all.slice(cursorAt + 1));
+    expect(remaining, 'ust kimlik imlecin onunde, bu taramada gorulmez').not.toContain(above);
+    expect(remaining[0], 'alt kimlik imlecin hemen arkasinda').toBe(below);
     const seen = [...first.ids, ...remaining];
     expect(new Set(seen).size).toBe(seen.length);
     for (const id of originals) expect(seen, id).toContain(id);
