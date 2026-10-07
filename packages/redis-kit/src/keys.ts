@@ -55,8 +55,11 @@ export const EVENTS_STREAM_KEY = 'stream:events';
  */
 export const EVENTS_DEAD_LETTER_STREAM_KEY = 'stream:events:dead';
 
-/** Supurucu/reconcile liderligi (ADR-01: Redlock yalnizca burada). */
+/** Supurucu/reconcile liderligi (ADR-01: Redlock yalnizca arka plan liderliginde). */
 export const RECONCILE_LOCK_KEY = 'lock:reconcile';
+
+/** Kurye tick liderligi (T13.3; ADR-01): rotalari ayni anda tek ornek ilerletir. */
+export const COURIER_TICK_LOCK_KEY = 'lock:courier-tick';
 
 /**
  * Stok sayac kumesinin isareti (T10.1 PR 2, ADR-17): sayaclar Mongo'dan her

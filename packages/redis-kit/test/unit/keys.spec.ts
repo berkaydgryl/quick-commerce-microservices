@@ -19,6 +19,7 @@ import {
   phoneVerificationKey,
   rateLimitKey,
   realtimeSeqKey,
+  COURIER_TICK_LOCK_KEY,
   RECONCILE_LOCK_KEY,
   reservationIndexKey,
   reservationKey,
@@ -54,6 +55,7 @@ describe('anahtar bicimleri', () => {
     expect(EVENTS_STREAM_KEY).toBe('stream:events');
     expect(EVENTS_DEAD_LETTER_STREAM_KEY).toBe('stream:events:dead');
     expect(RECONCILE_LOCK_KEY).toBe('lock:reconcile');
+    expect(COURIER_TICK_LOCK_KEY).toBe('lock:courier-tick');
     // Sayac kumesinin isareti (ADR-17): market basina degil, tek ve hash-tag'siz.
     expect(STOCK_SEEDED_MARKER_KEY).toBe('stock:seeded');
     expect(hashTagOf(STOCK_SEEDED_MARKER_KEY)).toBeUndefined();
