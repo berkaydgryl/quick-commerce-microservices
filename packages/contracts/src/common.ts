@@ -66,6 +66,14 @@ export const cardIdSchema = z.string().regex(new RegExp(`^${ID_PREFIX.CARD}_[0-9
 });
 
 /**
+ * Kurye kimligi (T13.1): yalnizca `crr_` onekli. Seed kimlikleri de bu
+ * bicimdedir (market ve sira numarasindan turetilir, courier fixtures).
+ */
+export const courierIdSchema = z.string().regex(new RegExp(`^${ID_PREFIX.COURIER}_[0-9a-f]{32}$`), {
+  message: 'kurye kimligi bekleniyor',
+});
+
+/**
  * Katalog kimligi semasi uretir: "<onek>_<okunabilir-govde>" (ADR-15).
  * Seed ile gelen kimlikler icindir; UUID ya da 32 hex DEGILDIR.
  */
