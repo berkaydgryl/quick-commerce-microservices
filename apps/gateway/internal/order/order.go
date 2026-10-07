@@ -19,7 +19,6 @@ import (
 
 	commonv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/common/v1"
 	orderv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/order/v1"
-	paymentv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/payment/v1"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rpc"
@@ -147,8 +146,9 @@ func (s *Service) Place(ctx context.Context, in PlaceInput) (Placement, error) {
 	request := &orderv1.CreateOrderRequest{
 		OrderId: in.OrderID,
 		UserId:  in.UserID,
-		// REST yuzeyinde tek yontem kart (contracts paymentMethodSchema).
-		PaymentMethod:  paymentv1.PaymentMethod_PAYMENT_METHOD_CARD,
+		// Yontem ve tur dogrulanmis (payment_rule.go); bilinmeyen deger UNSPECIFIED gider, servis reddeder.
+		PaymentMethod:  methodToProto[in.Method],
+		OnDelivery:     kindToProto[in.OnDelivery],
 		CardId:         in.CardID,
 		CardToken:      in.CardToken,
 		IdempotencyKey: in.IdempotencyKey,
@@ -160,7 +160,7 @@ func (s *Service) Place(ctx context.Context, in PlaceInput) (Placement, error) {
 
 	response, err := rpc.Invoke(ctx, s.timeout, service, "CreateOrder", s.rpc.CreateOrder, request)
 	if err != nil {
-		return Placement{}, rpc.RenameFields(err, placeFieldNames)
+		return Placement{}, renameConflictField(rpc.RenameFields(err, placeFieldNames), placeFieldNames)
 	}
 	return toPlacement(response.GetOrderId(), response.GetStatus(), challengeOf(response, s.now()))
 }

@@ -1,6 +1,11 @@
 package order
 
-import "strings"
+import (
+	"errors"
+	"strings"
+
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
+)
 
 // order-service'in dogrulama hatasi (VALIDATION_FAILED; digerlerine dokunulmaz,
 // bkz. rpc.RenameFields) proto alan YOLUNU tasir ("lines.0.quantity",
@@ -31,6 +36,7 @@ var placeFieldNames = renamer(
 		"paymentMethod":  "payment.method",
 		"cardToken":      "payment.cardToken",
 		"cardId":         "payment.cardId",
+		"onDelivery":     "payment.onDelivery",
 		"idempotencyKey": idempotencyKeyField,
 	},
 	// Ayrinti hatalari (T12.4) REST'teki adlariyla ayni gelir: "details.gift.recipientPhone".
@@ -78,4 +84,25 @@ func renamer(names, prefixes map[string]string) func(string) string {
 		}
 		return field
 	}
+}
+
+// renameConflictField, order'in CONFLICT'indeki degisen alanin (details.field,
+// T12.4: odeme bekleyen sipariste yontem ya da tur degisti) proto adini REST
+// adina cevirir: "paymentMethod" -> "payment.method". Diger hatalara dokunmaz.
+func renameConflictField(err error, rename func(string) string) error {
+	var appErr *apperror.Error
+	if !errors.As(err, &appErr) || appErr.Code != apperror.CodeConflict {
+		return err
+	}
+	field, isText := appErr.Details["field"].(string)
+	if !isText {
+		return err
+	}
+	// Kopya: rpc.RenameFields gibi asil hatayi DEGISTIRMEZ.
+	renamed := make(map[string]any, len(appErr.Details))
+	for key, value := range appErr.Details {
+		renamed[key] = value
+	}
+	renamed["field"] = rename(field)
+	return &apperror.Error{Code: appErr.Code, Details: renamed, Cause: appErr.Cause}
 }

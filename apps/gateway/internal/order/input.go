@@ -35,10 +35,14 @@ type ReserveInput struct {
 type PlaceInput struct {
 	UserID  string
 	OrderID string
+	// Method, odeme yontemi (T12.4): MethodCard ya da MethodCashOnDelivery.
+	Method string
 	// CardID, kasadaki kayitli kart (T12.4); CardToken (DEPRECATED test jetonu)
-	// ile ikisinden TAM biri dolu. Biri bossa gonderilmedi demektir.
-	CardID         string
-	CardToken      string
+	// ile ikisinden TAM biri dolu; yalnizca kartta. Bos ise gonderilmedi.
+	CardID    string
+	CardToken string
+	// OnDelivery, kapida odemenin turu (KindCash ya da KindPOS); yalnizca kapida odemede.
+	OnDelivery     string
 	IdempotencyKey string
 	// Details, hediye, not, "Zili Çalma" ve sozlesme onayi (T12.4); dogrulanmis.
 	Details Details

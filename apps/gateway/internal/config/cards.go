@@ -10,7 +10,8 @@ const PaymentService = "payment"
 const defaultPaymentAddress = "localhost:50054"
 
 // CardVaultEnabled, kart uclari acik mi (K1): yalnizca production DISINDA.
-// Saglayici bugun mock'tur (yalniz test kartlari onaylanir); gercek saglayici
+// Saglayici bugun mock'tur: test kartlari kendi kararini alir, Luhn'u gecerli
+// ve markasi desteklenen HER kart onaylanir (bekleyen is 112). Gercek saglayici
 // gelene kadar uclar canlida HIC baglanmaz ve payment /healthz listesine girmez.
 func (c Config) CardVaultEnabled() bool {
 	return cardVaultEnabled(c.NodeEnv)

@@ -17,8 +17,6 @@ import (
 // Konum gonderilmediyse proto'ya da gonderilmez ve servis "zorunlu" der;
 // gonderilen konumun enlemi eksikse (0 degil, YOK) bunu yalniz gateway gorur.
 
-const cardMethod = "CARD"
-
 // reserveBody, POST /v1/cart/reserve (reserveCartRequestSchema).
 type reserveBody struct {
 	MarketID      string         `json:"marketId"`
@@ -56,13 +54,16 @@ type placeBody struct {
 	Details *detailsBody `json:"details"`
 }
 
-// paymentBody: kart alanlari isaretcidir (T12.4): sozlesmede GONDERILEN
-// alanlardan tam biri olmali; bos metin "gonderilmedi" sayilmaz.
+// paymentBody: alanlar isaretcidir (T12.4): sozlesmede GONDERILEN alan
+// sayilir; bos metin "gonderilmedi" degildir. Kurallar order.PaymentChoice'ta.
 type paymentBody struct {
+	// Method, CARD ya da CASH_ON_DELIVERY.
 	Method string `json:"method"`
-	// CardID, kasadaki kayitli kart; CardToken DEPRECATED test jetonu.
-	CardID    *string `json:"cardId"`
-	CardToken *string `json:"cardToken"`
+	// CardID, kasadaki kayitli kart; CardToken DEPRECATED test jetonu (kartta).
+	CardID    sentText `json:"cardId"`
+	CardToken sentText `json:"cardToken"`
+	// OnDelivery, kapida odemenin turu: CASH ya da POS (kapida odemede).
+	OnDelivery sentText `json:"onDelivery"`
 }
 
 // threeDSBody, POST /v1/orders/{id}/3ds (threeDsRequestSchema).
@@ -121,24 +122,26 @@ func (m *moneyBody) toMoney(field string, errs fieldErrors) *rest.Money {
 	return &rest.Money{AmountMinor: *m.AmountMinor, Currency: m.Currency}
 }
 
-// toInput, siparis govdesini adaptor girdisine cevirir. REST'te tek yontem
-// kart; baska bir deger bicim hatasidir (servis onu hic gormez). Risk
-// sinyalleri govdeden GELMEZ (B9); handler onlari oturumdan ekler.
+// toInput, siparis govdesini adaptor girdisine cevirir. Yontem kart ya da
+// kapida odeme (T12.4); kurallar order.PaymentChoice'ta. Risk sinyalleri
+// govdeden GELMEZ (B9); handler onlari oturumdan ekler.
 func (b placeBody) toInput(userID, idempotencyKey string, errs fieldErrors) order.PlaceInput {
 	input := order.PlaceInput{
 		UserID:         userID,
 		OrderID:        b.OrderID,
 		IdempotencyKey: idempotencyKey,
 	}
-	switch {
-	case b.Payment == nil:
+	if b.Payment == nil {
 		errs[paymentField] = requiredReason
-	case b.Payment.Method != cardMethod:
-		errs[paymentField+".method"] = "CARD olmali"
-	default:
-		card := order.CardChoice{ID: b.Payment.CardID, Token: b.Payment.CardToken}.Normalized()
-		collectUnder(errs, paymentField, card.Problems())
-		card.Apply(&input)
+	} else {
+		payment := order.PaymentChoice{
+			Method:     b.Payment.Method,
+			CardID:     b.Payment.CardID.value(),
+			CardToken:  b.Payment.CardToken.value(),
+			OnDelivery: b.Payment.OnDelivery.value(),
+		}.Normalized()
+		collectUnder(errs, paymentField, payment.Problems())
+		payment.Apply(&input)
 	}
 	input.Details = b.Details.toDetails(errs)
 	return input

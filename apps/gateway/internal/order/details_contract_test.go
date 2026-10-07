@@ -57,8 +57,28 @@ func TestDetailsReasonsMatchContractMessages(t *testing.T) {
 	if contract := testkit.MessageConstant(t, testkit.ReadContract(t, contractAuthPath), "PHONE_MESSAGE", nil); contract != giftPhoneReason {
 		t.Errorf("PHONE_MESSAGE: sozlesme %q, gateway %q", contract, giftPhoneReason)
 	}
-	if contract := testkit.MessageConstant(t, testkit.ReadContract(t, contractOrderPath), "PAYMENT_CARD_MESSAGE", nil); contract != paymentCardReason {
-		t.Errorf("PAYMENT_CARD_MESSAGE: sozlesme %q, gateway %q", contract, paymentCardReason)
+	orderSource := testkit.ReadContract(t, contractOrderPath)
+	for name, reason := range map[string]string{
+		"PAYMENT_CARD_MESSAGE":              paymentCardReason,
+		"PAYMENT_ON_DELIVERY_MESSAGE":       onDeliveryReason,
+		"PAYMENT_FIELD_NOT_ALLOWED_MESSAGE": notAllowedReason,
+	} {
+		if contract := testkit.MessageConstant(t, orderSource, name, nil); contract != reason {
+			t.Errorf("%s: sozlesme %q, gateway %q", name, contract, reason)
+		}
+	}
+}
+
+func TestPaymentMethodsAndKindsMatchContract(t *testing.T) {
+	// Kapida odeme (T12.4): yontemler ve turler sozlesmedekiyle ayni ve ayni sirada.
+	source := testkit.ReadContract(t, contractOrderPath)
+	for name, gateway := range map[string][]string{
+		"paymentMethodSchema":       {MethodCard, MethodCashOnDelivery},
+		"deliveryPaymentKindSchema": {KindCash, KindPOS},
+	} {
+		if contract := testkit.StringEnum(t, source, name); strings.Join(contract, ",") != strings.Join(gateway, ",") {
+			t.Errorf("%s: sozlesme %v, gateway %v", name, contract, gateway)
+		}
 	}
 }
 
