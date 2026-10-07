@@ -37,6 +37,13 @@ import { describeOrderStoreContract } from '../support/order-store-contract.js';
 /** infra/docker/docker-compose.dev.yml ile ayni surum. */
 const MONGO_IMAGE = 'mongo:7';
 const DB_NAME = 'getir_order_test';
+/** Saga testinin hediyesi (T12.4): Mongo'daki alt belge ve GetOrder icin. */
+const GIFT: orderV1.GiftDetails = {
+  message: 'Mutlu yıllar',
+  senderName: 'Gönderen',
+  recipientName: 'Alıcı Adı',
+  recipientPhone: '+905321234567',
+};
 
 const explainSchema = z.object({ queryPlanner: z.object({ winningPlan: z.unknown() }) });
 const statsSchema = explainSchema.extend({
@@ -215,6 +222,7 @@ describe('gRPC -> Mongo (T4.5 bitti sayilir: siparis Mongo da gorulur)', () => {
       cardToken: TEST_CARD.APPROVED,
       cardId: '',
       idempotencyKey: '4f1c3a2b-9d8e-11ef',
+      details: { gift: GIFT, note: 'Zili çalma', doNotRingBell: true, agreementsAccepted: true },
     });
 
     const document = await connection.db
@@ -268,11 +276,30 @@ describe('gRPC -> Mongo (T4.5 bitti sayilir: siparis Mongo da gorulur)', () => {
     const lifetimeMs = reservation.expiresAt.getTime() - reservation.reservedAt.getTime();
     expect(lifetimeMs).toBeLessThanOrEqual(DEFAULT_RESERVATION_TTL_SECONDS * 1000);
     expect(lifetimeMs).toBeGreaterThan(DEFAULT_RESERVATION_TTL_SECONDS * 1000 - 5_000);
+    // Siparis ayrintisi (T12.4) alt belge: yalnizca bilinen alanlar, onay ani Date (strict).
+    const details = z
+      .object({
+        gift: z.object({
+          message: z.string(),
+          senderName: z.string(),
+          recipientName: z.string(),
+          recipientPhone: z.string(),
+        }),
+        note: z.string(),
+        doNotRingBell: z.boolean(),
+        agreementsAcceptedAt: z.date(),
+      })
+      .strict()
+      .parse(document?.['details']);
+    expect(details).toMatchObject({ gift: GIFT, note: 'Zili çalma', doNotRingBell: true });
 
     // Ayni kayit GetOrder ve ListMyOrders ile de okunur (servis yeniden baslasa da).
     const got = await call(orderV1.OrderServiceService.getOrder, { orderId, userId: 'usr_grpc' });
     const listed = await call(orderV1.OrderServiceService.listMyOrders, { userId: 'usr_grpc' });
     expect(got.response?.order?.status).toBe(orderV1.OrderStatus.ORDER_STATUS_PAID);
     expect(listed.response?.orders.map((order) => order.id)).toEqual([orderId]);
+    // Ayrinti yalnizca GetOrder'da; liste kisisel veri tasimaz (T12.4).
+    expect(got.response?.order?.details).toMatchObject({ gift: GIFT, agreementsAccepted: true });
+    expect(listed.response?.orders[0]?.details).toBeUndefined();
   });
 });

@@ -27,6 +27,16 @@ export const draftRequest: orderV1.CreateDraftOrderRequest = {
   couponCode: '',
 };
 
+/**
+ * Varsayilan siparis ayrintisi (T12.4): gRPC'de ZORUNLU; hediyesiz, notsuz,
+ * sozlesme onayli. Kisisel veri tasimaz.
+ */
+export const ORDER_DETAILS: orderV1.OrderDetails = {
+  note: '',
+  doNotRingBell: false,
+  agreementsAccepted: true,
+};
+
 /** Kartla (onaylanan test karti) CreateOrder istegi; varsayilan: taslagin sahibi. */
 export function createOrderRequest(
   orderId: string,
@@ -39,6 +49,7 @@ export function createOrderRequest(
     cardToken: 'tok_test_4242',
     cardId: '',
     idempotencyKey: IDEMPOTENCY_KEY,
+    details: ORDER_DETAILS,
     ...overrides,
   };
 }

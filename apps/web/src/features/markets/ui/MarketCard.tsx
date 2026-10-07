@@ -4,9 +4,9 @@ import { Link } from 'react-router-dom';
 
 import { formatDeliveryTime, formatMoney, formatRating } from '../../../shared/services/format';
 import { marketPath } from '../routes';
-import { marketInitials } from '../services/market-initials';
 
 import { StarIcon } from './icons';
+import { MarketBadge } from './MarketBadge';
 import styles from './MarketCard.module.css';
 
 interface MarketCardProps {
@@ -22,8 +22,8 @@ interface MarketCardProps {
 }
 
 /**
- * Market karti (T11.12; referans getircarsi): solda kapak ve uzerinde bas
- * harf rozeti (logo yok, T11.11 karari), sagda ad, puan, sure, minimum sepet
+ * Market karti (T11.12; referans getircarsi): solda kapak ve sol ortasinda
+ * marka kutusu (MarketBadge: logo ya da bas harf), sagda ad, puan, sure, minimum sepet
  * ve ucretsiz teslimat esigi. Kapali market soluk ve "Kapali" etiketli, yine
  * tiklanabilir (market sayfasi kapali oldugunu soyler).
  *
@@ -50,9 +50,7 @@ export function MarketCard({ market, content, nameLevel: Name, action }: MarketC
               loading="lazy"
             />
           )}
-          <span className={styles['c-market-card__badge']} aria-hidden="true">
-            {marketInitials(market.brand)}
-          </span>
+          <MarketBadge brand={market.brand} logoUrl={market.logoUrl} size="card" />
           {action !== undefined && <div className={styles['c-market-card__action']}>{action}</div>}
         </div>
         <div className={styles['c-market-card__body']}>

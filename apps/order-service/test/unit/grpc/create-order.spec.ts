@@ -126,12 +126,15 @@ describe('CreateOrder', () => {
       { paymentMethod: paymentV1.PaymentMethod.PAYMENT_METHOD_UNSPECIFIED },
       'paymentMethod',
     ],
-    ['kartli odemede jeton yok', { cardToken: '' }, 'cardToken'],
+    // Kart kurali payment-svc'ninkiyle ayni (T12.4): kart yoksa hata card_id'de,
+    // kapida odemede gonderilen alanda.
+    ['kartli odemede kart yok', { cardToken: '' }, 'cardId'],
     [
       'kapida odemede jeton dolu',
       { paymentMethod: paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY },
       'cardToken',
     ],
+    ['ayrinti yok (T12.4)', { details: undefined }, 'details'],
   ])('gecersiz odeme istegi (%s): INVALID_ARGUMENT', async (_name, overrides, field) => {
     const { error } = await createOrder(overrides);
 

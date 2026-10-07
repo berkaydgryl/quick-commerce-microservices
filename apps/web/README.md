@@ -10,7 +10,7 @@ Müşteri arayüzü: React 18 + Vite + TypeScript. Tarayıcı yalnızca gateway 
 | TanStack Query          | ✅ Yalnızca geçici hata (`SERVICE_UNAVAILABLE`) yeniden denenir; mutasyon denenmez                                                              |
 | HTTP istemcisi          | ✅ Zarf açıcı → `AppError`; mutasyon `Idempotency-Key`'siz derlenmez (ADR-08)                                                                   |
 | Idempotency key         | ✅ `crypto.randomUUID()`, sözleşmedeki uzunluk sınırıyla                                                                                        |
-| Design token'lar        | ✅ `tokens.css`: marka paleti, Nunito, `clamp()` ölçeği, kapsayıcı, bileşen ölçüleri (D11)                                                      |
+| Design token'lar        | ✅ `tokens.css`: marka paleti, Nunito, `clamp()` ölçeği, kapsayıcı, bileşen ölçüleri (D11); 297 satır, sonraki eklemede bölünür                 |
 | Kırılımlar              | ✅ `@custom-media` (48rem / 64rem / 90rem), JS karşılığı `shared/config/breakpoints.ts`                                                         |
 | Market veri hook'ları   | ✅ `useNearbyMarkets`, `useMarket`, `useMarketCategories`, `useMarketProducts` (imleçle sayfalı), `useNearbySearch` (T9.6)                      |
 | Ortak durumlar          | ✅ `QueryStatus`: yükleniyor / hata / boş; \"Tekrar dene\" yalnızca geçici hatada                                                               |
@@ -79,8 +79,13 @@ Tanıtım bölümlerinin görselleri (T11.7) kullanıcının getir.com'dan sağl
 | `evcil-hayvan.jpg`  | Evcil Hayvan      | [rawpixel](https://www.rawpixel.com/image/5958959/free-public-domain-cc0-photo)                   | —                 | CC0 1.0 |
 
 Market kapakları (T11.11, `img/market/`, 640×360 px, her biri 60 KB'ın altında) dükkân türüne göredir: aynı türdeki
-marketler aynı kapağı kullanır, veri `coverUrl` alanında `/img/market/<tür>.jpg` yolunu saklar. Logo yoktur; liste
-kartı marketin baş harflerini rozet olarak gösterir. Hepsi **CC0 1.0** (Openverse aramasıyla).
+marketler aynı kapağı kullanır, veri `coverUrl` alanında `/img/market/<tür>.jpg` yolunu saklar. Hepsi **CC0 1.0**
+(Openverse aramasıyla).
+
+Market logoları (07.10 kullanıcı kararı, **geçici**): `img/market-logo/<marka>.svg`, marka başına bir yazı logo:
+yalnız marka adı ve marka (ya da dükkân türü) rengi; gerçek logo çizimi taklit edilmez, `<title>` yok (dekoratif).
+Renkler SVG dosyasının içindedir (CSS token kuralı SVG içeriğine uygulanmaz). Veri `logoUrl` alanında yolu saklar;
+`logoUrl` yoksa ya da dosya yüklenemezse kapak marketin baş harflerini rozet olarak gösterir (`MarketBadge`).
 
 | Dosya           | Dükkân türü | Kaynak                                                                                                | Yazar          | Lisans  |
 | --------------- | ----------- | ----------------------------------------------------------------------------------------------------- | -------------- | ------- |
@@ -202,14 +207,14 @@ getirçarşı. Karşılama ekranının barıyla aynı renk; logo sarı "getir" +
 Ana sayfa (oturumda, `?ara=` yokken) ve `/markets` aynı ekranı kullanır; referans getirçarşı işletme listesi.
 Ana sayfanın ürün kategorileri şeridi kalktı (karşılama ekranının kategori ızgarası yerinde).
 
-| Bölge           | Dosya                                                                  | İş                                                                                                       |
-| --------------- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Ekran           | `pages/markets/MarketListingScreen.tsx`                                | Birleştirir: liste (markets) sepeti, sepet (cart) market adreslerini tanımaz; Sepetim sağ sütun yuvasına |
-| Düzen           | `features/markets/ui/MarketListing.tsx`, `MarketListingView.tsx`       | ≥64rem üç sütun (1:2:1); altında tek sütun, menünün yerine çip satırı                                    |
-| Kategoriler     | `features/markets/ui/StoreTypeMenu.tsx`, `StoreTypeChips.tsx`          | Akordeon gruplar (küçük görsel, ok); açılınca adresteki sayılarıyla türler, tıklayınca süzer             |
-| Kart            | `features/markets/ui/MarketCard.tsx`                                   | Kapak + baş harf rozeti (logo yok), ad, puan, süre, min. tutar, ücretsiz teslimat eşiği, Kapalı          |
-| Sepetim         | `features/cart/ui/CartPanel.tsx`, `CartPanelView.tsx`, `CartBar.tsx`   | Genişte sağ panel (boş ya da dolu); telefon ve tablette altta sabit çubuk, yalnızca sepet doluyken       |
-| Süzgeç ve sayım | `features/markets/services/store-type-filter.ts`, `market-initials.ts` | `?tur=kasap` ↔ `KASAP`; adreste marketi olmayan tür ve grup gösterilmez; sıra yakından uzağa             |
+| Bölge           | Dosya                                                                  | İş                                                                                                         |
+| --------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Ekran           | `pages/markets/MarketListingScreen.tsx`                                | Birleştirir: liste (markets) sepeti, sepet (cart) market adreslerini tanımaz; Sepetim sağ sütun yuvasına   |
+| Düzen           | `features/markets/ui/MarketListing.tsx`, `MarketListingView.tsx`       | ≥64rem üç sütun (1:2:1); altında tek sütun, menünün yerine çip satırı                                      |
+| Kategoriler     | `features/markets/ui/StoreTypeMenu.tsx`, `StoreTypeChips.tsx`          | Akordeon gruplar (küçük görsel, ok); açılınca adresteki sayılarıyla türler, tıklayınca süzer               |
+| Kart            | `features/markets/ui/MarketCard.tsx`, `MarketBadge.tsx`                | Kapak + sol ortada logo ya da baş harf rozeti, ad, puan, süre, min. tutar, ücretsiz teslimat eşiği, Kapalı |
+| Sepetim         | `features/cart/ui/CartPanel.tsx`, `CartPanelView.tsx`, `CartBar.tsx`   | Genişte sağ panel (boş ya da dolu); telefon ve tablette altta sabit çubuk, yalnızca sepet doluyken         |
+| Süzgeç ve sayım | `features/markets/services/store-type-filter.ts`, `market-initials.ts` | `?tur=kasap` ↔ `KASAP`; adreste marketi olmayan tür ve grup gösterilmez; sıra yakından uzağa               |
 
 - **Gruplar ve tür adları içerikten:** `marketList.groups` (hangi tür hangi grupta) ve `storeTypes` gateway'in
   `welcome.json`'ında; kodda sabit yok. Her tür tam bir gruptadır, adı tam bir kez yazılır (sözleşme ve gateway
@@ -288,18 +293,21 @@ Karar ve hesap **veri katmanında**, arayüz yalnızca çizer. Tasarım baştan 
 modal, çekmece, ayrı sepet sayfası) yalnızca `features/cart/ui/*` değişir; testlerin hepsi veri
 katmanındadır.
 
-| Katman       | Dosya                                                          | İş                                                                                     |
-| ------------ | -------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Saf kurallar | `features/cart/services/cart-state.ts`                         | Tek market + onay, adet (99 ya da stok) ve kalem (50) sınırı, satış durumu, `canAdd`   |
-| Kalıcılık    | `features/cart/services/cart-persistence.ts`                   | `getir.cart`: sürüm, 24 saat, okunan kaydın doğrulanması                               |
-| Toplam       | `features/cart/services/cart.service.ts`                       | `@getir/pricing` `calculateCart`; kurallar **sepetin marketinden**                     |
-| Depo         | `features/cart/stores/useCartStore.ts`                         | Zustand; saf fonksiyonları bağlar, kural yazmaz                                        |
-| Hook'lar     | `useCartTotals`, `useAddToCart`, `useCartStorageSync`          | Toplam; onay bekleyen market değişimi; sekmeler arası eşitleme                         |
-| Düğmeler     | `ProductCartAction`, `CartQuantityStepper`, `CartSwitchPrompt` | "+" ya da adet kutusu (ürün kartında dikey, arama satırında yatay; T16.2), onay satırı |
+| Katman       | Dosya                                                          | İş                                                                                        |
+| ------------ | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Saf kurallar | `features/cart/services/cart-state.ts`                         | Tek market + onay, adet (99 ya da stok) ve kalem (50) sınırı, satış durumu, `canAdd`      |
+| Kalıcılık    | `features/cart/services/cart-persistence.ts`                   | `getir.cart`: sürüm, 24 saat, okunan kaydın doğrulanması                                  |
+| Toplam       | `features/cart/services/cart.service.ts`                       | `@getir/pricing` `calculateCart`; kurallar **sepetin marketinden**                        |
+| Depo         | `features/cart/stores/useCartStore.ts`                         | Zustand; saf fonksiyonları bağlar, kural yazmaz                                           |
+| Hook'lar     | `useCartTotals`, `useAddToCart`, `useCartStorageSync`          | Toplam; onay bekleyen market değişimi; sekmeler arası eşitleme                            |
+| Düğmeler     | `ProductCartAction`, `CartQuantityStepper`, `CartSwitchDialog` | "+" ya da adet kutusu (ürün kartında dikey, arama satırında yatay; T16.2), onay penceresi |
 
-- **Tek market:** sepette Migros ürünü varken A101'den eklemede ekleme **yapılmaz**, onay istenir:
+- **Tek market:** sepette Migros ürünü varken A101'den eklemede ekleme **yapılmaz**, ekranın ortasında
+  onay penceresi açılır ("Sepeti boşalt" penceresinin kabuğu: karartma, odak pencerede, Esc ve X = Vazgeç):
   "Sepetinde Migros Jet – Moda ürünleri var. Sepeti boşaltıp A101 – Caferağa ile devam edilsin mi?"
-  ("-den/-dan/-ndan" eki ada göre değiştiği için "ile" kullanıldı.)
+  Mor "Evet" sepeti boşaltıp ürünü ekler, "Vazgeç" bir şey değiştirmez; açılınca odak "Vazgeç"te, kapanınca
+  tıklanan "+"ya (Evet'te aynı ürünün "adedini artır"ına) döner. Mağaza sayfası ve arama sonuçları aynı
+  pencereyi (`CartSwitchDialog`) kullanır. ("-den/-dan/-ndan" eki ada göre değiştiği için "ile" kullanıldı.)
 - **Kalem teklif kimliğiyle (`offerId`) tanınır**, ürün kimliğiyle değil: aynı ürünün her markette aynı
   `prd_` kimliği var. Ürün kimliğiyle tanımak A101 sayfasında Migros sepetindeki adedi gösteriyor ve "−"
   Migros kalemini azaltıyordu (canlı denemede bulundu, regresyon testi var).
@@ -347,7 +355,8 @@ katmanındadır.
 - **Çıplak birim yok:** CSS modüllerinde `px`, `rem`, `em` yazılmaz; değer `tokens.css`'te işlevsel
   adla token olur, modül `var(--...)` kullanır. Kapı stylelint `unit-disallowed-list`
   (`tokens.css`, `global.css`, `breakpoints.css` hariç). Token adları ve değerleri kullanıcının
-  kararıdır.
+  kararıdır. **`tokens.css` 297 satır (07.10):** bir sonraki token eklemesinden önce dosya konu konu bölünür
+  (300 satır kuralı; örnek `payment-card/tokens.css`).
 - **Kendi bloğu:** bileşen başka bloğun sınıfını ödünç almaz; ortak görünüm ortak bileşendir
   (`shared/ui/badge/Badge`: "Kapalı" rozeti, liste ve market başlığı birlikte kullanır).
 - **Tanımsız sınıf yok:** `styles['c-yok']` TypeScript'te hata vermez, sessizce stilsiz kalır.
@@ -361,14 +370,14 @@ katmanındadır.
 `/markets/:marketId`; referans getirçarşı işletme sayfası. Sayfa birleştirir: katalog sepeti, sepet katalogu,
 markets favorileri tanımaz.
 
-| Bölge         | Dosya                                                                        | İş                                                                                     |
-| ------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| Ekran         | `pages/market/MarketPage.tsx`                                                | ≥64rem solda sayfa, sağda başlıksız Sepetim (3:1); altında tek sütun ve sepet çubuğu   |
-| Baş           | `features/markets/ui/MarketHeroSection.tsx`, `MarketHero.tsx`, `RatingStars` | Kapak + baş harf rozeti, ad, yıldızlar ve puan, kalp, süre ve min., açık/kapalı, rozet |
-| Hakkında      | `features/markets/ui/MarketAboutDialog.tsx`                                  | Marka, süre, minimum sepet, teslimat ücreti, ücretsiz teslimat eşiği                   |
-| Kategoriler   | `features/catalog/ui/MarketCategoryNav.tsx`                                  | Genişte dikey liste (görsel, ad, ok), dar ekranda kayan şerit; başta "Tümü"            |
-| Ürünler       | `MarketCatalogSection.tsx`, `MarketProductGrid.tsx`, `ProductCard.tsx`       | Başlık (kategori, "Tüm Ürünler" ya da "Arama Sonuçları"), kart ızgarası, "Daha fazla"  |
-| Sepet düğmesi | `features/cart/ui/ProductCartAction.tsx`                                     | "+"; sepetteyse Sepetim'in adet kutusu (dikey); ana sayfa aramasında aynı düğme yatay  |
+| Bölge         | Dosya                                                                        | İş                                                                                                    |
+| ------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Ekran         | `pages/market/MarketPage.tsx`                                                | ≥64rem solda sayfa, sağda başlıksız Sepetim (3:1); altında tek sütun ve sepet çubuğu                  |
+| Baş           | `features/markets/ui/MarketHeroSection.tsx`, `MarketHero.tsx`, `RatingStars` | Kapak + sol ortada logo ya da baş harf, ad, yıldızlar ve puan, kalp, süre ve min., açık/kapalı, rozet |
+| Hakkında      | `features/markets/ui/MarketAboutDialog.tsx`                                  | Marka, süre, minimum sepet, teslimat ücreti, ücretsiz teslimat eşiği                                  |
+| Kategoriler   | `features/catalog/ui/MarketCategoryNav.tsx`                                  | Genişte dikey liste (görsel, ad, ok), dar ekranda kayan şerit; başta "Tümü"                           |
+| Ürünler       | `MarketCatalogSection.tsx`, `MarketProductGrid.tsx`, `ProductCard.tsx`       | Başlık (kategori, "Tüm Ürünler" ya da "Arama Sonuçları"), kart ızgarası, "Daha fazla"                 |
+| Sepet düğmesi | `features/cart/ui/ProductCartAction.tsx`                                     | "+"; sepetteyse Sepetim'in adet kutusu (dikey); ana sayfa aramasında aynı düğme yatay                 |
 
 - **Metinler içerikten:** `marketPage` bloğu; puan, "Min.", "Kapalı", eşik, "Kategoriler", "Tümü" ve adet kutusunun
   adları market listesiyle ortak (`marketList`). İçerik gelmezse yedek (`CONTENT_FALLBACK.marketPage`).

@@ -23,23 +23,6 @@
   object-fit: cover;
 }
 
-/* Logonun yerine bas harf rozeti (referanstaki beyaz logo kutusu). */
-.c-market-hero__badge {
-  position: absolute;
-  inset-block-end: var(--space-4);
-  inset-inline-start: var(--space-4);
-  display: grid;
-  place-items: center;
-  width: var(--size-market-hero-badge);
-  height: var(--size-market-hero-badge);
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-extrabold);
-  color: var(--color-brand-primary);
-  background: var(--bg-surface);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-surface);
-}
-
 .c-market-hero__body {
   display: grid;
   gap: var(--space-3);

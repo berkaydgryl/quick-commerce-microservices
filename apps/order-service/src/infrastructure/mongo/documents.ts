@@ -46,6 +46,18 @@ export interface TimelineEntryDocument {
 }
 
 /**
+ * Siparis ayrintilari (T12.4). Kisisel veri (adlar, telefon, not, mesaj):
+ * yalnizca bu belgede durur, olaylara (outbox) kopyalanmaz. Hediye yoksa
+ * `gift` HIC yazilmaz.
+ */
+export interface OrderDetailsDocument {
+  gift?: { message: string; senderName: string; recipientName: string; recipientPhone: string };
+  note: string;
+  doNotRingBell: boolean;
+  agreementsAcceptedAt: Date;
+}
+
+/**
  * Teslimat konumu duz {lat, lng}: bu koleksiyonda konum SORGUSU yok, yalnizca
  * gosterim ve kurye rotasi icin saklanir. GeoJSON + 2dsphere, yakinlik
  * sorgusu gereken yerdedir (catalog markets).
@@ -65,6 +77,8 @@ export interface OrderDocument extends BaseDocument {
   reservation?: { reservedAt: Date; expiresAt: Date };
   /** Atanan kurye (T13.1 PR 2); atanmadan HIC yazilmaz. */
   courier?: { courierId: string; assignedAt: Date };
+  /** Risk adiminda yazilir (T12.4); ayrintisiz ve T12.4 oncesi sipariste HIC yok. */
+  details?: OrderDetailsDocument;
   /** Kuryesiz PREPARING'in yeniden deneme ani; yalnizca o durumda var. */
   courierRetryAt?: Date;
   /** Kurye kuyrugundaki yer: odeme ani (#92); kurye ataninca silinir. */

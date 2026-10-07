@@ -57,22 +57,6 @@
   object-fit: cover;
 }
 
-/* Logonun yerine bas harf rozeti (referanstaki beyaz logo kutusu). */
-.c-market-card__badge {
-  position: absolute;
-  inset-block-end: var(--space-2);
-  inset-inline-start: var(--space-2);
-  display: grid;
-  place-items: center;
-  width: var(--size-market-badge);
-  height: var(--size-market-badge);
-  font-weight: var(--font-weight-extrabold);
-  color: var(--color-brand-primary);
-  background: var(--bg-surface);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-surface);
-}
-
 .c-market-card__body {
   display: grid;
   gap: var(--space-2);

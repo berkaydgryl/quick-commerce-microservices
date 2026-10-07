@@ -58,12 +58,28 @@ function payment(status: paymentV1.PaymentStatus, failureCode = ''): paymentV1.P
   return paymentV1.Payment.fromPartial({ id: 'pay_1', orderId: 'ord_1', status, failureCode });
 }
 
-/** Sahte sunucunun jetona gore karari. */
+/** 3DS kodunun bitisi (T12.4): payment-svc'nin cevabindaki an. */
+const CHALLENGE_EXPIRES_AT = new Date('2026-10-07T12:01:00Z');
+/** Kasada olmayan kayitli kart: sahte sunucu NOT_FOUND (resource "card") doner. */
+const MISSING_CARD_ID = 'crd_yok';
+
+/** Sahte sunucunun jetona gore karari; kayitli kartla (card_id) onay. */
 const CHARGE_RESPONSES: Readonly<Record<string, paymentV1.ChargeResponse>> = {
   tok_onay: { payment: payment(S.PAYMENT_STATUS_SUCCEEDED), challengeId: '' },
   tok_red: { payment: payment(S.PAYMENT_STATUS_FAILED, 'PAYMENT_DECLINED'), challengeId: '' },
   tok_tuhaf_neden: { payment: payment(S.PAYMENT_STATUS_FAILED, 'BILINMEYEN'), challengeId: '' },
   tok_3ds: { payment: payment(S.PAYMENT_STATUS_REQUIRES_3DS), challengeId: 'tds_1' },
+  tok_3ds_bitisli: {
+    payment: payment(S.PAYMENT_STATUS_REQUIRES_3DS),
+    challengeId: 'tds_2',
+    challengeExpiresAt: CHALLENGE_EXPIRES_AT,
+  },
+  // Dogrulama yokken gelen bitis anlamsizdir: tasinmaz.
+  tok_bitis_yalniz: {
+    payment: payment(S.PAYMENT_STATUS_SUCCEEDED),
+    challengeId: '',
+    challengeExpiresAt: CHALLENGE_EXPIRES_AT,
+  },
   tok_durumsuz: { payment: payment(S.PAYMENT_STATUS_UNSPECIFIED), challengeId: '' },
   '': { payment: payment(S.PAYMENT_STATUS_PENDING), challengeId: '' },
 };
@@ -99,7 +115,16 @@ const implementation = {
   ): void => {
     seenCharges.push(call.request);
     seenRequestIds.push(call.metadata.get(REQUEST_ID_METADATA_KEY)[0]);
-    const response = CHARGE_RESPONSES[call.request.cardToken];
+    if (call.request.cardId === MISSING_CARD_ID) {
+      callback(
+        toServiceError(
+          new AppError(ERROR_CODES.NOT_FOUND, 'kart yok', { details: { resource: 'card' } }),
+        ),
+      );
+      return;
+    }
+    const response =
+      CHARGE_RESPONSES[call.request.cardId === '' ? call.request.cardToken : 'tok_onay'];
     callback(null, response ?? CHARGE_RESPONSES['tok_onay']);
   },
   confirm3Ds: (
@@ -245,8 +270,36 @@ describe('GrpcPayments.charge', () => {
       { status: PAYMENT_STATUS.FAILED, failureCode: ERROR_CODES.PAYMENT_DECLINED },
     ],
     ['tok_3ds', { status: PAYMENT_STATUS.REQUIRES_3DS, challengeId: 'tds_1' }],
+    // 3DS bitisi (T12.4) yalnizca dogrulama varken tasinir.
+    [
+      'tok_3ds_bitisli',
+      {
+        status: PAYMENT_STATUS.REQUIRES_3DS,
+        challengeId: 'tds_2',
+        challengeExpiresAt: CHALLENGE_EXPIRES_AT,
+      },
+    ],
+    ['tok_bitis_yalniz', { status: PAYMENT_STATUS.SUCCEEDED }],
   ])('%s -> %o', async (cardToken, expected) => {
     await expect(payments.charge(charge({ cardToken }), scope)).resolves.toEqual(expected);
+  });
+
+  it('kayitli kart (T12.4): card_id telde, jeton bos gider', async () => {
+    const { cardToken: _omitted, ...saved } = charge({ cardId: 'crd_kayitli' });
+
+    await expect(payments.charge(saved, scope)).resolves.toEqual({
+      status: PAYMENT_STATUS.SUCCEEDED,
+    });
+    expect(seenCharges.at(-1)).toMatchObject({ cardId: 'crd_kayitli', cardToken: '' });
+  });
+
+  it('kasada olmayan kart: NOT_FOUND kodu ve resource "card" AYNEN korunur', async () => {
+    const { cardToken: _omitted, ...saved } = charge({ cardId: MISSING_CARD_ID });
+
+    const error = await rejectionOf(payments.charge(saved, scope));
+
+    expect(error.code).toBe(ERROR_CODES.NOT_FOUND);
+    expect(error.details).toEqual({ resource: 'card' });
   });
 
   it('durumsuz cevapla siparis ilerletilmez: INTERNAL', async () => {
