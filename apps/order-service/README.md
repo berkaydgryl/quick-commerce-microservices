@@ -194,10 +194,28 @@ asla iki kez çekilmez.
 | 3DS                         | `AWAITING_PAYMENT`                  | `challenge_id` → `ConfirmPayment` |
 | Red / sağlayıcı hatası      | `PAYMENT_FAILED`, not hata anahtarı | `PAYMENT_DECLINED` (ya da nedeni) |
 | Kartlı çekim hâlâ `PENDING` | değişmez (eş zamanlı istek sürüyor) | `REQUEST_IN_PROGRESS`             |
+| Kayıtlı kart kasada yok     | `AWAITING_PAYMENT`, kilit yerinde   | `NOT_FOUND` (`resource: card`)    |
 
 **Tekrar deneme:** çekim cevabı kaybolursa (payment-svc'ye ulaşılamadı) sipariş `AWAITING_PAYMENT`
 kalır. Aynı `CreateOrder` tekrar gelince risk yeniden sorulmaz (kayıtlı bandın kuralı geçerli);
 çekim aynı anahtarla gider, payment-svc ikinci kez çekmez.
+
+**Kayıtlı kart (T12.4):** kartlı ödemede `card_id` (kullanıcının kasasındaki kart) ya da
+`card_token` (DEPRECATED test jetonu), tam biri; kapıda ödemede ikisi de boş (payment-svc'deki
+kuralla aynı). Kart yoksa, silinmişse ya da başkasınınsa payment-svc `NOT_FOUND` (ayrıntı yalnızca
+`resource: card`) döner ve kayıt yazmaz; order hatayı aynen geçirir. Sipariş `AWAITING_PAYMENT`
+kalır, kilit yerindedir; aynı sipariş başka kartla yeniden verilir (anahtar harcanmamıştır, eski
+sonuç dönmez). Eş zamanlı iki denemeden kartı bulunamayan siparişe hiçbir şey yazmaz. 3DS
+istendiyse cevapta `challenge_expires_at` döner (payment-svc'nin penceresi, çekimden 60 sn).
+
+**Sipariş ayrıntıları (T12.4):** `details` gRPC'de **zorunludur** (kapıda ödemede de): hediye
+(alıcı adı ve telefonu, gönderici adı, mesaj), kuryeye not, "Zili Çalma" ve sözleşme onayı.
+Kurallar tek kaynaktan, `@getir/contracts` `checkout-rules.ts`; hata cümleleri değeri yankılamaz.
+Ayrıntı risk adımının yazımında siparişe girer, onayın anı sunucu saatidir. Tekrar denemede ilk
+yazılan geçerlidir; farklı gelen yok sayılır ve değeri yazılmadan INFO düşer (T12.4 öncesi ödeme
+bekleyen sipariş tekrar denemede ayrıntı almaz; kilit ömrü kadar geçici). Yalnızca `GetOrder`
+(sahibine) döndürür; `ListMyOrders` ve geçmiş döndürmez. Kişisel veri günlüğe, hata ayrıntısına ve
+olaylara (outbox) girmez; Mongo'da `details` alt belgesindedir (saklama süresi bekleyen iş 133).
 
 **3. Telafi (P3):** çekim başarılı ama sipariş `PAID` yazılamadı (sürüm çakışması — örneğin
 kullanıcı tam o anda iptal etti) → tutar **iade edilir** (`Refund`, anahtar `refund-<orderId>`),
@@ -286,7 +304,8 @@ değişken), süre sınırı 1 sn.
   `CANCELLED`'a geçince `statusChangedEvents` `order.status_changed`'in ardından
   `payment.cancel_requested` üretir; iptal eden her yazım (kullanıcı, süpürücü, kilidi düşmüş ödeme)
   aynı fonksiyonu kullandığı için komut unutulamaz ve siparişle aynı transaction'dadır. Kapıda
-  ödemenin `PENDING`'ini ve 3DS bekleyen kartı payment `CANCELLED` yapar (payment README).
+  ödemenin `PENDING`'ini ve 3DS bekleyen kartı payment `CANCELLED` yapar; alınmış tutarı ise iade
+  eder (bekleyen iş 134; payment README).
 - **Devre kesici (D17, PR 4):** inventory istemcisi de bağımlılık başına devreli; kısaltma tekrar
   güvenli olduğu için yeniden denenir. Uzatma T15.3'ten beri (bekleyen iş 117, QA IQ3) beklenen bitişle
   gider ve o da yeniden denenir: cevabı kaybolan uzatmanın tekrarı bitişi değişmiş bulur, hak harcamaz.
@@ -634,8 +653,10 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/order/v1/order
 #    (teslimat yok 15 + bot hızı 15 = 30): 4242 bile 3DS ister, cevapta challenge_id döner.
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/order/v1/order.proto \
   -d '{"order_id":"<1. adımdan>","user_id":"usr_1","payment_method":"PAYMENT_METHOD_CARD",
-       "card_token":"tok_test_4242","idempotency_key":"4f1c3a2b-9d8e"}' \
+       "card_token":"tok_test_4242","idempotency_key":"4f1c3a2b-9d8e",
+       "details":{"note":"","do_not_ring_bell":false,"agreements_accepted":true}}' \
   localhost:50053 getir.order.v1.OrderService/CreateOrder
+#    details zorunlu (T12.4). Kayıtlı kartla: card_token yerine "card_id":"crd_..." (kart kasası).
 
 # 2b) 3DS istendiyse onayla → PAID (mock kod 123456; yanlış kod THREEDS_FAILED + kalan hak)
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/order/v1/order.proto \

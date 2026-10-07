@@ -6,10 +6,13 @@
  * payment-svc gibi idempotent: ayni anahtarla ikinci cekim ilk sonucu doner.
  * Odeme kaydi (getPayment) cekimlerden kurulur: son sonuc ve yontem; iade
  * kaydi REFUNDED yapar. Test kaydi `payments` ile dogrudan da kurabilir.
+ *
+ * Kayitli kart (T12.4): `cards` kasadir (kimlik -> sahip ve jeton). payment-svc
+ * gibi once tekrar (ayni anahtar) bakilir, sonra kart cozulur; kart yoksa ya da
+ * baskasininsa NOT_FOUND (resource "card") ve HICBIR kayit yazilmaz.
  */
 
-import { ERROR_CODES } from '@getir/core';
-import type { AppError } from '@getir/core';
+import { AppError, ERROR_CODES } from '@getir/core';
 
 import type {
   ChargeRequest,
@@ -43,6 +46,12 @@ export function fakeChargeResult(request: ChargeRequest): PaymentResult {
   return { status: PAYMENT_STATUS.SUCCEEDED };
 }
 
+/** Kasadaki kart: sahibi ve saglayici jetonu (TEST_CARD'lardan biri). */
+export interface FakeSavedCard {
+  readonly userId: string;
+  readonly token: string;
+}
+
 export class FakePayments implements Payments {
   readonly charges: ChargeRequest[] = [];
   readonly confirmations: ConfirmThreeDsRequest[] = [];
@@ -61,17 +70,34 @@ export class FakePayments implements Payments {
   readonly lookups: string[] = [];
   /** Doluysa kayit okumasi bu hatayla basarisiz olur. */
   getPaymentFailure: AppError | undefined;
+  /** Kart kasasi (T12.4): kart kimligi -> sahip ve jeton. */
+  readonly cards = new Map<string, FakeSavedCard>();
 
   async charge(request: ChargeRequest): Promise<PaymentResult> {
     this.charges.push(request);
     if (this.chargeFailure !== undefined) {
       throw this.chargeFailure;
     }
-    const result = this.byKey.get(request.idempotencyKey) ?? fakeChargeResult(request);
+    const result =
+      this.byKey.get(request.idempotencyKey) ?? fakeChargeResult(this.withCardToken(request));
     this.byKey.set(request.idempotencyKey, result);
     this.payments.set(request.orderId, { status: result.status, method: request.method });
     await this.beforeChargeReturns?.();
     return result;
+  }
+
+  /** Kayitli karti jetona cozer; kart yoksa NOT_FOUND (cagiran kayit yazmadan firlar). */
+  private withCardToken(request: ChargeRequest): ChargeRequest {
+    if (request.cardId === undefined) {
+      return request;
+    }
+    const card = this.cards.get(request.cardId);
+    if (card === undefined || card.userId !== request.userId) {
+      throw new AppError(ERROR_CODES.NOT_FOUND, 'Kart bulunamadi', {
+        details: { resource: 'card' },
+      });
+    }
+    return { ...request, cardToken: card.token };
   }
 
   confirmThreeDs(request: ConfirmThreeDsRequest): Promise<PaymentResult> {

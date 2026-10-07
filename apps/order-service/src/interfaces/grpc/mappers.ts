@@ -10,6 +10,7 @@ import { ORDER_STATUS } from '@getir/core';
 import type { OrderStatus } from '@getir/core';
 import { commonV1, orderV1 } from '@getir/proto';
 
+import type { OrderDetails } from '../../domain/order-details.js';
 import { ITEM_UNIT } from '../../domain/order-item.js';
 import type { ItemUnit, OrderItem } from '../../domain/order-item.js';
 import type { Order, TimelineEntry } from '../../domain/order.js';
@@ -75,9 +76,16 @@ function toProtoTimelineEntry(entry: TimelineEntry): orderV1.OrderTimelineEntry 
  * AWAITING_PAYMENT. Odenen, iptal edilen ya da reddedilen sipariste kilit yok;
  * eski an istemciye geri sayim gibi gorunmesin diye yazilmaz.
  *
+ * details (T12.4) VARSAYILAN olarak YAZILMAZ: hediye alicisinin adi ve telefonu
+ * kisisel veridir. Yalnizca siparisin SAHIBINE tek siparis okunurken (GetOrder,
+ * sahiplik denetimli) `withDetails` ile eklenir; liste ve gecmis dondurmez.
+ *
  * BILEREK BOS: dark_store_id kullanimdan kalkti (ADR-15); yerini market_id aldi.
  */
-export function toProtoOrder(order: Order): orderV1.Order {
+export function toProtoOrder(
+  order: Order,
+  { withDetails = false }: { readonly withDetails?: boolean } = {},
+): orderV1.Order {
   return {
     id: order.id,
     userId: order.userId,
@@ -97,5 +105,29 @@ export function toProtoOrder(order: Order): orderV1.Order {
     ...(order.reservation !== undefined && RESERVATION_HOLDING_STATUSES.has(order.status)
       ? { reservationExpiresAt: order.reservation.expiresAt }
       : {}),
+    ...(withDetails && order.details !== undefined
+      ? { details: toProtoDetails(order.details) }
+      : {}),
+  };
+}
+
+/** Kayitli ayrinti onaydan sonra yazilir: onay her zaman true, ani sunucu saati. */
+function toProtoDetails(details: OrderDetails): orderV1.OrderDetails {
+  const { gift } = details;
+  return {
+    ...(gift === undefined
+      ? {}
+      : {
+          gift: {
+            message: gift.message,
+            senderName: gift.senderName,
+            recipientName: gift.recipientName,
+            recipientPhone: gift.recipientPhone,
+          },
+        }),
+    note: details.note,
+    doNotRingBell: details.doNotRingBell,
+    agreementsAccepted: true,
+    agreementsAcceptedAt: details.agreementsAcceptedAt,
   };
 }

@@ -10,9 +10,9 @@ import { describe, expect, it } from 'vitest';
 import {
   cancelOrderRequestSchema,
   confirmPaymentRequestSchema,
-  createOrderRequestSchema,
   listMyOrdersRequestSchema,
 } from '../../../src/interfaces/grpc/schemas.js';
+import { createOrderRequestSchema } from '../../../src/interfaces/grpc/create-order-schema.js';
 import {
   confirmPaymentRequest,
   createOrderRequest,
@@ -40,6 +40,7 @@ describe('createOrderRequestSchema', () => {
       cardToken: 'tok_test_4242',
       idempotencyKey: IDEMPOTENCY_KEY,
       signals: {},
+      details: { note: '', doNotRingBell: false },
     });
   });
 
@@ -60,11 +61,12 @@ describe('createOrderRequestSchema', () => {
       'paymentMethod',
       'odeme yontemi zorunlu',
     ],
-    [{ cardToken: '' }, 'cardToken', 'kartli odemede zorunlu'],
+    // Kart kurali payment-svc'ninkiyle ayni (T12.4): card_id ya da card_token, TAM biri.
+    [{ cardToken: '' }, 'cardId', 'kartli odemede card_id ya da card_token zorunlu'],
     [
       { paymentMethod: paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY },
       'cardToken',
-      'kapida odemede bos olmali',
+      'kapida odemede kart bos olmali',
     ],
   ])('gecersiz odeme %o: tek hata, alaniyla', (overrides, field, message) => {
     expect(issuesOf(overrides)).toEqual([[field, message]]);

@@ -72,14 +72,18 @@ export class GrpcPayments implements Payments {
         amount: { amountMinor: request.amountMinor, currency: request.currency },
         method: METHOD_TO_PROTO[request.method],
         cardToken: request.cardToken ?? '',
-        // Kayitli kart (T12.4): sozlesmede var, order PR'i doldurur.
-        cardId: '',
+        cardId: request.cardId ?? '',
         idempotencyKey: request.idempotencyKey,
         requireThreeDs: request.requireThreeDs,
       },
       this.options(scope, IDEMPOTENT),
     );
-    return toPaymentResult(request.orderId, response.payment, response.challengeId);
+    return {
+      ...toPaymentResult(request.orderId, response.payment, response.challengeId),
+      ...(response.challengeId === '' || response.challengeExpiresAt === undefined
+        ? {}
+        : { challengeExpiresAt: response.challengeExpiresAt }),
+    };
   }
 
   async confirmThreeDs(
