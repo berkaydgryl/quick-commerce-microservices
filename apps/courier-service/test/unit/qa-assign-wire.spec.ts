@@ -90,8 +90,8 @@ async function assignedCourier(server: QaCourierServer, order: string, market: s
   return outcome.courierId;
 }
 
-describe('QA T13.2 havuz tel uzerinden (MOCK, 63 kurye, iki semt)', () => {
-  it('butun marketlere 4er istek ayni anda: her semt kendi kuryesi kadar atar (Kadikoy 30, Besiktas 33), fazlasi NOT_FOUND ve marketi soyler; kurye semtini asmaz', async () => {
+describe('QA T13.2 havuz tel uzerinden (MOCK, 99 kurye, iki semt)', () => {
+  it('butun marketlere 4er istek ayni anda: her semt kendi kuryesi kadar atar (Kadikoy 48, Besiktas 51), fazlasi NOT_FOUND ve marketi soyler; kurye semtini asmaz', async () => {
     const { qa: server } = await startMock();
     expect(MARKETS).toHaveLength(DEMO_MARKET_COUNT);
 
