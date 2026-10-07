@@ -29,6 +29,7 @@ export * from './content.js';
 export * from './geo.js';
 export * from './order-status.js';
 export * from './cart.js';
+export * from './checkout-rules.js';
 export * from './order.js';
 export * from './socket.js';
 export * from './events.js';

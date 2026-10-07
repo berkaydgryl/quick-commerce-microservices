@@ -279,8 +279,9 @@ function shopOf(parts: {
   const onRefund = createRefundRequestedHandler({
     refund: createRefund({ repository: payments, clock: world.clock }),
   });
+  const refund = createRefund({ repository: payments, clock: world.clock });
   const onCancel = createCancelRequestedHandler({
-    cancel: createCancelPayment({ repository: payments, clock: world.clock }),
+    cancel: createCancelPayment({ repository: payments, clock: world.clock, refund }),
   });
   return {
     faults,

@@ -188,6 +188,11 @@ message Order {
   google.protobuf.Timestamp reservation_expires_at = 14;
 
   repeated OrderTimelineEntry timeline = 15;
+
+  // Siparis ayrintilari (T12.4): yalnizca siparisin SAHIBINE doner (GetOrder
+  // zaten sahiplik denetler); agreements_accepted_at sunucu saatidir.
+  // Verilmeden olusturulmus sipariste bos.
+  OrderDetails details = 17;
 }
 
 message CreateDraftOrderRequest {
@@ -259,8 +264,11 @@ message CreateOrderRequest {
   // order-svc tarafinda uygulanir.
   getir.payment.v1.PaymentMethod payment_method = 3;
 
-  // Kart yontemi icin saklanan kart jetonu. Ham kart verisi HICBIR ZAMAN bu
-  // sozlesmeden gecmez.
+  // DEPRECATED (T12.4; yorumla, secenekle degil: hala okunuyor): card_id
+  // kullanin. Demo saglayicisinin test jetonu;
+  // personalar ve eski istemciler icin kabul edilir (kaldirma bekleyen is 118).
+  // card_id ile birlikte gelirse VALIDATION_FAILED. Ham kart verisi HICBIR
+  // ZAMAN bu sozlesmeden gecmez.
   string card_token = 4;
 
   string idempotency_key = 5;
@@ -269,6 +277,58 @@ message CreateOrderRequest {
   // gateway bunlari baglantidan ve oturumdan doldurur. Gonderilmezse ya da
   // alanlari bossa ilgili risk kurali tetiklenmez.
   CheckoutSignals signals = 6;
+
+  // Kayitli kart (T12.4; kart kasasi, getir.cardvault.v1): kullanicinin
+  // kasasindaki kartin kimligi (crd_). Kart verisi ve saglayici jetonu
+  // TASINMAZ; jetonu payment-svc kendi kasasindan cozer. Kart yoksa, silinmisse
+  // ya da baskasininsa NOT_FOUND (ayrinti resource = "card"; ikisi ayni cevap,
+  // varlik sizdirmaz): odeme kaydi yazilmaz, siparis AWAITING_PAYMENT kalir ve
+  // ayni siparis baska kartla yeniden verilebilir.
+  string card_id = 7;
+
+  // Siparis ayrintilari (T12.4): hediye, not, zili calma, sozlesme onayi.
+  // REST'te zorunludur (gateway); ic cagiranlar icin gonderilmeyebilir.
+  // Kurallar @getir/contracts checkout-rules.ts'te; kisisel veri gunluge,
+  // ize ve olaylara yazilmaz.
+  OrderDetails details = 8;
+}
+
+// Siparis ayrintilari (T12.4). Kurallar (@getir/contracts checkout-rules.ts;
+// uzunluk UTF-16 kod birimi): not ve hediye mesaji en fazla 250, adlar en fazla
+// 60; alici adi bosluktan ibaret olamaz; alici telefonu E.164 (PHONE_PATTERN);
+// sozlesme onayi true olmalidir. Disi VALIDATION_FAILED; hata ayrintisi degeri
+// YANKILAMAZ.
+message OrderDetails {
+  // Hediye: yoksa siparis hediye degildir.
+  GiftDetails gift = 1;
+
+  // Kuryeye not; bos olabilir. Gunlukte maskelenir.
+  string note = 2;
+
+  // "Zili calma": kurye kapiyi calmaz, arar.
+  bool do_not_ring_bell = 3;
+
+  // Mesafeli satis sozlesmesi ve on bilgilendirme onayi. Istekte true olmalidir.
+  bool agreements_accepted = 4;
+
+  // Onayin sunucu saatiyle ani. YALNIZCA cevapta (Order.details) doludur;
+  // istekte gonderilirse yok sayilir.
+  google.protobuf.Timestamp agreements_accepted_at = 5;
+}
+
+// Hediye bilgileri (T12.4). Alici adi ve telefonu kisisel veridir: gunluge,
+// ize ve olaylara yazilmaz; mesaj gunlukte maskelenir.
+message GiftDetails {
+  // Hediye kartindaki mesaj; bos olabilir.
+  string message = 1;
+
+  // Gonderici adi; bos olabilir.
+  string sender_name = 2;
+
+  string recipient_name = 3;
+
+  // E.164 ("+905321234567").
+  string recipient_phone = 4;
 }
 
 // Gateway'in bildigi, istemcinin GONDEREMEDIGI risk sinyalleri (T7.5).
@@ -318,6 +378,11 @@ message CreateOrderResponse {
   // Bos DEGILSE 3DS dogrulamasi bekleniyor demektir. Ayrica bir bayrak alani
   // tutulmaz; iki kaynak birbiriyle celisebilirdi.
   string challenge_id = 3;
+
+  // 3DS kodunun gecerlilik bitisi (T12.4): yalnizca challenge_id doluyken.
+  // payment-svc'nin penceresi (cekimden itibaren 60 sn); gateway istemciye kalan
+  // saniye (ttlSeconds) olarak cevirir.
+  google.protobuf.Timestamp challenge_expires_at = 4;
 }
 
 message ConfirmPaymentRequest {

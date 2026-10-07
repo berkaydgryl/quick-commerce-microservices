@@ -9,10 +9,13 @@ import type { EventHandler } from '@getir/event-bus';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createCancelPayment } from '../../src/application/cancel-payment.js';
-import { PAYMENT_METHOD, PAYMENT_STATUS } from '../../src/domain/payment.js';
+import { createRefund } from '../../src/application/refund.js';
+import { ATTEMPT_KIND, PAYMENT_METHOD, PAYMENT_STATUS } from '../../src/domain/payment.js';
 import { InMemoryPaymentStore } from '../../src/infrastructure/memory/in-memory-payment-store.js';
 import { createCancelRequestedHandler } from '../../src/interfaces/workers/cancel-requested.js';
+import { createRefundRequestedHandler } from '../../src/interfaces/workers/refund-requested.js';
 import { cancelCommand } from '../support/cancel-command.js';
+import { refundCommand } from '../support/refund-command.js';
 import { chargeOrder } from '../support/charge-order.js';
 
 const clock = fixedClock(Date.UTC(2026, 9, 2, 12, 0, 0));
@@ -27,7 +30,9 @@ beforeEach(() => {
 });
 
 const handler = (): EventHandler =>
-  createCancelRequestedHandler({ cancel: createCancelPayment({ repository, clock }) });
+  createCancelRequestedHandler({
+    cancel: createCancelPayment({ repository, clock, refund: createRefund({ repository, clock }) }),
+  });
 const command = (override: Record<string, unknown> = {}) =>
   cancelCommand(orderId, clock.date(), override);
 const cashOnDelivery = () =>
@@ -44,17 +49,58 @@ describe('iptal komutu: islenir', () => {
     });
   });
 
-  it('kapatilacak bir sey yoksa da onaylanir: para alinmis, kayit yok, zaten kapali', async () => {
-    await chargeOrder({ repository, clock, orderId, cardToken: 'tok_test_4242' });
+  it('kapatilacak bir sey yoksa da onaylanir: kayit yok, zaten kapali', async () => {
+    await cashOnDelivery();
     const otherOrder = newId(ID_PREFIX.ORDER);
 
+    await expect(handler()(command(), delivery)).resolves.toEqual({ kind: 'handled' });
     await expect(handler()(command(), delivery)).resolves.toEqual({ kind: 'handled' });
     await expect(handler()(cancelCommand(otherOrder, clock.date()), delivery)).resolves.toEqual({
       kind: 'handled',
     });
-    await expect(repository.findByOrderId(orderId)).resolves.toMatchObject({
-      status: PAYMENT_STATUS.SUCCEEDED,
+  });
+
+  it('para alinmis (T15.3, bekleyen is 134): IADE edilir, olay onaylanir; WARN satirinda tutar ve kart YOK', async () => {
+    await chargeOrder({ repository, clock, orderId, cardToken: 'tok_test_4242' });
+    const warn = vi.fn<(fields: LogFields, message: string) => void>();
+    const logger: Logger = { ...silentLogger, warn };
+
+    await expect(handler()(command(), { attempt: 1, logger })).resolves.toEqual({
+      kind: 'handled',
     });
+
+    await expect(repository.findByOrderId(orderId)).resolves.toMatchObject({
+      status: PAYMENT_STATUS.REFUNDED,
+      refundReason: 'order_cancelled',
+    });
+    expect(warn.mock.calls).toEqual([
+      [
+        { orderId, outcome: 'refunded', status: 'REFUNDED' },
+        'iptal komutu: iptal edilen sipariste alinmis tutar iade edildi',
+      ],
+    ]);
+    // Kimlik rastgele onaltilik: icinde "4242" gecebilir, aramadan once cikarilir.
+    const line = JSON.stringify(warn.mock.calls).replaceAll(orderId, '');
+    expect(line).not.toMatch(/amount|tok_|card|12990|4242/i);
+  });
+
+  it('iptal komutu ve iade komutu ayni anda islenir (kilidi dusmus, parasi alinmis siparis): TEK iade', async () => {
+    await chargeOrder({ repository, clock, orderId, cardToken: 'tok_test_4242' });
+    const refundHandler = createRefundRequestedHandler({
+      refund: createRefund({ repository, clock }),
+    });
+
+    await Promise.all([
+      handler()(command(), delivery),
+      refundHandler(refundCommand(orderId, clock.date()), delivery),
+    ]);
+    await handler()(command(), delivery);
+
+    const after = await repository.findByOrderId(orderId);
+    expect(after?.status).toBe(PAYMENT_STATUS.REFUNDED);
+    expect(after?.attempts.filter((attempt) => attempt.kind === ATTEMPT_KIND.REFUND)).toHaveLength(
+      1,
+    );
   });
 
   it('gunluge siparis kimligi, sonuc ve kaydin durumu yazilir', async () => {

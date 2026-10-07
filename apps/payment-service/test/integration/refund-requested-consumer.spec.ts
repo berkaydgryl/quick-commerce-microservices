@@ -216,15 +216,37 @@ describe('payment.cancel_requested uctan uca (Mongo + Redis, T11.2 PR 3)', () =>
     expect(payment?.attempts.map((attempt) => attempt.kind)).toEqual(['CANCEL']);
   });
 
-  it('parasi alinmis odemeye dokunulmaz; komut onaylanir (olu olaylara gitmez)', async () => {
+  it('parasi alinmis odeme IADE edilir (T15.3, bekleyen is 134); komut tekrar gelirse ikinci iade yok', async () => {
+    const streams = freshStreams();
+    const orderId = await chargedOrder();
+    await startPaymentConsumer(streams);
+    const command = cancelCommand(orderId, new Date());
+
+    await publish(streams, command);
+    await waitFor(async () => (await statusOf(orderId)) === PAYMENT_STATUS.REFUNDED);
+    await publish(streams, command);
+    await waitFor(() => groupDrained(streams));
+
+    const payment = await store.findByOrderId(orderId);
+    expect(payment?.refundReason).toBe('order_cancelled');
+    expect(payment?.attempts.map((attempt) => attempt.kind)).toEqual(['CHARGE', 'REFUND']);
+    expect(await admin.redis.xlen(streams.deadLetterKey)).toBe(0);
+  });
+
+  it("iptal komutu ardindan iade komutu (order'in yazdigi sira): TEK iade, olu olay yok", async () => {
     const streams = freshStreams();
     const orderId = await chargedOrder();
     await startPaymentConsumer(streams);
 
+    // Order'in yazdigi sira (ayni outbox yazimi): once iptal komutu, sonra iade komutu.
+    // Iptal iade eder; ardindan gelen iade komutu "zaten iade edilmis" gormeli.
     await publish(streams, cancelCommand(orderId, new Date()));
+    await publish(streams, refundCommand(orderId, new Date()));
+    await waitFor(async () => (await statusOf(orderId)) === PAYMENT_STATUS.REFUNDED);
     await waitFor(() => groupDrained(streams));
 
-    await expect(statusOf(orderId)).resolves.toBe(PAYMENT_STATUS.SUCCEEDED);
+    const payment = await store.findByOrderId(orderId);
+    expect(payment?.attempts.map((attempt) => attempt.kind)).toEqual(['CHARGE', 'REFUND']);
     expect(await admin.redis.xlen(streams.deadLetterKey)).toBe(0);
   });
 });

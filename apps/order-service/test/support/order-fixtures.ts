@@ -37,6 +37,7 @@ export function createOrderRequest(
     userId: draftRequest.userId,
     paymentMethod: paymentV1.PaymentMethod.PAYMENT_METHOD_CARD,
     cardToken: 'tok_test_4242',
+    cardId: '',
     idempotencyKey: IDEMPOTENCY_KEY,
     ...overrides,
   };

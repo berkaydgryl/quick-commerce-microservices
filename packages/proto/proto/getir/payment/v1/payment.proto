@@ -110,7 +110,10 @@ message ChargeRequest {
 
   PaymentMethod method = 4;
 
-  // Saklanmis kart jetonu. CASH_ON_DELIVERY icin bos birakilir.
+  // DEPRECATED (T12.4; yorumla, secenekle degil: hala okunuyor): card_id
+  // kullanin. Demo saglayicisinin test jetonu;
+  // personalar ve eski cagiranlar icin kabul edilir (kaldirma bekleyen is 118).
+  // CASH_ON_DELIVERY icin bos birakilir.
   string card_token = 5;
 
   // ADR-08: ayni anahtarla gelen ikinci cagri TEKRAR cekim yapmaz, ilk
@@ -122,6 +125,14 @@ message ChargeRequest {
   // payment yalnizca uygular. Reddedilecek kart yine reddedilir. Kapida
   // odemede anlamsizdir: true gelirse VALIDATION_FAILED.
   bool require_three_ds = 7;
+
+  // Kayitli kart (T12.4): kart kasasindaki kartin kimligi (crd_). payment-svc
+  // kartin bu user_id'ye ait ve ACTIVE oldugunu denetler, saglayici jetonunu
+  // kendi kasasindan cozer; jeton cagirana DONMEZ. Kart yoksa, silinmisse ya da
+  // baskasininsa NOT_FOUND (ayrinti resource = "card"; varlik sizdirmaz) ve
+  // HICBIR kayit yazilmaz: idempotency anahtari harcanmaz, ayni siparis baska
+  // kartla yeniden cekilebilir. card_token ile birlikte gelirse VALIDATION_FAILED.
+  string card_id = 8;
 }
 
 // Cekim cevabi.
@@ -136,6 +147,10 @@ message ChargeResponse {
   // Bos DEGILSE 3DS dogrulamasi bekleniyor demektir (status = REQUIRES_3DS).
   // Bu jeton Confirm3Ds cagrisina oldugu gibi geri verilir.
   string challenge_id = 2;
+
+  // 3DS kodunun gecerlilik bitisi (T12.4): yalnizca challenge_id doluyken.
+  // Pencere cekim anindan baslar (T5.2); tekrar istekte ilk cekimin bitisi doner.
+  google.protobuf.Timestamp challenge_expires_at = 3;
 }
 
 message Confirm3DsRequest {

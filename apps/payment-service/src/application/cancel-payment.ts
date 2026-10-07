@@ -1,7 +1,8 @@
 /**
  * CancelPayment use-case (T11.2 PR 3): iptal edilen siparisin tahsil edilmemis
- * odemesini kapatir. Kurallar domain/cancel.ts'te; burasi okur, karar verir,
- * surum kontrollu yazar.
+ * odemesini kapatir; para alinmissa iade eder (T15.3, bekleyen is 134; Refund
+ * use-case'i, ayni idempotent yol). Kurallar domain/cancel.ts'te; burasi okur,
+ * karar verir, surum kontrollu yazar.
  *
  * Cagiran payment.cancel_requested tuketicisidir. Teslimat en az bir kezdir:
  * ayni komut iki kez gelirse ikincisi "zaten iptal" gorur. Es zamanli bir yazim
@@ -15,10 +16,13 @@ import type { Clock } from '@getir/core';
 import { CANCEL_DECISION, cancelPayment, decideCancellation } from '../domain/cancel.js';
 import type { Payment } from '../domain/payment.js';
 import type { PaymentRepository } from '../domain/payment-repository.js';
+import type { Refund } from './refund.js';
 
 export interface CancelPaymentDeps {
   readonly repository: Pick<PaymentRepository, 'findByOrderId' | 'update'>;
   readonly clock: Clock;
+  /** Para alinmis odemenin iadesi (refund.ts): tekrar ve yarista tek iade. */
+  readonly refund: Refund;
 }
 
 export interface CancelPaymentInput {
@@ -30,8 +34,12 @@ export interface CancelPaymentInput {
 export const CANCEL_OUTCOME = {
   CANCELLED: 'cancelled',
   ALREADY_CANCELLED: 'already-cancelled',
-  /** Para alinmis, iade edilmis ya da odeme basarisiz: kapatilacak bir sey yok. */
+  /** Iade edilmis ya da odeme basarisiz: kapatilacak bir sey yok. */
   NOTHING_TO_CANCEL: 'nothing-to-cancel',
+  /** Para alinmisti: bu komut iade etti (T15.3). */
+  REFUNDED: 'refunded',
+  /** Para alinmisti ama o arada baska yol (order'in iadesi) iade etmisti. */
+  ALREADY_REFUNDED: 'already-refunded',
   /** O siparis icin hic cekim istenmemis. */
   NO_PAYMENT: 'no-payment',
 } as const;
@@ -70,6 +78,16 @@ export function createCancelPayment(deps: CancelPaymentDeps): CancelPayment {
           throw new AppError(ERROR_CODES.REQUEST_IN_PROGRESS, 'Kart cekimi hala isleniyor', {
             details: { orderId },
           });
+        case CANCEL_DECISION.REFUND: {
+          // Hata firlarsa komut onaylanmaz: yeniden teslim, hak bitince olu olay (ERROR).
+          const refunded = await deps.refund({ orderId, reason });
+          return {
+            outcome: refunded.alreadyRefunded
+              ? CANCEL_OUTCOME.ALREADY_REFUNDED
+              : CANCEL_OUTCOME.REFUNDED,
+            payment: refunded.payment,
+          };
+        }
         case CANCEL_DECISION.CANCEL:
           break;
       }

@@ -145,6 +145,10 @@ export function subscribePaymentEvents(
       cancel: createCancelPayment({
         repository: options.repository,
         clock: options.clock ?? systemClock,
+        refund: createRefund({
+          repository: options.repository,
+          clock: options.clock ?? systemClock,
+        }),
       }),
     }),
   );

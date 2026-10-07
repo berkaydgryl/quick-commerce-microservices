@@ -65,6 +65,7 @@ export async function chargeWith3Ds(client: Client, orderId: string): Promise<st
     amount: { amountMinor: 12_990, currency: 'TRY' },
     method: paymentV1.PaymentMethod.PAYMENT_METHOD_CARD,
     cardToken: 'tok_test_3184',
+    cardId: '',
     idempotencyKey: `anahtar-${orderId}`,
     requireThreeDs: false,
   });

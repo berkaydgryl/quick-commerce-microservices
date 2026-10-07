@@ -13,6 +13,7 @@
 import { z } from 'zod';
 
 import {
+  cardIdSchema,
   geoPointSchema,
   idSchema,
   isoDateTimeSchema,
@@ -21,6 +22,7 @@ import {
   pageSchema,
 } from './common.js';
 import { deliveryAddressSchema, reservationLineSchema } from './cart.js';
+import { orderDetailsSchema, orderDetailsViewSchema } from './checkout-rules.js';
 import { ORDER_HISTORY_PAGE_SIZE_MAX, OTP_PATTERN } from './constants.js';
 import { orderStatusSchema } from './order-status.js';
 
@@ -33,14 +35,29 @@ import { orderStatusSchema } from './order-status.js';
  */
 export const paymentMethodSchema = z.enum(['CARD']);
 
-export const orderPaymentInputSchema = z.object({
-  method: paymentMethodSchema,
-  /**
-   * Demo saglayicisinin urettigi jeton; kart numarasi TASINMAZ. Kartli odemede
-   * ZORUNLU (tek yontem kart oldugu icin her zaman).
-   */
-  cardToken: z.string().trim().min(1),
-});
+/** Kart secilmedi ya da iki kaynak birden geldi: tam biri gerekir. */
+export const PAYMENT_CARD_MESSAGE = 'Ödeme için bir kart seç';
+
+export const orderPaymentInputSchema = z
+  .object({
+    method: paymentMethodSchema,
+    /**
+     * Kayitli kart (T12.4): kart kasasindaki kartin kimligi. Kart verisi ve
+     * saglayici jetonu TASINMAZ. Kart yoksa, silinmisse ya da baskasininsa 404
+     * NOT_FOUND, ayrintida resource "card" (ikisi ayni cevap): siparis odeme
+     * bekler kalir, ayni siparis baska kartla yeniden verilebilir.
+     */
+    cardId: cardIdSchema.optional(),
+    /**
+     * DEPRECATED (T12.4): cardId kullanin. Demo saglayicisinin test jetonu;
+     * personalar ve eski istemciler icin kabul edilir (kaldirma bekleyen is 118).
+     */
+    cardToken: z.string().trim().min(1).optional(),
+  })
+  .refine((payment) => (payment.cardId === undefined) !== (payment.cardToken === undefined), {
+    message: PAYMENT_CARD_MESSAGE,
+    path: ['cardId'],
+  });
 
 /**
  * Siparis olusturma istegi.
@@ -53,6 +70,8 @@ export const orderPaymentInputSchema = z.object({
 export const createOrderRequestSchema = z.object({
   orderId: idSchema,
   payment: orderPaymentInputSchema,
+  /** Hediye, not, "Zili Çalma", sozlesme onayi (T12.4; kurallar checkout-rules.ts). */
+  details: orderDetailsSchema,
 });
 
 export const threeDsRequestSchema = z.object({
@@ -64,6 +83,11 @@ export const threeDsRequestSchema = z.object({
 /** 3DS bekleyen siparisin dogrulama jetonu (POST /v1/orders/{id}/3ds'e gider). */
 export const threeDsChallengeSchema = z.object({
   challengeId: z.string().min(1),
+  /**
+   * Kodun kalan gecerliligi, sunucu saatiyle saniye (T12.4): pencere cekim
+   * anindan baslar (60 sn). Sayac buna gore; istemci saatinden bagimsiz.
+   */
+  ttlSeconds: z.number().int().min(0).optional(),
 });
 
 /**
@@ -125,6 +149,11 @@ export const orderSchema = z.object({
    */
   reservationExpiresAt: isoDateTimeSchema.optional(),
   reservationTtlSeconds: z.number().int().min(0).optional(),
+  /**
+   * Hediye, not, "Zili Çalma" ve sozlesme onayi (T12.4): yalnizca siparisin
+   * SAHIBINE doner; ayrintisiz verilmis sipariste yoktur.
+   */
+  details: orderDetailsViewSchema.optional(),
 });
 
 /**
