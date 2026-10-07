@@ -9,10 +9,12 @@
  *   R2 GetLastEvaluation sahipligi: baskasinin siparisi NOT_FOUND, olmayan siparisle AYNI cevap
  *      (varlik ve sahibin kimligi sizmaz); sahip ayni siparisi okur; yalniz kullaniciyla sorgu
  *      onun en son degerlendirmesi.
- *   R3 BULGU (#167): kayit yazilamazsa karar yine doner (tasarim, T6.3) ama kayit BEKLENIR. Mongo
- *      donarsa (dondurulabilen vekil) order'in GERCEK risk istemcisi kendi butcesiyle (1 sn) karari
- *      alamaz: DEADLINE_EXCEEDED -> SERVICE_UNAVAILABLE. Genis sureli cagiran karari alir, ama
- *      order'in butcesinden gec. Duzeltme PR'i (kayda ayri kisa sinir) bu beklentiyi cevirir.
+ *   R3 #167 DUZELTMESI: kayit yazilamazsa karar yine doner (tasarim, T6.3) ve kayit artik kendi kisa
+ *      sinirindan (RISK_EVENT_RECORD_TIMEOUT_MS) fazla BEKLENMEZ. Mongo donarsa (dondurulabilen vekil)
+ *      order'in GERCEK risk istemcisi karari kendi butcesinde (1 sn) alir; genis sureli cagiran da
+ *      ayni hizda. Her iki cagri en az kayit siniri kadar surer (dondurma etkili). Vekil cozulunce
+ *      donukken baslayan kayitlar arka planda, yeni kayit da yazilir (sinirli bekleme, sabit aralik).
+ *      (Eski bulgu: karar kaydi bekliyordu, order DEADLINE_EXCEEDED -> SERVICE_UNAVAILABLE aliyordu.)
  */
 
 import { AppError, fixedClock, silentLogger } from '@getir/core';
@@ -37,7 +39,7 @@ import { GrpcRiskAssessment } from '../../../order-service/src/infrastructure/ri
 import { startFreezingProxy } from '../../../../packages/mongo-kit/test/support/freezing-proxy.js';
 import type { FreezingProxy } from '../../../../packages/mongo-kit/test/support/freezing-proxy.js';
 import { buildRiskService } from '../../src/bootstrap.js';
-import { DEFAULT_MONGO_DB } from '../../src/config/constants.js';
+import { DEFAULT_MONGO_DB, RISK_EVENT_RECORD_TIMEOUT_MS } from '../../src/config/constants.js';
 import type { RiskContext } from '../../src/domain/risk-context.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
 import { RiskEventsCollection } from '../../src/infrastructure/mongo/risk-events-collection.js';
@@ -48,6 +50,9 @@ const CONTAINER_START_TIMEOUT_MS = 120_000;
 const T0 = Date.parse('2026-10-07T12:00:00.000Z');
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const EVALUATIONS = 12;
+/** R3: arka planda suren kaydin beklenmesi; sinirli, sabit aralik. */
+const RECORD_WAIT_MS = 5_000;
+const POLL_INTERVAL_MS = 50;
 /** Kisisel sinyaller: geofence (oturum ~56 km uzakta) ve ip-device (IP degisti) tetiklenir. */
 const DELIVERY = { lat: 40.9912, lng: 29.0271 };
 const SESSION = { lat: 41.4943, lng: 29.0271 };
@@ -245,7 +250,7 @@ describe('QA RQ2 risk_events kaydi ve son degerlendirme (iki kopya, gercek Mongo
     expect(own.response?.evaluation?.evaluatedAt).toEqual(latest.evaluatedAt);
   });
 
-  it('R3 BULGU #167: Mongo donunca order in risk istemcisi kendi butcesinde karar alamaz; genis sure karari gec alir', async () => {
+  it('R3 #167 duzeltildi: Mongo donunca order in risk istemcisi karari kendi butcesinde alir; vekil cozulunce kayit yazilir', async () => {
     if (mongo === undefined) throw new Error('Mongo yok');
     databases += 1;
     const proxy: FreezingProxy = await startFreezingProxy({
@@ -284,27 +289,48 @@ describe('QA RQ2 risk_events kaydi ve son degerlendirme (iki kopya, gercek Mongo
     await expect(order.evaluate(request, scope)).resolves.toMatchObject({ band: 'LOW' });
     expect(env.operationTimeoutMs).toBeGreaterThan(RISK_CALL_TIMEOUT_MS);
 
-    // Mongo donar: kural motoru karari bulur, ama cevap kaydin yazilmasini bekler.
+    // Mongo donar: kural motoru karari bulur; kayit kendi sinirini asar ve beklenmez (#167).
     proxy.freeze();
     try {
-      const failure: unknown = await order
+      const orderStartedAt = performance.now();
+      const decision: unknown = await order
         .evaluate({ ...request, orderId: orderOf(201) }, scope)
         .then(
-          () => 'karar geldi',
+          (evaluation) => evaluation,
           (error: unknown) => error,
         );
-      expect(failure).toBeInstanceOf(AppError);
-      const { code, cause } = failure as AppError & { cause?: ServiceError };
-      expect([code, cause?.code]).toEqual(['SERVICE_UNAVAILABLE', status.DEADLINE_EXCEEDED]);
+      expect(decision).not.toBeInstanceOf(AppError);
+      expect(decision).toMatchObject({ band: 'LOW' });
+      const orderElapsed = performance.now() - orderStartedAt;
+      expect(orderElapsed).toBeLessThan(RISK_CALL_TIMEOUT_MS);
+      // Dondurma etkili: karar kayit sinirini bekledi (kayit gercekten takildi).
+      expect(orderElapsed).toBeGreaterThanOrEqual(RISK_EVENT_RECORD_TIMEOUT_MS - 5);
 
-      // Kaydi bekleyebilen cagiran karari alir: kayit Mongo'nun islem sinirinda duser, karar doner.
+      // Genis sureli cagiran da kaydi beklemez: karar ayni hizda, order'in butcesinin altinda.
       const startedAt = performance.now();
       await expect(
         patient.evaluate({ ...request, orderId: orderOf(202) }, scope),
       ).resolves.toMatchObject({ band: 'LOW' });
-      expect(performance.now() - startedAt).toBeGreaterThanOrEqual(RISK_CALL_TIMEOUT_MS);
+      const patientElapsed = performance.now() - startedAt;
+      expect(patientElapsed).toBeLessThan(RISK_CALL_TIMEOUT_MS);
+      expect(patientElapsed).toBeGreaterThanOrEqual(RISK_EVENT_RECORD_TIMEOUT_MS - 5);
     } finally {
       proxy.thaw();
+    }
+
+    // Vekil cozulunce: donukken baslayan kayitlar (201, 202) arka planda, yeni kayit (203) yazilir.
+    await expect(
+      order.evaluate({ ...request, orderId: orderOf(203) }, scope),
+    ).resolves.toMatchObject({ band: 'LOW' });
+    const reader = await openEventsReader(env);
+    for (const n of [201, 202, 203]) {
+      await expect
+        .poll(() => reader.events.count({ userId: request.userId, orderId: orderOf(n) }), {
+          timeout: RECORD_WAIT_MS,
+          interval: POLL_INTERVAL_MS,
+          message: `${orderOf(n)} kaydi vekil cozuldukten sonra yazilmadi`,
+        })
+        .toBe(1);
     }
   });
 });
