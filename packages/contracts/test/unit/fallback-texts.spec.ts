@@ -29,6 +29,8 @@ const WELCOME = JSON.parse(
   orders: unknown;
   paymentMethods: unknown;
   marketPage: unknown;
+  cartPage: unknown;
+  footer: unknown;
 };
 
 /** Yapidaki butun metinler (dizi ve ic nesneler dahil). */
@@ -83,6 +85,11 @@ describe('CONTENT_FALLBACK', () => {
 
   it('Magaza sayfasi metinleri (T16.2) welcome.json marketPage ile birebir', () => {
     expect(CONTENT_FALLBACK.marketPage).toEqual(WELCOME.marketPage);
+  });
+
+  it('Sepet sayfasi ve alt bilgi metinleri (T16.3) welcome.json cartPage ve footer ile birebir', () => {
+    expect(CONTENT_FALLBACK.cartPage).toEqual(WELCOME.cartPage);
+    expect(CONTENT_FALLBACK.footer).toEqual(WELCOME.footer);
   });
 
   it('Gecmis Siparislerim metinleri (T11.16) welcome.json orders ile birebir', () => {

@@ -1,0 +1,11 @@
+/* Sayfa alt bilgisi (T16.3): govdenin altinda beyaz bant, telif satiri. */
+.c-site-footer {
+  padding-block: var(--space-5);
+  margin-block-start: var(--space-6);
+  background: var(--bg-surface);
+}
+
+.c-site-footer__copyright {
+  font-size: var(--font-size-sm);
+  color: var(--text-default);
+}

@@ -47,12 +47,63 @@
   padding-block: var(--space-4);
 }
 
+/* Alt bilgili sayfa (T16.3): ekran yuksekliginde sutun, govde bosluğu doldurur. */
+.c-page-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.c-page-layout .c-page-layout__main {
+  flex: 1 0 auto;
+}
+
+/* Sade bar (T16.3): telefonda ustte logo, altta yan yana cipler; genis ekranda tek satir. */
+.c-page-layout__bar--minimal {
+  grid-template-areas:
+    'brand'
+    'chips';
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.c-page-layout__chips {
+  display: flex;
+  grid-area: chips;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* Beyaz kutu: icindeki odak halkasi mor (barin beyaz halkasi beyaz zeminde gorunmezdi). */
+.c-page-layout__chip {
+  --focus-ring-color: var(--color-brand-primary);
+  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
+
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: var(--size-header-search);
+  padding-inline-end: var(--space-1);
+  color: var(--text-default);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+}
+
 /* Tablet ve genis: tek satir, arama ortada ve en fazla --container-max-header-search. */
 @media (--bp-md) {
   .c-page-layout__bar {
     grid-template-areas: 'brand search actions';
     grid-template-columns: auto minmax(0, 1fr) auto;
     gap: var(--space-5);
+  }
+
+  .c-page-layout__bar--minimal {
+    grid-template-areas: 'brand chips';
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .c-page-layout__chips {
+    justify-content: flex-end;
   }
 
   .c-page-layout__search {

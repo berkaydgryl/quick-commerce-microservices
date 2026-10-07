@@ -218,7 +218,7 @@ Ana sayfanın ürün kategorileri şeridi kalktı (karşılama ekranının kateg
   ile aynıdır (contracts testi).
 - **Seçim adreste** (`?tur=`): geri tuşu bir önceki süzgece döner, adres paylaşılabilir. Bilinmeyen değer
   süzgeç yok sayılır. Türü bilinmeyen market (eski catalog-service) yalnızca süzgeçsiz listede görünür.
-- **Sepetim:** hesap `@getir/pricing`'te (`useCartTotals`); "Sepete git" sepetin marketinin sayfasına gider.
+- **Sepetim:** hesap `@getir/pricing`'te (`useCartTotals`); "Sepete git" sepet sayfasına (`/sepet`, T16.3) gider.
 - Favori, görünüm düğmeleri ve indirim rozeti yok (veri yok; T11.11 kararı 4).
 
 ## Favori marketler (T11.13)
@@ -375,6 +375,27 @@ markets favorileri tanımaz.
 - **Veri olmayanlar (B3, backend):** kapanış saati (yerine açık/kapalı), ürün görsel dosyaları (kartın görseli ürünün
   kategorisinin; `product.imageUrl` istenmez, her ürün 404 verirdi), alt kategori (katalog düz) ve indirim verisi.
 - **Teslimat satırı etiketsiz** ("15-25 dk · Min. 40,00 TL"): kuryeyi platform atar (T13), "İşletme getirsin" değil.
+
+## Sepet sayfası (T16.3)
+
+`/sepet`; referans getirçarşı sepet sayfası. Oturum ister (girişle geri döner, `?next=/sepet`). Sepetim panelinin ve
+sepet çubuğunun "Sepete git"i buraya gelir.
+
+| Bölge        | Dosya                                                                            | İş                                                                                         |
+| ------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Ekran        | `pages/cart/CartPage.tsx`, `CartScreen.tsx`                                      | Sade bar + alt bilgi; ≥64rem solda sepet, sağda adres ve toplam (7:3); boş sepet           |
+| Sade bar     | `shared/ui/page-layout/PageLayout.tsx` (`variant="minimal"`), `DeliveryTimeChip` | Logo, beyaz kutuda teslimat adresi, sarı "TVS 20-30 dk" (sepetin marketi); arama yok       |
+| Sepet kutusu | `features/cart/ui/CartItemsCard.tsx`, `CartPageItem.tsx`                         | Mağaza (bağlantı), satır: kategori görseli, ad, mor tutar, "Son N adet", adet kutusu       |
+| Toplam       | `features/cart/ui/CartTotalsCard.tsx`                                            | "Sepet Tutarı", minimum sepete ve ücretsiz teslimata kalan, "Ödemeye Geç" (F4'e dek pasif) |
+| Adres        | `features/address/ui/DeliveryAddressSection.tsx`, `services/address-text.ts`     | Üst bardaki seçimle aynı adres; satır, bina, kat, daire                                    |
+| Alt bilgi    | `shared/ui/site-footer/SiteFooter.tsx`                                           | Telif satırı; sosyal ikon ve bağlantı gerçek adresler gelene kadar yok                     |
+
+- **"Son N adet"** (`shared/services/low-stock.ts`, N = 5): ürün kartında stok, sepet satırında kalemin stok sınırı.
+  Bilgi amaçlı; bağlayıcı kontrol rezervasyonda (ADR-13).
+- **Satırın görseli** kategorinin (ürün görselleri yok, B3): kalem eklenirken kategorisi yazılır (`categoryId`, isteğe
+  bağlı; eski sepetler korunur). Satır sonunda ayrı çöp kutusu yok (referans).
+- **Metinler içerikten:** `cartPage` ve `footer` blokları; onay penceresi, adet kutusu, boş sepet ve minimum sepet
+  metinleri Sepetim paneliyle ortak (`marketList.cart`).
 
 ## Market ekranları (T5.4) — tasarımsız kabuk
 

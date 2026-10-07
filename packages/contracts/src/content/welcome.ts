@@ -12,6 +12,7 @@ import { addressesContentSchema } from './addresses.js';
 import { appDownloadContentSchema, featureContentSchema } from './app-download.js';
 import { appHeaderContentSchema } from './app-header.js';
 import { bannerSchema } from './banner.js';
+import { cartPageContentSchema, footerContentSchema } from './cart-page.js';
 import { contentTextSchema } from './content-text.js';
 import { favoritesContentSchema } from './favorites.js';
 import { loginCardContentSchema } from './login-card.js';
@@ -56,6 +57,9 @@ export const welcomeContentSchema = z.object({
   orders: ordersContentSchema,
   /** Magaza sayfasi (T16.2). */
   marketPage: marketPageContentSchema,
+  /** Sepet sayfasi ve alt bilgi (T16.3). */
+  cartPage: cartPageContentSchema,
+  footer: footerContentSchema,
 });
 
 export type WelcomeContent = z.infer<typeof welcomeContentSchema>;

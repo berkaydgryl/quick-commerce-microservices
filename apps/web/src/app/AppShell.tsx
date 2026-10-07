@@ -3,7 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { HeaderSlotContext } from '../shared/ui/page-layout/header-slot';
 import type { HeaderSlots } from '../shared/ui/page-layout/header-slot';
 
-import { AppHeaderAccount, AppHeaderLogo, AppHeaderSearch } from './AppHeader';
+import { AppHeaderAccount, AppHeaderAddress, AppHeaderLogo, AppHeaderSearch } from './AppHeader';
 import { AppToaster } from './AppToaster';
 
 /** Yuvalar bir kez kurulur: her yonlendirmede tuketicileri bosuna cizilmez. */
@@ -11,6 +11,7 @@ const HEADER_SLOTS: HeaderSlots = {
   logo: <AppHeaderLogo />,
   search: <AppHeaderSearch />,
   account: <AppHeaderAccount />,
+  address: <AppHeaderAddress />,
 };
 
 /**

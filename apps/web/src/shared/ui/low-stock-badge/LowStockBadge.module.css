@@ -1,0 +1,12 @@
+/* "Son 3 adet" (T16.3): sari zeminde koyu yazi; dikkat ceker ama uyari (kirmizi) degil. */
+.c-low-stock {
+  display: inline-block;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  color: var(--text-on-accent);
+  white-space: nowrap;
+  background: var(--color-brand-accent);
+  border-radius: var(--radius-sm);
+}

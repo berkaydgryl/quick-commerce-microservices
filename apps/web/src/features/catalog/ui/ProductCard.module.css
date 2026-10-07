@@ -26,6 +26,12 @@
   inset-inline-end: 0;
 }
 
+.c-product-card__badge {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+}
+
 .c-product-card__price {
   font-weight: var(--font-weight-bold);
   color: var(--color-brand-primary);

@@ -31,4 +31,7 @@ type MarketPage struct {
 	AddSuffix        string `json:"addSuffix"`
 	SoldOutLabel     string `json:"soldOutLabel"`
 	UnavailableLabel string `json:"unavailableLabel"`
+	// LowStockPrefix ve LowStockSuffix, "Son 3 adet" rozeti (T16.3): sayinin iki yani.
+	LowStockPrefix string `json:"lowStockPrefix"`
+	LowStockSuffix string `json:"lowStockSuffix"`
 }

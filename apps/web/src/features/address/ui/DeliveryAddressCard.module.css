@@ -1,0 +1,26 @@
+/* Teslimat adresi karti (T16.3; referans getircarsi): baslik ustte, beyaz kartta ad ve tam metin. */
+.c-delivery-address {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.c-delivery-address__title {
+  font-size: var(--font-size-md);
+}
+
+.c-delivery-address__card {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-delivery-address__name {
+  font-weight: var(--font-weight-bold);
+}
+
+.c-delivery-address__text {
+  overflow-wrap: anywhere;
+}

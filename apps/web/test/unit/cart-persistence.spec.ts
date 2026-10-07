@@ -68,6 +68,19 @@ describe('restoreCart (okunan kaydin dogrulanmasi)', () => {
     expect(sepet.items[0]?.maxQuantity).toBe(CART_ITEM_MAX_QUANTITY);
   });
 
+  it('kalemde kategori yoksa (T16.3 oncesi) kayit atilmaz; varsa gidip gelir', () => {
+    const eski = {
+      ...kayit,
+      items: kayit.items.map(({ categoryId: _kategori, ...kalem }) => kalem),
+    };
+
+    const sepet = restoreCart(eski, NOW + 1_000);
+
+    expect(sepet.items).toHaveLength(1);
+    expect(sepet.items[0]?.categoryId).toBeUndefined();
+    expect(restoreCart(kayit, NOW + 1_000).items[0]?.categoryId).toBe(SUT.categoryId);
+  });
+
   it('kalemin siniri kayittan aynen doner', () => {
     const azStok = addItem(EMPTY_CART, { ...SUT, availableQuantity: 4 }, MIGROS).state;
 

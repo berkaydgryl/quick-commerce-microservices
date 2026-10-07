@@ -1,0 +1,65 @@
+/*
+ * "Sepet Toplamı" (T16.3; referans getircarsi): baslik, beyaz kartta tutar ve
+ * notlar, altinda tam genislikte mor "Ödemeye Geç". Odeme sayfasi (F4) gelene
+ * kadar dugme pasif gorunur.
+ */
+.c-cart-totals {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.c-cart-totals__title {
+  font-size: var(--font-size-md);
+}
+
+.c-cart-totals__card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-cart-totals__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: space-between;
+}
+
+.c-cart-totals__amount {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+  white-space: nowrap;
+}
+
+.c-cart-totals__notice {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-brand-primary);
+  background: var(--color-brand-primary-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.c-cart-totals__nowrap {
+  white-space: nowrap;
+}
+
+.c-cart-totals__checkout {
+  min-height: var(--size-field-min-height);
+  margin-block-start: var(--space-2);
+  font: inherit;
+  font-weight: var(--font-weight-bold);
+  color: var(--text-on-brand);
+  cursor: pointer;
+  background: var(--color-brand-primary);
+  border: none;
+  border-radius: var(--radius-md);
+}
+
+/* Odeme sayfasi gelene kadar (F4) pasif: odaklanir, basilmaz. */
+.c-cart-totals__checkout[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
+}

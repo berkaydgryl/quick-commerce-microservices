@@ -1,0 +1,97 @@
+/*
+ * Sepet sayfasi duzeni (T16.3; referans getircarsi). Mobil oncelikli: tek
+ * sutun (sepet, adres, toplam). Genis ekranda (64rem) solda sepet, sagda
+ * adres ve toplam (7:3). Govde ust bar ve alt bilgiyle ayni kapsayicida:
+ * logo, "Sepetim" ve telif ayni cizgide baslar.
+ */
+.c-cart-page,
+.c-cart-page__empty {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+}
+
+.c-cart-page__main,
+.c-cart-page__side {
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
+  min-width: 0;
+}
+
+.c-cart-page__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.c-cart-page__title {
+  font-size: var(--font-size-md);
+}
+
+.c-cart-page__clear {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-1);
+
+  /* Dolgu tiklama alani icin; satiri yukseltmesin ("Adres" basligiyla ayni hizada). */
+  margin-block: calc(var(--space-1) * -1);
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-brand-primary);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+}
+
+.c-cart-page__clear:hover {
+  text-decoration: underline;
+}
+
+.c-cart-page__clear-icon {
+  display: grid;
+  width: var(--size-field-icon);
+}
+
+.c-cart-page__empty-card {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: center;
+  padding: var(--space-6) var(--space-5);
+  text-align: center;
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-cart-page__empty-icon {
+  display: grid;
+  width: var(--size-cart-empty-icon);
+  color: var(--color-brand-primary);
+}
+
+.c-cart-page__empty-title {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+}
+
+.c-cart-page__browse {
+  padding: var(--space-2) var(--space-4);
+  margin-block-start: var(--space-2);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-on-brand);
+  text-decoration: none;
+  background: var(--color-brand-primary);
+  border-radius: var(--radius-md);
+}
+
+@media (--bp-lg) {
+  .c-cart-page {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
+    align-items: start;
+  }
+}

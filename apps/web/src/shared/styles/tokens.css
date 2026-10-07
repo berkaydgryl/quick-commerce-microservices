@@ -194,6 +194,9 @@
   --size-product-visual: 7.5rem;
   --size-product-card-min: 13rem;
 
+  /* Sepet sayfasi (T16.3): satirin gorseli. */
+  --size-cart-row-visual: 4rem;
+
   /* Favori kalbi (T11.13): kapagin sag ust kosesindeki dugme ve ikonu. */
   --size-favorite-button: 2.25rem;
   --size-favorite-icon: 1.25rem;

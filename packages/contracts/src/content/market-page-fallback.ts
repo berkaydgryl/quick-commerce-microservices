@@ -27,4 +27,6 @@ export const MARKET_PAGE_FALLBACK: MarketPageContent = {
   addSuffix: 'sepete ekle',
   soldOutLabel: 'Tükendi',
   unavailableLabel: 'Satışta değil',
+  lowStockPrefix: 'Son',
+  lowStockSuffix: 'adet',
 };
