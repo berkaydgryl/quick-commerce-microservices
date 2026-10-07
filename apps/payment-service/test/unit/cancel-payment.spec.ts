@@ -8,6 +8,7 @@ import { paymentV1 } from '@getir/proto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CANCEL_OUTCOME, createCancelPayment } from '../../src/application/cancel-payment.js';
+import { createRefund } from '../../src/application/refund.js';
 import { CANCEL_DECISION, decideCancellation } from '../../src/domain/cancel.js';
 import {
   ATTEMPT_KIND,
@@ -32,7 +33,10 @@ beforeEach(() => {
 });
 
 const cancel = () =>
-  createCancelPayment({ repository, clock })({ orderId, reason: 'order_cancelled' });
+  createCancelPayment({ repository, clock, refund: createRefund({ repository, clock }) })({
+    orderId,
+    reason: 'order_cancelled',
+  });
 const cashOnDelivery = () =>
   chargeOrder({ repository, clock, orderId, cardToken: '', cashOnDelivery: true });
 const card = (cardToken: string) => chargeOrder({ repository, clock, orderId, cardToken });
@@ -58,7 +62,12 @@ describe('decideCancellation', () => {
     ],
     ['3DS bekleyen kart', payment(PAYMENT_STATUS.REQUIRES_3DS), CANCEL_DECISION.CANCEL],
     ['zaten CANCELLED', payment(PAYMENT_STATUS.CANCELLED), CANCEL_DECISION.ALREADY_CANCELLED],
-    ['para alinmis', payment(PAYMENT_STATUS.SUCCEEDED), CANCEL_DECISION.NOTHING_TO_CANCEL],
+    ['para alinmis kart (T15.3)', payment(PAYMENT_STATUS.SUCCEEDED), CANCEL_DECISION.REFUND],
+    [
+      'tahsil edilmis kapida odeme',
+      payment(PAYMENT_STATUS.SUCCEEDED, PAYMENT_METHOD.CASH_ON_DELIVERY),
+      CANCEL_DECISION.REFUND,
+    ],
     ['iade edilmis', payment(PAYMENT_STATUS.REFUNDED), CANCEL_DECISION.NOTHING_TO_CANCEL],
     ['basarisiz', payment(PAYMENT_STATUS.FAILED), CANCEL_DECISION.NOTHING_TO_CANCEL],
     ['kart cekimi PENDING', payment(PAYMENT_STATUS.PENDING), CANCEL_DECISION.IN_FLIGHT],
@@ -106,17 +115,59 @@ describe('CancelPayment', () => {
     await expect(repository.findByOrderId(orderId)).resolves.toEqual(after);
   });
 
-  it.each([
-    ['para alinmis', 'tok_test_4242', PAYMENT_STATUS.SUCCEEDED],
-    ['kart reddedilmis', 'tok_test_0002', PAYMENT_STATUS.FAILED],
-  ])('%s odemeye dokunulmaz (iade ayri akis)', async (_name, token, status) => {
-    const before = await card(token);
+  it('kart reddedilmis odemeye dokunulmaz', async () => {
+    const before = await card('tok_test_0002');
 
     await expect(cancel()).resolves.toMatchObject({ outcome: CANCEL_OUTCOME.NOTHING_TO_CANCEL });
     await expect(repository.findByOrderId(orderId)).resolves.toMatchObject({
-      status,
+      status: PAYMENT_STATUS.FAILED,
       version: before.version,
     });
+  });
+
+  it('para alinmis (T15.3, bekleyen is 134): IADE edilir, gerekce komutunki, gecmise REFUND denemesi', async () => {
+    const before = await card('tok_test_4242');
+
+    await expect(cancel()).resolves.toMatchObject({ outcome: CANCEL_OUTCOME.REFUNDED });
+    const after = await repository.findByOrderId(orderId);
+    expect(after).toMatchObject({
+      status: PAYMENT_STATUS.REFUNDED,
+      refundReason: 'order_cancelled',
+      version: before.version + 1,
+    });
+    expect(after?.attempts.at(-1)).toMatchObject({
+      kind: ATTEMPT_KIND.REFUND,
+      outcome: ATTEMPT_OUTCOME.REFUNDED,
+    });
+  });
+
+  it('para alinmis, komut ikinci kez: iade edilmis, yazilmaz', async () => {
+    await card('tok_test_4242');
+    await cancel();
+    const after = await repository.findByOrderId(orderId);
+
+    await expect(cancel()).resolves.toMatchObject({ outcome: CANCEL_OUTCOME.NOTHING_TO_CANCEL });
+    await expect(repository.findByOrderId(orderId)).resolves.toEqual(after);
+  });
+
+  it("order'in kendi iadesiyle AYNI ANDA: tek iade, ikincisi zaten iade edilmis gorur", async () => {
+    await card('tok_test_4242');
+    const refund = createRefund({ repository, clock });
+
+    const [byCancel, byOrder] = await Promise.all([
+      cancel(),
+      refund({ orderId, reason: 'order_changed_during_payment' }),
+    ]);
+
+    const outcomes = [byCancel.outcome, byOrder.alreadyRefunded ? 'already' : 'refunded'];
+    expect(
+      outcomes.filter((outcome) => outcome === CANCEL_OUTCOME.REFUNDED || outcome === 'refunded'),
+    ).toHaveLength(1);
+    const after = await repository.findByOrderId(orderId);
+    expect(after?.status).toBe(PAYMENT_STATUS.REFUNDED);
+    expect(after?.attempts.filter((attempt) => attempt.kind === ATTEMPT_KIND.REFUND)).toHaveLength(
+      1,
+    );
   });
 
   it('hic cekim istenmemis siparis: kayit yok, hata degil', async () => {

@@ -10,8 +10,8 @@
  *      tek iade; komutlar tuketicide ikinci iade yapmaz.
  *   K1 3DS onayi payment'ta kapida beklerken kullanici iptal eder (odeme henuz alinmamis
  *      gorunur); onay basarili, cevap gelir: kilit yok, iptal cakisir, para IADE edilir.
- *   K2 BULGU #134 (MEVCUT davranis belgelenir): K1'in aynisi ama onayin cevabi KAYBOLUR: para
- *      alinmis kalir, hicbir yol iade etmez.
+ *   K2 #134 (T15.3'te duzeltildi): K1'in aynisi ama onayin cevabi KAYBOLUR: iptal komutu
+ *      payment'ta alinmis tutari iade eder (once para iadesiz kaliyordu).
  *   D1 payment kapaliyken tekrar: 503, HICBIR sey yazilmaz; payment donunce L1 sonucu.
  *
  * Her senaryonun sonunda AYNI para ve stok denetimi (qa-money-checks.ts).
@@ -179,11 +179,10 @@ describe('QA #122 cekim basarili, cevap kayboldu, kilit dustu: IADE', () => {
     });
   });
 
-  // BULGU #134: duzeltmeyle TERSINE donecek (refunded 1; payment cancel_requested SUCCEEDED'i iade
-  // eder, gerekce order_cancelled). Bugun uc savunma da tutmuyor:
-  // onay tekrari CANCELLED'da assertTransition'a takilir, order supurucusu CANCELLED'i taramaz,
-  // payment.cancel_requested SUCCEEDED odemede NOTHING_TO_CANCEL der.
-  it('K2 MEVCUT davranis: K1 ama onayin cevabi KAYBOLUR -> para alinmis kalir, hicbir yol iade etmez', async () => {
+  // #134 (T15.3): duzeltmeyle TERSINE dondu. Once belgelenen: para alinmis kalir, hicbir yol iade
+  // etmezdi (payment.cancel_requested SUCCEEDED odemede NOTHING_TO_CANCEL derdi). Artik iptal komutu
+  // alinmis tutari iade eder (gerekce order_cancelled); onay tekrari ve order supurucusu hala devre disi.
+  it('K2 K1 ama onayin cevabi KAYBOLUR -> iptal komutu payment ta alinmis tutari IADE eder (#134)', async () => {
     const shop = await openShop({ paymentTimeoutMs: GATED_PAYMENT_TIMEOUT_MS });
     const userId = shop.nextUser();
     const { orderId, before, challengeId } = await awaitingThreeDs(shop, userId);
@@ -196,18 +195,31 @@ describe('QA #122 cekim basarili, cevap kayboldu, kilit dustu: IADE', () => {
     const lost = await confirming;
 
     expect(appErrorOf(lost.error)?.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
-    // payment'ta para alindi; iptal komutu tuketicide "kapatilacak tahsilat yok" der.
+    // Komutlar teslim edilmeden: payment'ta para alindi, henuz iade yok.
     expect(await moneyOf(shop, orderId)).toEqual({ charged: 1, refunded: 0 });
-    await expectCommandsHandled(shop, orderId);
-    // Onay tekrari iptal edilmis sipariste ilerlemez; supurucu CANCELLED'i taramaz.
+
+    const delivered = await shop.deliverPaymentCommands();
+
+    // Iptal komutu kabul edilir ve alinmis tutari iade eder; order'in iade komutu yok.
+    expect(delivered).toContainEqual({
+      topic: EVENTS.PAYMENT_CANCEL_REQUESTED,
+      outcome: EVENT_HANDLED,
+    });
+    expect(delivered.map((entry) => entry.outcome)).toEqual(delivered.map(() => EVENT_HANDLED));
+    expect(await moneyOf(shop, orderId)).toEqual({ charged: 1, refunded: 1 });
+    expect(await shop.payments.findByOrderId(orderId)).toMatchObject({
+      status: 'REFUNDED',
+      refundReason: 'order_cancelled',
+    });
+    expect(refundCommands(shop, orderId)).toBe(0);
+    // Onay tekrari iptal edilmis sipariste ilerlemez; supurucu CANCELLED'i taramaz (degismedi).
     const retry = await shop.confirm(orderId, userId, challengeId);
     expect(appErrorOf(retry.error)?.code).toBe(ERROR_CODES.ORDER_STATE_INVALID);
     expect(await shop.sweepOrders()).toMatchObject({ refunded: 0, failed: 0 });
-    expect(refundCommands(shop, orderId)).toBe(0);
     await expectSettled(world, shop, orderId, before, {
       status: ORDER_STATUS.CANCELLED,
       charged: 1,
-      refunded: 0,
+      refunded: 1,
       onHandDelta: 0,
       committed: false,
     });
