@@ -1,0 +1,58 @@
+/*
+ * Kapagin uzerindeki marka kutusu (T11.11; 07.10 duzeltmesi): kapagin sol
+ * ORTASINDA (dikeyde ortali), soldan kapak genisliginin yuzdesi kadar iceride.
+ * Beyaz, kavisli, golgeli kutu: logo varsa 2:1 ve kapagin genisliginin yuzdesi,
+ * yoksa kare bas harf rozeti. Kapsayici (kapak) position: relative.
+ */
+.c-market-badge {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: var(--inset-market-badge);
+  display: grid;
+  place-items: center;
+  font-weight: var(--font-weight-extrabold);
+  color: var(--color-brand-primary);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-surface);
+  transform: translateY(-50%);
+}
+
+.c-market-badge--card {
+  inline-size: var(--size-market-badge);
+  block-size: var(--size-market-badge);
+  border-radius: var(--radius-sm);
+}
+
+.c-market-badge--hero {
+  inline-size: var(--size-market-hero-badge);
+  block-size: var(--size-market-hero-badge);
+  font-size: var(--font-size-lg);
+  border-radius: var(--radius-md);
+}
+
+.c-market-badge--logo {
+  block-size: auto;
+  aspect-ratio: var(--ratio-market-logo);
+  padding: var(--space-1) var(--space-2);
+}
+
+.c-market-badge--card.c-market-badge--logo {
+  inline-size: var(--size-market-logo-narrow);
+}
+
+.c-market-badge--hero.c-market-badge--logo {
+  inline-size: var(--size-market-hero-logo);
+}
+
+/* Kart yatay olunca (kapak dar) kutu kapagin daha buyuk payini alir. */
+@media (--bp-md) {
+  .c-market-badge--card.c-market-badge--logo {
+    inline-size: var(--size-market-logo);
+  }
+}
+
+.c-market-badge__logo {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+}
