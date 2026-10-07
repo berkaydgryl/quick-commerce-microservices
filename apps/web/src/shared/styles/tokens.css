@@ -110,6 +110,15 @@
   --size-cart-button-min: 2rem;
   --size-cart-quantity-min: 1.5rem;
 
+  /* Sepet paneli (T16.3; referans getircarsi): sari cercevenin kalinligi, adet
+     kutusunun (-, adet, +) kare dugmeleri ve magaza ikonu. */
+  --border-width-cart-panel: 0.125rem;
+  --size-cart-stepper: 2rem;
+  --size-cart-store-icon: 1.5rem;
+
+  /* Satirdaki adin en az genisligi: panel bundan darsa dugmeler adin altina iner. */
+  --size-cart-item-text: 6.5rem;
+
   /* Yuklenirken gorunen iskelet satiri: bir metin satiri yuksekliginde (em). */
   --size-skeleton-line: 1em;
 
@@ -174,6 +183,16 @@
   --size-rating-icon: 1em;
   --size-cart-empty-icon: 2.5rem;
   --size-cart-bar: 3.5rem;
+
+  /* Magaza sayfasi (T16.2; referans getircarsi): genis kapagin orani ve
+     uzerindeki bas harf rozeti, puanin yildizlari, kategori listesinin
+     gorseli, urun kartinin gorseli ve izgarada kartin en az genisligi. */
+  --ratio-market-hero: 8 / 3;
+  --size-market-hero-badge: 4rem;
+  --size-rating-star: 1rem;
+  --size-category-nav-icon: 2.25rem;
+  --size-product-visual: 7.5rem;
+  --size-product-card-min: 13rem;
 
   /* Favori kalbi (T11.13): kapagin sag ust kosesindeki dugme ve ikonu. */
   --size-favorite-button: 2.25rem;

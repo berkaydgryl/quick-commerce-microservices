@@ -36,6 +36,8 @@ import {
 
 const scope = { requestId: 'req_stok_1', logger: silentLogger };
 const EXPIRES_AT = new Date('2026-10-02T10:10:00.000Z');
+/** Siparisin bildigi kilit bitisi: uzatmada beklenen bitis olarak gider (T15.3). */
+const EXPECTED = new Date('2026-10-02T10:09:00.000Z');
 
 /** Sunucunun gordugu istekler ve x-request-id degerleri. */
 const seen: { request: unknown; requestId: unknown }[] = [];
@@ -55,6 +57,8 @@ const ORDER = {
   UNCHANGED: 'ord_degismedi',
   /** Kilit dusmus: RESERVATION_EXPIRED (T11.3). */
   LAPSED: 'ord_dustu',
+  /** Beklenen bitis tutmadi (T15.3): expiry_mismatch. */
+  MOVED: 'ord_kaydi',
 } as const;
 /** Yavas siparisin bekletilen istekleri (cevap verilmez; kimlik ve kalan sure kaydedilir, #113). */
 const held = new HeldReplies();
@@ -153,9 +157,12 @@ const implementation = {
     record(call);
     const { orderId } = call.request;
     if (orderId === ORDER.FLAKY) {
+      // Ilk cagri uygulanir ama cevabi kaybolur; tekrar bitisi degismis bulur (T15.3).
       flakyExtends += 1;
-      callback(appError(ERROR_CODES.SERVICE_UNAVAILABLE, {}));
-      return;
+      if (flakyExtends === 1) {
+        callback(appError(ERROR_CODES.SERVICE_UNAVAILABLE, {}));
+        return;
+      }
     }
     const failure = timingFailure(orderId);
     if (failure !== undefined) {
@@ -171,6 +178,7 @@ const implementation = {
       expiresAt: EXPIRES_AT,
       alreadyExtended: unchanged,
       extensionCount: unchanged ? 3 : 1,
+      expiryMismatch: orderId === ORDER.MOVED || orderId === ORDER.FLAKY,
     });
   },
   shortenReservation: (
@@ -375,7 +383,15 @@ describe('GrpcStockReservations.extend / shorten (T11.3)', () => {
     seen.length = 0;
 
     await expect(
-      stock.extend({ orderId: ORDER.LOCKED, marketId: MARKET, additionalSeconds: 60 }, scope),
+      stock.extend(
+        {
+          orderId: ORDER.LOCKED,
+          marketId: MARKET,
+          additionalSeconds: 60,
+          expectedExpiresAt: EXPECTED,
+        },
+        scope,
+      ),
     ).resolves.toEqual({ kind: 'active', expiresAt: EXPIRES_AT, changed: true });
     expect(seen).toEqual([
       {
@@ -383,15 +399,38 @@ describe('GrpcStockReservations.extend / shorten (T11.3)', () => {
           orderId: ORDER.LOCKED,
           marketId: MARKET,
           additionalSeconds: 60,
+          expectedExpiresAt: EXPECTED,
         }) as unknown,
         requestId: 'req_stok_1',
       },
     ]);
   });
 
+  it('beklenen bitis tutmadi (T15.3): moved ve guncel bitis; sureye dokunulmadi', async () => {
+    await expect(
+      stock.extend(
+        {
+          orderId: ORDER.MOVED,
+          marketId: MARKET,
+          additionalSeconds: 60,
+          expectedExpiresAt: EXPECTED,
+        },
+        scope,
+      ),
+    ).resolves.toEqual({ kind: 'moved', expiresAt: EXPIRES_AT });
+  });
+
   it('uzatma hakki bitmis: kilit duruyor ama sure degismedi (changed=false)', async () => {
     await expect(
-      stock.extend({ orderId: ORDER.UNCHANGED, marketId: MARKET, additionalSeconds: 60 }, scope),
+      stock.extend(
+        {
+          orderId: ORDER.UNCHANGED,
+          marketId: MARKET,
+          additionalSeconds: 60,
+          expectedExpiresAt: EXPECTED,
+        },
+        scope,
+      ),
     ).resolves.toEqual({ kind: 'active', expiresAt: EXPIRES_AT, changed: false });
   });
 
@@ -412,7 +451,15 @@ describe('GrpcStockReservations.extend / shorten (T11.3)', () => {
 
   it('kilit dusmus (RESERVATION_EXPIRED): hata degil SONUC, iki cagride de lapsed', async () => {
     await expect(
-      stock.extend({ orderId: ORDER.LAPSED, marketId: MARKET, additionalSeconds: 60 }, scope),
+      stock.extend(
+        {
+          orderId: ORDER.LAPSED,
+          marketId: MARKET,
+          additionalSeconds: 60,
+          expectedExpiresAt: EXPECTED,
+        },
+        scope,
+      ),
     ).resolves.toEqual({ kind: 'lapsed' });
     await expect(
       stock.shorten({ orderId: ORDER.LAPSED, marketId: MARKET, maxRemainingSeconds: 120 }, scope),
@@ -421,27 +468,55 @@ describe('GrpcStockReservations.extend / shorten (T11.3)', () => {
 
   it('beklenmeyen hata AYNEN yukari; bitis anisiz cevapla sure varsayilmaz: INTERNAL', async () => {
     const invalid = await rejectionOf(
-      stock.extend({ orderId: ORDER.INVALID, marketId: MARKET, additionalSeconds: 60 }, scope),
+      stock.extend(
+        {
+          orderId: ORDER.INVALID,
+          marketId: MARKET,
+          additionalSeconds: 60,
+          expectedExpiresAt: EXPECTED,
+        },
+        scope,
+      ),
     );
     const noExpiry = await rejectionOf(
-      stock.extend({ orderId: ORDER.NO_EXPIRY, marketId: MARKET, additionalSeconds: 60 }, scope),
+      stock.extend(
+        {
+          orderId: ORDER.NO_EXPIRY,
+          marketId: MARKET,
+          additionalSeconds: 60,
+          expectedExpiresAt: EXPECTED,
+        },
+        scope,
+      ),
     );
 
     expect(invalid.code).toBe(ERROR_CODES.VALIDATION_FAILED);
     expect(noExpiry.code).toBe(ERROR_CODES.INTERNAL);
   });
 
-  it('D17: uzatma yeniden DENENMEZ (her cagri bir hak harcar); kisaltma denenir ve gecer', async () => {
+  it('D17 ve T15.3: uzatma beklenen bitisle yeniden denenir; tekrar guncel bitisi alir (moved), kisaltma da denenir', async () => {
     const resilient = new GrpcStockReservations(`127.0.0.1:${handle.port}`, FUNCTIONAL_TIMEOUT_MS, {
       breaker: new CircuitBreaker({ target: 'inventory', failureThreshold: 5, openMs: 60_000 }),
       retry: { target: 'inventory', maxRetries: 2, baseDelayMs: 1 },
     });
     try {
-      const failure = await rejectionOf(
-        resilient.extend({ orderId: ORDER.FLAKY, marketId: MARKET, additionalSeconds: 60 }, scope),
-      );
-      expect(failure.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
-      expect(flakyExtends).toBe(1);
+      seen.length = 0;
+      await expect(
+        resilient.extend(
+          {
+            orderId: ORDER.FLAKY,
+            marketId: MARKET,
+            additionalSeconds: 60,
+            expectedExpiresAt: EXPECTED,
+          },
+          scope,
+        ),
+      ).resolves.toEqual({ kind: 'moved', expiresAt: EXPIRES_AT });
+      expect(flakyExtends).toBe(2);
+      // Iki denemede de AYNI beklenen bitis gider: tekrar hak harcamaz.
+      expect(
+        seen.map((entry) => (entry.request as { expectedExpiresAt?: Date }).expectedExpiresAt),
+      ).toEqual([EXPECTED, EXPECTED]);
 
       await expect(
         resilient.shorten(

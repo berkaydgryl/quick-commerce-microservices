@@ -73,16 +73,19 @@ describe('ExtendReservation (T11.3)', () => {
       expiresAt: at(TTL_SECONDS + 60),
       alreadyExtended: false,
       extensionCount: 1,
+      expiryMismatch: false,
     });
     expect((await extend(1)).response).toEqual({
       expiresAt: at(TTL_SECONDS + 120),
       alreadyExtended: false,
       extensionCount: 2,
+      expiryMismatch: false,
     });
     expect((await extend(1)).response).toEqual({
       expiresAt: at(TTL_SECONDS + 120),
       alreadyExtended: true,
       extensionCount: 2,
+      expiryMismatch: false,
     });
   });
 
@@ -100,12 +103,31 @@ describe('ExtendReservation (T11.3)', () => {
     }
   });
 
+  it('beklenen bitis (T15.3): tutarsa uzatir; kaybolan cevabin tekrari expiryMismatch, hak harcanmaz', async () => {
+    await reserve(4);
+
+    expect((await extend(4, { expectedExpiresAt: at(TTL_SECONDS) })).response).toEqual({
+      expiresAt: at(TTL_SECONDS + 60),
+      alreadyExtended: false,
+      extensionCount: 1,
+      expiryMismatch: false,
+    });
+    expect((await extend(4, { expectedExpiresAt: at(TTL_SECONDS) })).response).toEqual({
+      expiresAt: at(TTL_SECONDS + 60),
+      alreadyExtended: false,
+      extensionCount: 1,
+      expiryMismatch: true,
+    });
+  });
+
   it.each([
     ['siparis bicimsiz', { orderId: 'ord_1' }],
     ['market yok', { marketId: '' }],
     ['sure 0', { additionalSeconds: 0 }],
     ['sure negatif', { additionalSeconds: -60 }],
     ['sure 300 sn ustu', { additionalSeconds: 301 }],
+    ['beklenen bitis 1970 (sifir an)', { expectedExpiresAt: new Date(0) }],
+    ['beklenen bitis 1970 oncesi', { expectedExpiresAt: new Date(-1_000) }],
   ])('%s: INVALID_ARGUMENT / VALIDATION_FAILED', async (_name, override) => {
     const { error } = await extend(1, override);
 

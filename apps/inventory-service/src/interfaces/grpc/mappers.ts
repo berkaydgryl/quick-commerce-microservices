@@ -46,6 +46,7 @@ export function toExtendResponse(
     expiresAt: result.expiresAt,
     alreadyExtended: result.alreadyExtended,
     extensionCount: result.extensionCount,
+    expiryMismatch: result.expiryMismatch,
   };
 }
 

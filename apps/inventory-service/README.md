@@ -210,6 +210,12 @@ sonradan ayarlar. Süreyi order verir; inventory yalnızca sınırları korur.
   - **Defter:** her uzatma kalem başına bir `extend` kaydı (`delta: 0`, gerekçe `payment_attempt`,
     `sequence` 1..3; kimlik `sipariş/sku/extend-sıra`). Sipariş sonucu değildir. Defter yazılamazsa uzatma
     geçerli kalır, uyarı yazılır: hata dönmek order'ın tekrar denerken bir hakkı boşa yakmasına yol açardı.
+  - **Beklenen bitiş** (T15.3; bekleyen iş 117, QA IQ3): istek `expected_expires_at` taşırsa uzatma yalnızca
+    indeksteki güncel bitiş buna eşitse yapılır (denetim `extend.lua` içinde, atomik). Eşit değilse süreye
+    dokunulmaz, hak harcanmaz; güncel bitiş `expiry_mismatch: true` ile döner. Cevabı kaybolan uzatmanın tekrarı
+    böylece hakkı ikinci kez yakmaz. Sıra: aktiflik → beklenen bitiş → hak sınırı. Uyuşmazlıkta sayı 0'dan
+    büyükse `extend-1..n` eksik kayıtları upsert edilir (en iyi gayret, cevabı bekletmez). Alan gönderilmezse
+    eski davranış. Dağıtım sırası: inventory, order'dan önce.
 - **`ShortenReservation`** (`lua/shorten.lua`): kalan süreyi en çok `max_remaining_seconds`'e (30-900) indirir.
   Kalan süre zaten kısaysa dokunmaz (`shortened: false`); **asla uzatmaz**. Defter yazılmaz (stok hareket
   etmedi; karar order'ın kaydında, risk bandı).

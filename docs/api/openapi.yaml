@@ -3713,6 +3713,7 @@ components:
           accountMenu,
           orders,
           paymentMethods,
+          marketPage,
         ]
       properties:
         header:
@@ -3766,6 +3767,8 @@ components:
           $ref: "#/components/schemas/OrdersContent"
         paymentMethods:
           $ref: "#/components/schemas/PaymentMethodsContent"
+        marketPage:
+          $ref: "#/components/schemas/MarketPageContent"
 
     FavoritesContent:
       type: object
@@ -4035,6 +4038,74 @@ components:
         ordersLabel: { $ref: "#/components/schemas/ContentText" }
         paymentMethodsLabel: { $ref: "#/components/schemas/ContentText" }
 
+    MarketPageContent:
+      type: object
+      description: |
+        Mağaza sayfası (T16.2; referans getirçarşı işletme sayfası): bilgi kartı ve
+        "Hakkında" penceresi, "Bu işletmede ara…", katalog başlıkları ve boş durumları,
+        ürün kartının sepet düğmesi. Puan, "Min.", "Kapalı", ücretsiz teslimat eşiği,
+        "Kategoriler", "Tümü" ve sepet metinleri `MarketListContent` ile ortaktır.
+      required:
+        [
+          infoLabel,
+          loadingLabel,
+          openLabel,
+          aboutLabel,
+          closeLabel,
+          brandLabel,
+          deliveryTimeLabel,
+          minBasketLabel,
+          deliveryFeeLabel,
+          freeDeliveryThresholdLabel,
+          searchLabel,
+          searchPlaceholder,
+          allProductsTitle,
+          searchResultsTitle,
+          searchEmptyNotice,
+          categoryEmptyNotice,
+          productsLoadingLabel,
+          moreLabel,
+          loadingMoreLabel,
+          addSuffix,
+          soldOutLabel,
+          unavailableLabel,
+        ]
+      properties:
+        infoLabel:
+          $ref: "#/components/schemas/ContentText"
+          description: 'Bilgi kartının erişilebilir adı: "İşletme bilgisi".'
+        loadingLabel: { $ref: "#/components/schemas/ContentText" }
+        openLabel:
+          $ref: "#/components/schemas/ContentText"
+          description: "Açık mağazanın durumu; kapalıda `MarketListContent.closedLabel`."
+        aboutLabel:
+          $ref: "#/components/schemas/ContentText"
+          description: '"Hakkında" bağlantısı ve penceresinin başlığı.'
+        closeLabel: { $ref: "#/components/schemas/ContentText" }
+        brandLabel: { $ref: "#/components/schemas/ContentText" }
+        deliveryTimeLabel: { $ref: "#/components/schemas/ContentText" }
+        minBasketLabel: { $ref: "#/components/schemas/ContentText" }
+        deliveryFeeLabel: { $ref: "#/components/schemas/ContentText" }
+        freeDeliveryThresholdLabel: { $ref: "#/components/schemas/ContentText" }
+        searchLabel: { $ref: "#/components/schemas/ContentText" }
+        searchPlaceholder: { $ref: "#/components/schemas/ContentText" }
+        allProductsTitle:
+          $ref: "#/components/schemas/ContentText"
+          description: "Kategori seçili değilken ızgaranın başlığı."
+        searchResultsTitle:
+          $ref: "#/components/schemas/ContentText"
+          description: "Arama varken ızgaranın başlığı."
+        searchEmptyNotice: { $ref: "#/components/schemas/ContentText" }
+        categoryEmptyNotice: { $ref: "#/components/schemas/ContentText" }
+        productsLoadingLabel: { $ref: "#/components/schemas/ContentText" }
+        moreLabel: { $ref: "#/components/schemas/ContentText" }
+        loadingMoreLabel: { $ref: "#/components/schemas/ContentText" }
+        addSuffix:
+          $ref: "#/components/schemas/ContentText"
+          description: 'Ürün kartının "+"sı, adın arkası: "Beyaz Peynir 500 g sepete ekle".'
+        soldOutLabel: { $ref: "#/components/schemas/ContentText" }
+        unavailableLabel: { $ref: "#/components/schemas/ContentText" }
+
     PaymentMethodsContent:
       type: object
       description: |
@@ -4294,6 +4365,15 @@ components:
               minBasketRemainingLabel,
               goToCartLabel,
               clearLabel,
+              clearConfirmQuestion,
+              clearConfirmHint,
+              clearConfirmLabel,
+              cancelLabel,
+              closeLabel,
+              decreaseSuffix,
+              increaseSuffix,
+              removeSuffix,
+              quantitySuffix,
             ]
           properties:
             title: { $ref: "#/components/schemas/ContentText" }
@@ -4307,6 +4387,15 @@ components:
             minBasketRemainingLabel: { $ref: "#/components/schemas/ContentText" }
             goToCartLabel: { $ref: "#/components/schemas/ContentText" }
             clearLabel: { $ref: "#/components/schemas/ContentText" }
+            clearConfirmQuestion: { $ref: "#/components/schemas/ContentText" }
+            clearConfirmHint: { $ref: "#/components/schemas/ContentText" }
+            clearConfirmLabel: { $ref: "#/components/schemas/ContentText" }
+            cancelLabel: { $ref: "#/components/schemas/ContentText" }
+            closeLabel: { $ref: "#/components/schemas/ContentText" }
+            decreaseSuffix: { $ref: "#/components/schemas/ContentText" }
+            increaseSuffix: { $ref: "#/components/schemas/ContentText" }
+            removeSuffix: { $ref: "#/components/schemas/ContentText" }
+            quantitySuffix: { $ref: "#/components/schemas/ContentText" }
 
     ContentImage:
       type: object

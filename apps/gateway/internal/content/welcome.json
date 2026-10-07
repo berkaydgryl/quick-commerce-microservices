@@ -184,7 +184,16 @@
       "totalLabel": "Toplam",
       "minBasketRemainingLabel": "Minimum sepet tutarına kalan",
       "goToCartLabel": "Sepete git",
-      "clearLabel": "Sepeti boşalt"
+      "clearLabel": "Sepeti boşalt",
+      "clearConfirmQuestion": "Sepeti boşaltmak istediğine emin misin?",
+      "clearConfirmHint": "Sepetteki bütün ürünler kaldırılır.",
+      "clearConfirmLabel": "Boşalt",
+      "cancelLabel": "Vazgeç",
+      "closeLabel": "Kapat",
+      "decreaseSuffix": "adedini azalt",
+      "increaseSuffix": "adedini artır",
+      "removeSuffix": "sepetten çıkar",
+      "quantitySuffix": "adedi"
     }
   },
   "favorites": {
@@ -378,5 +387,29 @@
       "AMEX": "AMEX",
       "TROY": "troy"
     }
+  },
+  "marketPage": {
+    "infoLabel": "İşletme bilgisi",
+    "loadingLabel": "İşletme yükleniyor…",
+    "openLabel": "Açık",
+    "aboutLabel": "Hakkında",
+    "closeLabel": "Kapat",
+    "brandLabel": "Marka",
+    "deliveryTimeLabel": "Teslimat süresi",
+    "minBasketLabel": "Minimum sepet tutarı",
+    "deliveryFeeLabel": "Teslimat ücreti",
+    "freeDeliveryThresholdLabel": "Ücretsiz teslimat eşiği",
+    "searchLabel": "Bu işletmede ara",
+    "searchPlaceholder": "Bu işletmede ara…",
+    "allProductsTitle": "Tüm Ürünler",
+    "searchResultsTitle": "Arama Sonuçları",
+    "searchEmptyNotice": "Bu işletmede aradığın ürün bulunmuyor.",
+    "categoryEmptyNotice": "Bu kategoride ürün yok.",
+    "productsLoadingLabel": "Ürünler yükleniyor…",
+    "moreLabel": "Daha fazla ürün",
+    "loadingMoreLabel": "Yükleniyor…",
+    "addSuffix": "sepete ekle",
+    "soldOutLabel": "Tükendi",
+    "unavailableLabel": "Satışta değil"
   }
 }

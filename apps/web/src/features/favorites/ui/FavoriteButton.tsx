@@ -8,9 +8,13 @@ import { favoriteIdsOf } from '../services/favorite-list';
 import styles from './FavoriteButton.module.css';
 import { HeartIcon } from './icons';
 
+/** Kalbin zemini: fotograf (beyaz cizgi; varsayilan) ya da beyaz kart (gri, T16.2 magaza sayfasi). */
+export type FavoriteTone = 'photo' | 'surface';
+
 interface FavoriteButtonProps {
   readonly market: Market;
   readonly texts: FavoritesContent;
+  readonly tone?: FavoriteTone | undefined;
 }
 
 /**
@@ -19,7 +23,7 @@ interface FavoriteButtonProps {
  * moru. Basinca iyimser degisir (useToggleFavorite). Oturum yoksa cizilmez;
  * favoriler okunana kadar basilamaz (yanlis durumu tersine cevirmesin).
  */
-export function FavoriteButton({ market, texts }: FavoriteButtonProps) {
+export function FavoriteButton({ market, texts, tone }: FavoriteButtonProps) {
   const status = useSessionStore((state) => state.status);
   const favorites = useFavorites();
   const toggle = useToggleFavorite(market, texts);
@@ -33,6 +37,7 @@ export function FavoriteButton({ market, texts }: FavoriteButtonProps) {
       favorite={favorite}
       label={favorite ? texts.removeLabel : texts.addLabel}
       disabled={favorites.data === undefined}
+      tone={tone}
       onToggle={() => toggle.mutate(!favorite)}
     />
   );
@@ -42,6 +47,7 @@ interface FavoriteButtonViewProps {
   readonly favorite: boolean;
   readonly label: string;
   readonly disabled: boolean;
+  readonly tone?: FavoriteTone | undefined;
   readonly onToggle: () => void;
 }
 
@@ -50,12 +56,20 @@ export function FavoriteButtonView({
   favorite,
   label,
   disabled,
+  tone = 'photo',
   onToggle,
 }: FavoriteButtonViewProps) {
+  const className = [
+    styles['c-favorite'],
+    tone === 'surface' ? styles['c-favorite--surface'] : undefined,
+    favorite ? styles['is-active'] : undefined,
+  ]
+    .filter((name) => name !== undefined)
+    .join(' ');
   return (
     <button
       type="button"
-      className={favorite ? `${styles['c-favorite']} ${styles['is-active']}` : styles['c-favorite']}
+      className={className}
       aria-pressed={favorite}
       aria-label={label}
       disabled={disabled}

@@ -1,0 +1,48 @@
+/* Sepet adet kutusu (T16.3; referans getircarsi): beyaz kutuda "−", mor kutuda adet, "+". */
+.c-cart-stepper {
+  display: inline-grid;
+  grid-template-columns: repeat(3, var(--size-cart-stepper));
+  align-items: stretch;
+  overflow: hidden;
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-surface);
+}
+
+/* Urun kartinda (T16.2): ustte "+", ortada adet, altta "−". */
+.c-cart-stepper--vertical {
+  grid-template-rows: repeat(3, var(--size-cart-stepper));
+  grid-template-columns: var(--size-cart-stepper);
+}
+
+.c-cart-stepper__step {
+  display: grid;
+  place-items: center;
+  block-size: var(--size-cart-stepper);
+  padding: var(--space-2);
+  font: inherit;
+  font-size: var(--font-size-lg);
+  line-height: 1;
+  color: var(--color-brand-primary);
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.c-cart-stepper__step:disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
+}
+
+.c-cart-stepper__step:hover:not(:disabled) {
+  background: var(--color-brand-primary-subtle);
+}
+
+.c-cart-stepper__quantity {
+  display: grid;
+  place-items: center;
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-on-brand);
+  background: var(--color-brand-primary);
+}

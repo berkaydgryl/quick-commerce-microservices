@@ -19,7 +19,9 @@ syntax = "proto3";
 // istemci tarafi kilit YOKTUR. Bu yuzden kismi rezervasyon imkansizdir:
 // ya sepetin tamami rezerve edilir ya hicbiri. Commit ve Release'in stok
 // defteri (Mongo) kaydi script'ten SONRA yazilir; yarida kalirsa ayni istegin
-// tekrari tamamlar (ADR-18).
+// tekrari tamamlar (ADR-18). ExtendReservation'in defter kaydi en iyi
+// gayrettir; eksik kalan kaydi ancak beklenen bitisi tutmayan bir sonraki cagri
+// tamamlar (RPC yorumu), her durumda tamamlanacagi garanti DEGILDIR.
 
 package getir.inventory.v1;
 
@@ -75,19 +77,45 @@ service InventoryService {
   // Rezervasyonun bitis anini `additional_seconds` ileri alir (T11.3, B21):
   // odeme ya da 3DS denemesi kilit dusmeden bitsin. Uzatma rezervasyon basina
   // en cok RESERVATION_MAX_EXTENSIONS kez (varsayilan 3) yapilir; hak bitince
-  // sure DEGISMEZ ve already_extended = true doner (hata degil). Her uzatma
-  // stok defterine yazilir (eldeki adet degismez).
+  // sure DEGISMEZ ve already_extended = true doner (hata degil; beklenen bitis
+  // verilip tutmadiysa once o denetlenir, asagida). Her uzatma stok defterine en
+  // iyi gayretle yazilir (eldeki adet degismez); yazilamazsa uzatma gecerli kalir.
   //
   // Aktif rezervasyon yoksa (birakilmis, onaylanmis, bitis ani gecmis ya da
   // hic olmamis) FAILED_PRECONDITION + ErrorDetail.code = "RESERVATION_EXPIRED":
   // kilit dusmustur, cagiran odeme ALMAMALIDIR. Bitis ani gecmis rezervasyon
   // supurucu henuz birakmamis olsa da uzatilmaz (dusmus kilit diriltilmez).
+  //
+  // TEKRAR GUVENLIGI (T15.3; bekleyen is 117, QA IQ3): istek
+  // `expected_expires_at` tasiyorsa uzatma yalnizca kilidin GUNCEL bitisi buna
+  // esitse yapilir. Denetim uzatmayla AYNI atomik adimdadir (Lua script'i, sure
+  // indeksindeki puana karsi); on okunan kayitla yapilmaz. Esit degilse sureye
+  // dokunulmaz, hak harcanmaz; guncel bitis ve uzatma sayisi `expiry_mismatch =
+  // true` ile doner. Cevabi kaybolan uzatmanin tekrari boylece hakki ikinci kez
+  // yakmaz: bitis zaten degismistir (additional_seconds en az 1). Denetim
+  // sirasi: once aktiflik (dusmus kilit RESERVATION_EXPIRED alir), sonra beklenen
+  // bitis, sonra hak siniri.
+  //
+  // DEFTER: `expiry_mismatch` cevabinda uzatma sayisi 0'dan buyukse 1'den o
+  // sayiya kadar eksik uzatma kayitlari tamamlanir (var olana dokunulmaz, kayit
+  // tek kalir; eksik kayit tamamlayan cagrinin aniyla yazilir). Tamamlama en iyi
+  // gayrettir: cevabi bekletmez, yazilamazsa cevap yine basarilidir.
+  //
+  // CAGIRAN DENETIMI: beklenen bitis verilip uzatma yapildiysa (expiry_mismatch
+  // ve already_extended false) expires_at = expected_expires_at +
+  // additional_seconds olur. Tutmuyorsa sunucu denetimi uygulamamistir (eski
+  // surum); cagiran bunu hata olarak gunluge yazar.
+  //
+  // DAGITIM SIRASI: inventory, alani gonderen order'dan ONCE dagitilir; eski
+  // inventory alani tanimaz ve yok sayar (her tekrar yine hak harcardi).
   rpc ExtendReservation(ExtendReservationRequest) returns (ExtendReservationResponse);
 
   // Rezervasyonun kalan suresini en cok `max_remaining_seconds`'e indirir
   // (T11.3: orta risk bandinda kilit 2 dk). Kalan sure zaten kisaysa
   // dokunmaz (shortened = false); asla uzatmaz. Kaydin, indeksin ve kullanici
   // kilidinin omru birlikte kisalir: supurucu kilidi yeni bitiste birakir.
+  // Kisaltilan bitis, ExtendReservation'in `expected_expires_at` denetimindeki
+  // degeri de degistirir: cagiran donen bitisi sonraki uzatmadan ONCE kaydeder.
   //
   // Aktif rezervasyon yoksa ExtendReservation ile ayni hata
   // (FAILED_PRECONDITION + "RESERVATION_EXPIRED").
@@ -311,19 +339,36 @@ message ExtendReservationRequest {
   // Mutlak bir zaman alinmaz; istemci saatine guvenmek, saat kaymasi olan bir
   // cihazin sureyi istedigi kadar uzatmasina izin verirdi.
   int32 additional_seconds = 3;
+
+  // Cagiranin bildigi bitis ani (T15.3; bekleyen is 117; istege bagli): doluysa
+  // uzatma yalnizca kilidin guncel bitisi buna esitse yapilir (RPC yorumu).
+  // Cagiran bu alani inventory'nin daha once dondurdugu expires_at'ten doldurur;
+  // milisaniye hassasiyetinde karsilastirilir (milisaniye alti kesilir). Alan
+  // GONDERILMEZSE denetim yok (eski davranis). Gonderilen an gecerli ve 1970'ten
+  // sonra olmalidir, degilse VALIDATION_FAILED.
+  google.protobuf.Timestamp expected_expires_at = 5;
 }
 
 message ExtendReservationResponse {
-  // Uzatma sonrasi yeni bitis ani. Uzatma yapilmadiysa MEVCUT bitis ani doner.
+  // Uzatma sonrasi yeni bitis ani. Uzatma yapilmadiysa (hak bitmis ya da
+  // beklenen bitis tutmamis) kilidin GUNCEL bitis ani doner.
   google.protobuf.Timestamp expires_at = 1;
 
   // true ise uzatma hakki bitmisti ve bu cagri sureye dokunmadi. Hata
   // degildir: cagiran kalan sureyle devam eder (alan adi T11.3 oncesinden;
-  // o zaman tek uzatma vardi).
+  // o zaman tek uzatma vardi). expiry_mismatch true ise bu alan false'tur
+  // (beklenen bitis hak sinirindan once denetlenir; hakkin durumu bu cevaptan
+  // okunamaz).
   bool already_extended = 2;
 
   // Bu cagridan sonra rezervasyonun toplam uzatma sayisi (0 = hic uzatilmadi).
   int32 extension_count = 3;
+
+  // true ise istekteki expected_expires_at kilidin guncel bitisiyle TUTMADI
+  // (T15.3; bekleyen is 117): bu cagri sureye DOKUNMADI, hak harcamadi;
+  // expires_at guncel bitistir. Cagiran guncel bitisi kaydeder; kalan sure hala
+  // yetmiyorsa yeni beklenen bitisle tekrar uzatir.
+  bool expiry_mismatch = 4;
 }
 
 message ShortenReservationRequest {

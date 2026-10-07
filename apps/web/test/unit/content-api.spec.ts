@@ -141,6 +141,7 @@ const welcome = {
   addresses: CONTENT_FALLBACK.addresses,
   orders: CONTENT_FALLBACK.orders,
   paymentMethods: CONTENT_FALLBACK.paymentMethods,
+  marketPage: CONTENT_FALLBACK.marketPage,
 };
 
 function clientReturning(body: unknown) {

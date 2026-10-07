@@ -22,42 +22,25 @@ import type {
   ExpireOutcome,
   ExtendCommand,
   ExtendOutcome,
-  InactiveReservation,
   ReleaseCommand,
   ReleaseOutcome,
-  ReservationLine,
-  ReservationSettlement,
   ReservationStore,
   ReserveCommand,
   ReserveOutcome,
-  SettledReservation,
   ShortenCommand,
   ShortenOutcome,
 } from '../../domain/reservation.js';
 import { COMMIT_REASON, EXPIRE_REASON } from '../../domain/stock-ledger.js';
 
 import { counterKey } from './in-memory-counter-key.js';
-
-interface Settled {
-  readonly settlement: ReservationSettlement;
-  readonly reason: string;
-  readonly at: number;
-}
-
-interface StoredReservation {
-  readonly userId: string;
-  readonly lines: readonly ReservationLine[];
-  readonly expiresAt: number;
-  /** Kac kez uzatildi (Redis'te hash'in `extended` alani, T11.3). */
-  readonly extensionCount: number;
-  /** Sonuclandiysa iz (Redis'te hash'in `state` alani). */
-  readonly settled?: Settled;
-}
-
-interface UserLock {
-  readonly orderId: string;
-  readonly expiresAt: number;
-}
+import {
+  inactiveOf,
+  isStored,
+  memoryReservationKey,
+  settledOrAbsent,
+  sortedLines,
+} from './in-memory-reservation-record.js';
+import type { StoredReservation, UserLock } from './in-memory-reservation-record.js';
 
 export interface InMemoryReservationStoreOptions {
   /** Kaydin bitisten sonra kalma payi (ms; Redis'te hash PEXPIRE payi). */
@@ -107,13 +90,13 @@ export class InMemoryReservationStore implements ReservationStore {
 
   /** Bitis ani gelmis aktif rezervasyonlar, en eskisi once (Redis'te resv:index). */
   listDue(marketId: string, nowMs: number, limit: number): Promise<readonly string[]> {
-    const prefix = reservationKey(marketId, '');
+    const prefix = memoryReservationKey(marketId, '');
     const due = [...this.reservations.entries()]
       .filter(
         ([key, reservation]) =>
           key.startsWith(prefix) &&
           reservation.settled === undefined &&
-          this.isStored(reservation, nowMs) &&
+          isStored(this.options, reservation, nowMs) &&
           reservation.expiresAt <= nowMs,
       )
       .sort(([, left], [, right]) => left.expiresAt - right.expiresAt)
@@ -135,7 +118,7 @@ export class InMemoryReservationStore implements ReservationStore {
   }
 
   forgetSettled(marketId: string, orderId: string): Promise<void> {
-    const key = reservationKey(marketId, orderId);
+    const key = memoryReservationKey(marketId, orderId);
     if (this.reservations.get(key)?.settled !== undefined) {
       this.reservations.delete(key);
     }
@@ -144,11 +127,11 @@ export class InMemoryReservationStore implements ReservationStore {
 
   private reserveNow(command: ReserveCommand): ReserveOutcome {
     const { orderId, marketId, userId, lines, nowMs, ttlMs } = command;
-    const key = reservationKey(marketId, orderId);
+    const key = memoryReservationKey(marketId, orderId);
 
     // 0. Ayni siparis (ya da izi duran sonuclanmis kayit): sayaclar tekrar dusmez.
     const existing = this.reservations.get(key);
-    if (existing !== undefined && this.isStored(existing, nowMs)) {
+    if (existing !== undefined && isStored(this.options, existing, nowMs)) {
       return { status: 'already-reserved', expiresAt: existing.expiresAt };
     }
 
@@ -192,11 +175,11 @@ export class InMemoryReservationStore implements ReservationStore {
     settlement: 'released' | 'expired',
   ): ReleaseOutcome | { readonly status: 'not-due' } {
     const { orderId, marketId, reason, nowMs } = command;
-    const key = reservationKey(marketId, orderId);
+    const key = memoryReservationKey(marketId, orderId);
     const existing = this.reservations.get(key);
 
     // 0-1. Daha once sonuclanmis (iz) ya da aktif rezervasyon yok.
-    const done = this.settledOrAbsent(existing, nowMs);
+    const done = settledOrAbsent(this.options, existing, nowMs);
     if (done !== undefined || existing === undefined) {
       return done ?? { status: 'absent' };
     }
@@ -227,10 +210,10 @@ export class InMemoryReservationStore implements ReservationStore {
 
   private commitNow(command: CommitCommand): CommitOutcome {
     const { orderId, marketId, nowMs } = command;
-    const key = reservationKey(marketId, orderId);
+    const key = memoryReservationKey(marketId, orderId);
     const existing = this.reservations.get(key);
 
-    const done = this.settledOrAbsent(existing, nowMs);
+    const done = settledOrAbsent(this.options, existing, nowMs);
     if (done !== undefined || existing === undefined) {
       return done ?? { status: 'absent' };
     }
@@ -250,11 +233,23 @@ export class InMemoryReservationStore implements ReservationStore {
   /** Uzatma (extend.lua): kayit ve kullanici kilidi birlikte ileri; hak sinirli. */
   private extendNow(command: ExtendCommand): ExtendOutcome {
     const { orderId, marketId, nowMs, additionalMs, maxExtensions } = command;
-    const key = reservationKey(marketId, orderId);
+    const key = memoryReservationKey(marketId, orderId);
     const existing = this.reservations.get(key);
-    const inactive = this.inactiveOf(existing, nowMs);
+    const inactive = inactiveOf(this.options, existing, nowMs);
     if (inactive !== undefined || existing === undefined) {
       return inactive ?? { status: 'inactive', reason: 'absent' };
+    }
+    // Beklenen bitis (T15.3): extend.lua ile ayni sira, aktiflikten sonra hak sinirindan once.
+    if (
+      command.expectedExpiresAt !== undefined &&
+      command.expectedExpiresAt !== existing.expiresAt
+    ) {
+      return {
+        status: 'expiry-mismatch',
+        expiresAt: existing.expiresAt,
+        extensionCount: existing.extensionCount,
+        lines: sortedLines(existing.lines),
+      };
     }
     if (existing.extensionCount >= maxExtensions) {
       return {
@@ -272,9 +267,9 @@ export class InMemoryReservationStore implements ReservationStore {
   /** Kisaltma (shorten.lua): kalan sure en cok sinir kadar; asla uzatmaz. */
   private shortenNow(command: ShortenCommand): ShortenOutcome {
     const { orderId, marketId, nowMs, maxRemainingMs } = command;
-    const key = reservationKey(marketId, orderId);
+    const key = memoryReservationKey(marketId, orderId);
     const existing = this.reservations.get(key);
-    const inactive = this.inactiveOf(existing, nowMs);
+    const inactive = inactiveOf(this.options, existing, nowMs);
     if (inactive !== undefined || existing === undefined) {
       return inactive ?? { status: 'inactive', reason: 'absent' };
     }
@@ -298,57 +293,4 @@ export class InMemoryReservationStore implements ReservationStore {
       this.userLocks.set(existing.userId, { orderId, expiresAt: next.expiresAt });
     }
   }
-
-  /** Uzatma ve kisaltma icin: aktif degilse sebebi, aktifse undefined (extend.lua sirasi). */
-  private inactiveOf(
-    existing: StoredReservation | undefined,
-    nowMs: number,
-  ): InactiveReservation | undefined {
-    if (existing?.settled !== undefined && this.isStored(existing, nowMs)) {
-      return { status: 'inactive', reason: 'settled' };
-    }
-    if (existing === undefined || !this.isStored(existing, nowMs)) {
-      return { status: 'inactive', reason: 'absent' };
-    }
-    if (existing.expiresAt <= nowMs) {
-      return { status: 'inactive', reason: 'due' };
-    }
-    return undefined;
-  }
-
-  /** Iz varsa iz, kayit hic yoksa ya da dusmusse absent; aktif kayitta undefined. */
-  private settledOrAbsent(
-    existing: StoredReservation | undefined,
-    nowMs: number,
-  ): SettledReservation | { readonly status: 'absent' } | undefined {
-    if (existing === undefined || !this.isStored(existing, nowMs)) {
-      return { status: 'absent' };
-    }
-    if (existing.settled !== undefined) {
-      return {
-        status: 'settled',
-        settlement: existing.settled.settlement,
-        reason: existing.settled.reason,
-        settledAt: existing.settled.at,
-        lines: sortedLines(existing.lines),
-      };
-    }
-    return undefined;
-  }
-
-  /** Kayit hala duruyor mu (Redis'te hash'in TTL'i dolmadi mi)? */
-  private isStored(reservation: StoredReservation, nowMs: number): boolean {
-    return reservation.settled === undefined
-      ? nowMs < reservation.expiresAt + this.options.holdAfterExpiryMs
-      : nowMs < reservation.settled.at + this.options.settledTtlMs;
-  }
-}
-
-function reservationKey(marketId: string, orderId: string): string {
-  return `${marketId}/${orderId}`;
-}
-
-/** Redis uygulamasiyla ayni sira: SKU'ya gore. */
-function sortedLines(lines: readonly ReservationLine[]): ReservationLine[] {
-  return [...lines].sort((left, right) => left.sku.localeCompare(right.sku));
 }

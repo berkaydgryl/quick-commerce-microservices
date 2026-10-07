@@ -18,10 +18,11 @@ import { z } from 'zod';
 
 import type { RequestScope } from '../../application/request-scope.js';
 import { SETTLEMENT } from '../../application/stock-reservations.js';
-import { IDEMPOTENT, NOT_IDEMPOTENT, outgoingOptions } from '../grpc-resilience.js';
+import { IDEMPOTENT, outgoingOptions } from '../grpc-resilience.js';
 import type { ClientResilience } from '../grpc-resilience.js';
 import type {
   ExtendLockRequest,
+  ExtendTiming,
   LockTiming,
   ReleaseStockRequest,
   ReserveStockOutcome,
@@ -115,10 +116,11 @@ export class GrpcStockReservations implements StockReservations {
   }
 
   /**
-   * Uzatma (T11.3). Tekrar guvenli DEGIL: her cagri bir uzatma hakki harcar,
-   * cevabi kaybolan istegi yeniden denemek hakki bosa yakardi (D17).
+   * Uzatma (T11.3). Beklenen bitisle tekrar guvenli (T15.3; bekleyen is 117):
+   * cevabi kaybolan istegin tekrari bitisi degismis bulur, hak harcamaz ve
+   * guncel bitisi alir (`moved`). Bu yuzden yeniden denenir (D17).
    */
-  async extend(request: ExtendLockRequest, scope: RequestScope): Promise<LockTiming> {
+  async extend(request: ExtendLockRequest, scope: RequestScope): Promise<ExtendTiming> {
     let response: inventoryV1.ExtendReservationResponse;
     try {
       response = await callUnary<
@@ -131,11 +133,15 @@ export class GrpcStockReservations implements StockReservations {
           orderId: request.orderId,
           marketId: request.marketId,
           additionalSeconds: request.additionalSeconds,
+          expectedExpiresAt: request.expectedExpiresAt,
         }),
-        this.options(scope, NOT_IDEMPOTENT),
+        this.options(scope, IDEMPOTENT),
       );
     } catch (error: unknown) {
       return lapsedOrThrow(error);
+    }
+    if (response.expiryMismatch) {
+      return { kind: 'moved', expiresAt: requiredExpiry(response.expiresAt, request.orderId) };
     }
     return activeTiming(response.expiresAt, !response.alreadyExtended, request.orderId);
   }
@@ -168,7 +174,7 @@ export class GrpcStockReservations implements StockReservations {
     this.client.close();
   }
 
-  /** Reserve, Commit, Release ve kisaltma tekrar guvenli; uzatma degil (D17). */
+  /** Reserve, Commit, Release ve kisaltma tekrar guvenli; uzatma beklenen bitisle (T15.3). */
   private options(scope: RequestScope, idempotent: boolean): OutgoingCallOptions {
     return outgoingOptions(scope, this.timeoutMs, this.resilience, idempotent);
   }
@@ -200,13 +206,17 @@ function lapsedOrThrow(error: unknown): LockTiming {
 }
 
 /** Bitis anisiz cevapla kilit suresi varsayilmaz: INTERNAL. */
-function activeTiming(expiresAt: Date | undefined, changed: boolean, orderId: string): LockTiming {
+function requiredExpiry(expiresAt: Date | undefined, orderId: string): Date {
   if (expiresAt === undefined) {
     throw AppError.internal('Stok servisi kilidin bitis anini dondurmedi', {
       details: { orderId },
     });
   }
-  return { kind: 'active', expiresAt, changed };
+  return expiresAt;
+}
+
+function activeTiming(expiresAt: Date | undefined, changed: boolean, orderId: string): LockTiming {
+  return { kind: 'active', expiresAt: requiredExpiry(expiresAt, orderId), changed };
 }
 
 function settlementOf(outcome: inventoryV1.ReservationOutcome, orderId: string): Settlement {

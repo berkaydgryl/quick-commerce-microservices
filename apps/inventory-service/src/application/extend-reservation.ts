@@ -12,6 +12,12 @@
  *    sureyle devam eder).
  *  - aktif rezervasyon yok (birakilmis, onaylanmis, bitis ani gecmis):
  *    RESERVATION_EXPIRED. Dusmus kilit uzatilarak diriltilmez.
+ *  - beklenen bitis tutmadi (T15.3, bekleyen is 117): sure degismez, hak
+ *    harcanmaz; guncel bitis `expiryMismatch` ile doner. Cevabi kaybolan
+ *    uzatmanin tekrari boylece hakki ikinci kez yakmaz. Uzatma sayisi 0'dan
+ *    buyukse 1'den o sayiya kadar eksik defter kayitlari tamamlanir (var olana
+ *    dokunulmaz): yarida kalmis bir yazima karsi guvence. Tamamlama cevabi
+ *    BEKLETMEZ ve basarisiz etmez (en iyi gayret).
  *
  * Hak sayisi servisindir (RESERVATION_MAX_EXTENSIONS); sureyi order verir.
  */
@@ -37,6 +43,8 @@ export interface ExtendReservationInput {
   readonly orderId: string;
   readonly marketId: string;
   readonly additionalSeconds: number;
+  /** Cagiranin bildigi bitis (T15.3); verilirse uzatma yalnizca guncel bitis buna esitse. */
+  readonly expectedExpiresAt?: Date | undefined;
 }
 
 export interface ExtendReservationResult {
@@ -45,13 +53,15 @@ export interface ExtendReservationResult {
   readonly alreadyExtended: boolean;
   /** Bu cagridan sonra toplam uzatma sayisi. */
   readonly extensionCount: number;
+  /** true: beklenen bitis tutmadi, sure degismedi; expiresAt guncel bitistir. */
+  readonly expiryMismatch: boolean;
 }
 
 export type ExtendReservation = (input: ExtendReservationInput) => Promise<ExtendReservationResult>;
 
 export function createExtendReservation(deps: ExtendReservationDeps): ExtendReservation {
   return async (input) => {
-    const { orderId, marketId, additionalSeconds } = input;
+    const { orderId, marketId, additionalSeconds, expectedExpiresAt } = input;
     const nowMs = deps.clock.now();
     const outcome = await deps.reservations.extend({
       orderId,
@@ -59,6 +69,9 @@ export function createExtendReservation(deps: ExtendReservationDeps): ExtendRese
       nowMs,
       additionalMs: additionalSeconds * MS_PER_SECOND,
       maxExtensions: deps.maxExtensions,
+      ...(expectedExpiresAt === undefined
+        ? {}
+        : { expectedExpiresAt: expectedExpiresAt.getTime() }),
     });
 
     switch (outcome.status) {
@@ -82,7 +95,12 @@ export function createExtendReservation(deps: ExtendReservationDeps): ExtendRese
             ),
           { orderId, marketId, extensionCount },
         );
-        return { expiresAt: new Date(expiresAt), alreadyExtended: false, extensionCount };
+        return {
+          expiresAt: new Date(expiresAt),
+          alreadyExtended: false,
+          extensionCount,
+          expiryMismatch: false,
+        };
       }
       case 'limit-reached':
         deps.logger.info(
@@ -93,7 +111,41 @@ export function createExtendReservation(deps: ExtendReservationDeps): ExtendRese
           expiresAt: new Date(outcome.expiresAt),
           alreadyExtended: true,
           extensionCount: outcome.extensionCount,
+          expiryMismatch: false,
         };
+      case 'expiry-mismatch': {
+        const { expiresAt, extensionCount, lines } = outcome;
+        deps.logger.info(
+          { orderId, marketId, expiresAt: new Date(expiresAt), extensionCount },
+          'rezervasyon uzatilmadi: beklenen bitis tutmadi; guncel hal donuldu',
+        );
+        if (extensionCount > 0) {
+          // Cevabi bekletmez: upsert idempotent, yazilamazsa uyari (recordBestEffort).
+          void recordBestEffort(
+            deps,
+            () =>
+              deps.ledger.record(
+                Array.from({ length: extensionCount }, (_, index) =>
+                  extendEntries({
+                    orderId,
+                    marketId,
+                    lines,
+                    sequence: index + 1,
+                    at: new Date(nowMs),
+                  }),
+                ).flat(),
+              ),
+            { orderId, marketId, extensionCount },
+            'eksik uzatma kaydi tamamlanamadi (beklenen bitis tutmadi); cevap etkilenmez',
+          );
+        }
+        return {
+          expiresAt: new Date(expiresAt),
+          alreadyExtended: false,
+          extensionCount,
+          expiryMismatch: true,
+        };
+      }
       case 'inactive':
         throw reservationNotActive(input, outcome);
     }
@@ -105,10 +157,11 @@ async function recordBestEffort(
   deps: Pick<ExtendReservationDeps, 'logger'>,
   write: () => Promise<void>,
   context: Readonly<Record<string, unknown>>,
+  warning = 'uzatma defter kaydi yazilamadi; uzatma gecerli',
 ): Promise<void> {
   try {
     await write();
   } catch (error: unknown) {
-    deps.logger.warn({ ...context, err: error }, 'uzatma defter kaydi yazilamadi; uzatma gecerli');
+    deps.logger.warn({ ...context, err: error }, warning);
   }
 }

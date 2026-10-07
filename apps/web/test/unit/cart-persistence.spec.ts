@@ -56,6 +56,24 @@ describe('restoreCart (okunan kaydin dogrulanmasi)', () => {
     expect(restoreCart(kayit, NOW + 1_000)).toEqual(ikiSut());
   });
 
+  it('T16.3 oncesi kayit (kalemde maxQuantity yok) atilmaz: sinir platform siniri olur', () => {
+    const eski = {
+      ...kayit,
+      items: kayit.items.map(({ maxQuantity: _sinir, ...kalem }) => kalem),
+    };
+
+    const sepet = restoreCart(eski, NOW + 1_000);
+
+    expect(sepet.items).toHaveLength(1);
+    expect(sepet.items[0]?.maxQuantity).toBe(CART_ITEM_MAX_QUANTITY);
+  });
+
+  it('kalemin siniri kayittan aynen doner', () => {
+    const azStok = addItem(EMPTY_CART, { ...SUT, availableQuantity: 4 }, MIGROS).state;
+
+    expect(restoreCart(toPersistedCart(azStok, NOW), NOW + 1_000).items[0]?.maxQuantity).toBe(4);
+  });
+
   it('24 saat dolunca bos sepet', () => {
     expect(restoreCart(kayit, NOW + CART_TTL_MS - 1)).toEqual(ikiSut());
     expect(restoreCart(kayit, NOW + CART_TTL_MS)).toBe(EMPTY_CART);

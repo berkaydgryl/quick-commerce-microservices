@@ -110,6 +110,10 @@ export const commitRequestSchema = z.object({
 /**
  * ExtendReservation (T11.3, B21). Eklenecek sure 1-300 sn: sinir KORUMADIR
  * (sureyi order verir, 60); 0 ya da negatif sure uzatma hakkini bosa yakardi.
+ *
+ * Beklenen bitis (T15.3, bekleyen is 117): alan gonderilmezse undefined (denetim
+ * yok). Gonderilen an gecerli ve 1970'ten sonra olmali: sifir zaman damgasi
+ * "bilinmiyor" anlamina gelmez, her cagriyi uyusmazliga dusururdu.
  */
 export const extendRequestSchema = z.object({
   orderId: requiredText.pipe(orderIdSchema),
@@ -119,6 +123,9 @@ export const extendRequestSchema = z.object({
     .int('tam sayi olmali')
     .min(1, 'en az 1 saniye')
     .max(RESERVATION_EXTEND_MAX_SECONDS, `en fazla ${RESERVATION_EXTEND_MAX_SECONDS} saniye`),
+  expectedExpiresAt: z
+    .custom<Date>((value) => value instanceof Date && value.getTime() > 0, 'gecerli bir an olmali')
+    .optional(),
 });
 
 /**

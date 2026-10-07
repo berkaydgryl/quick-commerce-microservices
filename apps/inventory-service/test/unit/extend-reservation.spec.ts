@@ -50,6 +50,7 @@ describe('ExtendReservation use-case (T11.3)', () => {
       expiresAt: new Date(NOW + 120_000),
       alreadyExtended: false,
       extensionCount: 2,
+      expiryMismatch: false,
     });
     expect(extend).toHaveBeenCalledWith({
       orderId: ORDER,
@@ -86,6 +87,7 @@ describe('ExtendReservation use-case (T11.3)', () => {
       expiresAt: new Date(NOW + 30_000),
       alreadyExtended: true,
       extensionCount: 3,
+      expiryMismatch: false,
     });
     expect(ledger.record).not.toHaveBeenCalled();
   });

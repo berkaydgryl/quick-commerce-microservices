@@ -11,6 +11,13 @@
 -- olsa da kilit dusmustur; uzatmak onu diriltir ve odeme, supurucunun her an
 -- birakabilecegi stokla alinmis olurdu.
 --
+-- Beklenen bitis (ARGV[7]; T15.3, bekleyen is 117): verilirse uzatma yalnizca
+-- indeksteki GUNCEL bitis buna esitse yapilir; degilse 'mismatch' (sureye
+-- dokunulmaz, hak harcanmaz). Cevabi kaybolan uzatmanin tekrari boylece hakki
+-- ikinci kez yakmaz: bitis zaten degismistir. Denetim burada, ayni atomik
+-- adimda: on okunan kayitla yapilsaydi iki es zamanli cagri ikisi de uzatirdi.
+-- Sira: aktiflik, beklenen bitis, hak siniri.
+--
 -- KEYS[1]  rezervasyon hash'i   resv:{market}:{orderId}
 -- KEYS[2]  sure indeksi (zset)  resv:index:{market}
 -- KEYS[3]  kullanici kilidi     resv:user:{userId}  (ayri slot, beyanli; YALNIZCA on
@@ -20,10 +27,12 @@
 -- ARGV[3] simdi (ms)   ARGV[4] eklenecek sure (ms)
 -- ARGV[5] hash'in bitisten sonra kalma payi (ms; reserve.lua ile ayni)
 -- ARGV[6] en cok uzatma sayisi
+-- ARGV[7] beklenen bitis (ms; bos ise denetim yok)
 --
 -- Doner (ilk eleman durum):
 --   {'extended', yeniBitis, sayac, sku, adet, ...}  uzatildi; sayac bu uzatma dahil
 --   {'limit', bitis, sayac}                         hak bitmis
+--   {'mismatch', bitis, sayac, sku, adet, ...}      beklenen bitis tutmadi (guncel hal)
 --   {'settled'}                                     sonuclanmis (iz duruyor)
 --   {'absent'}                                      indekste yok
 --   {'orphaned'}                                    indekste var, kaydi yok
@@ -35,6 +44,19 @@ local resvKey, indexKey, userKey = KEYS[1], KEYS[2], KEYS[3]
 local orderId, userId = ARGV[1], ARGV[2]
 local nowMs, addMs = tonumber(ARGV[3]), tonumber(ARGV[4])
 local holdMs, maxExtensions = tonumber(ARGV[5]), tonumber(ARGV[6])
+local expected = ARGV[7]
+
+-- Cevaba kaydin kalemlerini ekler: sku, adet, sku, adet... (qty:{sku} alanlari).
+local function withLines(reply)
+  local fields = redis.call('HGETALL', resvKey)
+  for i = 1, #fields, 2 do
+    if string.sub(fields[i], 1, 4) == 'qty:' then
+      reply[#reply + 1] = string.sub(fields[i], 5)
+      reply[#reply + 1] = fields[i + 1]
+    end
+  end
+  return reply
+end
 
 -- 1. Aktif mi: sonuclanmamis, indekste, kaydi duruyor, bitis ani gelmemis.
 if redis.call('HGET', resvKey, 'state') then
@@ -55,13 +77,19 @@ if redis.call('HGET', resvKey, 'userId') ~= userId then
   return { 'stale' }
 end
 
--- 2. Hak bitti mi.
 local count = tonumber(redis.call('HGET', resvKey, 'extended')) or 0
+
+-- 2. Beklenen bitis tutuyor mu (T15.3): tutmazsa guncel hal, hicbir sey yazilmaz.
+if expected and expected ~= '' and tonumber(expected) ~= expiresAt then
+  return withLines({ 'mismatch', expiresAt, count })
+end
+
+-- 3. Hak bitti mi.
 if count >= maxExtensions then
   return { 'limit', expiresAt, count }
 end
 
--- 3. Uc yer birlikte ileri: kayit (alan + omur), indeks (XX: yalnizca var olan
+-- 4. Uc yer birlikte ileri: kayit (alan + omur), indeks (XX: yalnizca var olan
 -- uye), kullanici kilidi (yalnizca BU siparisinse).
 expiresAt = expiresAt + addMs
 count = count + 1
@@ -72,13 +100,5 @@ if userKey and redis.call('GET', userKey) == orderId then
   redis.call('PEXPIRE', userKey, expiresAt - nowMs)
 end
 
--- 4. Kalemler: servis stok defterine uzatma kaydi yazar.
-local reply = { 'extended', expiresAt, count }
-local fields = redis.call('HGETALL', resvKey)
-for i = 1, #fields, 2 do
-  if string.sub(fields[i], 1, 4) == 'qty:' then
-    reply[#reply + 1] = string.sub(fields[i], 5)
-    reply[#reply + 1] = fields[i + 1]
-  end
-end
-return reply
+-- 5. Kalemler: servis stok defterine uzatma kaydi yazar.
+return withLines({ 'extended', expiresAt, count })
