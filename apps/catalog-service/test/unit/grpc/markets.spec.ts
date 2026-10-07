@@ -37,8 +37,8 @@ describe('ListNearbyMarkets', () => {
     expect(migros?.rating).toEqual({ averageTenths: 47, count: 1200 });
     expect(migros?.pricingRules?.minBasket).toEqual({ amountMinor: 4000, currency: CURRENCY });
     expect(migros?.deliveryTime).toEqual({ minMinutes: 15, maxMinutes: 25 });
-    // T11.11: logo yok (istemci bas harf rozeti); tur ve kapak telde.
-    expect(migros?.logoUrl).toBe('');
+    // T11.11: tur, kapak ve (07.10, gecici yazi logo) logo yolu telde; gateway mutlak adres kurar.
+    expect(migros?.logoUrl).toBe('/img/market-logo/migros-jet.svg');
     expect(migros?.storeType).toBe(catalogV1.StoreType.STORE_TYPE_MARKET);
     expect(migros?.coverUrl).toBe('/img/market/market.jpg');
   });
