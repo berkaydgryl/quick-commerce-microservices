@@ -14,7 +14,8 @@
  *     ayni bitisi doner (stok bir kez).
  *   Yarida kalan onay (ADR-18): depo katmaninda Lua uygulanir, Mongo yazilmadan hata; tekrar onayi
  *     tamamlar.
- *   Extend (NOT_IDEMPOTENT): cevap kaybolursa order hata gorur; inventory'de olan belgelenir (#117).
+ *   Extend (beklenen bitisle IDEMPOTENT, T15.3; bekleyen is 117): cevap kaybolursa order yeniden
+ *     dener; tekrar guncel bitisi alir (moved), hak, bitis ve defter BIR kez.
  */
 
 import { AppError, ERROR_CODES, fixedClock, silentLogger } from '@getir/core';
@@ -375,25 +376,30 @@ describe('QA IQ3 yavas cevap ve yarida kalan islem', () => {
   });
 });
 
-// #117: duzeltme sonrasi TERSINE donecek. Extend deneme kimligiyle idempotent olunca order
-// istemcisi yeniden dener: beklenen basari, hak bir kez, bitis bir kez ileri.
-describe('QA IQ3 Extend (NOT_IDEMPOTENT): cevap kaybolursa', () => {
-  it('order hata gorur ve tekrar etmez; inventory uzatmayi tamamlamis olur (hak, bitis ve defter): belgelenen davranis', async () => {
+// Bekleyen is 117 (T15.3): Extend beklenen bitisle gider ve yeniden denenir. Duzeltmeden once bu
+// test "order hata gorur, hak tukenir" davranisini belgeliyordu; artik tersine dondu.
+describe('QA IQ3 Extend (beklenen bitisle IDEMPOTENT, T15.3): cevap kaybolursa', () => {
+  it('order yeniden dener; tekrar guncel bitisi alir (moved); hak, bitis ve defter BIR kez', async () => {
     const { orderId, expiresAt } = await reserved();
     const received = replies.received.extendReservation;
     replies.loseNext('extendReservation', orderId);
 
-    const error = await rejection(
-      stock.extend({ orderId, marketId: MARKET, additionalSeconds: EXTEND_SECONDS }, scope),
+    const timing = await stock.extend(
+      {
+        orderId,
+        marketId: MARKET,
+        additionalSeconds: EXTEND_SECONDS,
+        expectedExpiresAt: expiresAt,
+      },
+      scope,
     );
     const hash = await stores.redis.redis.hgetall(reservationKey(MARKET, orderId));
+    const extendedTo = expiresAt.getTime() + EXTEND_SECONDS * MS_PER_SECOND;
 
-    expect(error.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
-    expect(replies.received.extendReservation - received, 'NOT_IDEMPOTENT: tekrar yok').toBe(1);
-    expect(Number(hash['extended']), 'hak tuketildi').toBe(1);
-    expect(Number(hash['expiresAt']), 'bitis ileri alindi').toBe(
-      expiresAt.getTime() + EXTEND_SECONDS * MS_PER_SECOND,
-    );
-    expect(await ledgerCount(orderId, LEDGER_KINDS.EXTEND), 'defterde uzatma var').toBe(1);
+    expect(timing).toEqual({ kind: 'moved', expiresAt: new Date(extendedTo) });
+    expect(replies.received.extendReservation - received, 'IDEMPOTENT: kayip + tekrar').toBe(2);
+    expect(Number(hash['extended']), 'hak bir kez').toBe(1);
+    expect(Number(hash['expiresAt']), 'bitis bir kez ileri').toBe(extendedTo);
+    expect(await ledgerCount(orderId, LEDGER_KINDS.EXTEND), 'defterde tek uzatma').toBe(1);
   });
 });
