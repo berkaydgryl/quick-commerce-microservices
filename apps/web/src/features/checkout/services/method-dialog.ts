@@ -27,6 +27,11 @@ export interface MethodDialogState {
   readonly focus: ListFocus;
   /** Ekleme adiminin sirasi: geri donulup yeniden acilan adim eski kaydin sonucunu almaz. */
   readonly addSession: number;
+  /**
+   * Silme sayaci (F13): liste onay penceresinin altinda acik kalir; silinen kartin
+   * dugmesi kalkinca odak kaybolmasin diye liste her silmede yeniden kurulur.
+   */
+  readonly deletions: number;
 }
 
 export type MethodDialogAction =
@@ -59,10 +64,11 @@ export function openMethodDialog(
     pendingOnDelivery: appliedOnDelivery,
     focus: start === 'add' ? { kind: 'add' } : SELECTED,
     addSession: start === 'add' ? 1 : 0,
+    deletions: 0,
   };
 }
 
-/** Geri (ok, Esc, "Vazgeç"): odak adimi acan dugmeye doner (P4). */
+/** Geri (ok, Esc, "Hayır"): odak adimi acan dugmeye doner (P4). */
 function backFocus(step: MethodStep): ListFocus {
   return step.kind === 'delete' ? { kind: 'delete', cardId: step.card.id } : { kind: 'add' };
 }
@@ -107,6 +113,7 @@ export function methodDialogReducer(
         step: LIST,
         pendingId: state.pendingId === action.cardId ? undefined : state.pendingId,
         focus: SELECTED,
+        deletions: state.deletions + 1,
       };
   }
 }

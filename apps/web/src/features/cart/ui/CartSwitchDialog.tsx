@@ -1,19 +1,20 @@
 import type { MarketListCartContent } from '@getir/contracts';
 import { useEffect, useState } from 'react';
 
-import { ConfirmPanel } from '../../../shared/ui/confirm-panel/ConfirmPanel';
-import { Dialog } from '../../../shared/ui/dialog/Dialog';
+import { ConfirmDialog } from '../../../shared/ui/confirm-panel/ConfirmDialog';
+import { useConfirmContent } from '../../content/hooks/useConfirmContent';
 import type { PendingSwitch } from '../hooks/useAddToCart';
 
 import { captureSwitchFocus } from './switch-focus';
 
 export type CartSwitchTexts = Pick<
   MarketListCartContent,
-  'clearLabel' | 'cancelLabel' | 'closeLabel' | 'increaseSuffix'
+  'switchConfirmPrefix' | 'switchConfirmSuffix' | 'increaseSuffix'
 >;
 
 interface CartSwitchDialogProps {
   readonly pending: PendingSwitch;
+  /** Eklenen urunun marketi: soruda adi gecer (aramada hangi market belli olsun). */
   readonly targetMarketName: string;
   readonly texts: CartSwitchTexts;
   readonly onConfirm: () => void;
@@ -21,17 +22,14 @@ interface CartSwitchDialogProps {
 }
 
 /**
- * Baska marketten ekleme onayi (T6.4; T16.3 duzeltmesi: kullanici istegiyle
- * satir ici kutu yerine ekranin ORTASINDA pencere). "Sepeti boşalt"
- * penceresinin kabugu ve govdesi (ortak Dialog + ConfirmPanel): arka plan
- * karartilir, odak pencerede, Esc ve X "Vazgeç" ile ayni yol. Soru ve
- * dugmeler T6.4'tekiyle ayni: mor "Evet" sepeti bosaltip bekleyen urunu
- * ekler, "Vazgeç" hicbir seyi degistirmez. Acilinca odak "Vazgeç"te; kapaninca
- * tiklanan "+"ya doner (switch-focus.ts). Mağaza sayfasi ve arama sonuclari
- * bu bileseni kullanir.
- *
- * "ile" kullanildi: "-den/-dan/-ndan" eki market adina gore degisir
- * ("Besiktas'tan", "Manavi'ndan") ve her ad icin dogru uretmek kirilgan olurdu.
+ * Baska marketten ekleme onayi (T6.4; T16.3'te ekranin ortasinda pencere; F13
+ * ortak onay penceresi): sepet bosaltilacagi icin silme onayiyla ayni pencere;
+ * soru icerikten, hedef marketin adiyla ("…Sepeti boşaltıp A101 – Caferağa ile
+ * devam etmek istediğinden emin misin?"; eskiden kodda sabitti; "ile" ek uyumu
+ * gerektirmez). "Evet" sepeti bosaltip bekleyen urunu ekler; "Hayır", Esc ve
+ * karartma hicbir seyi degistirmez. Odak acilista "Hayır"da; kapaninca tiklanan
+ * "+"ya, "+" adet kutusuna donustuyse kutunun "adedini artır"ina doner
+ * (switch-focus.ts). Mağaza sayfasi ve arama sonuclari bu bileseni kullanir.
  */
 export function CartSwitchDialog({
   pending,
@@ -40,25 +38,21 @@ export function CartSwitchDialog({
   onConfirm,
   onCancel,
 }: CartSwitchDialogProps) {
+  const labels = useConfirmContent();
   const [returnFocus] = useState(() =>
     captureSwitchFocus(`${pending.product.name} ${texts.increaseSuffix}`),
   );
   useEffect(() => returnFocus, [returnFocus]);
 
   return (
-    <Dialog title={texts.clearLabel} close={{ label: texts.closeLabel, onAction: onCancel }}>
-      <ConfirmPanel
-        questionSuffix={`Sepetinde ${pending.currentMarket.name} ürünleri var. Sepeti boşaltıp ${targetMarketName} ile devam edilsin mi?`}
-        error={null}
-        pending={false}
-        confirmLabel="Evet"
-        confirmTone="primary"
-        pendingLabel="Evet"
-        cancelLabel={texts.cancelLabel}
-        focusCancel
-        onConfirm={onConfirm}
-        onCancel={onCancel}
-      />
-    </Dialog>
+    <ConfirmDialog
+      question={`${texts.switchConfirmPrefix} ${targetMarketName} ${texts.switchConfirmSuffix}`}
+      error={null}
+      pending={false}
+      yesLabel={labels.yesLabel}
+      noLabel={labels.noLabel}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
   );
 }

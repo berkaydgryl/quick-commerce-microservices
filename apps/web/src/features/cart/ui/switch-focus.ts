@@ -1,7 +1,7 @@
 /**
  * Baska market penceresi kapaninca odak (T16.3 duzeltmesi). Pencere acilmadan
  * once odakli dugme ("+") ve durdugu yer yakalanir:
- *   - Vazgeç, X, Esc: "+" hala sayfada; odak ona doner;
+ *   - Hayır, Esc, karartma: "+" hala sayfada; odak ona doner;
  *   - Evet: urun eklendi, "+" adet kutusuna donustu; ayni yerdeki kutunun
  *     "adedini artır" dugmesine (o pasifse kutudaki ilk etkin dugmeye).
  * Odakli oge dugme degilse (fareyle tiklamada odak vermeyen tarayici) bir sey

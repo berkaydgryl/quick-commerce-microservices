@@ -105,7 +105,7 @@ export function CartScreen({ page, list, marketTexts, setup }: CartScreenProps) 
       </div>
       {confirming && (
         <ClearCartDialog
-          texts={list.cart}
+          question={list.cart.clearConfirmQuestion}
           onConfirm={() => {
             clear();
             setConfirming(false);

@@ -61,11 +61,9 @@ const MARKET_LIST_FALLBACK: MarketListContent = {
     closedNotice: 'Market şu an kapalı',
     goToCartLabel: 'Sepete git',
     clearLabel: 'Sepeti boşalt',
-    clearConfirmQuestion: 'Sepeti boşaltmak istediğine emin misin?',
-    clearConfirmHint: 'Sepetteki bütün ürünler kaldırılır.',
-    clearConfirmLabel: 'Boşalt',
-    cancelLabel: 'Vazgeç',
-    closeLabel: 'Kapat',
+    clearConfirmQuestion: 'Sepeti boşaltmak istediğinden emin misin?',
+    switchConfirmPrefix: 'Sepetinde başka bir marketin ürünleri var. Sepeti boşaltıp',
+    switchConfirmSuffix: 'ile devam etmek istediğinden emin misin?',
     decreaseSuffix: 'adedini azalt',
     increaseSuffix: 'adedini artır',
     removeSuffix: 'sepetten çıkar',
@@ -209,12 +207,8 @@ const ADDRESSES_FALLBACK: AddressesContent = {
   ],
   editTitle: 'Adresi Düzenle',
   deleteLabel: 'Adresi sil',
-  confirmTitle: 'Adresi sil',
-  confirmQuestionSuffix: 'adresini silmek istiyor musun?',
-  confirmHint: 'Geçmiş siparişlerin bundan etkilenmez.',
-  confirmLabel: 'Sil',
+  confirmQuestion: 'Adresi silmek istediğinden emin misin?',
   deletingLabel: 'Siliniyor…',
-  cancelLabel: 'Vazgeç',
   deletedToastSuffix: 'adresi silindi.',
   updatedToast: 'Adresin güncellendi.',
 };
@@ -264,6 +258,8 @@ export const CONTENT_FALLBACK = {
   footer: FOOTER_FALLBACK,
   /** checkout: bloğun tamami (T17.1). */
   checkout: CHECKOUT_FALLBACK,
+  /** confirm: ortak onay penceresinin dugmeleri (F13). */
+  confirm: { yesLabel: 'Evet', noLabel: 'Hayır' },
 } as const;
 
 export type ContentFallback = typeof CONTENT_FALLBACK;

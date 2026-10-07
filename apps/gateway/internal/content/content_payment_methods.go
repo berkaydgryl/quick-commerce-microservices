@@ -15,15 +15,11 @@ type PaymentMethods struct {
 	LastFourLabel string `json:"lastFourLabel"`
 	// DeleteSuffix, Cop kutusunun adi, kartin okunan adinin arkasina: "Visa, son dört hane 4242 kartını sil".
 	DeleteSuffix string `json:"deleteSuffix"`
-	// ConfirmTitle, Silme onayi.
-	ConfirmTitle          string `json:"confirmTitle"`
-	ConfirmQuestionSuffix string `json:"confirmQuestionSuffix"`
-	ConfirmHint           string `json:"confirmHint"`
-	ConfirmLabel          string `json:"confirmLabel"`
-	DeletingLabel         string `json:"deletingLabel"`
-	CancelLabel           string `json:"cancelLabel"`
-	DeletedToastSuffix    string `json:"deletedToastSuffix"`
-	// CloseLabel, Pencerelerin X dugmesi (silme onayi, kosullar); icerik gelmese de yedekten (QA C5).
+	// ConfirmQuestion, Silme onayi (F13 ortak onay penceresi): tek soru.
+	ConfirmQuestion    string `json:"confirmQuestion"`
+	DeletingLabel      string `json:"deletingLabel"`
+	DeletedToastSuffix string `json:"deletedToastSuffix"`
+	// CloseLabel, Pencerelerin X dugmesi (kart ekleme, kosullar); icerik gelmese de yedekten (QA C5).
 	CloseLabel string `json:"closeLabel"`
 	// BackToListLabel, Kart ekle sayfasi (referans getircarsi "Kart Ekle").
 	BackToListLabel string `json:"backToListLabel"`

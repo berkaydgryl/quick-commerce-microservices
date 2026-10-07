@@ -94,10 +94,9 @@ function AddressesSection({ userId }: { readonly userId: string }) {
           onAdd={(kind) => setDialog({ mode: 'add', kind })}
         />
       )}
-      {texts !== undefined && content !== undefined && dialog?.mode === 'delete' && (
+      {texts !== undefined && dialog?.mode === 'delete' && (
         <DeleteAddressDialog
           texts={texts}
-          closeLabel={content.loginCard.closeLabel}
           address={dialog.address}
           pending={removing.isPending}
           error={deleteError}

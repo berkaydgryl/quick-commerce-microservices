@@ -97,6 +97,10 @@ describe('CONTENT_FALLBACK', () => {
     expect(CONTENT_FALLBACK.checkout).toEqual(WELCOME.checkout);
   });
 
+  it('ortak onay penceresinin dugmeleri (F13) welcome.json confirm ile birebir', () => {
+    expect(CONTENT_FALLBACK.confirm).toEqual(WELCOME.confirm);
+  });
+
   it('Gecmis Siparislerim metinleri (T11.16) welcome.json orders ile birebir', () => {
     expect(CONTENT_FALLBACK.orders).toEqual(WELCOME.orders);
   });

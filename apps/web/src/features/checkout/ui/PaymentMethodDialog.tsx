@@ -6,9 +6,8 @@ import { formFeedback } from '../../auth/services/server-errors';
 import { useAddCard } from '../../cards/hooks/useAddCard';
 import { useDeleteCard } from '../../cards/hooks/useDeleteCard';
 import { useSavedCards } from '../../cards/hooks/useSavedCards';
-import { cardShortName, cardSpokenName } from '../../cards/services/card-face';
 import { AddCardForm } from '../../cards/ui/AddCardForm';
-import { ConfirmPanel } from '../../../shared/ui/confirm-panel/ConfirmPanel';
+import { DeleteCardDialog } from '../../cards/ui/DeleteCardDialog';
 import { Dialog } from '../../../shared/ui/dialog/Dialog';
 import { useStepFocus } from '../hooks/useStepFocus';
 import { methodDialogReducer, openMethodDialog, pendingChoice } from '../services/method-dialog';
@@ -34,18 +33,18 @@ interface PaymentMethodDialogProps {
 
 function stepTitle(step: MethodStep, texts: CheckoutContent, cardTexts: PaymentMethodsContent) {
   switch (step.kind) {
-    case 'list':
-      return texts.methodDialogTitle;
     case 'add':
       return cardTexts.addTitle;
+    case 'list':
     case 'delete':
-      return cardTexts.confirmTitle;
+      // Silme onayi listenin USTUNDE ortak onay penceresi (F13, PM S5 (a)).
+      return texts.methodDialogTitle;
   }
 }
 
 /**
  * Adimin kabi: acilinca ilk eslesen ogeye odak (P4). Ekleme adiminda ilk alan
- * ("Karta İsim Ver"), onay adiminda "Vazgeç" (ConfirmPanel'de ilk dugme).
+ * ("Karta İsim Ver").
  */
 function FocusedStep({
   selector,
@@ -66,9 +65,10 @@ function FocusedStep({
  * "Ödeme Yöntemi Seç" penceresi (T17.1; F5; P1-P4): tek pencere, uc adim. Liste
  * adiminda kartlarin altinda "Kapıda Ödeme" (F12; OnDeliveryOptions).
  * Liste -> "+ Kredi/Banka Kartı" ayni pencerede kart ekleme (AddCardForm
- * variant="checkout"; Ödeme Yöntemlerim'e gidilmez), "Kartı Sil" silme onayi.
- * Ekleme ve onay adiminda sol ustte geri oku; Esc once geri gider, listede
- * kapatir (ortak Dialog). Kartlar Ödeme Yöntemlerim'le AYNI sorgudan
+ * variant="checkout"; Ödeme Yöntemlerim'e gidilmez), "Kartı Sil" listenin
+ * USTUNDE ortak onay penceresi (F13; "Hayır" ve Esc listeye doner, odak kartin
+ * "Kartı Sil"inde). Ekleme adiminda sol ustte geri oku; Esc once geri gider,
+ * listede kapatir (ortak Dialog). Kartlar Ödeme Yöntemlerim'le AYNI sorgudan
  * (cardKeys.list): ekleme ve silme onu gunceller, iki sayfa ayni listeyi gorur.
  *
  * Numara ve CVV yalnizca ekleme adiminin form durumunda (M7): adim kapaninca
@@ -121,14 +121,13 @@ export function PaymentMethodDialog({
     <Dialog
       title={stepTitle(step, texts, cardTexts)}
       back={
-        step.kind === 'list'
-          ? undefined
-          : { label: texts.backLabel, onAction: back, disabled: busy }
+        step.kind !== 'add' ? undefined : { label: texts.backLabel, onAction: back, disabled: busy }
       }
       close={{ label: texts.closeLabel, onAction: onClose, disabled: busy }}
     >
-      {step.kind === 'list' && (
+      {(step.kind === 'list' || step.kind === 'delete') && (
         <PaymentMethodList
+          key={state.deletions}
           cards={cards}
           selected={pendingChoice(state, cards)}
           refusedNotice={refusedNotice}
@@ -154,25 +153,14 @@ export function PaymentMethodDialog({
         </FocusedStep>
       )}
       {step.kind === 'delete' && (
-        <FocusedStep selector="button">
-          <ConfirmPanel
-            subject={cardShortName(step.card, cardTexts.brandLabels)}
-            spokenSubject={cardSpokenName(
-              step.card,
-              cardTexts.brandLabels,
-              cardTexts.lastFourLabel,
-            )}
-            questionSuffix={cardTexts.confirmQuestionSuffix}
-            hint={cardTexts.confirmHint}
-            error={deleteError}
-            pending={busy}
-            confirmLabel={cardTexts.confirmLabel}
-            pendingLabel={cardTexts.deletingLabel}
-            cancelLabel={cardTexts.cancelLabel}
-            onConfirm={() => void remove(step.card)}
-            onCancel={back}
-          />
-        </FocusedStep>
+        <DeleteCardDialog
+          texts={cardTexts}
+          card={step.card}
+          pending={busy}
+          error={deleteError}
+          onConfirm={() => void remove(step.card)}
+          onCancel={back}
+        />
       )}
     </Dialog>
   );
