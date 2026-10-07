@@ -29,9 +29,13 @@ type Checkout struct {
 	DoNotRingLabel          string   `json:"doNotRingLabel"`
 	PaymentTitle            string   `json:"paymentTitle"`
 	ChangeLabel             string   `json:"changeLabel"`
-	AddCardLabel            string   `json:"addCardLabel"`
 	CardsLoadingLabel       string   `json:"cardsLoadingLabel"`
 	NoCardNotice            string   `json:"noCardNotice"`
+	OnDeliveryTitle         string   `json:"onDeliveryTitle"`
+	OnDeliveryCashLabel     string   `json:"onDeliveryCashLabel"`
+	OnDeliveryPosLabel      string   `json:"onDeliveryPosLabel"`
+	OnDeliveryCashSummary   string   `json:"onDeliveryCashSummary"`
+	OnDeliveryPosSummary    string   `json:"onDeliveryPosSummary"`
 	SecurityNote            string   `json:"securityNote"`
 	SummaryTitle            string   `json:"summaryTitle"`
 	SubtotalLabel           string   `json:"subtotalLabel"`

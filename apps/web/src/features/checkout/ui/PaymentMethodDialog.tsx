@@ -11,22 +11,24 @@ import { AddCardForm } from '../../cards/ui/AddCardForm';
 import { ConfirmPanel } from '../../../shared/ui/confirm-panel/ConfirmPanel';
 import { Dialog } from '../../../shared/ui/dialog/Dialog';
 import { useStepFocus } from '../hooks/useStepFocus';
-import { methodDialogReducer, openMethodDialog } from '../services/method-dialog';
+import { methodDialogReducer, openMethodDialog, pendingChoice } from '../services/method-dialog';
 import type { MethodDialogStart, MethodStep } from '../services/method-dialog';
-import { effectiveCard } from '../services/selected-card';
+import type { PaymentChoice } from '../services/payment-choice';
 
 import styles from './PaymentMethodDialog.module.css';
 import { PaymentMethodList } from './PaymentMethodList';
 
 interface PaymentMethodDialogProps {
   readonly userId: string;
-  /** Sayfada uygulanan kart: pencere onu secili acar. */
-  readonly appliedId: string | undefined;
+  /** Sayfada uygulanan secim (kart ya da kapida odeme): pencere onu secili acar. */
+  readonly applied: PaymentChoice | undefined;
+  /** Bu siparis icin kapida odeme reddedildi (422; F12): sunucunun cumlesi. */
+  readonly refusedNotice?: string | undefined;
   readonly start: MethodDialogStart;
   readonly texts: CheckoutContent;
   readonly cardTexts: PaymentMethodsContent;
-  /** "Seç": bekleyen secim sayfaya yazilir. */
-  readonly onChoose: (cardId: string) => void;
+  /** "Seç": bekleyen secim (kart ya da kapida odeme) sayfaya yazilir. */
+  readonly onChoose: (choice: PaymentChoice) => void;
   readonly onClose: () => void;
 }
 
@@ -61,7 +63,8 @@ function FocusedStep({
 }
 
 /**
- * "Ödeme Yöntemi Seç" penceresi (T17.1; F5; P1-P4): tek pencere, uc adim.
+ * "Ödeme Yöntemi Seç" penceresi (T17.1; F5; P1-P4): tek pencere, uc adim. Liste
+ * adiminda kartlarin altinda "Kapıda Ödeme" (F12; OnDeliveryOptions).
  * Liste -> "+ Kredi/Banka Kartı" ayni pencerede kart ekleme (AddCardForm
  * variant="checkout"; Ödeme Yöntemlerim'e gidilmez), "Kartı Sil" silme onayi.
  * Ekleme ve onay adiminda sol ustte geri oku; Esc once geri gider, listede
@@ -75,7 +78,8 @@ function FocusedStep({
  */
 export function PaymentMethodDialog({
   userId,
-  appliedId,
+  applied,
+  refusedNotice,
   start,
   texts,
   cardTexts,
@@ -83,7 +87,13 @@ export function PaymentMethodDialog({
   onClose,
 }: PaymentMethodDialogProps) {
   const [state, dispatch] = useReducer(methodDialogReducer, undefined, () =>
-    openMethodDialog(appliedId, start),
+    openMethodDialog(
+      applied?.kind === 'card' ? applied.cardId : undefined,
+      start,
+      applied?.kind === 'onDelivery' && refusedNotice === undefined
+        ? applied.onDelivery
+        : undefined,
+    ),
   );
   const cards = useSavedCards(userId).data ?? [];
   const { save, changed } = useAddCard(userId);
@@ -120,11 +130,13 @@ export function PaymentMethodDialog({
       {step.kind === 'list' && (
         <PaymentMethodList
           cards={cards}
-          selectedId={effectiveCard(cards, state.pendingId)?.id}
+          selected={pendingChoice(state, cards)}
+          refusedNotice={refusedNotice}
           focus={state.focus}
           texts={texts}
           cardTexts={cardTexts}
           onPick={(cardId) => dispatch({ type: 'pick', cardId })}
+          onPickOnDelivery={(onDelivery) => dispatch({ type: 'pickOnDelivery', onDelivery })}
           onDelete={(card) => dispatch({ type: 'openDelete', card })}
           onAdd={() => dispatch({ type: 'openAdd' })}
           onChoose={onChoose}

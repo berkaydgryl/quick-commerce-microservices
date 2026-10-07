@@ -169,7 +169,18 @@ export function useEarlyReservation({
     phase,
     retry: useCallback(() => setPhase({ kind: 'none' }), [setPhase]),
     take,
-    keep: useCallback((held: HeldOrder) => setPhase({ kind: 'held', held }), [setPhase]),
+    // Sayfadan ayrildiktan sonra gelen cevap (kart 404, 422) taslagi tutmaz: leave()
+    // calismisti, tutulan rezervasyonu kimse birakmazdi (QA #183 inceleme).
+    keep: useCallback(
+      (held: HeldOrder) => {
+        if (!mounted.current) {
+          void releaseSafely(deps, held.orderId);
+          return;
+        }
+        setPhase({ kind: 'held', held });
+      },
+      [deps, setPhase],
+    ),
     uncertain: useCallback((held: HeldOrder) => setPhase({ kind: 'placing', held }), [setPhase]),
     ordered: useCallback((orderId: string) => setPhase({ kind: 'ordered', orderId }), [setPhase]),
     forget: useCallback(() => setPhase({ kind: 'none' }), [setPhase]),

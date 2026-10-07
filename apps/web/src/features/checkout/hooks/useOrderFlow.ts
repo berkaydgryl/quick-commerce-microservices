@@ -18,6 +18,7 @@ import { isUnknownOutcome } from '../../cards/services/attempt-key';
 import { orderBodyFingerprint } from '../services/held-order';
 import type { HeldOrder } from '../services/held-order';
 import { monotonicNow } from '../services/monotonic-clock';
+import type { ReservationPhase } from '../services/reservation-plan';
 import { placeReserved, releaseSafely, reserveOrder, submitCode } from '../services/place-order';
 import type { OrderFlowDeps } from '../services/place-order';
 import { createReserveIntent } from '../services/reserve-intent';
@@ -46,6 +47,20 @@ type FlowTexts = Pick<
   | 'reservationRenewedToast'
 >;
 
+interface OrderFlowOptions {
+  /** Kapida odeme reddedildi (422; F12): sayfa secimi kaldirir, pencereyi acar. */
+  readonly onMethodRefused?: (() => void) | undefined;
+  /**
+   * Kartla odeme bu pakette var mi (__CARD_VAULT__). Yoksa (production) 422'den
+   * sonra kartla devam edilemez: taslak TUTULMAZ, birakilir (stok kilitli kalmasin).
+   */
+  readonly cardFallback?: boolean | undefined;
+}
+
+/** Tutulan ya da ucustaki siparisin kimligi (rezervasyon fazindan). */
+const heldOrderId = (phase: ReservationPhase): string | undefined =>
+  phase.kind === 'held' || phase.kind === 'placing' ? phase.held.orderId : undefined;
+
 /** Kullaniciya gosterilecek cumle: gateway'in cumlesi (ERROR_MESSAGES) ya da genel hata. */
 const userMessage = (error: unknown) =>
   error instanceof AppError ? error.message : errorMessage(ERROR_CODES.INTERNAL);
@@ -66,17 +81,25 @@ const userMessage = (error: unknown) =>
  * kart listesi yeniden okunur; sonraki "Sipariş Ver" sepet, adres, tutar,
  * odeme yontemi ve ayrintilar ayniysa ve sure dolmadiysa ayni siparisi yeni
  * kartla verir; degilse tutulan rezervasyonu birakip yeniden alir (QA #176 N2).
+ *
+ * Kapida odeme orta risk bandinda reddedilirse (422; F12) siparis TASLAKTA
+ * tutulur (yontem degisebilir: parmak izi yok), sunucunun cumlesi gosterilir;
+ * bu siparis surdukce kapida odeme kapali (onDeliveryRefusal), sayfa kart
+ * secer. Sonraki "Sipariş Ver" ayni siparisi kartla verir (yeni deneme anahtari).
+ * Kart yoksa (kasasiz paket) taslak birakilir; yalniz cumle gosterilir.
  */
 export function useOrderFlow(
   marketId: string | undefined,
   texts: FlowTexts,
   reservationRequest: ReserveCartRequest | undefined,
+  options: OrderFlowOptions = {},
 ) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const clear = useCartStore((cart) => cart.clear);
   const show = useToastStore((toast) => toast.show);
   const [state, setState] = useState<OrderFlowState>({ kind: 'idle' });
+  const [refusal, setRefusal] = useState<{ orderId: string; message: string } | undefined>();
   const [deps] = useState<OrderFlowDeps>(() => ({
     client: authorizedClient,
     now: monotonicNow,
@@ -160,6 +183,21 @@ export function useOrderFlow(
         void queryClient.invalidateQueries({ queryKey: cardKeys.all });
         return;
       }
+      if (outcome.kind === 'method-refused' && options.cardFallback === false) {
+        await releaseSafely(deps, outcome.held.orderId);
+        reservation.forget();
+        setState({ kind: 'idle' });
+        show(outcome.message);
+        return;
+      }
+      if (outcome.kind === 'method-refused') {
+        reservation.keep(outcome.held);
+        setRefusal({ orderId: outcome.held.orderId, message: outcome.message });
+        setState({ kind: 'idle' });
+        show(outcome.message);
+        options.onMethodRefused?.();
+        return;
+      }
       reservation.ordered(outcome.orderId);
       if (outcome.kind === 'challenge') {
         setState({ ...outcome, verifying: false });
@@ -213,5 +251,13 @@ export function useOrderFlow(
     cancel,
     expire,
     reservation: { phase: reservation.phase, retry: reservation.retry },
+    /**
+     * Bu siparis icin kapida odeme reddedildiyse (422; F12) sunucunun cumlesi:
+     * pencerede secenekler pasif ve not. Siparis degisince (yeni rezervasyon) kalkar.
+     */
+    onDeliveryRefusal:
+      refusal !== undefined && heldOrderId(reservation.phase) === refusal.orderId
+        ? refusal.message
+        : undefined,
   };
 }

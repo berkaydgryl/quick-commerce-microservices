@@ -20,6 +20,7 @@ import { DeliveryMethodSection } from '../../src/features/checkout/ui/DeliveryMe
 import { GiftSection } from '../../src/features/checkout/ui/GiftSection';
 import { OrderSummaryCard } from '../../src/features/checkout/ui/OrderSummaryCard';
 import { PaymentMethodView } from '../../src/features/checkout/ui/PaymentMethodView';
+import type { PaymentChoice } from '../../src/features/checkout/services/payment-choice';
 import { Switch } from '../../src/shared/ui/switch/Switch';
 import { TextAreaField } from '../../src/shared/ui/text-area/TextAreaField';
 
@@ -160,10 +161,30 @@ describe('DeliveryMethodSection (T17.1, K4)', () => {
   });
 });
 
-describe('PaymentMethodView (T17.1, M4, M7)', () => {
-  const view = (card: SavedCard | undefined, loading = false) =>
+describe('PaymentMethodView (T17.1, M4, M7; F12)', () => {
+  const cardChoice = (card: SavedCard | undefined): PaymentChoice | undefined =>
+    card === undefined ? undefined : { kind: 'card', cardId: card.id };
+  const view = (card: SavedCard | undefined, loading = false, onChange?: () => void) =>
     render(
-      createElement(PaymentMethodView, { loading, card, texts: TEXTS, cardTexts: CARD_TEXTS }),
+      createElement(PaymentMethodView, {
+        loading,
+        choice: cardChoice(card),
+        card,
+        texts: TEXTS,
+        cardTexts: CARD_TEXTS,
+        onChange,
+      }),
+    );
+  const onDelivery = (kind: 'CASH' | 'POS') =>
+    render(
+      createElement(PaymentMethodView, {
+        loading: true,
+        choice: { kind: 'onDelivery', onDelivery: kind },
+        card: VISA,
+        texts: TEXTS,
+        cardTexts: CARD_TEXTS,
+        onChange: () => undefined,
+      }),
     );
 
   it('secili kart: logo, kart adi, maskeli numara; okunan ad "Visa, son dört hane 1881"', () => {
@@ -181,40 +202,37 @@ describe('PaymentMethodView (T17.1, M4, M7)', () => {
     expect(markup).not.toContain('<input');
   });
 
-  it('"Değiştir" (kart varken) ve "Kart ekle" (kart yokken) pencere yokken pasif (kasa kapali, siparis suruyor)', () => {
+  it('kapida odeme secili (F12): "Kapıda nakit" / "Kapıda kredi/banka kartı" ve "Değiştir"; kart satiri yok', () => {
+    expect(onDelivery('CASH')).toContain(`>${TEXTS.onDeliveryCashSummary}<`);
+    expect(onDelivery('POS')).toContain(`>${TEXTS.onDeliveryPosSummary}<`);
+    expect(onDelivery('CASH')).not.toContain('1881');
+    expect(onDelivery('CASH')).not.toContain(TEXTS.cardsLoadingLabel);
+    expect(onDelivery('CASH')).toMatch(/>Değiştir<\/button>/);
+  });
+
+  it('secim yok: not ve "Seç" (pencereyi acar); siparis surerken pasif', () => {
+    expect(view(undefined)).toContain(TEXTS.noCardNotice);
+    expect(view(undefined)).toMatch(/aria-disabled="true">Seç<\/button>/);
+    expect(view(undefined, false, () => undefined)).toMatch(
+      /<button type="button" class="[^"]*c-payment-method__add[^"]*">Seç<\/button>/,
+    );
+  });
+
+  it('"Değiştir" pencere verilince etkin, yokken pasif', () => {
     expect(view(VISA)).toMatch(
       /c-payment-method__row[^"]*">[\s\S]*1881[\s\S]*aria-disabled="true">Değiştir<\/button>/,
     );
-    expect(view(undefined)).toMatch(/aria-disabled="true">Kart ekle<\/button>/);
-    expect(view(undefined)).toContain(TEXTS.noCardNotice);
-  });
-
-  it('F5: pencere verilince "Değiştir" ve "Kart ekle" etkin (aria-disabled yok)', () => {
-    const active = (card: SavedCard | undefined) =>
-      render(
-        createElement(PaymentMethodView, {
-          loading: false,
-          card,
-          texts: TEXTS,
-          cardTexts: CARD_TEXTS,
-          onChange: () => undefined,
-          onAdd: () => undefined,
-        }),
-      );
-
-    expect(active(VISA)).toMatch(
+    expect(view(VISA, false, () => undefined)).toMatch(
       /<button type="button" class="[^"]*c-payment-method__change[^"]*">Değiştir<\/button>/,
     );
-    expect(active(undefined)).toMatch(
-      /<button type="button" class="[^"]*c-payment-method__add[^"]*">Kart ekle<\/button>/,
-    );
   });
 
-  it('kartlar okunamadi: durum gosterilir, "Kayıtlı kartın yok" ve "Kart ekle" DEGIL', () => {
+  it('kartlar okunamadi: durum gosterilir, secim yok notu DEGIL; "Seç" kalir (kapida odeme)', () => {
     const markup = render(
       createElement(PaymentMethodView, {
         loading: false,
         problem: 'OKUNAMADI',
+        choice: undefined,
         card: undefined,
         texts: TEXTS,
         cardTexts: CARD_TEXTS,
@@ -223,13 +241,18 @@ describe('PaymentMethodView (T17.1, M4, M7)', () => {
 
     expect(markup).toContain('OKUNAMADI');
     expect(markup).not.toContain(TEXTS.noCardNotice);
-    expect(markup).not.toContain(TEXTS.addCardLabel);
+    expect(markup).toContain('>Seç<');
   });
 
-  it('kartlar yuklenirken durum; guvenlik cumlesi her durumda (Masterpass yok)', () => {
+  it('kartlar yuklenirken durum; guvenlik cumlesi YALNIZ kart seciliyken (Masterpass yok)', () => {
     expect(view(undefined, true)).toContain(TEXTS.cardsLoadingLabel);
     expect(view(VISA)).toContain('ödeme kayıtlı kartınla alınır');
+    expect(view(undefined)).not.toContain('ödeme kayıtlı kartınla alınır');
     expect(view(VISA)).not.toMatch(/masterpass/i);
+  });
+
+  it('kapida odemede "kayıtlı kartınla alınır" cumlesi YOK (yaniltirdi)', () => {
+    expect(onDelivery('CASH')).not.toContain('kayıtlı kartınla alınır');
   });
 });
 

@@ -1,5 +1,10 @@
 import { CARD_FIELD_MESSAGES, SAVED_CARDS_MAX } from '@getir/contracts';
-import type { CheckoutContent, PaymentMethodsContent, SavedCard } from '@getir/contracts';
+import type {
+  CheckoutContent,
+  DeliveryPaymentKind,
+  PaymentMethodsContent,
+  SavedCard,
+} from '@getir/contracts';
 import { useId } from 'react';
 
 import { PlusIcon } from '../../address/ui/icons';
@@ -7,13 +12,17 @@ import { cardSpokenName, maskedCardNumber } from '../../cards/services/card-face
 import { BrandLogo } from '../../cards/ui/BrandLogo';
 import { useStepFocus } from '../hooks/useStepFocus';
 import type { ListFocus } from '../services/method-dialog';
+import type { PaymentChoice } from '../services/payment-choice';
 
+import { OnDeliveryOptions } from './OnDeliveryOptions';
+import type { OnDeliveryTexts } from './OnDeliveryOptions';
 import styles from './PaymentMethodList.module.css';
 
 export type MethodListTexts = Pick<
   CheckoutContent,
   'onlinePaymentTitle' | 'deleteCardLabel' | 'chooseLabel'
->;
+> &
+  OnDeliveryTexts;
 
 export type MethodListCardTexts = Pick<
   PaymentMethodsContent,
@@ -22,15 +31,18 @@ export type MethodListCardTexts = Pick<
 
 interface PaymentMethodListProps {
   readonly cards: readonly SavedCard[];
-  /** Bekleyen secim (effectiveCard); gecerli kart yoksa undefined. */
-  readonly selectedId: string | undefined;
+  /** Bekleyen secim (pendingChoice): kart ya da kapida odeme; yoksa undefined. */
+  readonly selected: PaymentChoice | undefined;
+  /** Bu siparis icin kapida odeme reddedildi (422): sunucunun cumlesi; secenekler pasif. */
+  readonly refusedNotice?: string | undefined;
   readonly focus: ListFocus;
   readonly texts: MethodListTexts;
   readonly cardTexts: MethodListCardTexts;
   readonly onPick: (cardId: string) => void;
+  readonly onPickOnDelivery: (kind: DeliveryPaymentKind) => void;
   readonly onDelete: (card: SavedCard) => void;
   readonly onAdd: () => void;
-  readonly onChoose: (cardId: string) => void;
+  readonly onChoose: (choice: PaymentChoice) => void;
 }
 
 /**
@@ -41,7 +53,7 @@ interface PaymentMethodListProps {
 function focusSelector(focus: ListFocus): string {
   switch (focus.kind) {
     case 'selected':
-      return 'input[type="radio"]:checked, [data-method-add]';
+      return 'input[type="radio"]:checked';
     case 'add':
       return '[data-method-add]';
     case 'delete':
@@ -56,23 +68,27 @@ function focusSelector(focus: ListFocus): string {
  * listede ama secilemez; silinebilir. Secili kartin yaninda "Kartı Sil";
  * altta "+ Kredi/Banka Kartı" (Ödeme Yöntemlerim'e GITMEZ, ayni pencerede
  * ekleme adimi; kasa doluysa sozlesmenin cumlesi); mor "Seç". BKM Express ve
- * Masterpass YOK. Durumsuz: secimi pencere tutar.
+ * Masterpass YOK. Altinda "Kapıda Ödeme" (F12): "Nakit" ve "Kapıda Kredi/Banka
+ * Kartı", kartlarla AYNI radyo grubu (tek secim). Durumsuz: secimi pencere tutar.
  */
 export function PaymentMethodList({
   cards,
-  selectedId,
+  selected,
+  refusedNotice,
   focus,
   texts,
   cardTexts,
   onPick,
+  onPickOnDelivery,
   onDelete,
   onAdd,
   onChoose,
 }: PaymentMethodListProps) {
   const name = useId();
+  const selectedId = selected?.kind === 'card' ? selected.cardId : undefined;
   const root = useStepFocus<HTMLDivElement>(
     focusSelector(focus),
-    'input[type="radio"]:not(:disabled), button:not(:disabled)',
+    '[data-method-add], input[type="radio"]:not(:disabled), button:not(:disabled)',
   );
 
   return (
@@ -154,13 +170,20 @@ export function PaymentMethodList({
           </li>
         </ul>
       </fieldset>
+      <OnDeliveryOptions
+        name={name}
+        selected={selected?.kind === 'onDelivery' ? selected.onDelivery : undefined}
+        refusedNotice={refusedNotice}
+        texts={texts}
+        onPick={onPickOnDelivery}
+      />
       <button
         type="button"
         className={styles['c-method-list__choose']}
-        disabled={selectedId === undefined}
+        disabled={selected === undefined}
         onClick={() => {
-          if (selectedId !== undefined) {
-            onChoose(selectedId);
+          if (selected !== undefined) {
+            onChoose(selected);
           }
         }}
       >

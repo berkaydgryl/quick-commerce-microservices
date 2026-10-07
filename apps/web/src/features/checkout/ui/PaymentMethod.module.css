@@ -1,6 +1,6 @@
 /*
  * Odeme yontemi (T17.1; referans #33): kartin icinde satir (logo, ad, maskeli
- * numara) ve sagda cerceveli mor "Değiştir" (kart yoksa "Kart ekle"); ince
+ * numara) ya da kapida odeme ve sagda cerceveli mor "Değiştir" (secim yoksa "Seç"); ince
  * ayiricidan sonra guvenlik cumlesi. Pasif dugmeler (kasa kapali, siparis
  * suruyor) soluk.
  */

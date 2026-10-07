@@ -30,6 +30,11 @@ export const ordersContentSchema = z.object({
   /** Detay sayfasi. */
   dateLabel: contentTextSchema,
   addressLabel: contentTextSchema,
+  /** Odeme satiri (F12): kart, kapida nakit ya da kapida kart (POS); eski sipariste yok. */
+  paymentLabel: contentTextSchema,
+  paymentCardLabel: contentTextSchema,
+  paymentCashLabel: contentTextSchema,
+  paymentPosLabel: contentTextSchema,
   itemsTitle: contentTextSchema,
   subtotalLabel: contentTextSchema,
   deliveryFeeLabel: contentTextSchema,
