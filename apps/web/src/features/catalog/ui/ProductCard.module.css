@@ -5,18 +5,26 @@
  */
 .c-product-card {
   display: grid;
+
+  /* Uzun kelime karti genisletmesin ("+" kartin disina tasmasin). */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-1);
   align-content: start;
   padding: var(--space-3);
   text-align: center;
   background: var(--bg-surface);
+
+  /* Kartlar arasi ince cizgi; bos hucre beyaz kalir (izgaranin zemini beyaz). */
+  box-shadow: 0 0 0 var(--border-width-thin) var(--border-faint);
 }
 
 .c-product-card__media {
   position: relative;
   display: grid;
   place-items: center;
-  padding-inline: var(--space-6);
+
+  /* Dar kartta (4 sutun) gorsel sigsin; sag ustteki "+" kenara biraz biner. */
+  padding-inline: var(--space-3);
   margin-block-end: var(--space-2);
 }
 
@@ -54,4 +62,5 @@
 .c-product-card__description {
   font-size: var(--font-size-sm);
   color: var(--text-muted);
+  overflow-wrap: anywhere;
 }

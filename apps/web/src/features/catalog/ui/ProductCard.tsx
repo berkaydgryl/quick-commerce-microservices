@@ -38,7 +38,8 @@ export function ProductCard({ product, category, action, texts, closed }: Produc
         />
         {action !== undefined && <div className={styles['c-product-card__action']}>{action}</div>}
         <span className={styles['c-product-card__badge']}>
-          <LowStockBadge stock={product.availableQuantity} texts={texts} />
+          {/* Satista olmayan teklifte "Son N adet" yok (dar kartta "Satışta değil"le cakisirdi). */}
+          {product.isActive && <LowStockBadge stock={product.availableQuantity} texts={texts} />}
         </span>
       </div>
       <p className={styles['c-product-card__price']}>{formatMoney(product.price)}</p>
