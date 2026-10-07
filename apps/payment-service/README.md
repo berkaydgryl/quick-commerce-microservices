@@ -14,7 +14,7 @@ idempotency ve durum makinesi baştan yerinde. Aynı sunucuda ikinci servis **ka
 | `payments`                 | ✅ Mongo (`MOCK=false`) ya da bellek (`MOCK=true`); `attempts[]` geçmişi (T5.3)                                  |
 | `Refund`                   | ✅ Saga'nın telafisi (T7.1): yalnızca tamamlanmış çekim; tekrar istek `already_refunded`                         |
 | `payment.refund_requested` | ✅ Olay tüketicisi (T7.4): saga'nın kalıcı iade komutu `stream:events`'ten, grup `payment`                       |
-| `payment.cancel_requested` | ✅ Olay tüketicisi (T11.2 PR 3): iptal edilen siparişin tahsil edilmemiş ödemesi `CANCELLED`                     |
+| `payment.cancel_requested` | ✅ Olay tüketicisi (T11.2 PR 3): tahsil edilmemiş ödeme `CANCELLED`, alınmışsa iade (T15.3)                      |
 | `GetPayment`               | ✅ Siparişin ödeme kaydı (yöntem, durum); kayıt yoksa `NOT_FOUND`. Çağıran order: iptal ve süpürücü (T11.2 PR 2) |
 | `CardVaultService`         | ✅ Kart kasası (T11.17): `AddCard` (0 TL doğrulama), `ListCards`, `DeleteCard`; maskeli, en çok 10 kart          |
 
@@ -162,7 +162,8 @@ Grup ve teslim kuralları iade komutuyla aynı (`payment` grubu, en az bir kez).
 | ------------------------------------------------------ | ----------------------------------------------------------------------------- |
 | Kapıda ödeme `PENDING` · 3DS bekleyen (`REQUIRES_3DS`) | `CANCELLED` + `cancelReason` (`order_cancelled`), geçmişe `CANCEL`; onaylanır |
 | Zaten `CANCELLED` (komut tekrar geldi)                 | değişmez; onaylanır                                                           |
-| `SUCCEEDED` · `REFUNDED` · `FAILED` · kayıt yok        | dokunulmaz (para alınmışsa iade ayrı akış); onaylanır                         |
+| `SUCCEEDED` (para alınmış; T15.3, iş 134)              | **iade** (`refundReason` `order_cancelled`, geçmişe `REFUND`); onaylanır      |
+| `REFUNDED` · `FAILED` · kayıt yok                      | dokunulmaz; onaylanır                                                         |
 | Kart çekimi hâlâ `PENDING`                             | onaylanmaz (`REQUEST_IN_PROGRESS`); 30 sn sonra yeniden                       |
 | Gövde sözleşmeye uymuyor                               | **ret**: beklemeden `stream:events:dead`                                      |
 | Geçici hata (veritabanı kapalı, sürüm çakışması)       | onaylanmaz; yeniden denenir (sürüm çakışmasında önce bir kez yeniden okunur)  |
@@ -170,6 +171,16 @@ Grup ve teslim kuralları iade komutuyla aynı (`payment` grubu, en az bir kez).
 - **`CANCELLED` yeni durum** (proto `PAYMENT_STATUS_CANCELLED = 6`, ekleme): "tahsil edilmeden
   kapatıldı", para hiç alınmadı. İade edilmiş (`REFUNDED`) ödemeden ayrıdır. İptal edilmiş ödemenin
   3DS'i onaylanamaz (`Confirm3Ds` → `NOT_FOUND`), iadesi de yoktur (`Refund` → `CONFLICT`).
+- **Alınmış paranın iadesi (T15.3, bekleyen iş 134):** `CANCELLED` siparişin son durumudur; komut
+  geldiyse sipariş bir daha ödenmez ve teslim edilmez, tutar `Refund` use-case'iyle iade edilir. Örnek:
+  3DS onayı payment'ta başarılı olurken kullanıcı iptal etti, onay cevabı order'a ulaşmadı. Order'ın
+  kendi iadesiyle (doğrudan `Refund`, `payment.refund_requested`) çakışırsa ikincisi "zaten iade
+  edilmiş" görür: para bir kez döner. İade de mock'tur: sağlayıcıya çağrı gitmez, kayıt `REFUNDED`
+  olur. Kapıda ödeme bugün hiç `SUCCEEDED` olmaz (teslimde tahsilat kaydı yok; `PENDING` kalır ve
+  iptalde `CANCELLED` olur), bu yol yalnız kartta işler. İade sürekli hata verirse komut en çok 5 kez
+  teslim edilir (`@getir/event-bus` `maxDeliveries`; 4 yeniden teslim), sonra `stream:events:dead`'e taşınır, ERROR
+  yazılır ve `event_consumer_events_total{outcome="dead"}` artar. WARN satırında yalnız `orderId`,
+  sonuç ve durum vardır; tutar ve kart yok.
 - `MOCK=true` iken dinleme kapalıdır (Redis yok); order da MOCK'ta olay yayınlamaz.
 
 ## Veri kaynağı: Mongo ya da MOCK
