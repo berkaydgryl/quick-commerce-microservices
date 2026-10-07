@@ -34,7 +34,7 @@ packages/contracts/
 │   ├── order.ts       # sipariş, adres, 3DS, kurye özeti; kayıtlı kartla ödeme (T12.4)
 │   ├── checkout-rules.ts  # sipariş ayrıntıları (T12.4): hediye, not, zili çalma, sözleşme onayı; sınırlar ve cümleler
 │   ├── card-rules.ts  # kart kasası kuralları (T11.17): marka, Luhn, CVV, son kullanma, ad, kart adı; alan cümleleri
-│   ├── cards.ts       # kart kasası şemaları (T11.17): ekleme isteği, maskeli kart ve liste
+│   ├── cards.ts       # kart kasası şemaları (T11.17): ekleme, kart adı düzenleme (#148), maskeli kart ve liste
 │   ├── socket.ts      # oda adları, olay payload'ları, olay sözlüğü
 │   ├── events.ts      # servisler arası olay gövdeleri (payment.refund_requested T7.4, payment.cancel_requested T11.2)
 │   └── index.ts

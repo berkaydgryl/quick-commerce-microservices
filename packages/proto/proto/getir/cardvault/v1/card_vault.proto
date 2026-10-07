@@ -14,8 +14,7 @@ syntax = "proto3";
 // sozlesmesi (payment.proto) kart verisi tasimaz; kayitli kartla odeme T12.4'te
 // kartin kimligiyle (card_id) yapilir.
 //
-// Proto paketi ayridir (getir.cardvault.v1): her proto paketinde tek dosya
-// (packages/proto scripts/write-barrel.mjs) ve kart numarasi tasiyan tek
+// Proto paketi ayridir (getir.cardvault.v1): kart numarasi tasiyan tek
 // sozlesme odeme sozlesmesinden ayri dursun.
 //
 // user_id gateway'den gelir (erisim jetonunun sub'i); servis jetonu
@@ -37,6 +36,9 @@ service CardVaultService {
 
   // Karti siler (yumusak silme); cevap guncel liste.
   rpc DeleteCard(DeleteCardRequest) returns (DeleteCardResponse);
+  // Kartin adini degistirir ya da kaldirir (#148); numara, son kullanma ve
+  // CVV degismez. Cevap guncel kart.
+  rpc UpdateCardNickname(UpdateCardNicknameRequest) returns (UpdateCardNicknameResponse);
 }
 
 // Kart markasi: numaranin ilk hanelerinden (IIN) bulunur. Rozetleri istemci
@@ -60,8 +62,8 @@ enum CardBrand {
 
 // Kayitli kart: MASKELI gorunum. Tam numara ve CVV hicbir alanda yoktur.
 message SavedCard {
-  // crd_ + 32 kucuk onaltilik; rastgele. Silmede ve (T12.4) odemede bu kimlik
-  // tasinir.
+  // crd_ + 32 kucuk onaltilik; rastgele. Silmede, kart adi duzenlemede (#148)
+  // ve (T12.4) odemede bu kimlik tasinir.
   string id = 1;
 
   CardBrand brand = 2;
@@ -154,4 +156,29 @@ message DeleteCardRequest {
 // karta bagli degildir, etkilenmez.
 message DeleteCardResponse {
   repeated SavedCard cards = 1;
+}
+
+message UpdateCardNicknameRequest {
+  string user_id = 1;
+  string card_id = 2;
+  // Yeni kart adi: AddCardRequest.nickname ile AYNI kural (NFC'ye cevrilip
+  // kirpilir; en fazla 30 karakter; harf, rakam, bosluk ve . , ' -; ayraclar
+  // atilinca 8 ya da daha fazla yan yana rakam yok). Bos ya da yalnizca
+  // bosluk: kart adi KALDIRILIR. ALAN YOKSA (optional; JSON null da) kart adi
+  // DEGISMEZ, istek "Kart adı gönderilmedi" ile reddedilir: eksik alanla bos
+  // metin ayrilir, bos govde adi silmez. Kisisel veridir: GUNLUGE YAZILMAZ,
+  // hata ayrintisi degeri yankilamaz.
+  optional string nickname = 3;
+}
+
+// Kart adi cevabi: guncel kart (maskeli).
+//
+// Hatalar (yeni hata kodu yok):
+//   - kart adi kurali ya da eksik kart adi: INVALID_ARGUMENT +
+//     VALIDATION_FAILED, alan nickname (deger yankilanmaz);
+//   - kart yok, baskasinin ya da silinmis: NOT_FOUND (uc durum ayirt
+//     edilemez; baskasinin kart kimligi yoklanamaz).
+// Suresi gecmis kartin adi da degisebilir (listede durur).
+message UpdateCardNicknameResponse {
+  SavedCard card = 1;
 }
