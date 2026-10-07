@@ -22,8 +22,18 @@ idempotency ve durum makinesi baştan yerinde. Aynı sunucuda ikinci servis **ka
 
 Çekime (`Charge`) kart numarası **gelmez**, yalnızca jeton gelir (`payment.proto`: "kart verisi
 bu sözleşmeden geçmez"). Numara yalnızca kart kasasının `AddCard`'ında bir kez geçer: mock
-sağlayıcı numarayı bu tablodan tanır ve kasaya karşılığı olan jeton yazılır (T11.17). Tanınmayan
-numara (Luhn'dan geçse bile) doğrulamada reddedilir.
+sağlayıcı numarayı bu tablodan tanır ve kasaya karşılığı olan jeton yazılır (T11.17).
+
+**Kart üretici numaraları (bekleyen iş 112):** tablodaki kartlar kendi kararını alır. Dışındaki her
+kart Luhn'dan geçiyor ve markası desteklenen (Visa, Mastercard, Amex, Troy) ise **onaylanır**. Kart,
+numaradan türetilmeyen rastgele bir jeton alır (`tok_<32 onaltılık>`) ve çekimde bu biçimdeki jeton
+onaylanır. Kural durumsuzdur: payment yeniden başlasa da kasadaki kart çekilir. Desteklenmeyen
+marka (Discover, JCB…) sağlayıcıya gitmeden `VALIDATION_FAILED` alır ("Bu kart türü
+desteklenmiyor"); son kullanma tarihi geçmiş kart da öyle.
+
+> **Uyarı:** bu kural yalnızca mock sağlayıcıdadır (`infrastructure/mock-provider`), ortam bayrağı
+> yoktur. Bugün `bootstrap.ts` her ortamda mock'u bağlar; gerçek sağlayıcı geldiğinde orada o
+> bağlanmalı ve mock hiçbir ortamda kalmamalıdır (aksi halde üretilmiş her kart onaylanır).
 
 | Jeton           | Kart                  | `Charge` sonucu                                  | Kasa (`AddCard`)         |
 | --------------- | --------------------- | ------------------------------------------------ | ------------------------ |
@@ -33,7 +43,9 @@ numara (Luhn'dan geçse bile) doğrulamada reddedilir.
 | `tok_test_4444` | `5555 5555 5555 4444` | `SUCCEEDED`                                      | kaydedilir (Mastercard)  |
 | `tok_test_0005` | `3782 822463 10005`   | `SUCCEEDED`                                      | kaydedilir (Amex, CVV 4) |
 | `tok_test_0003` | `9792 0000 0000 0003` | `SUCCEEDED`                                      | kaydedilir (Troy)        |
-| başka her jeton | —                     | `FAILED` + `PAYMENT_DECLINED`                    | `PAYMENT_DECLINED`       |
+| `tok_test_8431` | `3714 496353 98431`   | `FAILED` + `PAYMENT_DECLINED`                    | `PAYMENT_DECLINED`       |
+| `tok_<32 hex>`  | başka geçerli kart    | `SUCCEEDED`                                      | kaydedilir (üretilmiş)   |
+| başka her jeton | —                     | `FAILED` + `PAYMENT_DECLINED`                    | —                        |
 
 **Risk 3DS isteyebilir (T7.1):** `require_three_ds = true` gelirse (order-svc orta risk bandında
 doldurur) bankanın onaylayacağı kart da `REQUIRES_3DS` döner; reddedilecek kart yine reddedilir.

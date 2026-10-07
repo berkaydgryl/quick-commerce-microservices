@@ -6,6 +6,10 @@
  * eklemesinde (T11.17) mock'un 0 TL dogrulamasina gecer ve karsiligi olan
  * jeton saklanir. Jeton son dort haneyi tasir; hangi kartin kullanildigi
  * gunlukte okunabilir, tam numara hicbir yerde saklanmaz.
+ *
+ * Buradaki her kart KENDI kararini alir. Disindaki Luhn'u gecerli kartlar
+ * onaylanir (kart uretici, mock-payment-provider.ts); reddedilmesi gereken bir
+ * kart bu yuzden burada acikca DECLINED yazilir.
  */
 
 import type { ProviderDecision } from '../../domain/payment-provider.js';
@@ -24,4 +28,6 @@ export const TEST_CARDS: Readonly<Record<string, TestCard>> = {
   tok_test_4444: { number: '5555 5555 5555 4444', decision: 'APPROVED' },
   tok_test_0005: { number: '3782 822463 10005', decision: 'APPROVED' },
   tok_test_0003: { number: '9792 0000 0000 0003', decision: 'APPROVED' },
+  // Reddedilen Amex (4 haneli CVV'li ret yolu; kart kasasi gunlugu, QA P1).
+  tok_test_8431: { number: '3714 496353 98431', decision: 'DECLINED' },
 };
