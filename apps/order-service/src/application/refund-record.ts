@@ -1,6 +1,6 @@
 /**
  * Iade isaretinin AYRI yazimi (#166): siparisi baska yol iptal etmis, para sonra
- * iade edilmis (refund-step.ts; lapsed-order.ts refundIfCancelledElsewhere ve
+ * iade edilmis (refund-step.ts: refundIfCancelledElsewhere ve
  * payment-step.ts markPaid cakismasi). Isaret siparisi Gecmis Siparislerim'de
  * "Iptal edildi · Iade edildi" olarak tutar (order-history-listing.ts).
  *

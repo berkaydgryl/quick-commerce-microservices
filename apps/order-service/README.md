@@ -78,7 +78,7 @@ derlemede karar ister):
   `AWAITING_PAYMENT`) listeden çıkar, ödenince geri gelir.
 - **İade işareti (#166):** parası alınıp `PAID` olmadan iptal edilen sipariş (kilidi düşmüş ödeme)
   zaman çizelgesinde `PAID` taşımaz; kalıcı `refund` işareti (gerekçe, an; tutar yok) onu geçmişte
-  tutar (`domain/order-refund.ts`). Siparişi kendisi iptal eden kapatma (`lapsed-order.ts`)
+  tutar (`domain/order-refund.ts`). Siparişi kendisi iptal eden kapatma (`stockless-close.ts`)
   işareti iptal ve iade komutuyla aynı yazımda yazar. Siparişi başka yol iptal etmiş, para sonra
   iade edilmişse (`refund-step.ts`: `refundIfCancelledElsewhere`, `markPaid` çakışması) iadeden ya
   da komuttan sonra sürüm kontrollü ayrı yazım (`refund-record.ts`, en çok 3 deneme; durum dışı
@@ -400,8 +400,9 @@ ayarlanır (`application/lock-timing.ts`; inventory `ShortenReservation`, `Exten
 | inventory'ye ulaşılamadı                         | hiçbir şey yazılmaz; risk adımında sipariş `DRAFT`, ödemede `AWAITING_PAYMENT` kalır                      | `SERVICE_UNAVAILABLE`          |
 
 - **Kilidi düşmüş siparişin kapatılması (T15.3, iş 122):** karar `application/lapsed-order.ts`'te,
-  süpürücüyle aynı tablo. Para alınmışsa iade komutu (`payment.refund_requested`) `CANCELLED` ile
-  **aynı yazımda** kaydedilir (servis hemen çökse de kaybolmaz), ardından doğrudan iade denenir.
+  süpürücüyle aynı tablo; kilitsiz kapatmanın yazımı `application/stockless-close.ts`'te (paranın
+  durumu tek değer: `CHARGE` yok / alındı / iade edilmiş). Para alınmışsa iade komutu
+  (`payment.refund_requested`) `CANCELLED` ile **aynı yazımda** kaydedilir (servis hemen çökse de kaybolmaz), ardından doğrudan iade denenir.
   Komut iadeden sonra da gelse payment "zaten iade edilmiş" der; para iki kez geri verilmez.
 - **Para alınmışsa önce `Commit` (T15.3, iş 124):** inventory kesinleşmiş kilidin uzatma ve
   kısaltmasına da `RESERVATION_EXPIRED` döner. `Commit` ise kesinleşmiş kilidi tanır
@@ -669,8 +670,9 @@ src/
 │   ├── stock-step.ts            # saga'nın kesinleştirme ve en iyi gayretle bırakma adımı (T11.2)
 │   ├── lock-timing.ts           # kilidin süresi: orta bantta kısaltma, ödeme öncesi uzatma, düşmüş kilit (T11.3)
 │   ├── lapsed-order.ts          # kilidi düşmüş siparişi kapatma tablosu: saga ve süpürücü (T15.3)
+│   ├── stockless-close.ts       # kilitsiz kapatma: CANCELLED, iade komutu ve işaret aynı yazımda (T15.3, #166)
 │   ├── order-transition.ts      # sürüm kontrollü geçiş yazımı ve PAID (payment-step, lapsed-order)
-│   ├── refund-step.ts           # telafi iadesi: doğrudan, olmazsa outbox komutu (T7.1, T7.3)
+│   ├── refund-step.ts           # telafi iadesi: doğrudan, olmazsa outbox komutu (T7.1, T7.3); çapraz yol iadesi
 │   ├── refund-record.ts         # iadeden sonra iptal edilmiş siparişe iade işareti (#166)
 │   ├── sweep-expired-reservations.ts  # süpürücünün tek turu (T11.2 PR 2)
 │   ├── dispatch-couriers.ts     # kurye işçisinin tek turu (T13.1 PR 2; kuyruk, kaynak, geri çekilme T13.2)

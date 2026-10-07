@@ -1,7 +1,7 @@
 /**
  * Kalici iade isareti (#166): kilidi dusup parasi iade edilen siparis Gecmis
  * Siparislerim'de kalir. Iki yazim yolu:
- *   - siparisi KENDISI iptal eden kapatma (lapsed-order.ts cancelLapsed):
+ *   - siparisi KENDISI iptal eden kapatma (stockless-close.ts cancelLapsed):
  *     CANCELLED, iade komutu ve isaret AYNI yazimda;
  *   - siparisi BASKA yol iptal etmis, para sonra iade edilmis (refund-step.ts):
  *     iadeden sonra ayri, surum kontrollu yazim (refund-record.ts).
@@ -12,8 +12,9 @@ import { recordingLogger } from '@getir/core/testing';
 import type { LogLine } from '@getir/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { closeLapsedOrder, closeWithoutStock } from '../../src/application/lapsed-order.js';
+import { closeLapsedOrder } from '../../src/application/lapsed-order.js';
 import { refundCharge } from '../../src/application/refund-step.js';
+import { CHARGE, closeWithoutStock } from '../../src/application/stockless-close.js';
 import { REFUND_RECORD_WRITE_ATTEMPTS } from '../../src/config/constants.js';
 import {
   PAYMENT_METHOD,
@@ -21,7 +22,7 @@ import {
   REFUND_REASON,
 } from '../../src/domain/checkout-payment.js';
 import { isListedInHistory } from '../../src/domain/order-history-listing.js';
-import { PAYMENT_ALREADY_REFUNDED } from '../../src/domain/order-refund.js';
+import { REFUND_MARK_REASON } from '../../src/domain/order-refund.js';
 import { orderVersionConflict } from '../../src/domain/order-repository.js';
 import type { Order } from '../../src/domain/order.js';
 import { transitionOrder } from '../../src/domain/order.js';
@@ -73,7 +74,7 @@ describe('kendi kapatmasi: isaret iptalle AYNI yazimda', () => {
   it('para alinmis: CANCELLED + iade komutu + isaret tek yazim; siparis gecmiste', async () => {
     const awaiting = await insertAwaitingPayment(store, clock);
 
-    const outcome = await closeWithoutStock(deps(), awaiting, true, scope);
+    const outcome = await closeWithoutStock(deps(), awaiting, CHARGE.TAKEN, scope);
 
     const closed = await stored(awaiting.id);
     expect(outcome).toEqual({ kind: 'refunded' });
@@ -92,7 +93,7 @@ describe('kendi kapatmasi: isaret iptalle AYNI yazimda', () => {
   it('para alinmamis: isaret YOK, siparis gizli', async () => {
     const awaiting = await insertAwaitingPayment(store, clock);
 
-    await closeWithoutStock(deps(), awaiting, false, scope);
+    await closeWithoutStock(deps(), awaiting, CHARGE.NONE, scope);
 
     const closed = await stored(awaiting.id);
     expect(closed.status).toBe(S.CANCELLED);
@@ -200,7 +201,10 @@ describe('supurucu: odeme kaydi kapanista zaten iade edilmis', () => {
 
     const closed = await stored(awaiting.id);
     expect(outcome).toEqual({ kind: 'closed' });
-    expect(closed.refund).toEqual({ reason: PAYMENT_ALREADY_REFUNDED, requestedAt: clock.date() });
+    expect(closed.refund).toEqual({
+      reason: REFUND_MARK_REASON.PAYMENT_ALREADY_REFUNDED,
+      requestedAt: clock.date(),
+    });
     expect(isListedInHistory(closed)).toBe(true);
     expect(payments.refunds).toHaveLength(0);
     const commands = store.recordedEvents.filter(

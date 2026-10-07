@@ -38,7 +38,6 @@ import type { OrderRepository } from '../domain/order-repository.js';
 import type { Order } from '../domain/order.js';
 import { transitionOrder } from '../domain/order.js';
 import { RELEASE_REASON } from '../domain/stock-reservation.js';
-import { closeWithoutStock } from './lapsed-order.js';
 import { securePaymentWindow, throwLapse } from './lock-timing.js';
 import type { LockTimingDeps } from './lock-timing.js';
 import { isConflict, writePaid, writeTransition } from './order-transition.js';
@@ -47,6 +46,7 @@ import { refundCharge } from './refund-step.js';
 import type { RequestScope } from './request-scope.js';
 import { SETTLEMENT } from './stock-reservations.js';
 import { commitStock, releaseStock } from './stock-step.js';
+import { CHARGE, closeWithoutStock } from './stockless-close.js';
 
 export interface PaymentStepDeps extends LockTimingDeps {
   readonly repository: Pick<OrderRepository, 'update' | 'findById'>;
@@ -191,7 +191,8 @@ async function commitPaidStock(
     { orderId: order.id, charged },
     'stok kilidi odeme sirasinda dusmustu; siparis iptal ediliyor',
   );
-  await throwLapse(deps, order, await closeWithoutStock(deps, order, charged, scope));
+  const charge = charged ? CHARGE.TAKEN : CHARGE.NONE;
+  await throwLapse(deps, order, await closeWithoutStock(deps, order, charge, scope));
 }
 
 async function markPaid(

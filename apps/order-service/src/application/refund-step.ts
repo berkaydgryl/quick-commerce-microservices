@@ -1,9 +1,9 @@
 /**
  * Saga'nin telafi adimi: alinan tutarin iadesi (T7.1, T7.3); odeme adimi
  * (payment-step.ts) kullanir. Kilidi dusmus siparisi KENDISI iptal eden yol bu
- * yoldan gitmez: iade komutu iptalle ayni yazimda (lapsed-order.ts, T15.3).
- * Siparisi baska yol iptal ettiyse ve para alinmissa lapsed-order.ts de burayi
- * kullanir (bekleyen is 124).
+ * yoldan gitmez: iade komutu iptalle ayni yazimda (stockless-close.ts, T15.3).
+ * Siparisi baska yol iptal ettiyse ve para alinmissa kapatma da burayi
+ * kullanir (refundIfCancelledElsewhere; bekleyen is 124).
  *
  * Iade dogrudan yapildiysa ya da komutu yazildiysa iptal edilmis siparise kalici
  * iade isareti yazilir (#166, refund-record.ts): siparis gecmiste kalir. Ikisi de
@@ -11,6 +11,7 @@
  * gorunmesin.
  */
 
+import { ORDER_STATUS } from '@getir/core';
 import type { Clock } from '@getir/core';
 
 import { refundIdempotencyKey } from '../domain/checkout-payment.js';
@@ -58,6 +59,29 @@ export async function refundCharge(
   if (initiated) {
     await recordRefund(deps, order.id, reason, scope);
   }
+}
+
+/**
+ * Yazim cakisti ama para alinmisti. Siparisi baska yol IPTAL ettiyse iade
+ * komutu yazilmamis olabilir (kullanici iptali ya da odemeyi henuz gormemis
+ * kapatma): iade burada yapilir. Siparis hala aciksa (yalniz surum artmis) ya da
+ * PAID ise dokunulmaz: karari o yol ya da supurucu verir.
+ */
+export async function refundIfCancelledElsewhere(
+  deps: RefundStepDeps,
+  order: Order,
+  latest: Order | null,
+  reason: RefundReason,
+  scope: RequestScope,
+): Promise<void> {
+  if (latest?.status !== ORDER_STATUS.CANCELLED) {
+    return;
+  }
+  scope.logger.warn(
+    { orderId: order.id, reason },
+    'siparisi baska yol iptal etti ama odeme alinmisti; tutar iade ediliyor',
+  );
+  await refundCharge(deps, order, reason, scope);
 }
 
 /**
