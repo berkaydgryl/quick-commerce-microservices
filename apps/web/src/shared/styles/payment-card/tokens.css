@@ -133,18 +133,6 @@
   --card-logo-amex: #016fd0;
   --card-logo-troy: #0e5482;
 
-  /* Kart Ekle (referans getircarsi): Guvenlik kutusunun ikonu; genis ekranda
-     kutunun sagindaki kart sutunu (kutu ortak icerik kabinda kalir). Sutun,
-     --bp-xl'de sayfa kabinin icerik kabindan sonra kalan boslugudur: kap
-     (80rem, iki yanda --space-gutter) - menu - menu boslugu - icerik kabi -
-     kartin boslugu. Kartin sag kenari kabin sag kenarina (ust barin
-     "Profil"i hizasina) denk gelir; kabi asmaz. */
-  --size-card-security-icon: 3.5rem;
-  --size-card-aside: calc(
-    var(--container-max-xl) - var(--space-gutter) * 2 - var(--size-account-side) -
-      var(--size-account-content) - var(--space-5) * 2
-  );
-
   /* Zorunlu kosul onayi: satir en az 44 px dokunma alani, kutu ve hata cercevesinin araligi. */
   --size-card-terms-touch: 2.75rem;
   --size-card-terms-box: 1.25rem;

@@ -17,7 +17,6 @@ export const PAYMENT_METHODS_FALLBACK: PaymentMethodsContent = {
   closeLabel: 'Kapat',
   backToListLabel: "Ödeme Yöntemlerim'e geri dön",
   addTitle: 'Kart Ekle',
-  securityTitle: 'Güvenlik',
   securityText:
     "Kart numaranın tamamını ve CVV'ni saklamıyoruz; yalnızca ilk 4 ve son 4 hane saklanır. Kartını istediğin zaman silebilirsin.",
   nicknameLabel: 'Karta İsim Ver (Kişisel, İş vb.)',
@@ -43,6 +42,8 @@ export const PAYMENT_METHODS_FALLBACK: PaymentMethodsContent = {
   savingLabel: 'Kaydediliyor…',
   retryWaitLabel: 'Yeniden deneyebilmen için',
   duplicateCardNotice: 'Bu kart zaten kayıtlı.',
+  addDeclinedMessage:
+    'Kartın doğrulanamadı. Bankan bu kartı onaylamadı; başka bir kart deneyebilirsin.',
   addedToastPrefix: 'Kart eklendi:',
   acceptedBrandsLabel: 'Kabul edilen kartlar',
   holderCaption: 'KART SAHİBİ',

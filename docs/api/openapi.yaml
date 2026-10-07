@@ -4400,8 +4400,8 @@ components:
       description: |
         Ödeme Yöntemlerim (T11.17; `/hesabim/odeme-yontemlerim`; düzen kullanıcının
         referansı getirçarşı): kayıtlı kartlar satır satır, "Kart Ekle" sayfası
-        (Güvenlik kutusu, Ay/Yıl, zorunlu koşul onayı, Devam; yanında tasarım B'nin
-        kart animasyonu) ve silme onayı. Kural cümleleri içerikte değil, sözleşmede
+        (en üstte tasarım B'nin kart animasyonu, Ay/Yıl, zorunlu koşul onayı, Devam ve
+        altında küçük güvenlik cümlesi; F14) ve silme onayı. Kural cümleleri içerikte değil, sözleşmede
         (`CARD_FIELD_MESSAGES`); kasa aynı cümleleri döner.
       required:
         [
@@ -4417,7 +4417,6 @@ components:
           closeLabel,
           backToListLabel,
           addTitle,
-          securityTitle,
           securityText,
           nicknameLabel,
           numberLabel,
@@ -4437,6 +4436,7 @@ components:
           savingLabel,
           retryWaitLabel,
           duplicateCardNotice,
+          addDeclinedMessage,
           addedToastPrefix,
           acceptedBrandsLabel,
           holderCaption,
@@ -4464,7 +4464,6 @@ components:
         closeLabel: { $ref: "#/components/schemas/ContentText" }
         backToListLabel: { $ref: "#/components/schemas/ContentText" }
         addTitle: { $ref: "#/components/schemas/ContentText" }
-        securityTitle: { $ref: "#/components/schemas/ContentText" }
         securityText: { $ref: "#/components/schemas/ContentText" }
         nicknameLabel: { $ref: "#/components/schemas/ContentText" }
         numberLabel: { $ref: "#/components/schemas/ContentText" }
@@ -4487,6 +4486,9 @@ components:
         savingLabel: { $ref: "#/components/schemas/ContentText" }
         retryWaitLabel: { $ref: "#/components/schemas/ContentText" }
         duplicateCardNotice: { $ref: "#/components/schemas/ContentText" }
+        addDeclinedMessage:
+          $ref: "#/components/schemas/ContentText"
+          description: Kart eklemede sağlayıcı reddi (PAYMENT_DECLINED; F14); "Ödeme alınamadı" denmez.
         addedToastPrefix: { $ref: "#/components/schemas/ContentText" }
         acceptedBrandsLabel: { $ref: "#/components/schemas/ContentText" }
         holderCaption: { $ref: "#/components/schemas/ContentText" }

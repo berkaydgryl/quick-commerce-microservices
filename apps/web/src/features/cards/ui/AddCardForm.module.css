@@ -1,10 +1,7 @@
 /*
- * Kart Ekle formu (T11.17; referans getircarsi): beyaz kutuda tek sutun.
- * Kartin sahnesi dar ekranda Guvenlik kutusunun altinda (gri zemin); genis
- * ekranda (--bp-xl) kutunun SAGINDA, sayfa kabinin kalan boslugunda
- * (--size-card-aside: kabi asmaz), kutu ortak icerik kabinda kalir ve kart
- * yapiskan kalir (ust barin altinda). Daha darda (1280, 1024) yan yana
- * sigmaz: telefondaki gibi alanlarin ustunde.
+ * Kart Ekle formu (T11.17; referans getircarsi; F14): beyaz kutuda tek sutun, en
+ * ustte kartin sahnesi (gri zemin; Guvenlik kutusunun yerinde), her genislikte ayni
+ * yerde. Guvenlik cumlesi Devam'in altinda kucuk satir (yalniz sayfada).
  */
 .c-add-card {
   position: relative;
@@ -82,46 +79,18 @@
   background: var(--color-brand-primary-strong);
 }
 
-@media (--bp-xl) {
-  .c-add-card__stage {
-    position: absolute;
-    inset-block: 0;
-    inset-inline-start: calc(100% + var(--space-5));
-    display: block;
-    inline-size: var(--size-card-aside);
-    padding: 0;
-    background: none;
-  }
-
-  /* Ust barin (arama kutusu + iki bosluk) altinda yapiskan. */
-  .c-add-card__card {
-    position: sticky;
-    inset-block-start: calc(var(--size-header-search) + var(--space-3) * 2 + var(--space-5));
-  }
+/* Guvenlik cumlesi (F14): Devam'in altinda kucuk, soluk yazi (yalniz sayfada; Devam ona bagli). */
+.c-add-card__security {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  text-align: center;
 }
 
-/*
- * Odeme penceresinin adimi (T17.1; F5): pencere zaten beyaz kutu; kart her
- * genislikte alanlarin USTUNDE (sayfadaki gibi yana yapismaz).
- */
+/* Odeme penceresinin adimi (T17.1; F5): pencere zaten beyaz kutu. */
 .c-add-card--checkout {
   padding: 0;
   background: none;
   box-shadow: none;
-}
-
-@media (--bp-xl) {
-  .c-add-card--checkout .c-add-card__stage {
-    position: static;
-    display: grid;
-    inline-size: auto;
-    padding: var(--space-5) var(--space-4);
-    background: var(--bg-page);
-  }
-
-  .c-add-card--checkout .c-add-card__card {
-    position: static;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
