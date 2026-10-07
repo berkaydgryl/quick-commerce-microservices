@@ -71,8 +71,14 @@
   background: var(--bg-surface);
 }
 
-/* Siparis akisi (F4b) gelene kadar pasif: odaklanir, basilmaz. */
+/* Eksik kosul varken ya da istek surerken pasif: odaklanir, basilmaz. */
 .c-order-summary__place[aria-disabled='true'] {
   cursor: not-allowed;
   opacity: var(--opacity-disabled);
+}
+
+.c-order-summary__hint {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  text-align: center;
 }

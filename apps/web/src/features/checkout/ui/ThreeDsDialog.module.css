@@ -1,0 +1,110 @@
+/*
+ * 3DS penceresi (T12.4; T17.1): aciklama, kalan sure (son 30 saniyede kirmizi;
+ * hareket azaltmada renk gecisi aninda), kod alani, hata ve iki dugme.
+ */
+.c-three-ds {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.c-three-ds__timer {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  font-weight: var(--font-weight-semibold);
+  background: var(--color-brand-primary-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.c-three-ds__time {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-extrabold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-brand-primary);
+  transition: color var(--duration-fast) var(--easing-standard);
+}
+
+.c-three-ds__time.is-warning {
+  color: var(--text-danger);
+}
+
+.c-three-ds__label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.c-three-ds__input {
+  min-block-size: var(--size-field-min-height);
+  padding-inline: var(--space-3);
+  font: inherit;
+  font-size: var(--font-size-lg);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--letter-spacing-otp);
+  background: var(--bg-surface);
+  border: var(--border-width-thin) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.c-three-ds__input:focus {
+  border-color: var(--color-brand-primary);
+}
+
+.c-three-ds__input[aria-invalid='true'] {
+  border-color: var(--border-danger);
+}
+
+.c-three-ds__failure {
+  font-size: var(--font-size-sm);
+  color: var(--text-danger);
+}
+
+.c-three-ds__actions {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: flex-end;
+}
+
+.c-three-ds__cancel,
+.c-three-ds__submit {
+  min-block-size: var(--size-touch-min);
+  padding-inline: var(--space-5);
+  font: inherit;
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+  border-radius: var(--radius-md);
+}
+
+.c-three-ds__cancel {
+  color: var(--color-brand-primary);
+  background: var(--bg-surface);
+  border: var(--border-width-thin) solid var(--color-brand-primary);
+}
+
+.c-three-ds__submit {
+  color: var(--text-on-brand);
+  background: var(--color-brand-primary);
+  border: none;
+}
+
+.c-three-ds__submit:disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
+}
+
+/* Ekranda gorunmez, ekran okuyucu bir kez okur ("Son 30 saniye"). */
+.c-three-ds__sr {
+  position: absolute;
+  width: var(--size-visually-hidden);
+  height: var(--size-visually-hidden);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-three-ds__time {
+    transition: none;
+  }
+}
