@@ -185,3 +185,29 @@ func TestOrderTrackingErrorsLogNoCoordinatesOrName(t *testing.T) {
 		}
 	}
 }
+
+func TestOrderTrackingCourierErrorBodyCarriesNoCourierDetails(t *testing.T) {
+	// #187: courier'in NOT_FOUND disindaki hatasinin ayrintisi (kurye kimligi,
+	// konum, baska siparis) cevaba gecmez; kod ve kendi mesajimiz kalir.
+	courier := &trackingCourier{
+		err: status.Error(codes.FailedPrecondition, "Mehmet Kaya 41.0082,28.9784"),
+		trailer: metadata.Pairs(apperror.MetadataKey, `{"code":"ORDER_STATE_INVALID","message":"Mehmet Kaya",`+
+			`"details":{"courierId":"crr_0123456789abcdef0123456789abcdef","location":{"lat":41.0082,"lng":28.9784}}}`),
+	}
+	app := trackingApp(&trackedOrders{status: "ON_THE_WAY"}, courier, silentLogger())
+
+	got, header, raw := exchangeRaw(t, app, trackingRequest(t, trackingPath(), nil))
+
+	if want := apperror.HTTPStatus(apperror.CodeOrderStateInvalid); got != want {
+		t.Fatalf("%d bekleniyordu: %d", want, got)
+	}
+	body := string(raw)
+	for _, secret := range []string{"crr_", "41.0082", "Mehmet", `"details"`} {
+		if strings.Contains(body, secret) {
+			t.Errorf("cevap courier verisi tasimamali (%s): %s", secret, body)
+		}
+	}
+	if !strings.Contains(body, `"ORDER_STATE_INVALID"`) || header.Get(fiber.HeaderCacheControl) != noStore {
+		t.Errorf("kod korunmali ve cevap no-store olmali: %s %q", body, header.Get(fiber.HeaderCacheControl))
+	}
+}

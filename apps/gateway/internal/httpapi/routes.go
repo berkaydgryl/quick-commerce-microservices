@@ -76,9 +76,11 @@ func registerOrderRoutes(v1 fiber.Router, deps Deps, mw routeMiddleware) {
 	v1.Delete("/cart/reserve/:"+reservationIDParam, mw.user, mw.orderByUser, mw.mutation, releaseReservationHandler(deps.ReservationReleaser))
 	v1.Post("/orders", mw.user, mw.orderByUser, mw.checkout, placeOrderHandler(deps.OrderPlacer, deps.CheckoutSignals))
 	v1.Post("/orders/:"+orderIDParam+"/3ds", mw.user, mw.orderByUser, mw.checkout, confirmThreeDSHandler(deps.ThreeDSConfirmer))
-	v1.Get("/orders", mw.user, mw.generalByUser, listOrdersHandler(deps.OrderLister))
-	v1.Get("/orders/:"+orderIDParam, mw.user, mw.generalByUser, getOrderHandler(deps.OrderGetter))
-	v1.Get("/orders/:"+orderIDParam+"/token", mw.user, mw.generalByUser, orderRoomTokenHandler(deps.OrderRoomTokens))
-	// Konum kisisel veri: hata cevaplari dahil onbelleklenmez (#179 N3).
+	// Siparis okumalari kisisel veridir (adres, urunler, 3DS jetonu, oda jetonu,
+	// konum): HER cevap, hata dahil (401, 404, 429, 500, 503), onbelleklenmez.
+	// noStoreRoute ILK ara katmandir (#186; takip #179 N3).
+	v1.Get("/orders", noStoreRoute, mw.user, mw.generalByUser, listOrdersHandler(deps.OrderLister))
+	v1.Get("/orders/:"+orderIDParam, noStoreRoute, mw.user, mw.generalByUser, getOrderHandler(deps.OrderGetter))
+	v1.Get("/orders/:"+orderIDParam+"/token", noStoreRoute, mw.user, mw.generalByUser, orderRoomTokenHandler(deps.OrderRoomTokens))
 	v1.Get("/orders/:"+orderIDParam+"/tracking", noStoreRoute, mw.user, mw.generalByUser, orderTrackingHandler(deps.OrderTracking))
 }
