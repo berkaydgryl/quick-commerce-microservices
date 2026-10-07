@@ -1,0 +1,69 @@
+/*
+ * Kurye haritasi (F22): adres haritasinin olcusu ve kosesi. Isaretler token
+ * renginde: kurye mor daire icinde beyaz motor (en ustte), market beyaz daire
+ * mor cerceve, ev adres haritasinin mor pimi. Rota mor yumusak, kesik degil.
+ */
+.c-tracking-map {
+  overflow: hidden;
+  border-radius: var(--radius-md);
+}
+
+.c-tracking-map__canvas {
+  height: var(--size-address-map);
+  background: var(--bg-page);
+}
+
+/* Leaflet'in SVG yolu: renk ve kalinlik token'dan. */
+.c-tracking-map__route {
+  fill: none;
+  stroke: var(--color-brand-primary-soft);
+  stroke-width: var(--size-tracking-route);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Isaretler ortalanir: Leaflet konum icin transform kullanir, burada kenar boslugu. */
+.c-tracking-map__marker {
+  display: grid;
+  place-items: center;
+  width: var(--size-tracking-marker);
+  height: var(--size-tracking-marker);
+  margin-block-start: calc(var(--size-tracking-marker) / -2);
+  margin-inline-start: calc(var(--size-tracking-marker) / -2);
+  border-radius: var(--radius-pill);
+}
+
+.c-tracking-map__marker svg {
+  width: 60%;
+  height: 60%;
+}
+
+.c-tracking-map__marker--courier {
+  color: var(--text-on-brand);
+  background: var(--color-brand-primary);
+  border: var(--border-width-cart-panel) solid var(--bg-surface);
+  box-shadow: var(--shadow-floating);
+}
+
+.c-tracking-map__marker--market {
+  color: var(--color-brand-primary);
+  background: var(--bg-surface);
+  border: var(--border-width-cart-panel) solid var(--color-brand-primary);
+  box-shadow: var(--shadow-surface);
+}
+
+/* Ev pimi damla bicimli: capa alt orta (pimin ucu adreste). */
+.c-tracking-map__marker--home {
+  width: var(--size-map-pin);
+  height: auto;
+  margin-block-start: calc(var(--size-map-pin) * -1.2);
+  margin-inline-start: calc(var(--size-map-pin) / -2);
+  color: var(--color-brand-primary);
+  filter: drop-shadow(var(--shadow-surface));
+  border-radius: 0;
+}
+
+.c-tracking-map__marker--home svg {
+  width: 100%;
+  height: auto;
+}

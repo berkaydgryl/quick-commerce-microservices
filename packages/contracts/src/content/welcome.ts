@@ -16,6 +16,7 @@ import { cartPageContentSchema, footerContentSchema } from './cart-page.js';
 import { checkoutContentSchema } from './checkout.js';
 import { confirmContentSchema } from './confirm.js';
 import { contentTextSchema } from './content-text.js';
+import { courierTrackingContentSchema } from './courier-tracking.js';
 import { favoritesContentSchema } from './favorites.js';
 import { loginCardContentSchema } from './login-card.js';
 import { marketListContentSchema } from './market-list.js';
@@ -66,6 +67,8 @@ export const welcomeContentSchema = z.object({
   checkout: checkoutContentSchema,
   /** Ortak onay penceresi (F13): "Evet" ve "Hayır". */
   confirm: confirmContentSchema,
+  /** Kurye takibi (F22): "Kuryem nerede" penceresi ve yaklasma bildirimi. */
+  courierTracking: courierTrackingContentSchema,
 });
 
 export type WelcomeContent = z.infer<typeof welcomeContentSchema>;

@@ -1,8 +1,8 @@
 import type { GeoPoint, MapContent } from '@getir/contracts';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import type L from 'leaflet';
 import { useEffect, useRef } from 'react';
 
+import { createBaseMap, prefersReducedMotion } from '../../../shared/map/base-map';
 import { isSamePoint } from '../services/geo-point';
 
 import styles from './AddressMap.module.css';
@@ -28,8 +28,8 @@ interface AddressMapProps {
  * nokta haritanin ortasidir. Pin ve ipucu Leaflet'in degil sayfanin ogesidir:
  * marker gorseli gerekmez, renk token'dan gelir.
  *
- * Karo adresi ve atif icerik ucundan gelir. Atif OSM lisansi geregi haritada
- * gorunur; metin HTML olarak degil duz metin olarak eklenir.
+ * Karo, atif ve boyut gozlemcisi ortak kurulumdan (shared/map/base-map.ts;
+ * kurye haritasi da kullanir).
  */
 export function AddressMap({ map, center, label, interactive, hint, onMove }: AddressMapProps) {
   const container = useRef<HTMLDivElement>(null);
@@ -37,43 +37,28 @@ export function AddressMap({ map, center, label, interactive, hint, onMove }: Ad
   const onMoveRef = useRef(onMove);
   onMoveRef.current = onMove;
   const initialCenter = useRef(center);
+  const { tileUrl, attribution, zoom } = map;
 
   useEffect(() => {
     const element = container.current;
     if (element === null) {
       return undefined;
     }
-    const leaflet = L.map(element, {
-      center: [initialCenter.current.lat, initialCenter.current.lng],
-      zoom: map.zoom,
-      zoomControl: interactive,
-      dragging: interactive,
-      touchZoom: interactive ? 'center' : false,
-      scrollWheelZoom: interactive ? 'center' : false,
-      doubleClickZoom: interactive ? 'center' : false,
-      boxZoom: false,
-      keyboard: interactive,
-      attributionControl: false,
-    });
-    L.tileLayer(map.tileUrl, { maxZoom: 19 }).addTo(leaflet);
-    L.control
-      .attribution({ prefix: false })
-      .addAttribution(escapeHtml(map.attribution))
-      .addTo(leaflet);
+    const { leaflet, dispose } = createBaseMap(
+      element,
+      { tileUrl, attribution },
+      { center: [initialCenter.current.lat, initialCenter.current.lng], zoom, interactive },
+    );
     leaflet.on('moveend', () => {
       const { lat, lng } = leaflet.getCenter();
       onMoveRef.current?.({ lat, lng });
     });
-    // Pencere ya da ekran boyu degisince karolar yeniden hesaplanir.
-    const resize = new ResizeObserver(() => leaflet.invalidateSize());
-    resize.observe(element);
     instance.current = leaflet;
     return () => {
-      resize.disconnect();
-      leaflet.remove();
+      dispose();
       instance.current = null;
     };
-  }, [map.tileUrl, map.attribution, map.zoom, interactive]);
+  }, [tileUrl, attribution, zoom, interactive]);
 
   // Disaridan gelen yeni nokta (arama sonucu): harita oraya gider.
   const { lat, lng } = center;
@@ -86,8 +71,7 @@ export function AddressMap({ map, center, label, interactive, hint, onMove }: Ad
     if (isSamePoint(leaflet.getCenter(), { lat, lng })) {
       return;
     }
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    leaflet.setView([lat, lng], leaflet.getZoom(), { animate: !reduceMotion });
+    leaflet.setView([lat, lng], leaflet.getZoom(), { animate: !prefersReducedMotion() });
   }, [lat, lng]);
 
   return (
@@ -108,14 +92,4 @@ export function AddressMap({ map, center, label, interactive, hint, onMove }: Ad
       </div>
     </div>
   );
-}
-
-/** Atif metni Leaflet'e HTML olarak gider: icerikteki metin isaretleme sayilmasin. */
-function escapeHtml(text: string): string {
-  return text
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
 }
