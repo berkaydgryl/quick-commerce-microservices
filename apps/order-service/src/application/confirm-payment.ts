@@ -9,8 +9,9 @@
  * doner, payment-svc'ye gidilmez.
  *
  * KILIT SURESI (T11.3): her onay denemesinden ONCE kalan sure kisaysa kilit
- * uzatilir; kilit dusmusse kod payment-svc'ye gitmez, siparis CANCELLED + 410
- * (lock-timing.ts; payment.cancel_requested 3DS bekleyen odemeyi kapatir).
+ * uzatilir; kilit dusmusse kod payment-svc'ye gitmez, siparis lapsed-order.ts'in
+ * tablosuyla kapatilir: CANCELLED + 410 (payment.cancel_requested 3DS bekleyen
+ * odemeyi kapatir), onceki onay cekmisse iade, cekim suruyorsa REQUEST_IN_PROGRESS.
  */
 
 import { AppError, ERROR_CODES, ORDER_STATUS } from '@getir/core';

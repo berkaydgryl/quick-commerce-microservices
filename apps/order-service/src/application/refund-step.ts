@@ -1,7 +1,7 @@
 /**
- * Saga'nin telafi adimi: alinan tutarin iadesi (T7.1, T7.3). Odeme adimi
- * (payment-step.ts) ve kilidi dolan siparisleri kapatan supurucu (T11.2 PR 2)
- * ayni yolu kullanir.
+ * Saga'nin telafi adimi: alinan tutarin iadesi (T7.1, T7.3); odeme adimi
+ * (payment-step.ts) kullanir. Kilidi dusmus siparisin iadesi bu yoldan GITMEZ:
+ * iade komutu iptalle ayni yazimda (lapsed-order.ts, T15.3).
  */
 
 import type { Clock } from '@getir/core';

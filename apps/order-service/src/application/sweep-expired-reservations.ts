@@ -4,10 +4,12 @@
  *
  * Kullaniciya gorunen davranis bu turdan once de dogrudur: kilidi dusmus taslak
  * CreateOrder'da 410 alir, stoku inventory'nin kendi supurucusu geri verir.
- * Bu tur KAYITLARI ve PARAYI toparlar:
+ * Bu tur KAYITLARI ve PARAYI toparlar (karar lapsed-order.ts'te; odeme ya da 3DS
+ * denemesinde kilidi dusmus bulan saga da ayni tabloyu kullanir, T15.3):
  *   - DRAFT: CANCELLED (RESERVATION_EXPIRED), kilit birakilir;
  *   - AWAITING_PAYMENT: once odeme kaydina bakilir (payment-standing.ts):
- *       para alinmis -> CANCELLED, kilit birakilir, tutar IADE edilir;
+ *       para alinmis -> CANCELLED + iade komutu ayni yazimda, kilit birakilir,
+ *         tutar IADE edilir;
  *       kart cekimi suruyor -> bu turda dokunulmaz, sonraki turda tekrar;
  *       para alinmamis -> CANCELLED, kilit birakilir.
  *
@@ -18,29 +20,18 @@
  * Bir siparisin hatasi turu durdurmaz: sayilir, siradakine gecilir.
  */
 
-import { ERROR_CODES, isAppError, ORDER_STATUS } from '@getir/core';
+import { ORDER_STATUS } from '@getir/core';
 import type { Logger } from '@getir/core';
 import { resolveRequestId } from '@getir/observability';
 
-import { REFUND_REASON } from '../domain/checkout-payment.js';
 import type { ExpiredOrderFinder } from '../domain/expired-order-finder.js';
-import { statusChangedEvents } from '../domain/order-events.js';
-import type { OrderRepository } from '../domain/order-repository.js';
 import type { Order } from '../domain/order.js';
-import { transitionOrder } from '../domain/order.js';
-import { PAYMENT_STANDING, paymentStandingOf } from '../domain/payment-standing.js';
-import { RELEASE_REASON } from '../domain/stock-reservation.js';
-import type { Payments } from './payments.js';
-import { refundCharge } from './refund-step.js';
-import type { RefundStepDeps } from './refund-step.js';
+import { closeLapsedOrder } from './lapsed-order.js';
+import type { LapseDeps } from './lapsed-order.js';
 import type { RequestScope } from './request-scope.js';
-import { releaseStock } from './stock-step.js';
-import type { StockStepDeps } from './stock-step.js';
 
-export interface SweepExpiredReservationsDeps extends StockStepDeps, RefundStepDeps {
+export interface SweepExpiredReservationsDeps extends LapseDeps {
   readonly expired: ExpiredOrderFinder;
-  readonly repository: Pick<OrderRepository, 'update'>;
-  readonly payments: Pick<Payments, 'getPayment' | 'refund'>;
   /** Bir turda en fazla kac siparis ele alinir. */
   readonly batchSize: number;
   /**
@@ -106,59 +97,22 @@ export function createSweepExpiredReservations(
   };
 }
 
+/** Kapatma karari lapsed-order.ts'te (lock-timing ile ayni tablo); burada tur sayimi. */
 async function closeExpired(
   deps: SweepExpiredReservationsDeps,
   order: Order,
   scope: RequestScope,
 ): Promise<Outcome> {
-  if (order.status === ORDER_STATUS.DRAFT) {
-    return (await cancelExpired(deps, order, false, scope)) ? OUTCOME.CLOSED : OUTCOME.SKIPPED;
+  switch ((await closeLapsedOrder(deps, order, scope)).kind) {
+    case 'in-flight':
+      return OUTCOME.WAITING;
+    case 'conflict':
+      return OUTCOME.SKIPPED;
+    case 'refunded':
+      return OUTCOME.REFUNDED;
+    case 'closed':
+      return OUTCOME.CLOSED;
   }
-  const standing = paymentStandingOf(await deps.payments.getPayment(order.id, scope));
-  if (standing === PAYMENT_STANDING.IN_FLIGHT) {
-    return OUTCOME.WAITING;
-  }
-  const charged = standing === PAYMENT_STANDING.CHARGED;
-  if (!(await cancelExpired(deps, order, charged, scope))) {
-    return OUTCOME.SKIPPED;
-  }
-  if (!charged) {
-    return OUTCOME.CLOSED;
-  }
-  await refundCharge(deps, order, REFUND_REASON.RESERVATION_EXPIRED, scope);
-  return OUTCOME.REFUNDED;
-}
-
-/**
- * Siparisi CANCELLED (RESERVATION_EXPIRED) yazar, sonra kilidi birakir.
- * @returns yazildi mi? (false: surum cakismasi, siparis baska yolda ilerledi)
- */
-async function cancelExpired(
-  deps: SweepExpiredReservationsDeps,
-  order: Order,
-  charged: boolean,
-  scope: RequestScope,
-): Promise<boolean> {
-  const cancelled = transitionOrder(
-    order,
-    ORDER_STATUS.CANCELLED,
-    deps.clock,
-    ERROR_CODES.RESERVATION_EXPIRED,
-  );
-  try {
-    await deps.repository.update(cancelled, order.version, statusChangedEvents(order, cancelled));
-  } catch (error: unknown) {
-    if (isAppError(error) && error.code === ERROR_CODES.CONFLICT) {
-      return false;
-    }
-    throw error;
-  }
-  scope.logger.info(
-    { orderId: order.id, from: order.status, charged },
-    'kilidi dolan siparis kapatildi',
-  );
-  await releaseStock(deps, order, RELEASE_REASON.RESERVATION_EXPIRED, scope);
-  return true;
 }
 
 function tally(
