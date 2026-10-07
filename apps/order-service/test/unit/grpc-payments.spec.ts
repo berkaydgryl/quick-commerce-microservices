@@ -21,9 +21,21 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { ChargeRequest } from '../../src/application/payments.js';
 import { PAYMENT_METHOD, PAYMENT_STATUS } from '../../src/domain/checkout-payment.js';
 import { GrpcPayments } from '../../src/infrastructure/payment/grpc-payments.js';
+import {
+  cutAfterReach,
+  DEADLINE_TIMEOUT_MS,
+  FUNCTIONAL_TIMEOUT_MS,
+  HeldReplies,
+  REACH_BUDGET_MS,
+} from '../support/held-replies.js';
 
 const scope = { requestId: 'req_odeme_1', logger: silentLogger };
 const S = paymentV1.PaymentStatus;
+/** Dinlemeyen port aninda reddeder; kisa sinir takilan ortamda testi testTimeout'tan once bitirir. */
+const UNREACHABLE_TIMEOUT_MS = 500;
+const SLOW_ORDER_ID = 'ord_yavas';
+/** Yavas siparisin bekletilen istekleri (cevap verilmez; kimlik ve kalan sure kaydedilir). */
+const held = new HeldReplies();
 
 const seenCharges: paymentV1.ChargeRequest[] = [];
 const seenRefunds: paymentV1.RefundRequest[] = [];
@@ -116,6 +128,11 @@ const implementation = {
     call: ServerUnaryCall<paymentV1.GetPaymentRequest, paymentV1.GetPaymentResponse>,
     callback: sendUnaryData<paymentV1.GetPaymentResponse>,
   ): void => {
+    // Yavas siparis kayda YAZILMADAN bekletilir: gec gelen deneme baska testin at(-1)'ini bozmasin.
+    if (call.request.orderId === SLOW_ORDER_ID) {
+      held.hold(call);
+      return;
+    }
     seenLookups.push({
       orderId: call.request.orderId,
       requestId: call.metadata.get(REQUEST_ID_METADATA_KEY)[0],
@@ -160,7 +177,7 @@ beforeAll(async () => {
       },
     ],
   });
-  payments = new GrpcPayments(`127.0.0.1:${handle.port}`, 500);
+  payments = new GrpcPayments(`127.0.0.1:${handle.port}`, FUNCTIONAL_TIMEOUT_MS);
 });
 
 afterAll(async () => {
@@ -315,11 +332,11 @@ describe('GrpcPayments - dayaniklilik (D17)', () => {
   let resilient: GrpcPayments;
 
   beforeAll(() => {
-    resilient = new GrpcPayments(`127.0.0.1:${handle.port}`, 500, resilience());
+    resilient = new GrpcPayments(`127.0.0.1:${handle.port}`, FUNCTIONAL_TIMEOUT_MS, resilience());
   });
 
   afterAll(() => {
-    resilient.close();
+    resilient?.close();
   });
 
   it('idempotent okuma (GetPayment) ilk deneme duserse yeniden denenir ve sonuc doner', async () => {
@@ -341,7 +358,7 @@ describe('GrpcPayments - dayaniklilik (D17)', () => {
 
   it('ulasilamayan servise ust uste hatadan sonra devre acilir; cagri ag a gitmeden hemen reddedilir', async () => {
     // Dinlemeyen bir port: baglanti hemen reddedilir (UNAVAILABLE).
-    const unreachable = new GrpcPayments('127.0.0.1:1', 500, resilience());
+    const unreachable = new GrpcPayments('127.0.0.1:1', UNREACHABLE_TIMEOUT_MS, resilience());
     try {
       await rejectionOf(
         unreachable.confirmThreeDs(
@@ -367,7 +384,7 @@ describe('GrpcPayments - dayaniklilik (D17)', () => {
 
   it('is hatasi (yanlis 3DS kodu) devreyi ACMAZ', async () => {
     const options = resilience();
-    const client = new GrpcPayments(`127.0.0.1:${handle.port}`, 500, options);
+    const client = new GrpcPayments(`127.0.0.1:${handle.port}`, FUNCTIONAL_TIMEOUT_MS, options);
     try {
       for (let i = 0; i < 4; i += 1) {
         await rejectionOf(
@@ -378,5 +395,30 @@ describe('GrpcPayments - dayaniklilik (D17)', () => {
     } finally {
       client.close();
     }
+  });
+});
+
+describe('GrpcPayments sure siniri (#113)', () => {
+  let shortDeadline: GrpcPayments;
+
+  beforeAll(() => {
+    shortDeadline = new GrpcPayments(`127.0.0.1:${handle.port}`, DEADLINE_TIMEOUT_MS);
+  });
+
+  afterAll(() => {
+    shortDeadline?.close();
+  });
+
+  it('sure siniri dolarsa SERVICE_UNAVAILABLE; istemci KENDI kisa sinirini gonderir', async () => {
+    const { error, reply } = await cutAfterReach(
+      (requestId) => shortDeadline.getPayment(SLOW_ORDER_ID, { requestId, logger: silentLogger }),
+      held,
+      REACH_BUDGET_MS,
+    );
+
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+    // Istek sunucuya ulasti ve istemci kendi kisa sinirini gonderdi.
+    expect(reply.remainingMs).toBeLessThanOrEqual(DEADLINE_TIMEOUT_MS);
   });
 });
