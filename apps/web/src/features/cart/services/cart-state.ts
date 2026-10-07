@@ -128,11 +128,21 @@ export function isSoldOut(product: Product): boolean {
 }
 
 /**
+ * Market kapali mi (07.10 kullanici istegi)? Bilgi marketin sorgusundan; henuz
+ * bilinmiyorsa kapali SAYILMAZ (yukleme sirasi bugunku gibi; /odeme ayrica
+ * durdurur). Magaza, arama ve sepet ayni kurali buradan sorar.
+ */
+export function isMarketClosed(market: { readonly isOpen: boolean } | undefined): boolean {
+  return market?.isOpen === false;
+}
+
+/**
  * Bu urunden bir adet daha eklenebilir mi? Arayuzun "Ekle" ve "+" icin TEK
  * sorusu. Urun baska marketinse sinirlar BOS sepete gore sorulur: ekleme onayla
- * yeni sepette yapilacaktir.
+ * yeni sepette yapilacaktir. Market kapaliysa (isMarketClosed) eklenemez.
  */
-export function canAdd(state: CartState, product: Product): boolean {
+export function canAdd(state: CartState, product: Product, marketClosed = false): boolean {
+  if (marketClosed) return false;
   const cart = state.market?.id === product.marketId ? state : EMPTY_CART;
   return blockerOf(cart, product) === undefined;
 }
@@ -173,8 +183,12 @@ export function startNewCart(product: Product, market: CartMarket): CartState {
   return addItem(EMPTY_CART, product, market).state;
 }
 
-/** Sepetteki kalemden bir adet daha eklenebilir mi (panelin "+"si; sinir kalemdeki maxQuantity)? */
-export function canIncrement(state: CartState, offerId: string): boolean {
+/**
+ * Sepetteki kalemden bir adet daha eklenebilir mi (panelin "+"si; sinir kalemdeki
+ * maxQuantity)? Sepetin marketi kapaliysa hayir (07.10).
+ */
+export function canIncrement(state: CartState, offerId: string, marketClosed = false): boolean {
+  if (marketClosed) return false;
   const existing = state.items.find((item) => item.offerId === offerId);
   return existing !== undefined && existing.quantity < existing.maxQuantity;
 }

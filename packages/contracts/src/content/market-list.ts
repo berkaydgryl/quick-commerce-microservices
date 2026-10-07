@@ -40,6 +40,11 @@ export const marketListCartContentSchema = z.object({
   totalLabel: contentTextSchema,
   /** "Minimum sepet tutarına kalan: 25,10 TL". */
   minBasketRemainingLabel: contentTextSchema,
+  /**
+   * Kapali market (07.10 kullanici istegi): "+" pasif ve gri; sebep satiri magaza
+   * sayfasinda, arama kartinda, sepet panelinde ve /sepet'te ("Market şu an kapalı").
+   */
+  closedNotice: contentTextSchema,
   goToCartLabel: contentTextSchema,
   clearLabel: contentTextSchema,
   /** Sepeti bosaltma onayi (T16.3): soru, alt not ve dugmeler; pencerenin basligi clearLabel. */

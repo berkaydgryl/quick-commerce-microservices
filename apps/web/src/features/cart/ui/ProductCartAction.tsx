@@ -17,6 +17,10 @@ interface ProductCartActionProps {
   readonly texts: ProductCartTexts;
   /** Magaza sayfasinin karti dikey, ana sayfa aramasinin satiri yatay (T9.6: ayni bilesen). */
   readonly orientation?: CartStepperOrientation | undefined;
+  /** Market kapali (07.10 kullanici istegi): "+" pasif (cart-state canAdd). */
+  readonly closed?: boolean | undefined;
+  /** Kapaliyken "+"nin bagli oldugu sebep satiri ("Market şu an kapalı"). */
+  readonly closedReasonId?: string | undefined;
 }
 
 /**
@@ -24,9 +28,16 @@ interface ProductCartActionProps {
  * okur, gorunumu besler. "Eklenebilir mi" ve "tukendi mi" kararlarini bilesen
  * VERMEZ, cart-state'e sorar (D11): stok ve satis kurallari tek yerde.
  */
-export function ProductCartAction({ product, onAdd, texts, orientation }: ProductCartActionProps) {
+export function ProductCartAction({
+  product,
+  onAdd,
+  texts,
+  orientation,
+  closed = false,
+  closedReasonId,
+}: ProductCartActionProps) {
   const quantity = useCartStore((cart) => quantityOf(cart, product.offerId));
-  const addable = useCartStore((cart) => canAdd(cart, product));
+  const addable = useCartStore((cart) => canAdd(cart, product, closed));
   const decrement = useCartStore((cart) => cart.decrement);
 
   return (
@@ -37,6 +48,8 @@ export function ProductCartAction({ product, onAdd, texts, orientation }: Produc
       soldOut={isSoldOut(product)}
       texts={texts}
       orientation={orientation}
+      closed={closed}
+      closedReasonId={closedReasonId}
       onAdd={() => onAdd(product)}
       onDecrement={() => decrement(product.offerId)}
     />
@@ -53,6 +66,9 @@ interface ProductCartActionViewProps {
   readonly soldOut: boolean;
   readonly texts: ProductCartTexts;
   readonly orientation?: CartStepperOrientation | undefined;
+  /** Market kapali: "+" pasif ama odaklanir (aria-disabled), sebebe bagli. */
+  readonly closed?: boolean | undefined;
+  readonly closedReasonId?: string | undefined;
   readonly onAdd: () => void;
   readonly onDecrement: () => void;
 }
@@ -60,7 +76,10 @@ interface ProductCartActionViewProps {
 /**
  * Dugmenin gorunumu: sepette yoksa "+", varsa sepet panelinin adet kutusu
  * (adet 1'de "−" yerine cop kutusu). Satista olmayan teklifte "Satışta değil"
- * (T7.6), stogu bitende "Tükendi" (T8.4); ikisi de dugme degil. Durumsuz.
+ * (T7.6), stogu bitende "Tükendi" (T8.4); ikisi de dugme degil. Market
+ * kapaliyken (07.10) "+" pasif ama odaklanabilir (aria-disabled: sebep
+ * okunur), basinca hicbir sey olmaz; adet kutusunun "+"si da kapali, "−" ve
+ * cop kutusu calisir. Durumsuz.
  */
 export function ProductCartActionView({
   product,
@@ -69,6 +88,8 @@ export function ProductCartActionView({
   soldOut,
   texts,
   orientation,
+  closed = false,
+  closedReasonId,
   onAdd,
   onDecrement,
 }: ProductCartActionViewProps) {
@@ -89,8 +110,10 @@ export function ProductCartActionView({
         type="button"
         className={styles['c-product-cart-action__add']}
         aria-label={`${product.name} ${texts.addSuffix}`}
-        disabled={!addable}
-        onClick={onAdd}
+        disabled={!closed && !addable}
+        aria-disabled={closed ? true : undefined}
+        aria-describedby={closed ? closedReasonId : undefined}
+        onClick={closed ? undefined : onAdd}
       >
         <span aria-hidden="true">+</span>
       </button>
@@ -102,6 +125,7 @@ export function ProductCartActionView({
       name={product.name}
       quantity={quantity}
       canIncrement={addable}
+      incrementReasonId={closed ? closedReasonId : undefined}
       texts={texts}
       orientation={orientation}
       onIncrement={onAdd}

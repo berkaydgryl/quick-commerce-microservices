@@ -4635,6 +4635,7 @@ components:
               freeDeliveryLabel,
               totalLabel,
               minBasketRemainingLabel,
+              closedNotice,
               goToCartLabel,
               clearLabel,
               clearConfirmQuestion,
@@ -4657,6 +4658,9 @@ components:
             freeDeliveryLabel: { $ref: "#/components/schemas/ContentText" }
             totalLabel: { $ref: "#/components/schemas/ContentText" }
             minBasketRemainingLabel: { $ref: "#/components/schemas/ContentText" }
+            closedNotice:
+              $ref: "#/components/schemas/ContentText"
+              description: Kapalı marketin sebep satırı; "+" pasif, sepette not.
             goToCartLabel: { $ref: "#/components/schemas/ContentText" }
             clearLabel: { $ref: "#/components/schemas/ContentText" }
             clearConfirmQuestion: { $ref: "#/components/schemas/ContentText" }

@@ -58,6 +58,7 @@ const MARKET_LIST_FALLBACK: MarketListContent = {
     freeDeliveryLabel: 'Ücretsiz',
     totalLabel: 'Toplam',
     minBasketRemainingLabel: 'Minimum sepet tutarına kalan',
+    closedNotice: 'Market şu an kapalı',
     goToCartLabel: 'Sepete git',
     clearLabel: 'Sepeti boşalt',
     clearConfirmQuestion: 'Sepeti boşaltmak istediğine emin misin?',
