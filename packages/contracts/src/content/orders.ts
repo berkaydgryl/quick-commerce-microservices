@@ -12,7 +12,7 @@ import { contentTextSchema } from './content-text.js';
  * göster" ve detay sayfasinin etiketleri. Durum gruplari: Tamamlandı
  * (DELIVERED), Devam ediyor (rozet), İptal edildi (ucret alinmissa
  * "Ücret iade edildi" ile). Iptal edilen sipariste butun urunler "Teslim
- * edilmedi" (siparis duzeyi, #91).
+ * edilmedi" (siparis duzeyi, #91). Detayin en altinda takip cizgisi (F21).
  */
 export const ordersContentSchema = z.object({
   title: contentTextSchema,
@@ -41,6 +41,18 @@ export const ordersContentSchema = z.object({
   freeDeliveryLabel: contentTextSchema,
   discountLabel: contentTextSchema,
   totalLabel: contentTextSchema,
+  /**
+   * Takip cizgisi (F21): detayin en altinda, toplam kartinin altinda uc adim;
+   * kartin gorunur basligi trackTitle ("Sipariş durumu").
+   * "Kuryem nerede" yalniz "Kurye yolda" aktifken basilir (pencere F22).
+   */
+  trackTitle: contentTextSchema,
+  trackPreparingLabel: contentTextSchema,
+  trackOnTheWayLabel: contentTextSchema,
+  trackDeliveredLabel: contentTextSchema,
+  whereIsCourierLabel: contentTextSchema,
+  /** Dugme pasifken (hazirlaniyor) altindaki bilgi satiri. */
+  whereIsCourierHint: contentTextSchema,
 });
 
 export type OrdersContent = z.infer<typeof ordersContentSchema>;

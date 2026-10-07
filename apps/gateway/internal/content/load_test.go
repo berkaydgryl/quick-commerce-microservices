@@ -147,7 +147,10 @@ const validJSON = `{
     "notDeliveredLabel": "Teslim edilmedi", "moreLabel": "Daha fazla", "loadingMoreLabel": "Yükleniyor",
     "dateLabel": "Tarih", "addressLabel": "Adres", "paymentLabel": "Ödeme", "paymentCardLabel": "Kart",
     "paymentCashLabel": "Kapıda nakit", "paymentPosLabel": "Kapıda kart", "itemsTitle": "Ürünler", "subtotalLabel": "Ara toplam",
-    "deliveryFeeLabel": "Teslimat", "freeDeliveryLabel": "Ücretsiz", "discountLabel": "İndirim", "totalLabel": "Toplam"
+    "deliveryFeeLabel": "Teslimat Ücreti", "freeDeliveryLabel": "Ücretsiz", "discountLabel": "İndirim", "totalLabel": "Toplam",
+    "trackTitle": "Sipariş durumu", "trackPreparingLabel": "Hazırlanıyor", "trackOnTheWayLabel": "Kurye yolda",
+    "trackDeliveredLabel": "Teslim edildi", "whereIsCourierLabel": "Kuryem nerede",
+    "whereIsCourierHint": "Kurye yola çıkınca konumunu izleyebilirsin."
   },
   "confirm": {"yesLabel": "Evet", "noLabel": "Hayır"}
 }`

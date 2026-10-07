@@ -8,6 +8,7 @@ import type {
 } from './content.js';
 import { CART_PAGE_FALLBACK, FOOTER_FALLBACK } from './content/cart-page-fallback.js';
 import { CHECKOUT_FALLBACK } from './content/checkout-fallback.js';
+import { ADDRESS_SETUP_FALLBACK, APP_HEADER_FALLBACK } from './content/header-fallback.js';
 import { MARKET_PAGE_FALLBACK } from './content/market-page-fallback.js';
 import { PAYMENT_METHODS_FALLBACK } from './content/payment-methods-fallback.js';
 
@@ -186,10 +187,16 @@ const ORDERS_FALLBACK: OrdersContent = {
   paymentPosLabel: 'Kapıda kredi/banka kartı',
   itemsTitle: 'Ürünler',
   subtotalLabel: 'Ara toplam',
-  deliveryFeeLabel: 'Teslimat',
+  deliveryFeeLabel: 'Teslimat Ücreti',
   freeDeliveryLabel: 'Ücretsiz',
   discountLabel: 'İndirim',
   totalLabel: 'Toplam',
+  trackTitle: 'Sipariş durumu',
+  trackPreparingLabel: 'Siparişin hazırlanıyor',
+  trackOnTheWayLabel: 'Kurye yolda',
+  trackDeliveredLabel: 'Siparişin teslim edildi',
+  whereIsCourierLabel: 'Kuryem nerede',
+  whereIsCourierHint: 'Kuryen paketi alıp yola çıkınca konumunu buradan canlı izleyebilirsin.',
 };
 
 /** Adreslerim sekmesinin yedegi (T11.15): icerik gelmese de liste ve eylemler calisir. */
@@ -215,9 +222,10 @@ const ADDRESSES_FALLBACK: AddressesContent = {
 
 /**
  * Icerik yedegi (T11.10 duzeltmesi): GET /v1/content/welcome hata verirse
- * ust barin calismasi icin gereken en az metin. Oturumdaki kullanici icerik
- * gelmese de cikis yapabilmeli, Hesabim'a gidebilmeli ve yeniden deneyebilmeli.
- * T11.12'den beri market listesi de (marketList) yedekle calisir.
+ * (ya da gateway ile web arasindaki surum farki yuzunden sema gecmezse) ekran
+ * yine calisir. Oturumdaki kullanici icerik gelmese de cikis yapabilmeli ve
+ * Hesabim'a gidebilmeli; F21'den beri ust barin aramasi ve adres penceresi de
+ * (appHeader, addressSetup) yedekle calisir. T11.12'den beri market listesi de.
  *
  * Ekran metninin tek kaynagi icerik ucudur; bu sozluk yalnizca o uc
  * ulasilamazken kullanilir (errors.ts'teki hata sozlugu kalibi). Degerler
@@ -235,8 +243,11 @@ export const CONTENT_FALLBACK = {
   accountLabel: 'Hesabım',
   logoutLabel: 'Çıkış yap',
   logoutPendingLabel: 'Çıkış yapılıyor…',
-  /** Icerigi yeniden isteyen dugme (icerikte karsiligi yok: icerik gelmeyince gorunur). */
-  retryLabel: 'Tekrar dene',
+  /** loginCard.closeLabel: pencerelerin "Kapat"i (adres penceresi). */
+  closeLabel: 'Kapat',
+  /** appHeader ve addressSetup: ust bar ve adres penceresi (F21; icerik hatasinda bar bozulmaz). */
+  appHeader: APP_HEADER_FALLBACK,
+  addressSetup: ADDRESS_SETUP_FALLBACK,
   /** marketList: bloğun tamami (T11.12). */
   marketList: MARKET_LIST_FALLBACK,
   /** favorites: bloğun tamami (T11.13). */

@@ -127,29 +127,3 @@ export function HeaderSearch({ content, address, resultsHref }: HeaderSearchProp
 export function HeaderSearchPlaceholder() {
   return <div className={styles['c-header-search']} aria-busy="true" />;
 }
-
-interface HeaderSearchFallbackProps {
-  /** Icerik ucunun hatasi (sozlukten gelen Turkce mesaj). */
-  readonly message: string;
-  /** "Tekrar dene" (uygulama verir: icerik yedegi). */
-  readonly retryLabel: string;
-  readonly onRetry: () => void;
-}
-
-/**
- * Icerik ucu hata verirse kutunun yerinde mesaj ve "Tekrar dene" (T11.10
- * duzeltmesi): kutu sessizce bos kalmaz, kullanici yeniden isteyebilir.
- */
-export function HeaderSearchFallback({ message, retryLabel, onRetry }: HeaderSearchFallbackProps) {
-  return (
-    <div
-      className={`${styles['c-header-search']} ${styles['c-header-search--fallback']}`}
-      role="alert"
-    >
-      <p className={styles['c-header-search__message']}>{message}</p>
-      <button type="button" className={styles['c-header-search__retry']} onClick={onRetry}>
-        {retryLabel}
-      </button>
-    </div>
-  );
-}

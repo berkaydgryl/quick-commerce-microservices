@@ -318,10 +318,16 @@
     "paymentPosLabel": "Kapıda kredi/banka kartı",
     "itemsTitle": "Ürünler",
     "subtotalLabel": "Ara toplam",
-    "deliveryFeeLabel": "Teslimat",
+    "deliveryFeeLabel": "Teslimat Ücreti",
     "freeDeliveryLabel": "Ücretsiz",
     "discountLabel": "İndirim",
-    "totalLabel": "Toplam"
+    "totalLabel": "Toplam",
+    "trackTitle": "Sipariş durumu",
+    "trackPreparingLabel": "Siparişin hazırlanıyor",
+    "trackOnTheWayLabel": "Kurye yolda",
+    "trackDeliveredLabel": "Siparişin teslim edildi",
+    "whereIsCourierLabel": "Kuryem nerede",
+    "whereIsCourierHint": "Kuryen paketi alıp yola çıkınca konumunu buradan canlı izleyebilirsin."
   },
   "paymentMethods": {
     "title": "Ödeme Yöntemlerim",
