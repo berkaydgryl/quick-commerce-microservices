@@ -6,7 +6,7 @@ geçer (T13.1 PR 2). Canlı konum bu servisin RPC'lerinden geçmez (`courier.pro
 
 **Kurye havuzu (T13.2):** kurye bir markete bağlı değildir. Siparişin marketinin **3 km**
 çevresindeki boş kuryelerden biri atanır; demo verisinde Kadıköy ve Beşiktaş iki ayrı havuzdur
-(aralarında 6,6 km). Teslimattan sonra kurye olduğu yerde boşa çıkar, markete dönmez.
+(iki semtin en yakın marketleri 4,9 km ayrı; semt içinde en uzak çift 2,6 km). Teslimattan sonra kurye olduğu yerde boşa çıkar, markete dönmez.
 
 ## Bugünkü durum (T13.2 — kurye havuzu, rota ve varış tahmini)
 
@@ -16,7 +16,7 @@ geçer (T13.1 PR 2). Canlı konum bu servisin RPC'lerinden geçmez (`courier.pro
 | Havuz ataması (B7)        | ✅ `application/assign-courier.ts` + `nearest-available.ts`, kural `domain/courier-pool.ts` |
 | Market konumu kopyası     | ✅ `markets` koleksiyonu (seed ve göç 0001 yazar), MOCK'ta bellek                           |
 | Okuma, bırakma            | ✅ `GetCourier`, `ReleaseCourier` (kurye olduğu yerde boşa çıkar)                           |
-| Demo kuryeleri            | ✅ `pnpm seed`: her marketin 40-150 m yakınına 3 kurye, 63 (Kadıköy 30, Beşiktaş 33)        |
+| Demo kuryeleri            | ✅ `pnpm seed`: her marketin 40-150 m yakınına 3 kurye, 99 (Kadıköy 48, Beşiktaş 51)        |
 | Rota ve ETA, `StartRoute` | ✅ atamada kurye -> market -> adres, 20-40 eşit aralıklı nokta; `routes` (T13.2 PR 3)       |
 | GPS, canlı ETA            | ⏳ T13.3 (tick, `courier.location`)                                                         |
 
@@ -105,7 +105,7 @@ Kuryenin adı istemcide görünür, **günlüğe yazılmaz**; günlükte kimlik 
 ```bash
 pnpm --filter @getir/courier-service build
 MOCK=true pnpm --filter @getir/courier-service start   # :50056, demo kuryeleri bellekte
-pnpm --filter @getir/courier-service seed              # 63 kurye + 21 market konumu (tekrar koşmak sıfırlar)
+pnpm --filter @getir/courier-service seed              # 99 kurye + 33 market konumu (tekrar koşmak sıfırlar)
 pnpm --filter @getir/courier-service migrate status
 
 grpcurl -plaintext -import-path packages/proto/proto -proto getir/courier/v1/courier.proto \

@@ -1,0 +1,27 @@
+/* Kasasiz paketin odeme yontemi penceresi (F12): kart listesinin "Seç"iyle ayni dugme. */
+.c-on-delivery-dialog {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.c-on-delivery-dialog__choose {
+  min-height: var(--size-field-min-height);
+  padding: var(--space-3) var(--space-4);
+  font: inherit;
+  font-weight: var(--font-weight-extrabold);
+  color: var(--text-on-brand);
+  cursor: pointer;
+  background: var(--color-brand-primary);
+  border: none;
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast) var(--easing-standard);
+}
+
+.c-on-delivery-dialog__choose:disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
+}
+
+.c-on-delivery-dialog__choose:hover:not(:disabled) {
+  background: var(--color-brand-primary-strong);
+}

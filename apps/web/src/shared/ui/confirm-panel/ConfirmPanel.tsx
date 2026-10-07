@@ -3,79 +3,60 @@ import { useEffect, useRef } from 'react';
 import styles from './ConfirmPanel.module.css';
 
 export interface ConfirmPanelProps {
-  /** Sorunun konusu, kalin: "Ev", "Visa •••• 4242". Yoksa soru tek basina (sepeti bosaltma, T16.3). */
-  readonly subject?: string;
-  /** Konunun okunan hali (or. "Visa, son dört hane 4242"); verilirse gorunen konu ekran okuyucudan gizlenir. */
-  readonly spokenSubject?: string;
-  /** Konunun arkasindaki soru ("adresini silmek istiyor musun?"); konu yoksa sorunun tamami. */
-  readonly questionSuffix: string;
-  /** Sorunun altindaki not: "Geçmiş siparişlerin bundan etkilenmez."; yoksa cizilmez (baska market uyarisi). */
-  readonly hint?: string | undefined;
+  /** Sorunun kimligi: pencere adini buradan alir (aria-labelledby). */
+  readonly questionId?: string | undefined;
+  /** Tek soru (F13; silinen seye gore): "Kartı silmek istediğinden emin misin?". */
+  readonly question: string;
+  /**
+   * Yalniz ekran okuyucunun duydugu ayrinti, sorunun arkasina: hangi kart ya da
+   * adres ("Visa, son dört hane 4242"; QA K4). Gorunen soru duz kalir (PM S1 (a)).
+   */
+  readonly spokenDetail?: string | undefined;
   /** Sunucunun cumlesi (ag, 404); yoksa null. */
   readonly error: string | null;
   /** Islem suruyor: dugmeler bekler. */
   readonly pending: boolean;
-  readonly confirmLabel: string;
-  /** Onay dugmesinin tonu: geri alinamaz silme kirmizi (varsayilan); olagan bir secim mor (baska market uyarisi). */
-  readonly confirmTone?: 'danger' | 'primary' | undefined;
-  /** Acilinca odak "Vazgeç"e (baska market uyarisi); yoksa pencerenin kendi odagi. */
-  readonly focusCancel?: boolean | undefined;
-  readonly pendingLabel: string;
-  readonly cancelLabel: string;
+  readonly yesLabel: string;
+  readonly noLabel: string;
+  /** "Evet" beklerken ("Siliniyor…"); yoksa "Evet" kalir. */
+  readonly pendingLabel?: string | undefined;
   readonly onConfirm: () => void;
   readonly onCancel: () => void;
 }
 
 /**
- * Geri alinamaz islemin onay govdesi (T11.15'te adres silme icin yazildi,
- * T11.17'de ortaklasti, M6): soru, not, hata ve iki dugme ("Vazgeç", kirmizi
- * "Sil"). Pencere kabugunu (baslik, X, Esc) cagiran ozellik verir. Baska
- * market uyarisi (T16.3) notsuz, mor "Evet" ve odagi "Vazgeç"te kullanir.
- * Durumsuz (odak disinda).
+ * Ortak onay govdesi (F13; 07.10 kullanici istegi, referans #57; T11.15'te adres
+ * silme icin yazildi, T11.17'de ortaklasti): ortada tek soru, altta yan yana iki
+ * esit dugme, solda beyaz zeminli mor cerceveli "Hayır", sagda dolu mor "Evet".
+ * Acilinca odak "Hayır"da (yanlislikla silmeye karsi). Hata pencerede kalir.
+ * Kabugu ConfirmDialog verir. Durumsuz (odak disinda).
  */
 export function ConfirmPanel({
-  subject,
-  spokenSubject,
-  questionSuffix,
-  hint,
+  questionId,
+  question,
+  spokenDetail,
   error,
   pending,
-  confirmLabel,
-  confirmTone = 'danger',
-  focusCancel = false,
+  yesLabel,
+  noLabel,
   pendingLabel,
-  cancelLabel,
   onConfirm,
   onCancel,
 }: ConfirmPanelProps) {
-  const cancel = useRef<HTMLButtonElement>(null);
+  const no = useRef<HTMLButtonElement>(null);
   // Pencere acildiktan sonra (Dialog showModal'i yerlesim etkisinde cagirir).
   useEffect(() => {
-    if (focusCancel) {
-      cancel.current?.focus();
-    }
-  }, [focusCancel]);
+    no.current?.focus();
+  }, []);
 
   return (
     <div className={styles['c-confirm-panel']}>
-      <p className={styles['c-confirm-panel__question']}>
-        {subject !== undefined && (
-          <>
-            <strong className={styles['c-confirm-panel__subject']}>
-              {spokenSubject === undefined ? (
-                subject
-              ) : (
-                <>
-                  <span aria-hidden="true">{subject}</span>
-                  <span className={styles['c-confirm-panel__spoken']}>{spokenSubject}</span>
-                </>
-              )}
-            </strong>{' '}
-          </>
+      <p id={questionId} className={styles['c-confirm-panel__question']}>
+        {question}
+        {spokenDetail !== undefined && (
+          <span className={styles['c-confirm-panel__spoken']}> {spokenDetail}</span>
         )}
-        {questionSuffix}
       </p>
-      {hint !== undefined && <p className={styles['c-confirm-panel__hint']}>{hint}</p>}
       {error !== null && (
         <p className={styles['c-confirm-panel__alert']} role="alert">
           {error}
@@ -83,26 +64,22 @@ export function ConfirmPanel({
       )}
       <div className={styles['c-confirm-panel__actions']}>
         <button
-          ref={cancel}
+          ref={no}
           type="button"
-          className={styles['c-confirm-panel__cancel']}
+          className={styles['c-confirm-panel__no']}
           disabled={pending}
           onClick={onCancel}
         >
-          {cancelLabel}
+          {noLabel}
         </button>
         <button
           type="button"
-          className={
-            confirmTone === 'primary'
-              ? `${styles['c-confirm-panel__confirm']} ${styles['c-confirm-panel__confirm--primary']}`
-              : styles['c-confirm-panel__confirm']
-          }
+          className={styles['c-confirm-panel__yes']}
           disabled={pending}
           aria-busy={pending}
           onClick={onConfirm}
         >
-          {pending ? pendingLabel : confirmLabel}
+          {pending && pendingLabel !== undefined ? pendingLabel : yesLabel}
         </button>
       </div>
     </div>

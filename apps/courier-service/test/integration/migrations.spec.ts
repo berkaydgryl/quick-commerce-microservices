@@ -15,7 +15,6 @@ import type { Document } from 'mongodb';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { COURIER_STATUS } from '../../src/domain/courier.js';
-import { MARKET_LOCATION_SEEDS } from '../../src/infrastructure/fixtures/couriers.js';
 import { CourierMongoStore } from '../../src/infrastructure/mongo/courier-mongo-store.js';
 import { CouriersCollection } from '../../src/infrastructure/mongo/couriers-collection.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
@@ -30,6 +29,12 @@ import {
   orderId,
   POOL_RULE,
 } from '../support/couriers.js';
+
+/**
+ * Goc 0001'in yazdigi market sayisi: o gunun DONMUS listesi (ADR-19), 21 market.
+ * 07.10 subeleri goc ile degil seed ile gelir (demo verisi 33 market).
+ */
+const MIGRATION_0001_MARKET_COUNT = 21;
 
 const MONGO_IMAGE = 'mongo:7';
 const DB_NAME = 'getir_courier_goc_test';
@@ -145,7 +150,7 @@ describe('goc 0001: kurye havuzu', () => {
     ]);
     expect(await indexNames()).not.toContain(OLD_INDEX);
     expect(await connection.db.collection(COLLECTIONS.MARKETS).countDocuments()).toBe(
-      MARKET_LOCATION_SEEDS.length,
+      MIGRATION_0001_MARKET_COUNT,
     );
   });
 

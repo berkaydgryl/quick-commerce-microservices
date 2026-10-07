@@ -1,13 +1,10 @@
 import type { AddressesContent, SavedAddress } from '@getir/contracts';
 
-import { ConfirmPanel } from '../../../shared/ui/confirm-panel/ConfirmPanel';
-
-import { Dialog } from '../../../shared/ui/dialog/Dialog';
+import { ConfirmDialog } from '../../../shared/ui/confirm-panel/ConfirmDialog';
+import { useConfirmContent } from '../../content/hooks/useConfirmContent';
 
 interface DeleteAddressDialogProps {
-  readonly texts: AddressesContent;
-  /** Kapat (X) dugmesinin erisilebilir adi (icerikten). */
-  readonly closeLabel: string;
+  readonly texts: Pick<AddressesContent, 'confirmQuestion' | 'deletingLabel'>;
   readonly address: SavedAddress;
   /** Silme suruyor: dugmeler bekler. */
   readonly pending: boolean;
@@ -18,37 +15,31 @@ interface DeleteAddressDialogProps {
 }
 
 /**
- * Silme onayi (T11.15, T5): kucuk pencere. "<ad> adresini silmek istiyor
- * musun?", altinda siparislerin etkilenmedigi; "Vazgeç" ve "Sil". X ve Esc
- * vazgecer. Govde ortak (ConfirmPanel, T11.17'de kart silme de kullanir).
- * Durumsuz: silmeyi sayfa yapar.
+ * Adres silme onayi (T11.15, T5; F13 ortak onay penceresi): "Adresi silmek
+ * istediğinden emin misin?", "Hayır" ve "Evet" (beklerken "Siliniyor…").
+ * Gorunen soru duz (PM S1 (a)); ekran okuyucu arkasinda adin adini duyar
+ * ("Ev"). Silmeyi sayfa yapar; etiketler icerikten (kanca).
  */
 export function DeleteAddressDialog({
   texts,
-  closeLabel,
   address,
   pending,
   error,
   onConfirm,
   onCancel,
 }: DeleteAddressDialogProps) {
+  const labels = useConfirmContent();
   return (
-    <Dialog
-      title={texts.confirmTitle}
-      close={{ label: closeLabel, onAction: onCancel, disabled: pending }}
-    >
-      <ConfirmPanel
-        subject={address.title}
-        questionSuffix={texts.confirmQuestionSuffix}
-        hint={texts.confirmHint}
-        error={error}
-        pending={pending}
-        confirmLabel={texts.confirmLabel}
-        pendingLabel={texts.deletingLabel}
-        cancelLabel={texts.cancelLabel}
-        onConfirm={onConfirm}
-        onCancel={onCancel}
-      />
-    </Dialog>
+    <ConfirmDialog
+      question={texts.confirmQuestion}
+      spokenDetail={address.title}
+      error={error}
+      pending={pending}
+      yesLabel={labels.yesLabel}
+      noLabel={labels.noLabel}
+      pendingLabel={texts.deletingLabel}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    />
   );
 }

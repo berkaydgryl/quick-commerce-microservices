@@ -3,6 +3,7 @@ import { useId } from 'react';
 import { Link } from 'react-router-dom';
 
 import { statusGroup, wasRefunded } from '../../features/orders/services/order-status';
+import { paymentLabel } from '../../features/orders/services/payment-label';
 import { OrderStatusLabel } from '../../features/orders/ui/OrderStatusLabel';
 import { ChevronLeftIcon } from '../../features/profile/ui/icons';
 import { formatDateTime, formatMoney } from '../../shared/services/format';
@@ -24,7 +25,8 @@ export interface OrderDetailViewProps {
 
 /**
  * Siparis detayi (T11.16; /hesabim/siparislerim/:id): ustte listeye donus,
- * market adi ve durum; tarih ve teslimat adresi; urunler (adet, ad, tutar);
+ * market adi ve durum; tarih, teslimat adresi ve odeme (F12: kart ya da
+ * kapida nakit/kart; eski sipariste yok); urunler (adet, ad, tutar);
  * tutar dokumu. Iptal edilen sipariste her urunde "Teslim edilmedi" (siparis
  * duzeyi, #91: kalem duzeyinde teslim bilgisi yok). Durumsuz.
  */
@@ -38,6 +40,7 @@ export function OrderDetailView({
 }: OrderDetailViewProps) {
   const titleId = useId();
   const itemsId = useId();
+  const payment = paymentLabel(order?.payment, texts);
 
   return (
     <section
@@ -72,6 +75,12 @@ export function OrderDetailView({
               <dt>{texts.addressLabel}</dt>
               <dd>{order.address.line}</dd>
             </div>
+            {payment !== undefined && (
+              <div className={styles['c-order-detail__fact']}>
+                <dt>{texts.paymentLabel}</dt>
+                <dd>{payment}</dd>
+              </div>
+            )}
           </dl>
           <OrderLines texts={texts} order={order} headingId={itemsId} />
           <OrderTotals texts={texts} order={order} />

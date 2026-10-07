@@ -69,6 +69,8 @@ type Welcome struct {
 	Footer   Footer   `json:"footer"`
 	// Checkout, odeme sayfasi (T17.1).
 	Checkout Checkout `json:"checkout"`
+	// Confirm, ortak onay penceresinin dugmeleri (F13).
+	Confirm Confirm `json:"confirm"`
 }
 
 // Header, ust bar: logonun iki parcasi ve iki dugme.

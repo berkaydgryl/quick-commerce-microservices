@@ -20,6 +20,14 @@
   margin-block-end: var(--space-2);
 }
 
+/*
+ * Market kapali (07.10): gorsel ve rozet gri tonlu; ad ve fiyat ayni renkte (opaklik yok,
+ * karsitlik dusmez). Eylem haric: pasif "+" kendi grisinde, calisan "−" ve cop renkli kalir.
+ */
+.c-product-card.is-closed .c-product-card__media > :not(.c-product-card__action) {
+  filter: grayscale(1);
+}
+
 .c-product-card__action {
   position: absolute;
   inset-block-start: 0;

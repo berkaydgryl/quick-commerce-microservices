@@ -1,6 +1,7 @@
 /*
  * Urunun sepet dugmesi (T16.2; referans getircarsi): beyaz kare kutuda mor "+",
- * adet kutusunun bir hucresi buyuklugunde. Basilamayan durumlar gri etiket.
+ * adet kutusunun bir hucresi buyuklugunde. Basilamayan durumlar gri etiket;
+ * market kapaliyken "+" gri (aria-disabled; 07.10).
  */
 .c-product-cart-action__add {
   display: grid;
@@ -24,7 +25,12 @@
   opacity: var(--opacity-disabled);
 }
 
-.c-product-cart-action__add:hover:not(:disabled) {
+.c-product-cart-action__add[aria-disabled='true'] {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.c-product-cart-action__add:hover:not(:disabled, [aria-disabled='true']) {
   background: var(--color-brand-primary-subtle);
 }
 

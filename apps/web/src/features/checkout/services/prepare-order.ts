@@ -4,7 +4,6 @@ import type {
   Money,
   ReserveCartRequest,
   SavedAddress,
-  SavedCard,
 } from '@getir/contracts';
 import { CURRENCY } from '@getir/core';
 import type { CartTotals } from '@getir/pricing';
@@ -14,16 +13,18 @@ import type { CartItem } from '../../cart/services/cart-state';
 import type { CheckoutForm } from './checkout-rules';
 import { orderBlocker } from './order-readiness';
 import { buildOrderRequest } from './order-request';
+import type { PaymentChoice } from './payment-choice';
 import { buildReserveRequest } from './reserve-request';
 
 export interface PrepareOrderInput {
   readonly form: CheckoutForm;
-  readonly card: SavedCard | undefined;
+  /** Sayfadaki odeme secimi (F12): kart ya da kapida odeme. */
+  readonly payment: PaymentChoice | undefined;
   readonly address: SavedAddress | undefined;
   readonly market: Market | undefined;
   readonly items: readonly CartItem[];
   readonly totals: CartTotals | undefined;
-  /** Kart kasasi bu pakette acik mi (__CARD_VAULT__). */
+  /** Kart kasasi bu pakette acik mi (__CARD_VAULT__): kartla odeme yalnizca acikken. */
   readonly vaultOpen: boolean;
 }
 
@@ -33,14 +34,15 @@ export interface PreparedOrder {
 }
 
 /**
- * Istek atilmadan HEMEN ONCEKI son kapi (T12.4; QA N3): kart kasasi kapaliysa,
- * kart, hesap adresi, market ya da kurallar yoksa, herhangi bir eksik kosul
+ * Istek atilmadan HEMEN ONCEKI son kapi (T12.4; QA N3): odeme secilmediyse,
+ * kartla odemede kasa kapaliysa (kapida odeme kasasiz da verilir; F12), hesap
+ * adresi, market ya da kurallar yoksa, herhangi bir eksik kosul
  * varsa (hediye hatasi, sozlesme onaysiz, minimum, kapali) undefined: istek
  * ATILMAZ. Dugmenin pasifligine guvenilmez; ayni kosul fonksiyonu (orderBlocker).
  */
 export function prepareOrder({
   form,
-  card,
+  payment,
   address,
   market,
   items,
@@ -48,8 +50,8 @@ export function prepareOrder({
   vaultOpen,
 }: PrepareOrderInput): PreparedOrder | undefined {
   if (
-    !vaultOpen ||
-    card === undefined ||
+    payment === undefined ||
+    (payment.kind === 'card' && !vaultOpen) ||
     address === undefined ||
     market === undefined ||
     totals === undefined
@@ -58,7 +60,7 @@ export function prepareOrder({
   }
   const blocker = orderBlocker({
     form,
-    cardId: card.id,
+    hasPayment: true,
     hasAddress: true,
     canCheckout: totals.canCheckout,
     marketOpen: market.isOpen,
@@ -69,6 +71,6 @@ export function prepareOrder({
   const expectedTotal: Money = { amountMinor: totals.totalMinor, currency: CURRENCY };
   return {
     request: buildReserveRequest(market.id, items, address, expectedTotal),
-    orderBody: (orderId) => buildOrderRequest(orderId, card.id, form),
+    orderBody: (orderId) => buildOrderRequest(orderId, payment, form),
   };
 }

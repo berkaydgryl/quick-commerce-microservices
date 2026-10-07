@@ -1,6 +1,6 @@
 /**
- * gRPC testlerinin ortak istek kaliplari. Market kimlikleri demo verisindendir
- * (src/infrastructure/fixtures).
+ * gRPC testlerinin ortak istek kaliplari. Market kimlikleri ve sayilari KLASIK
+ * demo kumesindendir (classic-catalog.ts; gRPC sunucusu o kumeyle kosar).
  */
 
 import type { catalogV1 } from '@getir/proto';

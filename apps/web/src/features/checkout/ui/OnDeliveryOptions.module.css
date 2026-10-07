@@ -1,0 +1,63 @@
+/*
+ * "Kapıda Ödeme" (F12): kart listesinin ("Online Ödeme") gorunumuyle ayni baslik ve
+ * satirlar; satir ince cizgiyle ayrilir. Reddedildiyse (422) grup pasif ve not gorunur.
+ */
+.c-on-delivery {
+  min-inline-size: 0;
+  padding: 0;
+  margin: 0;
+  border: none;
+}
+
+.c-on-delivery__legend {
+  padding: 0;
+  margin-block-end: var(--space-2);
+  font-weight: var(--font-weight-extrabold);
+}
+
+.c-on-delivery__rows {
+  display: grid;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.c-on-delivery__row {
+  display: flex;
+  align-items: center;
+  padding-block: var(--space-3);
+}
+
+.c-on-delivery__row + .c-on-delivery__row {
+  border-block-start: var(--border-width-thin) solid var(--border-faint);
+}
+
+.c-on-delivery__option {
+  display: flex;
+  flex: 1;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: var(--size-touch-min);
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+}
+
+.c-on-delivery__radio {
+  flex-shrink: 0;
+  inline-size: var(--size-checkbox);
+  block-size: var(--size-checkbox);
+  margin: 0;
+  cursor: inherit;
+  accent-color: var(--color-brand-primary);
+}
+
+.c-on-delivery:disabled .c-on-delivery__option {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.c-on-delivery__notice {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}

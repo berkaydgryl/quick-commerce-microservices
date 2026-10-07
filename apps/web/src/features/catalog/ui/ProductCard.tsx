@@ -15,6 +15,8 @@ interface ProductCardProps {
   readonly action?: ReactNode;
   /** "Son 3 adet" rozetinin metinleri (T16.3). */
   readonly texts: { readonly lowStockPrefix: string; readonly lowStockSuffix: string };
+  /** Market kapali (07.10): gorsel ve "+" gri; ad ve fiyat okunakli kalir. */
+  readonly closed?: boolean | undefined;
 }
 
 /**
@@ -25,9 +27,9 @@ interface ProductCardProps {
  * ISTENMEZ, yoksa her urun 404 verirdi (K2). Stok azsa sol ustte "Son N adet"
  * (T16.3).
  */
-export function ProductCard({ product, category, action, texts }: ProductCardProps) {
+export function ProductCard({ product, category, action, texts, closed }: ProductCardProps) {
   return (
-    <li className={styles['c-product-card']}>
+    <li className={`${styles['c-product-card']} ${closed === true ? styles['is-closed'] : ''}`}>
       <div className={styles['c-product-card__media']}>
         <CategoryIcon
           name={category?.name ?? product.name}

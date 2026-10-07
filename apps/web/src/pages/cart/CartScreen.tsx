@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom';
 
 import { TrashIcon } from '../../features/address/ui/icons';
 import { DeliveryAddressSection } from '../../features/address/ui/DeliveryAddressSection';
+import { useCartMarketClosed } from '../../features/cart/hooks/useCartMarketClosed';
 import { useCartTotals } from '../../features/cart/hooks/useCartTotals';
 import { canIncrement } from '../../features/cart/services/cart-state';
 import type { CartMarket } from '../../features/cart/services/cart-state';
@@ -44,6 +45,7 @@ export function CartScreen({ page, list, marketTexts, setup }: CartScreenProps) 
   const items = useCartStore((cart) => cart.items);
   const clear = useCartStore((cart) => cart.clear);
   const totals = useCartTotals();
+  const closed = useCartMarketClosed();
   const [confirming, setConfirming] = useState(false);
 
   if (market === null || items.length === 0) {
@@ -80,7 +82,7 @@ export function CartScreen({ page, list, marketTexts, setup }: CartScreenProps) 
             {page.clearLabel}
           </button>
         </div>
-        <CartItemsSection market={market} list={list} marketTexts={marketTexts} />
+        <CartItemsSection market={market} list={list} marketTexts={marketTexts} closed={closed} />
       </div>
       <div className={styles['c-cart-page__side']}>
         {setup !== undefined && (
@@ -98,11 +100,12 @@ export function CartScreen({ page, list, marketTexts, setup }: CartScreenProps) 
           texts={page}
           cartTexts={list.cart}
           checkoutHref={CHECKOUT_PATH}
+          closed={closed}
         />
       </div>
       {confirming && (
         <ClearCartDialog
-          texts={list.cart}
+          question={list.cart.clearConfirmQuestion}
           onConfirm={() => {
             clear();
             setConfirming(false);
@@ -118,10 +121,12 @@ interface CartItemsSectionProps {
   readonly market: CartMarket;
   readonly list: MarketListContent;
   readonly marketTexts: MarketPageContent;
+  /** Market kapali (07.10): "+" kapali; "−" ve cop calisir (sepetten cikarabilsin). */
+  readonly closed: boolean;
 }
 
 /** Magaza kutusu: depoyu ve marketin kategorilerini (satirin gorseli, K2) baglar. */
-function CartItemsSection({ market, list, marketTexts }: CartItemsSectionProps) {
+function CartItemsSection({ market, list, marketTexts, closed }: CartItemsSectionProps) {
   const items = useCartStore((cart) => cart.items);
   const increment = useCartStore((cart) => cart.increment);
   const decrement = useCartStore((cart) => cart.decrement);
@@ -150,7 +155,7 @@ function CartItemsSection({ market, list, marketTexts }: CartItemsSectionProps) 
           />
         );
       }}
-      canIncrement={(offerId) => canIncrement({ market, items }, offerId)}
+      canIncrement={(offerId) => canIncrement({ market, items }, offerId, closed)}
       onIncrement={increment}
       onDecrement={decrement}
     />

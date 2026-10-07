@@ -5,14 +5,14 @@ henüz sahibi ayakta olmayan veri ve bu düzenin açıklaması var.
 
 ## Kim neyi yükler
 
-| Veri                                        | Sahibi (ADR-05) | Nerede                                                             | Ne zaman yüklenir                                 |
-| ------------------------------------------- | --------------- | ------------------------------------------------------------------ | ------------------------------------------------- |
-| 13 kategori, 49 ürün, 21 market, 166 teklif | catalog         | `apps/catalog-service/src/infrastructure/fixtures/`                | `pnpm seed` (T4.1, pazaryeri T4.8)                |
-| 3 hazır adres                               | gateway (users) | `apps/gateway/internal/persona/addresses.json`                     | `pnpm seed:personas` (T8.1) — `users.addresses[]` |
-| 5 persona hesabı + Ali'nin 3 ek hesabı      | gateway (users) | `apps/gateway/internal/persona/personas.json`                      | `pnpm seed:personas` (T8.1); MOCK'ta açılışta     |
-| Personaların sipariş geçmişi                | order           | `apps/order-service/src/infrastructure/fixtures/persona-orders.ts` | `pnpm seed:personas` (T8.1); MOCK'ta açılışta     |
-| Stok                                        | inventory       | —                                                                  | T9.1                                              |
-| 63 kurye (marketlerin yakını) + 21 konum    | courier         | `apps/courier-service/src/infrastructure/fixtures/couriers.ts`     | `pnpm seed` (T13.1; havuz ve konumlar T13.2)      |
+| Veri                                          | Sahibi (ADR-05) | Nerede                                                             | Ne zaman yüklenir                                 |
+| --------------------------------------------- | --------------- | ------------------------------------------------------------------ | ------------------------------------------------- |
+| 13 kategori, 122 ürün, 33 market, 1505 teklif | catalog         | `apps/catalog-service/src/infrastructure/fixtures/`                | `pnpm seed` (T4.1, pazaryeri T4.8)                |
+| 3 hazır adres                                 | gateway (users) | `apps/gateway/internal/persona/addresses.json`                     | `pnpm seed:personas` (T8.1) — `users.addresses[]` |
+| 5 persona hesabı + Ali'nin 3 ek hesabı        | gateway (users) | `apps/gateway/internal/persona/personas.json`                      | `pnpm seed:personas` (T8.1); MOCK'ta açılışta     |
+| Personaların sipariş geçmişi                  | order           | `apps/order-service/src/infrastructure/fixtures/persona-orders.ts` | `pnpm seed:personas` (T8.1); MOCK'ta açılışta     |
+| Stok                                          | inventory       | —                                                                  | T9.1                                              |
+| 99 kurye (marketlerin yakını) + 33 konum      | courier         | `apps/courier-service/src/infrastructure/fixtures/couriers.ts`     | `pnpm seed` (T13.1; havuz ve konumlar T13.2)      |
 
 **Neden veri servisin içinde (roadmap `infra/seed/data/*.json` diyordu):**
 

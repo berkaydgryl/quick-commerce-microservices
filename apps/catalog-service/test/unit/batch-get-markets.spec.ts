@@ -6,10 +6,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBatchGetMarkets } from '../../src/application/batch-get-markets.js';
-import { MARKETS } from '../../src/infrastructure/fixtures.js';
 import { createInMemoryReaders } from '../../src/infrastructure/memory/in-memory-catalog.js';
+import { CLASSIC_SNAPSHOT } from '../support/classic-catalog.js';
 
-const { markets } = createInMemoryReaders();
+const { markets: MARKETS } = CLASSIC_SNAPSHOT;
+
+const { markets } = createInMemoryReaders(CLASSIC_SNAPSHOT);
 const batchGetMarkets = createBatchGetMarkets({ markets });
 
 describe('batchGetMarkets', () => {

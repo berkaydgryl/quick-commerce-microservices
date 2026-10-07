@@ -308,12 +308,16 @@ katmanındadır.
 | Hook'lar     | `useCartTotals`, `useAddToCart`, `useCartStorageSync`          | Toplam; onay bekleyen market değişimi; sekmeler arası eşitleme                            |
 | Düğmeler     | `ProductCartAction`, `CartQuantityStepper`, `CartSwitchDialog` | "+" ya da adet kutusu (ürün kartında dikey, arama satırında yatay; T16.2), onay penceresi |
 
-- **Tek market:** sepette Migros ürünü varken A101'den eklemede ekleme **yapılmaz**, ekranın ortasında
-  onay penceresi açılır ("Sepeti boşalt" penceresinin kabuğu: karartma, odak pencerede, Esc ve X = Vazgeç):
-  "Sepetinde Migros Jet – Moda ürünleri var. Sepeti boşaltıp A101 – Caferağa ile devam edilsin mi?"
-  Mor "Evet" sepeti boşaltıp ürünü ekler, "Vazgeç" bir şey değiştirmez; açılınca odak "Vazgeç"te, kapanınca
-  tıklanan "+"ya (Evet'te aynı ürünün "adedini artır"ına) döner. Mağaza sayfası ve arama sonuçları aynı
-  pencereyi (`CartSwitchDialog`) kullanır. ("-den/-dan/-ndan" eki ada göre değiştiği için "ile" kullanıldı.)
+- **Tek market:** sepette Migros ürünü varken A101'den eklemede ekleme **yapılmaz**; ortak onay penceresi
+  açılır (F13): "Sepetinde başka bir marketin ürünleri var. Sepeti boşaltıp bu marketten devam etmek
+  istediğinden emin misin?" (içerikten). "Evet" sepeti boşaltıp ürünü ekler; "Hayır", Esc ve karartma bir şey
+  değiştirmez; açılınca odak "Hayır"da, kapanınca tıklanan "+"ya (Evet'te aynı ürünün "adedini artır"ına)
+  döner. Mağaza sayfası ve arama sonuçları aynı pencereyi (`CartSwitchDialog`) kullanır.
+- **Ortak onay penceresi (F13; 07.10 kullanıcı isteği):** bütün silme onayları (sepeti boşalt/temizle, kartı
+  sil, adresi sil, ödemede kartı sil) ve market değiştirme `shared/ui/confirm-panel/ConfirmDialog.tsx`:
+  koyu örtü, ortada beyaz kutu, tek soru; solda beyaz zeminli mor çerçeveli "Hayır", sağda dolu mor "Evet"
+  (içerik `confirm`). "Hayır", Esc ve örtüye tıklama iptal (işlem sürerken üçü de kapalı); odak açılışta
+  "Hayır"da, kapanınca açan düğmede. Soru silinen şeye göre ekranın içerik bloğunda.
 - **Kalem teklif kimliğiyle (`offerId`) tanınır**, ürün kimliğiyle değil: aynı ürünün her markette aynı
   `prd_` kimliği var. Ürün kimliğiyle tanımak A101 sayfasında Migros sepetindeki adedi gösteriyor ve "−"
   Migros kalemini azaltıyordu (canlı denemede bulundu, regresyon testi var).
@@ -417,17 +421,17 @@ sepet çubuğunun "Sepete git"i buraya gelir.
 `/odeme`; referans getirçarşı ödeme sayfası, **kampanya yok**. Sepet sayfasının "Ödemeye Geç"i buraya gelir (minimum
 sepet tutmazsa pasif). Oturum ister; sepet boşsa `/sepet`'e döner. Sade bar ve alt bilgi sepet sayfasıyla aynı.
 
-| Bölge                  | Dosya                                                                                                          | İş                                                                                                        |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Ekran                  | `pages/checkout/CheckoutPage.tsx`, `CheckoutScreen.tsx`                                                        | Solda bölümler, sağda adres ve özet (7:3); form hataları alan terk edilince                               |
-| Hediye                 | `features/checkout/ui/GiftSection.tsx`, `PresetNoteDialog.tsx`                                                 | Evet/Hayır anahtarı, hazır notlar, not (0/250), gönderen, zorunlu alıcı adı ve telefonu                   |
-| Teslimat ve not        | `DeliveryMethodSection.tsx`, `NoteSection.tsx`                                                                 | Tek seçili seçenek (etiketsiz); sipariş notu (0/250) ve "Zili Çalma"                                      |
-| Ödeme yöntemi          | `hooks/useSelectedCard.ts`, `ui/PaymentMethodView.tsx`                                                         | Seçilen kart (geçerliyse), yoksa süresi geçmemiş en yeni kart; "Değiştir" ve "Kart ekle" pencereyi açar   |
-| Ödeme yöntemi seç (F5) | `ui/PaymentMethodDialog.tsx`, `PaymentMethodList.tsx`, `services/method-dialog.ts`                             | Tek pencere, üç adım: liste (radyo grubu), kart ekleme (`AddCardForm variant="checkout"`), silme onayı    |
-| Sipariş akışı (T12.4)  | `hooks/useCheckoutOrder.ts`, `useOrderFlow.ts`, `services/place-order.ts`, `order-request.ts`, `held-order.ts` | Rezervasyon → sipariş (sözleşmenin gövdesi) → 3DS; kart 404'ünde sipariş tutulur; başarıda sipariş detayı |
-| 3DS (T12.4)            | `ui/ThreeDsStep.tsx`, `ThreeDsDialog.tsx`, `services/countdown.ts`                                             | 6 haneli kod, geri sayım (son 30 sn uyarı), kalan hak; Vazgeç/süre dolunca rezervasyon bırakılır          |
-| Özet                   | `OrderSummaryCard.tsx`, `AgreementField.tsx`                                                                   | Sepet Tutarı, Teslimat Ücreti, Ödenecek Tutar; sözleşme onayı; "Sipariş Ver" (pasif)                      |
-| Kurallar               | `features/checkout/services/checkout-rules.ts`, `selected-card.ts`                                             | Sözleşmeden (`@getir/contracts` checkout-rules): not ≤250, ad ≤60, alıcı adı ve cep telefonu zorunlu      |
+| Bölge                  | Dosya                                                                                                          | İş                                                                                                                                                                                                 |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ekran                  | `pages/checkout/CheckoutPage.tsx`, `CheckoutScreen.tsx`                                                        | Solda bölümler, sağda adres ve özet (7:3); form hataları alan terk edilince                                                                                                                        |
+| Hediye                 | `features/checkout/ui/GiftSection.tsx`, `PresetNoteDialog.tsx`                                                 | Evet/Hayır anahtarı, hazır notlar, not (0/250), gönderen, zorunlu alıcı adı ve telefonu                                                                                                            |
+| Teslimat ve not        | `DeliveryMethodSection.tsx`, `NoteSection.tsx`                                                                 | Tek seçili seçenek (etiketsiz); sipariş notu (0/250) ve "Zili Çalma"                                                                                                                               |
+| Ödeme yöntemi          | `hooks/useSelectedPayment.ts`, `ui/PaymentMethodView.tsx`, `ui/OnDeliveryOptions.tsx`                          | Kart (seçilen ya da süresi geçmemiş en yeni) ya da kapıda ödeme (nakit / POS; F12); "Değiştir" / "Seç" pencereyi açar; orta riskte 422: taslak tutulur, kartla verilir (kasasız pakette bırakılır) |
+| Ödeme yöntemi seç (F5) | `ui/PaymentMethodDialog.tsx`, `PaymentMethodList.tsx`, `services/method-dialog.ts`                             | Tek pencere: liste (radyo grubu), kart ekleme (`AddCardForm variant="checkout"`); silme onayı listenin üstünde ortak onay penceresi (F13)                                                          |
+| Sipariş akışı (T12.4)  | `hooks/useCheckoutOrder.ts`, `useOrderFlow.ts`, `services/place-order.ts`, `order-request.ts`, `held-order.ts` | Rezervasyon → sipariş (sözleşmenin gövdesi) → 3DS; kart 404'ünde sipariş tutulur; başarıda sipariş detayı                                                                                          |
+| 3DS (T12.4)            | `ui/ThreeDsStep.tsx`, `ThreeDsDialog.tsx`, `services/countdown.ts`                                             | 6 haneli kod, geri sayım (son 30 sn uyarı), kalan hak; Vazgeç/süre dolunca rezervasyon bırakılır                                                                                                   |
+| Özet                   | `OrderSummaryCard.tsx`, `AgreementField.tsx`                                                                   | Sepet Tutarı, Teslimat Ücreti, Ödenecek Tutar; sözleşme onayı; "Sipariş Ver" (pasif)                                                                                                               |
+| Kurallar               | `features/checkout/services/checkout-rules.ts`, `selected-card.ts`                                             | Sözleşmeden (`@getir/contracts` checkout-rules): not ≤250, ad ≤60, alıcı adı ve cep telefonu zorunlu                                                                                               |
 
 - **Kart kasası production paketinde kapalı** (`__CARD_VAULT__`, K1 (a)): kart bölümü orada kart okumaz ("Kayıtlı
   kartın yok"); kasa açılana kadar production'da sipariş verilemez. Kasanın ucu paket taramasıyla denetlenir.
@@ -569,15 +573,15 @@ yüze dönme. Hareket azaltma açıkken dönme yerine solma; eğim, ışık, par
   Koşulları'nı okudum, kabul ediyorum" (bağlantı içerikteki koşulları pencerede açar), tam genişlik "Devam", sağ altta
   kabul edilen kartlar. Kart geniş ekranda (`--bp-xl`) kutunun sağında yapışkan, dar ekranda Güvenlik kutusunun altında.
 
-| Parça      | Dosya                                                                                | Not                                                                                                         |
-| ---------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| Kart       | `features/cards/ui/CardVisual.tsx`                                                   | Büyük (Kart Ekle); iç ölçüler kartın genişliğine oranlı (`cqi`), ölçü ve renkler `payment-card/tokens.css`  |
-| Kart yüzü  | `features/cards/services/card-face.ts`                                               | Yalnızca ilk 4 ve son 4 hane, aradakiler "•"; liste numarası yıldızlı; kısa ad "Visa •••• 4242"             |
-| Form       | `features/cards/ui/AddCardForm.tsx`, `hooks/useCardForm.ts`, `services/card-form.ts` | Parçalar: `SecurityNotice`, `CardNumberField`, `ExpirySelects`, `TermsField`, `FormAlert`, `AcceptedBrands` |
-| Kurallar   | `@getir/contracts` `card-rules.ts`                                                   | Cümleler, marka uzunlukları (`BRAND_LENGTHS`), yıl seçenekleri (`cardExpiryYears`, İstanbul takvimi)        |
-| Liste      | `pages/account/PaymentMethodsView.tsx`, `features/cards/ui/BrandLogo.tsx`            | Satırlar; çöp kutusunun adı karttan ("Visa •••• 4242 kartını sil")                                          |
-| Veri       | `features/cards/api`, `hooks/useSavedCards`, `useAddCard`, `useDeleteCard`           | `GET`/`POST`/`DELETE /v1/me/cards`; anahtarlar kullanıcıya bağlı                                            |
-| Pencereler | `features/cards/ui/DeleteCardDialog.tsx`, `TermsDialog.tsx`                          | Ortak kabuk `shared/ui/dialog/Dialog.tsx` (adres ve profil de kullanır), onay gövdesi `ConfirmPanel`        |
+| Parça      | Dosya                                                                                | Not                                                                                                              |
+| ---------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| Kart       | `features/cards/ui/CardVisual.tsx`                                                   | Büyük (Kart Ekle); iç ölçüler kartın genişliğine oranlı (`cqi`), ölçü ve renkler `payment-card/tokens.css`       |
+| Kart yüzü  | `features/cards/services/card-face.ts`                                               | Yalnızca ilk 4 ve son 4 hane, aradakiler "•"; liste numarası yıldızlı; kısa ad "Visa •••• 4242"                  |
+| Form       | `features/cards/ui/AddCardForm.tsx`, `hooks/useCardForm.ts`, `services/card-form.ts` | Parçalar: `SecurityNotice`, `CardNumberField`, `ExpirySelects`, `TermsField`, `FormAlert`, `AcceptedBrands`      |
+| Kurallar   | `@getir/contracts` `card-rules.ts`                                                   | Cümleler, marka uzunlukları (`BRAND_LENGTHS`), yıl seçenekleri (`cardExpiryYears`, İstanbul takvimi)             |
+| Liste      | `pages/account/PaymentMethodsView.tsx`, `features/cards/ui/BrandLogo.tsx`            | Satırlar; çöp kutusunun adı karttan ("Visa •••• 4242 kartını sil")                                               |
+| Veri       | `features/cards/api`, `hooks/useSavedCards`, `useAddCard`, `useDeleteCard`           | `GET`/`POST`/`DELETE /v1/me/cards`; anahtarlar kullanıcıya bağlı                                                 |
+| Pencereler | `features/cards/ui/DeleteCardDialog.tsx`, `TermsDialog.tsx`                          | Ortak kabuk `shared/ui/dialog/Dialog.tsx` (adres ve profil de kullanır), silme onayı ortak `ConfirmDialog` (F13) |
 
 - **Numara ve CVV yalnızca form durumunda (M7):** kart görseline maskeli gider; sorgu ve mutasyon önbelleğine, tarayıcı
   deposuna, adrese ve Idempotency-Key'e girmez. Kaydetme bu yüzden `useMutation` değil (`saveCard`): mutasyon önbelleği
@@ -625,7 +629,7 @@ kabında; görsel dil Adreslerim'in.
 | Sayfa       | `pages/account/AddressesPage.tsx`                        | Birleştirir: liste, T11.8'in penceresi (ekleme ve düzenleme modu), silme onayı      |
 | Liste       | `pages/account/AddressesView.tsx`                        | Durumsuz; satırlar radyo grubu (satıra tıklamak seçer), sağda onay ya da çöp, kalem |
 | Düzenleme   | `features/address/ui/AddressSetupDialog.tsx` (`editing`) | Harita adresin noktasında; nokta değişmediyse satır korunur (`isSamePoint`, ~1 m)   |
-| Silme onayı | `features/address/ui/DeleteAddressDialog.tsx`            | Küçük pencere: "<ad> adresini silmek istiyor musun?", Vazgeç / Sil                  |
+| Silme onayı | `features/address/ui/DeleteAddressDialog.tsx`            | Ortak onay penceresi (F13): "Adresi silmek istediğinden emin misin?", Hayır / Evet  |
 | Veri        | `hooks/useUpdateAddress.ts`, `hooks/useDeleteAddress.ts` | `PUT`/`DELETE /v1/me/addresses/{addressId}`; cevap güncel defter, önbelleğe yazılır |
 
 - **Kararlar (5 Ekim, hepsi (a)):** seçili adreste yeşil onay, diğerlerinde çöp kutusu; seçili adres düzenleme

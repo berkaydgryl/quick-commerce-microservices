@@ -166,6 +166,7 @@ const WELCOME: WelcomeContent = {
   cartPage: CONTENT_FALLBACK.cartPage,
   footer: CONTENT_FALLBACK.footer,
   checkout: CONTENT_FALLBACK.checkout,
+  confirm: CONTENT_FALLBACK.confirm,
 };
 
 const withMarketList = (marketList: Partial<WelcomeContent['marketList']>) => ({

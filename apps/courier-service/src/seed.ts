@@ -1,6 +1,6 @@
 /**
  * Seed giris noktasi: demo kuryelerini ve market konumu kopyasini bastan yazar
- * (katalogdaki her marketin yakinina uc kurye, hepsi IDLE; 21 marketin konumu).
+ * (katalogdaki her marketin yakinina uc kurye, hepsi IDLE; 33 marketin konumu).
  *
  *   pnpm seed                                    (kokten; once derler)
  *   pnpm --filter @getir/courier-service seed    (derlenmis dist'ten)

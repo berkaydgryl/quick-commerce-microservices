@@ -16,10 +16,12 @@ interface CartTotalsCardProps {
     CartPageContent,
     'totalsTitle' | 'subtotalLabel' | 'freeDeliveryRemainingLabel' | 'checkoutLabel'
   >;
-  /** "Minimum sepet tutarına kalan" (sepet paneliyle ayni metin). */
-  readonly cartTexts: Pick<MarketListCartContent, 'minBasketRemainingLabel'>;
+  /** "Minimum sepet tutarına kalan" ve "Market şu an kapalı" (sepet paneliyle ayni metinler). */
+  readonly cartTexts: Pick<MarketListCartContent, 'minBasketRemainingLabel' | 'closedNotice'>;
   /** Odeme sayfasi (T17.1); sayfa verir: sepet odeme sayfasini tanimaz. */
   readonly checkoutHref: string;
+  /** Sepetin marketi kapali (07.10): not ve "Ödemeye Geç" PASIF. */
+  readonly closed?: boolean | undefined;
 }
 
 /**
@@ -27,10 +29,18 @@ interface CartTotalsCardProps {
  * altinda minimum sepete ve ucretsiz teslimata kalan (T16.3 olcutu), sonra mor
  * "Ödemeye Geç": odeme sayfasina (T17.1) baglanti. Minimum sepet tutmazsa ya
  * da kurallar gelmediyse PASIF (aria-disabled): odeme sayfasinda da siparis
- * verilemezdi. Hesap @getir/pricing'te; durumsuz.
+ * verilemezdi. Market kapaliysa (07.10) de PASIF ve notu gorunur. Hesap
+ * @getir/pricing'te; durumsuz.
  */
-export function CartTotalsCard({ totals, texts, cartTexts, checkoutHref }: CartTotalsCardProps) {
+export function CartTotalsCard({
+  totals,
+  texts,
+  cartTexts,
+  checkoutHref,
+  closed = false,
+}: CartTotalsCardProps) {
   const titleId = useId();
+  const closedId = useId();
   return (
     <section className={styles['c-cart-totals']} aria-labelledby={titleId}>
       <h2 id={titleId} className={styles['c-cart-totals__title']}>
@@ -43,7 +53,12 @@ export function CartTotalsCard({ totals, texts, cartTexts, checkoutHref }: CartT
             <span className={styles['c-cart-totals__amount']}>{money(totals.subtotalMinor)}</span>
           )}
         </p>
-        {totals !== undefined && !totals.canCheckout && (
+        {closed && (
+          <p id={closedId} className={styles['c-cart-totals__notice']}>
+            {cartTexts.closedNotice}
+          </p>
+        )}
+        {!closed && totals !== undefined && !totals.canCheckout && (
           <p className={styles['c-cart-totals__notice']}>
             {cartTexts.minBasketRemainingLabel}:{' '}
             <span className={styles['c-cart-totals__nowrap']}>
@@ -51,7 +66,7 @@ export function CartTotalsCard({ totals, texts, cartTexts, checkoutHref }: CartT
             </span>
           </p>
         )}
-        {totals !== undefined && totals.amountToFreeDeliveryMinor > 0 && (
+        {!closed && totals !== undefined && totals.amountToFreeDeliveryMinor > 0 && (
           <p className={styles['c-cart-totals__notice']}>
             {texts.freeDeliveryRemainingLabel}:{' '}
             <span className={styles['c-cart-totals__nowrap']}>
@@ -60,12 +75,17 @@ export function CartTotalsCard({ totals, texts, cartTexts, checkoutHref }: CartT
           </p>
         )}
       </div>
-      {totals?.canCheckout === true ? (
+      {!closed && totals?.canCheckout === true ? (
         <Link to={checkoutHref} className={styles['c-cart-totals__checkout']}>
           {texts.checkoutLabel}
         </Link>
       ) : (
-        <button type="button" className={styles['c-cart-totals__checkout']} aria-disabled="true">
+        <button
+          type="button"
+          className={styles['c-cart-totals__checkout']}
+          aria-disabled="true"
+          aria-describedby={closed ? closedId : undefined}
+        >
           {texts.checkoutLabel}
         </button>
       )}

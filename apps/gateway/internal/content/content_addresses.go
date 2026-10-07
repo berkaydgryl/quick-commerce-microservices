@@ -5,23 +5,19 @@ package content
 // onayi. *Suffix alanlari adin arkasina eklenir ("Ev adresini düzenle").
 // Yalnizca metin; kural yok.
 type Addresses struct {
-	Title                 string             `json:"title"`
-	LoadingLabel          string             `json:"loadingLabel"`
-	EmptyNotice           string             `json:"emptyNotice"`
-	SelectedLabel         string             `json:"selectedLabel"`
-	EditSuffix            string             `json:"editSuffix"`
-	DeleteSuffix          string             `json:"deleteSuffix"`
-	AddOptions            []AddressAddOption `json:"addOptions"`
-	EditTitle             string             `json:"editTitle"`
-	DeleteLabel           string             `json:"deleteLabel"`
-	ConfirmTitle          string             `json:"confirmTitle"`
-	ConfirmQuestionSuffix string             `json:"confirmQuestionSuffix"`
-	ConfirmHint           string             `json:"confirmHint"`
-	ConfirmLabel          string             `json:"confirmLabel"`
-	DeletingLabel         string             `json:"deletingLabel"`
-	CancelLabel           string             `json:"cancelLabel"`
-	DeletedToastSuffix    string             `json:"deletedToastSuffix"`
-	UpdatedToast          string             `json:"updatedToast"`
+	Title              string             `json:"title"`
+	LoadingLabel       string             `json:"loadingLabel"`
+	EmptyNotice        string             `json:"emptyNotice"`
+	SelectedLabel      string             `json:"selectedLabel"`
+	EditSuffix         string             `json:"editSuffix"`
+	DeleteSuffix       string             `json:"deleteSuffix"`
+	AddOptions         []AddressAddOption `json:"addOptions"`
+	EditTitle          string             `json:"editTitle"`
+	DeleteLabel        string             `json:"deleteLabel"`
+	ConfirmQuestion    string             `json:"confirmQuestion"`
+	DeletingLabel      string             `json:"deletingLabel"`
+	DeletedToastSuffix string             `json:"deletedToastSuffix"`
+	UpdatedToast       string             `json:"updatedToast"`
 }
 
 // AddressAddOption, Adreslerim'in ekleme satiri: tur ve metni ("Ev adresi ekle").

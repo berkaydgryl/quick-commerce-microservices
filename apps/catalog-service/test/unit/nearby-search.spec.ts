@@ -12,8 +12,10 @@ import type { Market, Offer } from '../../src/domain/catalog.js';
 import type { MarketDistance } from '../../src/domain/market-coverage.js';
 import { buildNearbySearchResults, marketNameMatches } from '../../src/domain/nearby-search.js';
 import type { NearbySearchResult } from '../../src/domain/nearby-search.js';
-import { MARKETS } from '../../src/infrastructure/fixtures.js';
 import { createInMemoryReaders } from '../../src/infrastructure/memory/in-memory-catalog.js';
+import { CLASSIC_SNAPSHOT } from '../support/classic-catalog.js';
+
+const { markets: MARKETS } = CLASSIC_SNAPSHOT;
 
 function demoMarket(id: string): Market {
   const found = MARKETS.find((candidate) => candidate.id === id);
@@ -31,7 +33,7 @@ function at(target: Market, distanceMeters: number): MarketDistance {
 
 /** Gercek teklifler: kural onlari yalnizca tasir, icerigine bakmaz. */
 async function someOffers(count: number): Promise<readonly Offer[]> {
-  const { offers } = createInMemoryReaders();
+  const { offers } = createInMemoryReaders(CLASSIC_SNAPSHOT);
   const page = await offers.listOffers(
     { marketId: 'mkt_migros-jet-moda' },
     { size: count, token: '' },

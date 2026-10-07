@@ -1,6 +1,6 @@
 /**
  * Demo kuryeleri (T13.1; havuz T13.2): katalogdaki her marketin YAKININA
- * DEMO_COURIERS_PER_MARKET_AREA kurye (21 x 3 = 63; Kadikoy 30, Besiktas 33).
+ * DEMO_COURIERS_PER_MARKET_AREA kurye (33 x 3 = 99; Kadikoy 48, Besiktas 51).
  * Kurye markete bagli degildir; yalnizca baslangic konumu bir marketin
  * 40-150 m yakininda, belirlenimci bir noktadir. Hepsi IDLE baslar.
  *
@@ -53,11 +53,25 @@ export const MARKET_LOCATIONS: readonly {
   { marketId: 'mkt_abbasaga-firini', lat: 41.0478, lng: 28.9996 },
   { marketId: 'mkt_pati-pet-shop-besiktas', lat: 41.0505, lng: 29.0035 },
   { marketId: 'mkt_lale-cicekcilik', lat: 41.0416, lng: 28.996 },
+  // Urun ve magaza cesitliligi (07.10): var olan markalarin yeni subeleri.
+  { marketId: 'mkt_bim-yeldegirmeni', lat: 40.9965, lng: 29.03 },
+  { marketId: 'mkt_carrefour-express-kadikoy', lat: 40.9975, lng: 29.0215 },
+  { marketId: 'mkt_a101-hasanpasa', lat: 40.9925, lng: 29.0395 },
+  { marketId: 'mkt_sok-feneryolu', lat: 40.9815, lng: 29.0445 },
+  { marketId: 'mkt_kardesler-manavi-hasanpasa', lat: 40.995, lng: 29.044 },
+  { marketId: 'mkt_bahariye-firini-yeldegirmeni', lat: 40.9958, lng: 29.0335 },
+  { marketId: 'mkt_sok-turkali', lat: 41.0475, lng: 28.9965 },
+  { marketId: 'mkt_a101-dikilitas', lat: 41.0525, lng: 29.0045 },
+  { marketId: 'mkt_migros-jet-ortakoy', lat: 41.048, lng: 29.0215 },
+  { marketId: 'mkt_carrefour-express-akaretler', lat: 41.0395, lng: 28.9955 },
+  { marketId: 'mkt_carsi-manavi-ortakoy', lat: 41.0495, lng: 29.0235 },
+  { marketId: 'mkt_barbaros-kasabi-balmumcu', lat: 41.056, lng: 29.0095 },
 ];
 
 /**
  * Istemcide gorunen adlar ("ad + soyadin bas harfi"); gercek kisi degil. Her
- * markette sirayla bir ad ve bir bas harf: 21 ad x 3 harf = 63 tekil ad.
+ * markette sirayla bir ad ve bir bas harf: 21 ad x 5 harf = 105 tekil ada (35 market)
+ * (ilk 63'u T13.1'deki adlar: harfler sona eklenir).
  */
 const FIRST_NAMES: readonly string[] = [
   'Mehmet',
@@ -82,9 +96,9 @@ const FIRST_NAMES: readonly string[] = [
   'Derya',
   'Baris',
 ];
-const INITIALS: readonly string[] = ['K.', 'D.', 'T.'];
+const INITIALS: readonly string[] = ['K.', 'D.', 'T.', 'A.', 'S.'];
 
-/** n. kuryenin adi (0'dan): ad n mod 21, bas harf n / 21; 63'e kadar tekil. */
+/** n. kuryenin adi (0'dan): ad n mod 21, bas harf n / 21; 105'e kadar tekil. */
 function courierName(n: number): string {
   const first = FIRST_NAMES[n % FIRST_NAMES.length] ?? 'Kurye';
   const initial = INITIALS[Math.floor(n / FIRST_NAMES.length) % INITIALS.length] ?? '';

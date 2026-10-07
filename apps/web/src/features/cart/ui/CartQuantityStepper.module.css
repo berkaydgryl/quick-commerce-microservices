@@ -29,12 +29,14 @@
   border: none;
 }
 
-.c-cart-stepper__step:disabled {
+/* Sebebi soylenen pasif "+" (kapali market, 07.10) ayni gorunur ama odakta kalir. */
+.c-cart-stepper__step:disabled,
+.c-cart-stepper__step[aria-disabled='true'] {
   cursor: not-allowed;
   opacity: var(--opacity-disabled);
 }
 
-.c-cart-stepper__step:hover:not(:disabled) {
+.c-cart-stepper__step:hover:not(:disabled, [aria-disabled='true']) {
   background: var(--color-brand-primary-subtle);
 }
 

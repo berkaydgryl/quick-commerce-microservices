@@ -18,12 +18,14 @@ import { useCartStore } from '../../features/cart/stores/useCartStore';
 import { useCheckoutForm } from '../../features/checkout/hooks/useCheckoutForm';
 import { useCheckoutOrder } from '../../features/checkout/hooks/useCheckoutOrder';
 import { useMethodDialog } from '../../features/checkout/hooks/useMethodDialog';
-import { useSelectedCard } from '../../features/checkout/hooks/useSelectedCard';
+import { useSelectedPayment } from '../../features/checkout/hooks/useSelectedPayment';
 import { giftFieldErrors } from '../../features/checkout/services/checkout-rules';
+import type { PaymentChoice } from '../../features/checkout/services/payment-choice';
 import type { GiftFieldErrors } from '../../features/checkout/services/checkout-rules';
 import { DeliveryMethodSection } from '../../features/checkout/ui/DeliveryMethodSection';
 import { GiftSection } from '../../features/checkout/ui/GiftSection';
 import { NoteSection } from '../../features/checkout/ui/NoteSection';
+import { OnDeliveryDialog } from '../../features/checkout/ui/OnDeliveryDialog';
 import { OrderSummaryCard } from '../../features/checkout/ui/OrderSummaryCard';
 import { PaymentMethodDialog } from '../../features/checkout/ui/PaymentMethodDialog';
 import { PaymentMethodView } from '../../features/checkout/ui/PaymentMethodView';
@@ -48,9 +50,11 @@ interface CheckoutScreenProps {
 /**
  * Odeme sayfasinin govdesi (T17.1; T12.4 siparis akisi): solda Hediye
  * Bilgileri, Teslimat Yöntemi, Not Ekle ve Ödeme Yöntemi; sagda adres ve Ödeme
- * Özeti; 3DS gerekirse pencere. "Değiştir" ve "Kart ekle" odeme yontemi
- * penceresini acar (F5; yalnizca kasa acik pakette: production'da pencere
- * pakete girmez). Formun hatalari alan terk edilince gorunur.
+ * Özeti; 3DS gerekirse pencere. "Değiştir" / "Seç" odeme yontemi penceresini
+ * acar (F5): kasa acik pakette kartlar ve "Kapıda Ödeme", kasa kapali pakette
+ * (production) yalniz "Kapıda Ödeme" (F12; kart bilesenleri pakete girmez).
+ * Kapida odeme orta risk bandinda reddedilirse (422) secim karta doner ve
+ * pencere acilir. Formun hatalari alan terk edilince gorunur.
  * Sepet bossa sepet sayfasina doner (siparis tamamlanip sepet bosaldiysa
  * donmez: sipariş detayina gidiliyor).
  */
@@ -66,21 +70,33 @@ export function CheckoutScreen({
   const userId = useSessionStore((state) => state.user?.id ?? '');
   const totals = useCartTotals();
   const checkout = useCheckoutForm();
-  const selected = useSelectedCard(userId);
+  const payment = useSelectedPayment(userId);
+  const selected = payment.cards;
   const { delivery, addresses } = useAddressBook();
+  const methods = useMethodDialog();
   const order = useCheckoutOrder({
     form: checkout.form,
-    card: selected.card,
+    payment: payment.choice,
     address: selectedAddress(addresses, delivery),
     market,
     items,
     totals,
     texts,
+    onMethodRefused: () => {
+      payment.dropOnDelivery();
+      methods.open('list');
+    },
   });
   const [touched, setTouched] = useState<ReadonlySet<keyof GiftFieldErrors>>(new Set());
-  const methods = useMethodDialog();
   const { state } = order.flow;
-  const canPickCard = __CARD_VAULT__ && state.kind === 'idle';
+  // Belirsiz sonuc (503) beklerken ('placing') secim degismez: ayni siparis ayni
+  // deneme anahtariyla AYNI govdeyle yeniden denenir (farkli govde 409 ya da cift siparis).
+  const canPick = state.kind === 'idle' && order.flow.reservation.phase.kind !== 'placing';
+  const refusal = order.flow.onDeliveryRefusal;
+  const choose = (choice: PaymentChoice) => {
+    payment.choose(choice);
+    methods.close();
+  };
 
   if (items.length === 0 && state.kind !== 'done') {
     return <Navigate to={CART_PATH} replace />;
@@ -118,11 +134,11 @@ export function CheckoutScreen({
               <QueryError error={selected.error} onRetry={selected.retry} />
             )
           }
+          choice={payment.choice}
           card={selected.card}
           texts={texts}
           cardTexts={cardTexts}
-          onChange={canPickCard ? () => methods.open('list') : undefined}
-          onAdd={canPickCard ? () => methods.open('add') : undefined}
+          onChange={canPick ? () => methods.open('list') : undefined}
           actionRef={methods.actionRef}
         />
       </div>
@@ -157,14 +173,21 @@ export function CheckoutScreen({
       {__CARD_VAULT__ && methods.start !== null && (
         <PaymentMethodDialog
           userId={userId}
-          appliedId={selected.card?.id}
+          applied={payment.choice}
+          refusedNotice={refusal}
           start={methods.start}
           texts={texts}
           cardTexts={cardTexts}
-          onChoose={(cardId) => {
-            selected.choose(cardId);
-            methods.close();
-          }}
+          onChoose={choose}
+          onClose={methods.close}
+        />
+      )}
+      {!__CARD_VAULT__ && methods.start !== null && (
+        <OnDeliveryDialog
+          applied={payment.choice?.kind === 'onDelivery' ? payment.choice.onDelivery : undefined}
+          refusedNotice={refusal}
+          texts={texts}
+          onChoose={choose}
           onClose={methods.close}
         />
       )}

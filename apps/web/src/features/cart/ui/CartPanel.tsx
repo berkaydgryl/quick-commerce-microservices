@@ -1,6 +1,7 @@
 import type { MarketListCartContent } from '@getir/contracts';
 import { useState } from 'react';
 
+import { useCartMarketClosed } from '../hooks/useCartMarketClosed';
 import { useCartTotals } from '../hooks/useCartTotals';
 import { canIncrement } from '../services/cart-state';
 import { useCartStore } from '../stores/useCartStore';
@@ -30,6 +31,7 @@ export function CartPanel({ texts, marketHref, cartHref, titleVisible }: CartPan
   const remove = useCartStore((cart) => cart.remove);
   const clear = useCartStore((cart) => cart.clear);
   const totals = useCartTotals();
+  const closed = useCartMarketClosed();
   const [confirming, setConfirming] = useState(false);
 
   return (
@@ -42,7 +44,8 @@ export function CartPanel({ texts, marketHref, cartHref, titleVisible }: CartPan
         marketHref={market === null ? undefined : marketHref(market.id)}
         cartHref={market === null ? undefined : cartHref(market.id)}
         titleVisible={titleVisible}
-        canIncrement={(offerId) => canIncrement({ market, items }, offerId)}
+        closed={closed}
+        canIncrement={(offerId) => canIncrement({ market, items }, offerId, closed)}
         onIncrement={increment}
         onDecrement={decrement}
         onRemove={remove}
@@ -50,7 +53,7 @@ export function CartPanel({ texts, marketHref, cartHref, titleVisible }: CartPan
       />
       {confirming && (
         <ClearCartDialog
-          texts={texts}
+          question={texts.clearConfirmQuestion}
           onConfirm={() => {
             clear();
             setConfirming(false);

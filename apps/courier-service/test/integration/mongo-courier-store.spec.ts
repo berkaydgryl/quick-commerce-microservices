@@ -61,6 +61,12 @@ import {
   TEST_MARKETS,
 } from '../support/couriers.js';
 
+/**
+ * Goc 0001'in yazdigi market sayisi: o gunun DONMUS listesi (ADR-19), 21 market.
+ * 07.10 subeleri goc ile degil seed ile gelir (demo verisi 33 market).
+ */
+const MIGRATION_0001_MARKET_COUNT = 21;
+
 const MONGO_IMAGE = 'mongo:7';
 const DB_NAME = 'getir_courier_test';
 
@@ -475,13 +481,13 @@ describe('acilis ve seed', () => {
       expect(await opened.routes.findByOrder(orderId())).toBeNull();
       expect(
         await connection.client.db(otherDb).collection(COLLECTIONS.MARKETS).countDocuments(),
-      ).toBe(MARKET_LOCATION_SEEDS.length);
+      ).toBe(MIGRATION_0001_MARKET_COUNT);
     } finally {
       await opened.close();
     }
   });
 
-  it('seed demo kuryelerini ve 21 marketi yazar; tekrar kosunca atanmis kurye IDLE a doner', async () => {
+  it('seed demo kuryelerini ve butun market konumlarini yazar; tekrar kosunca atanmis kurye IDLE a doner', async () => {
     const seed = createSeedCouriers({
       writer,
       seeds: COURIER_SEEDS,
@@ -490,7 +496,10 @@ describe('acilis ve seed', () => {
       clock: fixedClock(NOW_MS),
     });
 
-    expect(await seed()).toEqual({ markets: 21, couriers: 63 });
+    expect(await seed()).toEqual({
+      markets: MARKET_LOCATION_SEEDS.length,
+      couriers: COURIER_SEEDS.length,
+    });
     expect(await store.locate(FAR_MARKET)).toEqual(FAR_MARKET_LOCATION);
     const claimed = await store.claimNearest({
       orderId: orderId(),
@@ -503,7 +512,7 @@ describe('acilis ve seed', () => {
 
     await seed();
 
-    expect(await couriers.count({})).toBe(63);
-    expect(await couriers.count({ status: COURIER_STATUS.IDLE })).toBe(63);
+    expect(await couriers.count({})).toBe(COURIER_SEEDS.length);
+    expect(await couriers.count({ status: COURIER_STATUS.IDLE })).toBe(COURIER_SEEDS.length);
   });
 });
