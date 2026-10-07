@@ -218,7 +218,7 @@ Ana sayfanın ürün kategorileri şeridi kalktı (karşılama ekranının kateg
   ile aynıdır (contracts testi).
 - **Seçim adreste** (`?tur=`): geri tuşu bir önceki süzgece döner, adres paylaşılabilir. Bilinmeyen değer
   süzgeç yok sayılır. Türü bilinmeyen market (eski catalog-service) yalnızca süzgeçsiz listede görünür.
-- **Sepetim:** hesap `@getir/pricing`'te (`useCartTotals`); "Sepete git" sepetin marketinin sayfasına gider.
+- **Sepetim:** hesap `@getir/pricing`'te (`useCartTotals`); "Sepete git" sepet sayfasına (`/sepet`, T16.3) gider.
 - Favori, görünüm düğmeleri ve indirim rozeti yok (veri yok; T11.11 kararı 4).
 
 ## Favori marketler (T11.13)
@@ -288,14 +288,14 @@ Karar ve hesap **veri katmanında**, arayüz yalnızca çizer. Tasarım baştan 
 modal, çekmece, ayrı sepet sayfası) yalnızca `features/cart/ui/*` değişir; testlerin hepsi veri
 katmanındadır.
 
-| Katman       | Dosya                                                  | İş                                                                                   |
-| ------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| Saf kurallar | `features/cart/services/cart-state.ts`                 | Tek market + onay, adet (99 ya da stok) ve kalem (50) sınırı, satış durumu, `canAdd` |
-| Kalıcılık    | `features/cart/services/cart-persistence.ts`           | `getir.cart`: sürüm, 24 saat, okunan kaydın doğrulanması                             |
-| Toplam       | `features/cart/services/cart.service.ts`               | `@getir/pricing` `calculateCart`; kurallar **sepetin marketinden**                   |
-| Depo         | `features/cart/stores/useCartStore.ts`                 | Zustand; saf fonksiyonları bağlar, kural yazmaz                                      |
-| Hook'lar     | `useCartTotals`, `useAddToCart`, `useCartStorageSync`  | Toplam; onay bekleyen market değişimi; sekmeler arası eşitleme                       |
-| Kabuk        | `ProductCartAction`, `CartSwitchPrompt`, `CartSummary` | Ekle / − adet +, onay satırı, özet                                                   |
+| Katman       | Dosya                                                          | İş                                                                                     |
+| ------------ | -------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Saf kurallar | `features/cart/services/cart-state.ts`                         | Tek market + onay, adet (99 ya da stok) ve kalem (50) sınırı, satış durumu, `canAdd`   |
+| Kalıcılık    | `features/cart/services/cart-persistence.ts`                   | `getir.cart`: sürüm, 24 saat, okunan kaydın doğrulanması                               |
+| Toplam       | `features/cart/services/cart.service.ts`                       | `@getir/pricing` `calculateCart`; kurallar **sepetin marketinden**                     |
+| Depo         | `features/cart/stores/useCartStore.ts`                         | Zustand; saf fonksiyonları bağlar, kural yazmaz                                        |
+| Hook'lar     | `useCartTotals`, `useAddToCart`, `useCartStorageSync`          | Toplam; onay bekleyen market değişimi; sekmeler arası eşitleme                         |
+| Düğmeler     | `ProductCartAction`, `CartQuantityStepper`, `CartSwitchPrompt` | "+" ya da adet kutusu (ürün kartında dikey, arama satırında yatay; T16.2), onay satırı |
 
 - **Tek market:** sepette Migros ürünü varken A101'den eklemede ekleme **yapılmaz**, onay istenir:
   "Sepetinde Migros Jet – Moda ürünleri var. Sepeti boşaltıp A101 – Caferağa ile devam edilsin mi?"
@@ -356,10 +356,73 @@ katmanındadır.
 - **"Görünüm aynı" ölçülerek:** D11'de değişiklik öncesi ve sonrası 7 sahne başsız Chrome'da
   çekildi, görüntüler bayt bayt aynı çıktı (yöntem D11 raporunda).
 
+## Mağaza sayfası (T16.2)
+
+`/markets/:marketId`; referans getirçarşı işletme sayfası. Sayfa birleştirir: katalog sepeti, sepet katalogu,
+markets favorileri tanımaz.
+
+| Bölge         | Dosya                                                                        | İş                                                                                     |
+| ------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Ekran         | `pages/market/MarketPage.tsx`                                                | ≥64rem solda sayfa, sağda başlıksız Sepetim (3:1); altında tek sütun ve sepet çubuğu   |
+| Baş           | `features/markets/ui/MarketHeroSection.tsx`, `MarketHero.tsx`, `RatingStars` | Kapak + baş harf rozeti, ad, yıldızlar ve puan, kalp, süre ve min., açık/kapalı, rozet |
+| Hakkında      | `features/markets/ui/MarketAboutDialog.tsx`                                  | Marka, süre, minimum sepet, teslimat ücreti, ücretsiz teslimat eşiği                   |
+| Kategoriler   | `features/catalog/ui/MarketCategoryNav.tsx`                                  | Genişte dikey liste (görsel, ad, ok), dar ekranda kayan şerit; başta "Tümü"            |
+| Ürünler       | `MarketCatalogSection.tsx`, `MarketProductGrid.tsx`, `ProductCard.tsx`       | Başlık (kategori, "Tüm Ürünler" ya da "Arama Sonuçları"), kart ızgarası, "Daha fazla"  |
+| Sepet düğmesi | `features/cart/ui/ProductCartAction.tsx`                                     | "+"; sepetteyse Sepetim'in adet kutusu (dikey); ana sayfa aramasında aynı düğme yatay  |
+
+- **Metinler içerikten:** `marketPage` bloğu; puan, "Min.", "Kapalı", eşik, "Kategoriler", "Tümü" ve adet kutusunun
+  adları market listesiyle ortak (`marketList`). İçerik gelmezse yedek (`CONTENT_FALLBACK.marketPage`).
+- **Veri olmayanlar (B3, backend):** kapanış saati (yerine açık/kapalı), ürün görsel dosyaları (kartın görseli ürünün
+  kategorisinin; `product.imageUrl` istenmez, her ürün 404 verirdi), alt kategori (katalog düz) ve indirim verisi.
+- **Teslimat satırı etiketsiz** ("15-25 dk · Min. 40,00 TL"): kuryeyi platform atar (T13), "İşletme getirsin" değil.
+
+## Sepet sayfası (T16.3)
+
+`/sepet`; referans getirçarşı sepet sayfası. Oturum ister (girişle geri döner, `?next=/sepet`). Sepetim panelinin ve
+sepet çubuğunun "Sepete git"i buraya gelir.
+
+| Bölge        | Dosya                                                                            | İş                                                                                         |
+| ------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Ekran        | `pages/cart/CartPage.tsx`, `CartScreen.tsx`                                      | Sade bar + alt bilgi; ≥64rem solda sepet, sağda adres ve toplam (7:3); boş sepet           |
+| Sade bar     | `shared/ui/page-layout/PageLayout.tsx` (`variant="minimal"`), `DeliveryTimeChip` | Logo, beyaz kutuda teslimat adresi, sarı "TVS 20-30 dk" (sepetin marketi); arama yok       |
+| Sepet kutusu | `features/cart/ui/CartItemsCard.tsx`, `CartPageItem.tsx`                         | Mağaza (bağlantı), satır: kategori görseli, ad, mor tutar, "Son N adet", adet kutusu       |
+| Toplam       | `features/cart/ui/CartTotalsCard.tsx`                                            | "Sepet Tutarı", minimum sepete ve ücretsiz teslimata kalan, "Ödemeye Geç" (F4'e dek pasif) |
+| Adres        | `features/address/ui/DeliveryAddressSection.tsx`, `services/address-text.ts`     | Üst bardaki seçimle aynı adres; satır, bina, kat, daire                                    |
+| Alt bilgi    | `shared/ui/site-footer/SiteFooter.tsx`                                           | Telif satırı; sosyal ikon ve bağlantı gerçek adresler gelene kadar yok                     |
+
+- **"Son N adet"** (`shared/services/low-stock.ts`, N = 5): ürün kartında stok, sepet satırında kalemin stok sınırı.
+  Bilgi amaçlı; bağlayıcı kontrol rezervasyonda (ADR-13).
+- **Satırın görseli** kategorinin (ürün görselleri yok, B3): kalem eklenirken kategorisi yazılır (`categoryId`, isteğe
+  bağlı; eski sepetler korunur). Satır sonunda ayrı çöp kutusu yok (referans).
+- **Metinler içerikten:** `cartPage` ve `footer` blokları; onay penceresi, adet kutusu, boş sepet ve minimum sepet
+  metinleri Sepetim paneliyle ortak (`marketList.cart`).
+
+## Ödeme sayfası (T17.1)
+
+`/odeme`; referans getirçarşı ödeme sayfası, **kampanya yok**. Sepet sayfasının "Ödemeye Geç"i buraya gelir (minimum
+sepet tutmazsa pasif). Oturum ister; sepet boşsa `/sepet`'e döner. Sade bar ve alt bilgi sepet sayfasıyla aynı.
+
+| Bölge           | Dosya                                                                       | İş                                                                                      |
+| --------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Ekran           | `pages/checkout/CheckoutPage.tsx`, `CheckoutScreen.tsx`                     | Solda bölümler, sağda adres ve özet (7:3); form hataları alan terk edilince             |
+| Hediye          | `features/checkout/ui/GiftSection.tsx`, `PresetNoteDialog.tsx`              | Evet/Hayır anahtarı, hazır notlar, not (0/250), gönderen, zorunlu alıcı adı ve telefonu |
+| Teslimat ve not | `DeliveryMethodSection.tsx`, `NoteSection.tsx`                              | Tek seçili seçenek (etiketsiz); sipariş notu (0/250) ve "Zili Çalma"                    |
+| Ödeme yöntemi   | `PaymentMethodSection.tsx`, `SavedCardPayment.tsx`, `PaymentMethodView.tsx` | Süresi geçmemiş en yeni kart; "Değiştir" ve "Kart ekle" F5'e kadar pasif                |
+| Özet            | `OrderSummaryCard.tsx`, `AgreementField.tsx`                                | Sepet Tutarı, Teslimat Ücreti, Ödenecek Tutar; sözleşme onayı; "Sipariş Ver" (pasif)    |
+| Kurallar        | `features/checkout/services/checkout-rules.ts`, `selected-card.ts`          | B2 taslağı: not ≤250, ad ≤60, alıcı adı ve cep telefonu zorunlu (hediye açıkken)        |
+
+- **Kart kasası production paketinde kapalı** (`__CARD_VAULT__`, K1 (a)): kart bölümü orada kart okumaz ("Kayıtlı
+  kartın yok"); kasa açılana kadar production'da sipariş verilemez. Kasanın ucu paket taramasıyla denetlenir.
+- **Kişisel veri** (alıcı adı ve telefonu, notlar) yalnızca form durumunda yaşar (`useCheckoutForm`); depoya,
+  önbelleğe ve adrese yazılmaz. Kartın yalnızca ilk 4 ve son 4 hanesi görünür; PAN ve CVV bu sayfada yok (M7).
+- **Sözleşme metinleri demo** yer tutucu (`checkout.preInfoParagraphs`, `distanceSalesParagraphs`); gerçek metin
+  içerikten değişir.
+- **Sipariş akışı** (rezervasyon, sipariş, 3DS, hata bildirimleri) ayrı PR'da (T12.4); backend `cardId` ve hediye
+  alanlarını (B1, B2) aldıktan sonra gerçek uca bağlanır.
+
 ## Market ekranları (T5.4) — tasarımsız kabuk
 
-Ekranların **görsel tasarımı kullanıcının kararıdır** ve zamanı gelince yapılacak (T16.2). Bu görev
-yalnızca veri katmanını ve okunur bir kabuğu kurar; yeni görsel karar yoktur, mevcut token'lar kullanılır.
+Market sayfasının görsel tasarımı T16.2'de geldi (yukarıda). Bu bölüm T5.4'ün veri katmanı kararlarını tutar.
 
 - **Konum:** seçili teslimat adresi (T9.5, `features/address`); oturumsuzken varsayılan "Ev".
 - **Ana sayfa ve `/markets`:** market listesi (T11.12, yukarıda; ana sayfada liste başlığı h2, `/markets`'ta

@@ -26,11 +26,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SETTLEMENT } from '../../src/application/stock-reservations.js';
 import type { ReserveStockRequest } from '../../src/application/stock-reservations.js';
 import { GrpcStockReservations } from '../../src/infrastructure/inventory/grpc-stock-reservations.js';
+import {
+  cutAfterReach,
+  DEADLINE_TIMEOUT_MS,
+  FUNCTIONAL_TIMEOUT_MS,
+  HeldReplies,
+  REACH_BUDGET_MS,
+} from '../support/held-replies.js';
 
-/** Davranis testleri: yuklu makinede de asilmayacak kadar bol. */
-const CALL_TIMEOUT_MS = 5_000;
-/** Yalnizca sure siniri testinin istemcisi. */
-const SHORT_TIMEOUT_MS = 200;
 const scope = { requestId: 'req_stok_1', logger: silentLogger };
 const EXPIRES_AT = new Date('2026-10-02T10:10:00.000Z');
 /** Siparisin bildigi kilit bitisi: uzatmada beklenen bitis olarak gider (T15.3). */
@@ -57,8 +60,8 @@ const ORDER = {
   /** Beklenen bitis tutmadi (T15.3): expiry_mismatch. */
   MOVED: 'ord_kaydi',
 } as const;
-/** Yavas sunucunun bekletilen cevaplari: test sonunda birakilir. */
-const heldSlowReplies: (() => void)[] = [];
+/** Yavas siparisin bekletilen istekleri (cevap verilmez; kimlik ve kalan sure kaydedilir, #113). */
+const held = new HeldReplies();
 let flakyReserves = 0;
 let flakyExtends = 0;
 let flakyShortens = 0;
@@ -95,6 +98,11 @@ const implementation = {
     call: ServerUnaryCall<inventoryV1.ReserveRequest, inventoryV1.ReserveResponse>,
     callback: sendUnaryData<inventoryV1.ReserveResponse>,
   ): void => {
+    // Yavas siparis kayda YAZILMADAN bekletilir: gec gelen deneme baska testin at(-1)'ini bozmasin.
+    if (call.request.orderId === ORDER.SLOW) {
+      held.hold(call);
+      return;
+    }
     record(call);
     if (call.request.orderId === ORDER.FLAKY) {
       flakyReserves += 1;
@@ -120,12 +128,6 @@ const implementation = {
         return;
       case ORDER.NO_EXPIRY:
         callback(null, inventoryV1.ReserveResponse.fromPartial({}));
-        return;
-      case ORDER.SLOW:
-        // Cevap istemcinin suresi icinde HIC gelmez: sure siniri oranla degil olayla.
-        heldSlowReplies.push(() =>
-          callback(null, { expiresAt: EXPIRES_AT, alreadyReserved: false }),
-        );
         return;
       default:
         callback(null, { expiresAt: EXPIRES_AT, alreadyReserved: false });
@@ -221,12 +223,11 @@ beforeAll(async () => {
       },
     ],
   });
-  stock = new GrpcStockReservations(`127.0.0.1:${handle.port}`, CALL_TIMEOUT_MS);
-  shortStock = new GrpcStockReservations(`127.0.0.1:${handle.port}`, SHORT_TIMEOUT_MS);
+  stock = new GrpcStockReservations(`127.0.0.1:${handle.port}`, FUNCTIONAL_TIMEOUT_MS);
+  shortStock = new GrpcStockReservations(`127.0.0.1:${handle.port}`, DEADLINE_TIMEOUT_MS);
 });
 
 afterAll(async () => {
-  for (const reply of heldSlowReplies.splice(0)) reply();
   stock?.close();
   shortStock?.close();
   await handle?.shutdown('test bitti');
@@ -304,11 +305,17 @@ describe('GrpcStockReservations.reserve', () => {
     expect(error.code).toBe(ERROR_CODES.INTERNAL);
   });
 
-  it('sure siniri dolarsa SERVICE_UNAVAILABLE (sunucu cevap vermez)', async () => {
-    const error = await rejectionOf(shortStock.reserve(reserveRequest(ORDER.SLOW), scope));
+  it('sure siniri dolarsa SERVICE_UNAVAILABLE (sunucu cevap vermez); istemci KENDI kisa sinirini gonderir', async () => {
+    const { error, reply } = await cutAfterReach(
+      (requestId) =>
+        shortStock.reserve(reserveRequest(ORDER.SLOW), { requestId, logger: silentLogger }),
+      held,
+      REACH_BUDGET_MS,
+    );
 
-    expect(error.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
-    expect(heldSlowReplies.length).toBeGreaterThan(0);
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+    expect(reply.remainingMs).toBeLessThanOrEqual(DEADLINE_TIMEOUT_MS);
   });
 });
 
@@ -353,7 +360,7 @@ describe('GrpcStockReservations.commit / release', () => {
 
 describe('GrpcStockReservations - dayaniklilik (D17)', () => {
   it('Reserve siparise gore tekrar guvenli: ilk deneme duserse yeniden denenir, kilit alinir', async () => {
-    const resilient = new GrpcStockReservations(`127.0.0.1:${handle.port}`, 1_000, {
+    const resilient = new GrpcStockReservations(`127.0.0.1:${handle.port}`, FUNCTIONAL_TIMEOUT_MS, {
       breaker: new CircuitBreaker({ target: 'inventory', failureThreshold: 5, openMs: 60_000 }),
       retry: { target: 'inventory', maxRetries: 2, baseDelayMs: 1 },
     });
@@ -488,7 +495,7 @@ describe('GrpcStockReservations.extend / shorten (T11.3)', () => {
   });
 
   it('D17 ve T15.3: uzatma beklenen bitisle yeniden denenir; tekrar guncel bitisi alir (moved), kisaltma da denenir', async () => {
-    const resilient = new GrpcStockReservations(`127.0.0.1:${handle.port}`, 1_000, {
+    const resilient = new GrpcStockReservations(`127.0.0.1:${handle.port}`, FUNCTIONAL_TIMEOUT_MS, {
       breaker: new CircuitBreaker({ target: 'inventory', failureThreshold: 5, openMs: 60_000 }),
       retry: { target: 'inventory', maxRetries: 2, baseDelayMs: 1 },
     });

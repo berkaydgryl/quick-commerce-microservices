@@ -3,6 +3,8 @@ import { createBrowserRouter } from 'react-router-dom';
 import { ADDRESSES_PATH } from '../features/address/routes';
 import { AUTH_ROUTES } from '../features/auth/routes';
 import { ADD_CARD_PATH, PAYMENT_METHODS_PATH } from '../features/cards/routes';
+import { CART_PATH } from '../features/cart/routes';
+import { CHECKOUT_PATH } from '../features/checkout/routes';
 import { FAVORITES_PATH } from '../features/favorites/routes';
 import { ORDER_DETAIL_ROUTE, ORDERS_PATH } from '../features/orders/routes';
 import { AccountPage } from '../pages/account/AccountPage';
@@ -12,6 +14,8 @@ import { FavoritesPage } from '../pages/account/FavoritesPage';
 import { OrderDetailPage } from '../pages/account/OrderDetailPage';
 import { OrdersPage } from '../pages/account/OrdersPage';
 import { PaymentMethodsPage } from '../pages/account/PaymentMethodsPage';
+import { CartPage } from '../pages/cart/CartPage';
+import { CheckoutPage } from '../pages/checkout/CheckoutPage';
 import { ForgotPasswordPage } from '../pages/forgot-password/ForgotPasswordPage';
 import { LoginPage } from '../pages/login/LoginPage';
 import { MarketPage } from '../pages/market/MarketPage';
@@ -30,6 +34,10 @@ export const router = createBrowserRouter([
       { path: AUTH_ROUTES.welcome, element: <RootPage /> },
       { path: '/markets', element: <NearbyMarketsPage /> },
       { path: '/markets/:marketId', element: <MarketPage /> },
+      // Sepet sayfasi (T16.3): oturum ister, sayfa kendisi korur.
+      { path: CART_PATH, element: <CartPage /> },
+      // Odeme sayfasi (T17.1): oturum ister, sayfa kendisi korur.
+      { path: CHECKOUT_PATH, element: <CheckoutPage /> },
       { path: AUTH_ROUTES.login, element: <LoginPage /> },
       { path: AUTH_ROUTES.register, element: <RegisterPage /> },
       // Kodsuz sifre yenileme (T11.9): yalnizca gelistirme paketinde; production'da adres yok.

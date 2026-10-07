@@ -9,6 +9,12 @@
   box-shadow: var(--shadow-surface);
 }
 
+/* Urun kartinda (T16.2): ustte "+", ortada adet, altta "−". */
+.c-cart-stepper--vertical {
+  grid-template-rows: repeat(3, var(--size-cart-stepper));
+  grid-template-columns: var(--size-cart-stepper);
+}
+
 .c-cart-stepper__step {
   display: grid;
   place-items: center;

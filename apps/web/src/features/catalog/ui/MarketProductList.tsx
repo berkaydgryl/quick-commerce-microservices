@@ -3,14 +3,14 @@ import type { ReactNode } from 'react';
 
 import { formatMoney } from '../../../shared/services/format';
 
-import styles from './MarketCatalog.module.css';
+import styles from './MarketProductList.module.css';
 
 /**
- * Urun listesi - TASARIMSIZ KABUK (T5.4): ad ve BU MARKETIN fiyati (ADR-15).
- * Stok rozeti yok: "Son N adet" rozeti tasarimla (T16.3) eklenir. Satista
- * olmayan ve stogu biten teklif de listelenir; "Satista degil" (T7.6) ve
- * "Tukendi" (T8.4) durumlarini sepet eylemi cizer.
- * Sepet dugmeleri T6.4 ile, kart tasarimi T16.2 ile gelir.
+ * Urun satirlari (T5.4 kabugundan; T16.2'den beri yalnizca ana sayfa aramasi,
+ * T9.6): ad ve BU MARKETIN fiyati (ADR-15). Magaza sayfasi kart izgarasini
+ * kullanir (MarketProductGrid). "Son N adet" rozeti yalnizca magaza kartinda (T16.3).
+ * Satista olmayan ve stogu biten teklif de listelenir; "Satista degil" (T7.6)
+ * ve "Tukendi" (T8.4) durumlarini sepet eylemi cizer.
  */
 interface MarketProductListProps {
   readonly products: readonly Product[];
@@ -23,11 +23,11 @@ interface MarketProductListProps {
 
 export function MarketProductList({ products, renderAction }: MarketProductListProps) {
   return (
-    <ul className={styles['c-market-catalog__products']} role="list">
+    <ul className={styles['c-product-list']} role="list">
       {products.map((product) => (
-        <li key={product.offerId} className={styles['c-market-catalog__product']}>
+        <li key={product.offerId} className={styles['c-product-list__item']}>
           <span>{product.name}</span>
-          <span className={styles['c-market-catalog__price']}>{formatMoney(product.price)}</span>
+          <span className={styles['c-product-list__price']}>{formatMoney(product.price)}</span>
           {renderAction?.(product)}
         </li>
       ))}

@@ -1,0 +1,18 @@
+/* Onay kutusu (T17.1): kutu ve etiket tek satir, en az dokunma yuksekliginde. */
+.c-checkbox {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-block-size: var(--size-touch-min);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.c-checkbox__box {
+  flex-shrink: 0;
+  inline-size: var(--size-checkbox);
+  block-size: var(--size-checkbox);
+  margin: 0;
+  accent-color: var(--color-brand-primary);
+  cursor: pointer;
+}

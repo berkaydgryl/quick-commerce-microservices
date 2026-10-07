@@ -75,6 +75,26 @@ export function AppHeaderSearch() {
 }
 
 /**
+ * Sade barin teslimat adresi (T16.3; sepet ve odeme): aramadaki adres
+ * dugmesinin AYNISI, tek basina. Icerik gelene kadar yer yok.
+ */
+export function AppHeaderAddress() {
+  const { data: content } = useWelcomeContent();
+  const loginHref = loginPathFor(useLocation());
+  if (content === undefined) {
+    return null;
+  }
+  return (
+    <HeaderAddressPicker
+      content={content.appHeader}
+      setup={content.addressSetup}
+      closeLabel={content.loginCard.closeLabel}
+      loginHref={loginHref}
+    />
+  );
+}
+
+/**
  * Profil menusu: maddeler hesap sayfalarinin sol menusuyle AYNI listeden
  * (T11.16, accountMenuItems); burada yalnizca baglanir.
  */

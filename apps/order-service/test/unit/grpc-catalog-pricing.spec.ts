@@ -13,18 +13,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { ITEM_UNIT } from '../../src/domain/order-item.js';
 import { GrpcCatalogPricing } from '../../src/infrastructure/catalog/grpc-catalog-pricing.js';
-import { cutAfterReach, HeldReplies } from '../support/held-replies.js';
+import {
+  cutAfterReach,
+  DEADLINE_TIMEOUT_MS,
+  FUNCTIONAL_TIMEOUT_MS,
+  HeldReplies,
+  REACH_BUDGET_MS,
+} from '../support/held-replies.js';
 
-/**
- * Islevsel testlerin suresi COMERT (#113, E3 ile ayni desen): ilk cagri kanal kurulumunu da oder
- * ve yuklu makinede 200 ms'yi asabiliyordu ("Deadline exceeded after 0.191s", LB pick 0.163s).
- * Bu testler sureyi degil ceviriyi siner.
- */
-const FUNCTIONAL_TIMEOUT_MS = 5_000;
-/** Yalnizca sure siniri testinin kisa siniri; yavas marketin cevabi HIC gelmez. */
-const DEADLINE_TIMEOUT_MS = 200;
-/** Sure testinin zaman butcesi: istek sunucuya ulasana kadar tekrar (testTimeout'un altinda). */
-const REACH_BUDGET_MS = 5_000;
 /** Ayakta olmayan catalog: baglanti reddi aninda doner; sure sinirini beklemek bu sureyi asar. */
 const REFUSED_WITHIN_MS = 2_000;
 const SLOW_MARKET_ID = 'mkt_yavas';

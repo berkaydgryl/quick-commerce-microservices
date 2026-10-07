@@ -1,4 +1,5 @@
 import { useDeliveryLocation } from '../../features/address/hooks/useDeliveryLocation';
+import { cartPath } from '../../features/cart/routes';
 import { CartBar } from '../../features/cart/ui/CartBar';
 import { CartPanel } from '../../features/cart/ui/CartPanel';
 import { useFavoritesContent } from '../../features/content/hooks/useFavoritesContent';
@@ -32,9 +33,7 @@ export function MarketListingScreen({ headingLevel }: MarketListingScreenProps) 
         content={content}
         headingLevel={headingLevel}
         aside={
-          content && (
-            <CartPanel texts={content.cart} marketHref={marketPath} cartHref={marketPath} />
-          )
+          content && <CartPanel texts={content.cart} marketHref={marketPath} cartHref={cartPath} />
         }
         {...(favoriteTexts === undefined
           ? {}
@@ -44,7 +43,7 @@ export function MarketListingScreen({ headingLevel }: MarketListingScreenProps) 
               ),
             })}
       />
-      {content !== undefined && <CartBar texts={content.cart} cartHref={marketPath} />}
+      {content !== undefined && <CartBar texts={content.cart} cartHref={cartPath} />}
     </>
   );
 }

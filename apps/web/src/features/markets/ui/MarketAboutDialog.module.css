@@ -1,0 +1,30 @@
+/* "Hakkında" penceresi (T16.2): magazanin adi ve bilgileri; etiket solda, deger sagda. */
+.c-market-about {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.c-market-about__name {
+  font-weight: var(--font-weight-bold);
+}
+
+.c-market-about__facts {
+  display: grid;
+}
+
+.c-market-about__fact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  justify-content: space-between;
+  padding-block: var(--space-2);
+  font-size: var(--font-size-sm);
+}
+
+.c-market-about__fact + .c-market-about__fact {
+  border-block-start: var(--border-width-thin) solid var(--border-faint);
+}
+
+.c-market-about__value {
+  font-weight: var(--font-weight-semibold);
+}

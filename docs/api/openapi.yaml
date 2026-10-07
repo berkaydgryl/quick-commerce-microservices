@@ -3713,6 +3713,10 @@ components:
           accountMenu,
           orders,
           paymentMethods,
+          marketPage,
+          cartPage,
+          footer,
+          checkout,
         ]
       properties:
         header:
@@ -3766,6 +3770,14 @@ components:
           $ref: "#/components/schemas/OrdersContent"
         paymentMethods:
           $ref: "#/components/schemas/PaymentMethodsContent"
+        marketPage:
+          $ref: "#/components/schemas/MarketPageContent"
+        cartPage:
+          $ref: "#/components/schemas/CartPageContent"
+        footer:
+          $ref: "#/components/schemas/FooterContent"
+        checkout:
+          $ref: "#/components/schemas/CheckoutContent"
 
     FavoritesContent:
       type: object
@@ -4034,6 +4046,224 @@ components:
         favoritesLabel: { $ref: "#/components/schemas/ContentText" }
         ordersLabel: { $ref: "#/components/schemas/ContentText" }
         paymentMethodsLabel: { $ref: "#/components/schemas/ContentText" }
+
+    MarketPageContent:
+      type: object
+      description: |
+        Mağaza sayfası (T16.2; referans getirçarşı işletme sayfası): bilgi kartı ve
+        "Hakkında" penceresi, "Bu işletmede ara…", katalog başlıkları ve boş durumları,
+        ürün kartının sepet düğmesi. Puan, "Min.", "Kapalı", ücretsiz teslimat eşiği,
+        "Kategoriler", "Tümü" ve sepet metinleri `MarketListContent` ile ortaktır.
+      required:
+        [
+          infoLabel,
+          loadingLabel,
+          openLabel,
+          aboutLabel,
+          closeLabel,
+          brandLabel,
+          deliveryTimeLabel,
+          minBasketLabel,
+          deliveryFeeLabel,
+          freeDeliveryThresholdLabel,
+          searchLabel,
+          searchPlaceholder,
+          allProductsTitle,
+          searchResultsTitle,
+          searchEmptyNotice,
+          categoryEmptyNotice,
+          productsLoadingLabel,
+          moreLabel,
+          loadingMoreLabel,
+          addSuffix,
+          soldOutLabel,
+          unavailableLabel,
+          lowStockPrefix,
+          lowStockSuffix,
+        ]
+      properties:
+        infoLabel:
+          $ref: "#/components/schemas/ContentText"
+          description: 'Bilgi kartının erişilebilir adı: "İşletme bilgisi".'
+        loadingLabel: { $ref: "#/components/schemas/ContentText" }
+        openLabel:
+          $ref: "#/components/schemas/ContentText"
+          description: "Açık mağazanın durumu; kapalıda `MarketListContent.closedLabel`."
+        aboutLabel:
+          $ref: "#/components/schemas/ContentText"
+          description: '"Hakkında" bağlantısı ve penceresinin başlığı.'
+        closeLabel: { $ref: "#/components/schemas/ContentText" }
+        brandLabel: { $ref: "#/components/schemas/ContentText" }
+        deliveryTimeLabel: { $ref: "#/components/schemas/ContentText" }
+        minBasketLabel: { $ref: "#/components/schemas/ContentText" }
+        deliveryFeeLabel: { $ref: "#/components/schemas/ContentText" }
+        freeDeliveryThresholdLabel: { $ref: "#/components/schemas/ContentText" }
+        searchLabel: { $ref: "#/components/schemas/ContentText" }
+        searchPlaceholder: { $ref: "#/components/schemas/ContentText" }
+        allProductsTitle:
+          $ref: "#/components/schemas/ContentText"
+          description: "Kategori seçili değilken ızgaranın başlığı."
+        searchResultsTitle:
+          $ref: "#/components/schemas/ContentText"
+          description: "Arama varken ızgaranın başlığı."
+        searchEmptyNotice: { $ref: "#/components/schemas/ContentText" }
+        categoryEmptyNotice: { $ref: "#/components/schemas/ContentText" }
+        productsLoadingLabel: { $ref: "#/components/schemas/ContentText" }
+        moreLabel: { $ref: "#/components/schemas/ContentText" }
+        loadingMoreLabel: { $ref: "#/components/schemas/ContentText" }
+        addSuffix:
+          $ref: "#/components/schemas/ContentText"
+          description: 'Ürün kartının "+"sı, adın arkası: "Beyaz Peynir 500 g sepete ekle".'
+        soldOutLabel: { $ref: "#/components/schemas/ContentText" }
+        unavailableLabel: { $ref: "#/components/schemas/ContentText" }
+        lowStockPrefix:
+          $ref: "#/components/schemas/ContentText"
+          description: '"Son 3 adet" rozetinin sayıdan önceki kısmı (T16.3).'
+        lowStockSuffix: { $ref: "#/components/schemas/ContentText" }
+
+    CartPageContent:
+      type: object
+      description: |
+        Sepet sayfası (T16.3; `/sepet`; referans getirçarşı sepet sayfası): başlık ve "Sepeti temizle",
+        adres kartı, "Sepet Toplamı" kartı, "Ödemeye Geç", üst bardaki teslim süresi çipi ve boş sepetin
+        bağlantısı. Onay penceresi, adet kutusu ve minimum sepet metinleri `MarketListContent.cart` ile ortaktır.
+      required:
+        [
+          title,
+          clearLabel,
+          addressTitle,
+          addressLoadingLabel,
+          noAddressNotice,
+          totalsTitle,
+          subtotalLabel,
+          freeDeliveryRemainingLabel,
+          checkoutLabel,
+          deliveryTimeShortLabel,
+          deliveryTimeLabel,
+          browseMarketsLabel,
+        ]
+      properties:
+        title: { $ref: "#/components/schemas/ContentText" }
+        clearLabel: { $ref: "#/components/schemas/ContentText" }
+        addressTitle: { $ref: "#/components/schemas/ContentText" }
+        addressLoadingLabel: { $ref: "#/components/schemas/ContentText" }
+        noAddressNotice: { $ref: "#/components/schemas/ContentText" }
+        totalsTitle: { $ref: "#/components/schemas/ContentText" }
+        subtotalLabel: { $ref: "#/components/schemas/ContentText" }
+        freeDeliveryRemainingLabel: { $ref: "#/components/schemas/ContentText" }
+        checkoutLabel: { $ref: "#/components/schemas/ContentText" }
+        deliveryTimeShortLabel: { $ref: "#/components/schemas/ContentText" }
+        deliveryTimeLabel: { $ref: "#/components/schemas/ContentText" }
+        browseMarketsLabel: { $ref: "#/components/schemas/ContentText" }
+
+    FooterContent:
+      type: object
+      description: |
+        Sayfa alt bilgisi (T16.3; sepet ve ödeme sayfaları): telif satırı. Sosyal ikonlar ve bilgi
+        bağlantısı gerçek adresler verilene kadar yok.
+      required: [copyright]
+      properties:
+        copyright: { $ref: "#/components/schemas/ContentText" }
+
+    CheckoutContent:
+      type: object
+      description: |
+        Ödeme sayfası (T17.1; `/odeme`; referans getirçarşı ödeme sayfası; kampanya yok): hediye bilgileri,
+        teslimat yöntemi, sipariş notu ve "Zili Çalma", ödeme yöntemi, ödeme özeti, sözleşme onayı ve
+        pencereleri, "Sipariş Ver". Sözleşme paragrafları bugün demo yer tutucu.
+      required:
+        [
+          title,
+          giftTitle,
+          giftToggleLabel,
+          giftYesLabel,
+          giftNoLabel,
+          giftInfoLabel,
+          giftInfoText,
+          presetNoteLabel,
+          presetNotesTitle,
+          presetNotes,
+          giftMessageLabel,
+          senderNameLabel,
+          recipientNameLabel,
+          recipientPhoneLabel,
+          deliveryTitle,
+          deliveryFeeLabel,
+          freeDeliveryLabel,
+          noteTitle,
+          noteLabel,
+          notePlaceholder,
+          doNotRingLabel,
+          paymentTitle,
+          changeLabel,
+          addCardLabel,
+          cardsLoadingLabel,
+          noCardNotice,
+          securityNote,
+          summaryTitle,
+          subtotalLabel,
+          deliveryFeeRowLabel,
+          freeLabel,
+          payableLabel,
+          preInfoLinkLabel,
+          agreementJoiner,
+          distanceSalesLinkLabel,
+          agreementSuffix,
+          preInfoParagraphs,
+          distanceSalesParagraphs,
+          closeLabel,
+          placeOrderLabel,
+        ]
+      properties:
+        title: { $ref: "#/components/schemas/ContentText" }
+        giftTitle: { $ref: "#/components/schemas/ContentText" }
+        giftToggleLabel: { $ref: "#/components/schemas/ContentText" }
+        giftYesLabel: { $ref: "#/components/schemas/ContentText" }
+        giftNoLabel: { $ref: "#/components/schemas/ContentText" }
+        giftInfoLabel: { $ref: "#/components/schemas/ContentText" }
+        giftInfoText: { $ref: "#/components/schemas/ContentText" }
+        presetNoteLabel: { $ref: "#/components/schemas/ContentText" }
+        presetNotesTitle: { $ref: "#/components/schemas/ContentText" }
+        presetNotes:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/ContentText" }
+        giftMessageLabel: { $ref: "#/components/schemas/ContentText" }
+        senderNameLabel: { $ref: "#/components/schemas/ContentText" }
+        recipientNameLabel: { $ref: "#/components/schemas/ContentText" }
+        recipientPhoneLabel: { $ref: "#/components/schemas/ContentText" }
+        deliveryTitle: { $ref: "#/components/schemas/ContentText" }
+        deliveryFeeLabel: { $ref: "#/components/schemas/ContentText" }
+        freeDeliveryLabel: { $ref: "#/components/schemas/ContentText" }
+        noteTitle: { $ref: "#/components/schemas/ContentText" }
+        noteLabel: { $ref: "#/components/schemas/ContentText" }
+        notePlaceholder: { $ref: "#/components/schemas/ContentText" }
+        doNotRingLabel: { $ref: "#/components/schemas/ContentText" }
+        paymentTitle: { $ref: "#/components/schemas/ContentText" }
+        changeLabel: { $ref: "#/components/schemas/ContentText" }
+        addCardLabel: { $ref: "#/components/schemas/ContentText" }
+        cardsLoadingLabel: { $ref: "#/components/schemas/ContentText" }
+        noCardNotice: { $ref: "#/components/schemas/ContentText" }
+        securityNote: { $ref: "#/components/schemas/ContentText" }
+        summaryTitle: { $ref: "#/components/schemas/ContentText" }
+        subtotalLabel: { $ref: "#/components/schemas/ContentText" }
+        deliveryFeeRowLabel: { $ref: "#/components/schemas/ContentText" }
+        freeLabel: { $ref: "#/components/schemas/ContentText" }
+        payableLabel: { $ref: "#/components/schemas/ContentText" }
+        preInfoLinkLabel: { $ref: "#/components/schemas/ContentText" }
+        agreementJoiner: { $ref: "#/components/schemas/ContentText" }
+        distanceSalesLinkLabel: { $ref: "#/components/schemas/ContentText" }
+        agreementSuffix: { $ref: "#/components/schemas/ContentText" }
+        preInfoParagraphs:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/ContentText" }
+        distanceSalesParagraphs:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/ContentText" }
+        closeLabel: { $ref: "#/components/schemas/ContentText" }
+        placeOrderLabel: { $ref: "#/components/schemas/ContentText" }
 
     PaymentMethodsContent:
       type: object

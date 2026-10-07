@@ -19,3 +19,15 @@ export function ClearIcon() {
     </svg>
   );
 }
+
+/** "Tümü" (magaza sayfasinin kategori listesi, T16.2): dort kare. */
+export function GridIcon() {
+  return (
+    <svg {...STROKE_PROPS}>
+      <rect x="4" y="4" width="6.5" height="6.5" rx="1.5" />
+      <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" />
+      <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" />
+      <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" />
+    </svg>
+  );
+}

@@ -12,10 +12,13 @@ import { addressesContentSchema } from './addresses.js';
 import { appDownloadContentSchema, featureContentSchema } from './app-download.js';
 import { appHeaderContentSchema } from './app-header.js';
 import { bannerSchema } from './banner.js';
+import { cartPageContentSchema, footerContentSchema } from './cart-page.js';
+import { checkoutContentSchema } from './checkout.js';
 import { contentTextSchema } from './content-text.js';
 import { favoritesContentSchema } from './favorites.js';
 import { loginCardContentSchema } from './login-card.js';
 import { marketListContentSchema } from './market-list.js';
+import { marketPageContentSchema } from './market-page.js';
 import { ordersContentSchema } from './orders.js';
 import { paymentMethodsContentSchema } from './payment-methods.js';
 import { profileContentSchema } from './profile.js';
@@ -53,6 +56,13 @@ export const welcomeContentSchema = z.object({
   addresses: addressesContentSchema,
   /** Gecmis Siparislerim (T11.16). */
   orders: ordersContentSchema,
+  /** Magaza sayfasi (T16.2). */
+  marketPage: marketPageContentSchema,
+  /** Sepet sayfasi ve alt bilgi (T16.3). */
+  cartPage: cartPageContentSchema,
+  footer: footerContentSchema,
+  /** Odeme sayfasi (T17.1). */
+  checkout: checkoutContentSchema,
 });
 
 export type WelcomeContent = z.infer<typeof welcomeContentSchema>;

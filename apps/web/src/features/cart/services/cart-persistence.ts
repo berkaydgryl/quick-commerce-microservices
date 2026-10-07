@@ -18,6 +18,7 @@ import {
   CART_ITEM_MAX_QUANTITY,
   CART_ITEM_MIN_QUANTITY,
   CART_MAX_ITEMS,
+  categoryIdSchema,
   marketIdSchema,
   offerIdSchema,
   productIdSchema,
@@ -54,6 +55,8 @@ const persistedItemSchema = z.object({
     .min(CART_ITEM_MIN_QUANTITY)
     .max(CART_ITEM_MAX_QUANTITY)
     .default(CART_ITEM_MAX_QUANTITY),
+  /** T16.3'te eklendi; ISTEGE BAGLI (surum ayni): yoksa satirda bas harf. */
+  categoryId: categoryIdSchema.optional(),
 });
 
 const persistedCartSchema = z

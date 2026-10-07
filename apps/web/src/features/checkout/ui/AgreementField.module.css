@@ -1,0 +1,35 @@
+/* Sozlesme onayi (T17.1): kutu ve cumle; iki ad mor dugme. */
+.c-agreement {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  font-size: var(--font-size-sm);
+}
+
+.c-agreement__box {
+  flex-shrink: 0;
+  inline-size: var(--size-checkbox);
+  block-size: var(--size-checkbox);
+  margin: 0;
+  accent-color: var(--color-brand-primary);
+  cursor: pointer;
+}
+
+.c-agreement__text {
+  min-width: 0;
+}
+
+.c-agreement__link {
+  padding: 0;
+  font: inherit;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+  text-align: start;
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.c-agreement__link:hover {
+  text-decoration: underline;
+}

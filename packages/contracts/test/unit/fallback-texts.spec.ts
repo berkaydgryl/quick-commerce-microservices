@@ -28,6 +28,10 @@ const WELCOME = JSON.parse(
   addresses: unknown;
   orders: unknown;
   paymentMethods: unknown;
+  marketPage: unknown;
+  cartPage: unknown;
+  footer: unknown;
+  checkout: unknown;
 };
 
 /** Yapidaki butun metinler (dizi ve ic nesneler dahil). */
@@ -78,6 +82,19 @@ describe('CONTENT_FALLBACK', () => {
 
   it('Odeme Yontemlerim metinleri (T11.17) welcome.json paymentMethods ile birebir', () => {
     expect(CONTENT_FALLBACK.paymentMethods).toEqual(WELCOME.paymentMethods);
+  });
+
+  it('Magaza sayfasi metinleri (T16.2) welcome.json marketPage ile birebir', () => {
+    expect(CONTENT_FALLBACK.marketPage).toEqual(WELCOME.marketPage);
+  });
+
+  it('Sepet sayfasi ve alt bilgi metinleri (T16.3) welcome.json cartPage ve footer ile birebir', () => {
+    expect(CONTENT_FALLBACK.cartPage).toEqual(WELCOME.cartPage);
+    expect(CONTENT_FALLBACK.footer).toEqual(WELCOME.footer);
+  });
+
+  it('Odeme sayfasi metinleri (T17.1) welcome.json checkout ile birebir', () => {
+    expect(CONTENT_FALLBACK.checkout).toEqual(WELCOME.checkout);
   });
 
   it('Gecmis Siparislerim metinleri (T11.16) welcome.json orders ile birebir', () => {
