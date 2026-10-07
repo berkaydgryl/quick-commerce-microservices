@@ -21,6 +21,8 @@ const WELCOME = JSON.parse(
 ) as {
   header: Record<string, string>;
   appHeader: Record<string, string>;
+  addressSetup: unknown;
+  loginCard: Record<string, unknown>;
   marketList: unknown;
   favorites: unknown;
   accountMenu: unknown;
@@ -104,6 +106,12 @@ describe('CONTENT_FALLBACK', () => {
 
   it('Gecmis Siparislerim metinleri (T11.16) welcome.json orders ile birebir', () => {
     expect(CONTENT_FALLBACK.orders).toEqual(WELCOME.orders);
+  });
+
+  it('ust bar ve adres penceresi (F21): appHeader, addressSetup ve "Kapat" welcome.json ile ayni', () => {
+    expect(CONTENT_FALLBACK.appHeader).toEqual(WELCOME.appHeader);
+    expect(CONTENT_FALLBACK.addressSetup).toEqual(WELCOME.addressSetup);
+    expect(CONTENT_FALLBACK.closeLabel).toBe(WELCOME.loginCard['closeLabel']);
   });
 
   it('yedegin market listesi sozlesmeden gecer (gorseller mutlak adrese cevrilince)', () => {

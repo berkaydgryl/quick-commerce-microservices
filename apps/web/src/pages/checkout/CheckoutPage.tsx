@@ -5,7 +5,7 @@ import { useCheckoutContent } from '../../features/content/hooks/useCheckoutCont
 import { useFooterContent } from '../../features/content/hooks/useFooterContent';
 import { useMarketListContent } from '../../features/content/hooks/useMarketListContent';
 import { usePaymentMethodsContent } from '../../features/content/hooks/usePaymentMethodsContent';
-import { useWelcomeContent } from '../../features/content/hooks/useWelcomeContent';
+import { useAppHeaderContent } from '../../features/content/hooks/useAppHeaderContent';
 import { useMarket } from '../../features/markets/hooks/useMarket';
 import { DeliveryTimeChip } from '../../features/markets/ui/DeliveryTimeChip';
 import { PageLayout } from '../../shared/ui/page-layout/PageLayout';
@@ -25,7 +25,7 @@ export function CheckoutPage() {
   const list = useMarketListContent();
   const cardTexts = usePaymentMethodsContent();
   const footer = useFooterContent();
-  const setup = useWelcomeContent().data?.addressSetup;
+  const setup = useAppHeaderContent()?.addressSetup;
   const marketId = useCartStore((cart) => cart.market?.id);
   const market = useMarket(marketId);
   const ready =

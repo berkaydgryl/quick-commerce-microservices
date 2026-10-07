@@ -4648,7 +4648,8 @@ components:
         fazla göster" ve detay sayfasının etiketleri. Durum grupları istemcide:
         Tamamlandı (DELIVERED), Devam ediyor, İptal edildi (ücret alınmışsa
         "Ücret iade edildi" ile). İptal edilen siparişte bütün ürünler "Teslim
-        edilmedi" (sipariş düzeyi, #91).
+        edilmedi" (sipariş düzeyi, #91). Detayın en altında takip çizgisi (F21):
+        hazırlanıyor, kurye yolda, teslim edildi.
       required:
         [
           title,
@@ -4674,6 +4675,12 @@ components:
           freeDeliveryLabel,
           discountLabel,
           totalLabel,
+          trackTitle,
+          trackPreparingLabel,
+          trackOnTheWayLabel,
+          trackDeliveredLabel,
+          whereIsCourierLabel,
+          whereIsCourierHint,
         ]
       properties:
         title: { $ref: "#/components/schemas/ContentText" }
@@ -4703,6 +4710,18 @@ components:
         freeDeliveryLabel: { $ref: "#/components/schemas/ContentText" }
         discountLabel: { $ref: "#/components/schemas/ContentText" }
         totalLabel: { $ref: "#/components/schemas/ContentText" }
+        trackTitle:
+          $ref: "#/components/schemas/ContentText"
+          description: Takip çizgisi kartının görünür başlığı (F21; "Sipariş durumu").
+        trackPreparingLabel: { $ref: "#/components/schemas/ContentText" }
+        trackOnTheWayLabel: { $ref: "#/components/schemas/ContentText" }
+        trackDeliveredLabel: { $ref: "#/components/schemas/ContentText" }
+        whereIsCourierLabel:
+          $ref: "#/components/schemas/ContentText"
+          description: Yalnız "Kurye yolda" aktifken basılır; kurye penceresi F22.
+        whereIsCourierHint:
+          $ref: "#/components/schemas/ContentText"
+          description: Düğme pasifken (hazırlanıyor) altındaki bilgi satırı.
 
     MarketListContent:
       type: object

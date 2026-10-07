@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { statusGroup, wasRefunded } from '../../features/orders/services/order-status';
 import { paymentLabel } from '../../features/orders/services/payment-label';
 import { OrderStatusLabel } from '../../features/orders/ui/OrderStatusLabel';
+import { OrderTrack } from '../../features/orders/ui/OrderTrack';
 import { ChevronLeftIcon } from '../../features/profile/ui/icons';
 import { formatDateTime, formatMoney } from '../../shared/services/format';
 import { QueryError, QueryLoading } from '../../shared/ui/query-status/QueryStatus';
@@ -27,7 +28,8 @@ export interface OrderDetailViewProps {
  * Siparis detayi (T11.16; /hesabim/siparislerim/:id): ustte listeye donus,
  * market adi ve durum; tarih, teslimat adresi ve odeme (F12: kart ya da
  * kapida nakit/kart; eski sipariste yok); urunler (adet, ad, tutar);
- * tutar dokumu. Iptal edilen sipariste her urunde "Teslim edilmedi" (siparis
+ * tutar dokumu; en altta takip cizgisi (F21; suren ve teslim edilen
+ * sipariste; 07.10 kullanici: toplamin altinda). Iptal edilen sipariste her urunde "Teslim edilmedi" (siparis
  * duzeyi, #91: kalem duzeyinde teslim bilgisi yok). Durumsuz.
  */
 export function OrderDetailView({
@@ -84,6 +86,7 @@ export function OrderDetailView({
           </dl>
           <OrderLines texts={texts} order={order} headingId={itemsId} />
           <OrderTotals texts={texts} order={order} />
+          <OrderTrack status={order.status} texts={texts} />
         </>
       )}
     </section>
