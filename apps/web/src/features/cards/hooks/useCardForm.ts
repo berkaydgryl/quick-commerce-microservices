@@ -18,6 +18,7 @@ import {
 } from '../services/card-form';
 import type { CardFormValues } from '../services/card-form';
 import { watchCardForm } from '../services/card-form-watch';
+import { createSingleFlight } from '../services/single-flight';
 
 const MS_PER_SECOND = 1000;
 
@@ -52,6 +53,8 @@ export function useCardForm({ texts, save, changed, onSaved }: UseCardFormInput)
   const [retryAt, setRetryAt] = useState<number | null>(null);
   const now = useNow(retryAt !== null);
   const waitSeconds = retryAt === null ? 0 : secondsUntil(retryAt, now);
+  /** Kayit surerken ikinci gonderme birakilir: ikinci POST gitmez (F5 ek sart 3). */
+  const [once] = useState(createSingleFlight);
 
   // Istegin alani degisince anahtar (QA C3, D2); son kullanma ikisi birlikte (QA O3).
   useEffect(() => watchCardForm(form, changed), [form, changed]);
@@ -65,22 +68,23 @@ export function useCardForm({ texts, save, changed, onSaved }: UseCardFormInput)
   }, [retryAt, waitSeconds]);
 
   const submit = form.handleSubmit(
-    async (submitted) => {
-      setFormMessage(null);
-      try {
-        onSaved(await save(toAddCardRequest(submitted)));
-      } catch (error) {
-        const wait = retryWaitSeconds(error);
-        if (wait !== null) {
-          setRetryAt(Date.now() + wait * MS_PER_SECOND);
-          setFormMessage(errorMessage(ERROR_CODES.RATE_LIMITED));
-          return;
+    (submitted) =>
+      once(async () => {
+        setFormMessage(null);
+        try {
+          onSaved(await save(toAddCardRequest(submitted)));
+        } catch (error) {
+          const wait = retryWaitSeconds(error);
+          if (wait !== null) {
+            setRetryAt(Date.now() + wait * MS_PER_SECOND);
+            setFormMessage(errorMessage(ERROR_CODES.RATE_LIMITED));
+            return;
+          }
+          const feedback = cardFormFeedback(error, texts.duplicateCardNotice);
+          showServerErrors(CARD_FORM_FIELDS, feedback.fields, form.setError);
+          setFormMessage(feedback.message);
         }
-        const feedback = cardFormFeedback(error, texts.duplicateCardNotice);
-        showServerErrors(CARD_FORM_FIELDS, feedback.fields, form.setError);
-        setFormMessage(feedback.message);
-      }
-    },
+      }),
     (errors) => focusFirstInvalid(CARD_FORM_FIELDS, errors, form.setFocus),
   );
 

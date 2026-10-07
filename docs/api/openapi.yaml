@@ -4170,7 +4170,8 @@ components:
       description: |
         Ödeme sayfası (T17.1; `/odeme`; referans getirçarşı ödeme sayfası; kampanya yok): hediye bilgileri,
         teslimat yöntemi, sipariş notu ve "Zili Çalma", ödeme yöntemi, ödeme özeti, sözleşme onayı ve
-        pencereleri, "Sipariş Ver"; sipariş akışı ve 3DS penceresi (T12.4). Sözleşme paragrafları bugün demo.
+        pencereleri, "Sipariş Ver"; sipariş akışı ve 3DS penceresi (T12.4); "Ödeme Yöntemi Seç" penceresi.
+        Sözleşme paragrafları bugün demo.
       required:
         [
           title,
@@ -4233,6 +4234,11 @@ components:
           threeDsAttemptsLeftSuffix,
           threeDsExpiredToast,
           threeDsCancelledToast,
+          methodDialogTitle,
+          onlinePaymentTitle,
+          deleteCardLabel,
+          chooseLabel,
+          backLabel,
         ]
       properties:
         title: { $ref: "#/components/schemas/ContentText" }
@@ -4304,6 +4310,11 @@ components:
         threeDsAttemptsLeftSuffix: { $ref: "#/components/schemas/ContentText" }
         threeDsExpiredToast: { $ref: "#/components/schemas/ContentText" }
         threeDsCancelledToast: { $ref: "#/components/schemas/ContentText" }
+        methodDialogTitle: { $ref: "#/components/schemas/ContentText" }
+        onlinePaymentTitle: { $ref: "#/components/schemas/ContentText" }
+        deleteCardLabel: { $ref: "#/components/schemas/ContentText" }
+        chooseLabel: { $ref: "#/components/schemas/ContentText" }
+        backLabel: { $ref: "#/components/schemas/ContentText" }
 
     PaymentMethodsContent:
       type: object

@@ -27,8 +27,17 @@ import { SecurityNotice } from './SecurityNotice';
 import { TermsDialog } from './TermsDialog';
 import { TermsField } from './TermsField';
 
+/**
+ * Yerlesim (T17.1; F5): "page" Odeme Yontemlerim'in Kart Ekle sayfasi
+ * (Guvenlik kutusu ve yaninda kart); "checkout" odeme penceresinin adimi
+ * (Guvenlik kutusu YOK, kart animasyonu en ustte, tek sutun, kutusuz).
+ * Parcalar ve kurallar AYNI; yalnizca yerlesim degisir.
+ */
+export type AddCardFormVariant = 'page' | 'checkout';
+
 interface AddCardFormProps {
   readonly texts: PaymentMethodsContent;
+  readonly variant?: AddCardFormVariant | undefined;
   /** Karti kaydeder (useAddCard); hata verirse firlatir. */
   readonly onSave: (request: AddCardRequest) => Promise<SavedCard>;
   /** Formun bir alani degisti (QA C3). */
@@ -54,7 +63,13 @@ const DEFAULT_CVV_LENGTH = 3;
  * Numara ve CVV YALNIZCA bu formun durumunda yasar (M7): kart gorseline
  * maskeli gider, onbellege yazilmaz; form kapaninca gider.
  */
-export function AddCardForm({ texts, onSave, onChanged, onSaved }: AddCardFormProps) {
+export function AddCardForm({
+  texts,
+  variant = 'page',
+  onSave,
+  onChanged,
+  onSaved,
+}: AddCardFormProps) {
   const { form, values, formMessage, waitSeconds, submit } = useCardForm({
     texts,
     save: onSave,
@@ -75,8 +90,18 @@ export function AddCardForm({ texts, onSave, onChanged, onSaved }: AddCardFormPr
 
   return (
     <>
-      <form className={styles['c-add-card']} noValidate onSubmit={(event) => void submit(event)}>
-        <SecurityNotice title={texts.securityTitle} text={texts.securityText} />
+      <form
+        className={
+          variant === 'checkout'
+            ? `${styles['c-add-card']} ${styles['c-add-card--checkout']}`
+            : styles['c-add-card']
+        }
+        noValidate
+        onSubmit={(event) => void submit(event)}
+      >
+        {variant === 'page' && (
+          <SecurityNotice title={texts.securityTitle} text={texts.securityText} />
+        )}
         <div className={styles['c-add-card__stage']}>
           <div className={styles['c-add-card__card']}>
             <CardVisual

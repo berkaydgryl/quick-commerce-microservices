@@ -14,3 +14,16 @@ export function defaultCard(cards: readonly SavedCard[]): SavedCard | undefined 
       undefined,
     );
 }
+
+/**
+ * Odemede kullanilacak kart (T17.1; F5, P2): secilen kart (chosenId) hala
+ * listede ve suresi gecmemisse o; degilse (hic secilmedi, silindi, suresi
+ * doldu) kural defaultCard'a doner. Pencerenin bekleyen secimi de ayni
+ * kuralla gorunur: secili kart silinince kalan en yeni gecerli kart secilir.
+ */
+export function effectiveCard(
+  cards: readonly SavedCard[],
+  chosenId: string | undefined,
+): SavedCard | undefined {
+  return cards.find((card) => card.id === chosenId && !card.expired) ?? defaultCard(cards);
+}
