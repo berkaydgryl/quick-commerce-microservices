@@ -171,6 +171,39 @@ describe('kart verisi gizleme (T11.17)', () => {
     }
   });
 
+  it('siparis ayrintisi (T12.4): not, hediye mesaji, adlar ve telefon her yerde gizlenir', () => {
+    const hidden = {
+      note: '[gizli]',
+      doNotRingBell: true,
+      agreementsAccepted: true,
+      gift: {
+        message: '[gizli]',
+        senderName: '[gizli]',
+        recipientName: '[gizli]',
+        recipientPhone: '[gizli]',
+      },
+    };
+    expect(lines['siparis ayrintisi']?.['details']).toEqual(hidden);
+    expect(lines['siparis girdisi']?.['input']).toEqual({ orderId: 'ord_1', details: hidden });
+    expect(lines['siparis istegi']?.['request']).toEqual({ orderId: 'ord_1', details: hidden });
+    expect(lines['cocuk istek']).toMatchObject({
+      rpc: 'CreateOrder',
+      request: { orderId: 'ord_2', details: hidden },
+    });
+    // Gizleme kopya uzerinde: cagiranin nesnesi degismez (kayda [gizli] yazilmaz).
+    expect(lines['kopya']?.['intact']).toBe(true);
+    expect(lines['hediye']?.['gift']).toEqual(hidden.gift);
+    const all = withoutRandomNoise(JSON.stringify(Object.values(lines)));
+    for (const secret of ['4417', 'Zeynep', 'Mehmet', 'Kaya', '5321112233']) {
+      expect(all).not.toContain(secret);
+    }
+  });
+
+  it('DAR: ust duzey `note` (siparis durum notu) gizlenmez; `order` kap degil, altindaki URL bozulmaz', () => {
+    expect(lines['durum notu']).toMatchObject({ note: 'RESERVATION_EXPIRED', orderId: 'ord_1' });
+    expect(lines['siparis url']?.['order']).toBe('https://example.com/siparis');
+  });
+
   it('DAR: kart numarasina benzemeyen number alanlari (siparis, kapi, sayi, telefon) oldugu gibi kalir', () => {
     expect(lines['kart degil']).toMatchObject({
       order: { number: 'SIP-1042', total: 12990 },
