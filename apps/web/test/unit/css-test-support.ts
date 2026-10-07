@@ -18,3 +18,13 @@ export function block(source: string, selector: string): string {
   expect(start, `${selector} bulunamadi`).toBeGreaterThanOrEqual(0);
   return source.slice(start, source.indexOf('}', start));
 }
+
+/** Uygulamanin token dosyalari (main.tsx'teki yukleme sirasiyla). */
+export const TOKEN_FILES = [
+  'shared/styles/tokens.css',
+  'shared/styles/layout/tokens.css',
+  'shared/styles/payment-card/tokens.css',
+] as const;
+
+/** Butun token dosyalarinin metni: token hangi dosyada olursa olsun bulunur. */
+export const tokens = (): string => TOKEN_FILES.map(css).join('\n');

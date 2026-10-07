@@ -2,7 +2,7 @@
  * Odeme kartinin token'lari (T11.17). Ana token dosyasindan ayri: tokens.css
  * buyumesin diye (proje kurali "Tek sorumluluk", 300 satir). Ayni kurallar
  * gecerli: bilesen ciplak renk ve olcu yazmaz, buradaki degiskeni kullanir.
- * Yukleme sirasi main.tsx'te: tokens.css -> bu dosya -> breakpoints.css.
+ * Yukleme sirasi main.tsx'te: tokens.css -> layout/tokens.css -> bu dosya.
  */
 
 :root {
