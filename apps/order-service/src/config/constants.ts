@@ -176,3 +176,27 @@ export const DEPENDENCY_BREAKER_FAILURE_THRESHOLD = 5;
 export const DEPENDENCY_BREAKER_OPEN_MS = 10_000;
 export const IDEMPOTENT_RETRY_MAX = 2;
 export const IDEMPOTENT_RETRY_BASE_DELAY_MS = 100;
+
+/**
+ * Olay dinleme (T14.3): tuketici grubu servis adidir. Order'in her kopyasi
+ * ayni gruptadir; bir kurye olayini yalnizca biri isler.
+ */
+export const EVENT_CONSUMER_GROUP = SERVICE_NAME;
+
+/**
+ * Kurye kilometre tasi yazilamazsa (surum cakismasi: kurye iscisi ya da ikinci
+ * order ornegi ayni siparisi yazdi) siparis yeniden okunup karar yeniden
+ * verilir; en fazla bu kadar yazim denemesi. Ucuncude de surerse olay
+ * onaylanmaz, yeniden teslim edilir.
+ */
+export const COURIER_MILESTONE_WRITE_ATTEMPTS = 3;
+
+/**
+ * Kurye olayinin yeniden teslim penceresi (ms). "Kurye henuz yazilmadi" olayi
+ * onaylanmaz, takilma suresinde (event-bus, 30 sn) bir yeniden teslim edilir.
+ * Kurye iscisinin yazim hatasindaki geri cekilmesi 5 dk'ya kadar cikar
+ * (COURIER_FAILURE_BACKOFF_MAX_MS): pencere onun iki kati. Varsayilan 5 teslim
+ * (~2,5 dk) olayi kurye yazilmadan olu olaylara atardi; courier olayi bir daha
+ * basmaz, siparis PREPARING'de kalirdi. Teslim sayisi main.ts'te bundan cikar.
+ */
+export const COURIER_EVENT_RETRY_WINDOW_MS = 2 * COURIER_FAILURE_BACKOFF_MAX_MS;

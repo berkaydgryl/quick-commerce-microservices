@@ -19,6 +19,7 @@ import {
 import type { ExpiredOrderFinder } from '../../domain/expired-order-finder.js';
 import type { OrderEvent } from '../../domain/order-events.js';
 import { comesBefore, cursorOf } from '../../domain/order-history-cursor.js';
+import { isListedInHistory } from '../../domain/order-history-listing.js';
 import type {
   OrderHistoryPage,
   OrderHistoryQuery,
@@ -144,7 +145,8 @@ export class InMemoryOrderStore
 
   listByUser({ userId, pageSize, after }: OrderHistoryQuery): Promise<OrderHistoryPage> {
     const matching = [...this.orders.values()]
-      .filter((order) => order.userId === userId)
+      // Mongo'daki inHistory alaniyla ayni kural (#101): yalnizca gecmiste gorunenler.
+      .filter((order) => order.userId === userId && isListedInHistory(order))
       .filter((order) => after === undefined || comesBefore(after, cursorOf(order)))
       .sort((left, right) => (comesBefore(cursorOf(left), cursorOf(right)) ? -1 : 1));
 

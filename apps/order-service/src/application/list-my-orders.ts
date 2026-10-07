@@ -2,7 +2,9 @@
  * Use-case: kullanicinin siparis gecmisi (ListMyOrders), yeniden eskiye.
  *
  * Sahiplik sorgunun kendisindedir: filtre userId'dir, baskasinin siparisi
- * listeye hic girmez. Bos liste hata degildir ("henuz siparisin yok").
+ * listeye hic girmez. Yalnizca gecmiste gorunen siparisler doner (#101,
+ * domain/order-history-listing.ts); suzme depodadir. Bos liste hata degildir
+ * ("henuz siparisin yok").
  */
 
 import type { OrderHistoryCursor } from '../domain/order-history-cursor.js';
