@@ -62,6 +62,30 @@ export const checkoutContentSchema = z.object({
   distanceSalesParagraphs: z.array(contentTextSchema).min(1),
   closeLabel: contentTextSchema,
   placeOrderLabel: contentTextSchema,
+  /** Siparis akisi (T12.4): istek surerken dugme, basari ve inceleme bildirimleri. */
+  placingLabel: contentTextSchema,
+  orderPlacedToast: contentTextSchema,
+  orderInReviewToast: contentTextSchema,
+  /** "Sipariş Ver" pasifken altinda ilk eksik kosul (N1). */
+  blockerGiftNotice: contentTextSchema,
+  blockerAgreementNotice: contentTextSchema,
+  blockerCardNotice: contentTextSchema,
+  blockerAddressNotice: contentTextSchema,
+  blockerMinBasketNotice: contentTextSchema,
+  blockerClosedNotice: contentTextSchema,
+  /** 3DS penceresi (T12.4; geri sayim T17.1: son 30 saniyede uyari). */
+  threeDsTitle: contentTextSchema,
+  threeDsDescription: contentTextSchema,
+  threeDsCodeLabel: contentTextSchema,
+  threeDsSubmitLabel: contentTextSchema,
+  threeDsSubmittingLabel: contentTextSchema,
+  threeDsCancelLabel: contentTextSchema,
+  threeDsRemainingLabel: contentTextSchema,
+  threeDsLastSecondsNotice: contentTextSchema,
+  /** "2 deneme hakkın kaldı": sayinin arkasi. */
+  threeDsAttemptsLeftSuffix: contentTextSchema,
+  threeDsExpiredToast: contentTextSchema,
+  threeDsCancelledToast: contentTextSchema,
 });
 
 export type CheckoutContent = z.infer<typeof checkoutContentSchema>;

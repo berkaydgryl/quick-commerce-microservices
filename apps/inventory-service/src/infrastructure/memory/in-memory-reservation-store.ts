@@ -138,7 +138,11 @@ export class InMemoryReservationStore implements ReservationStore {
     // 1. Kullanicinin baska aktif rezervasyonu.
     const lock = this.userLocks.get(userId);
     if (lock !== undefined && nowMs < lock.expiresAt && lock.orderId !== orderId) {
-      return { status: 'user-has-active', activeOrderId: lock.orderId };
+      return {
+        status: 'user-has-active',
+        activeOrderId: lock.orderId,
+        activeExpiresInMs: lock.expiresAt - nowMs,
+      };
     }
 
     // 2. Hepsini kontrol et, hicbir sey yazma.

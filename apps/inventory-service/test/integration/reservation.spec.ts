@@ -53,6 +53,7 @@ import { RedisLeaderLock } from '../../src/infrastructure/redis/redis-leader-loc
 import { RedisReservationStore } from '../../src/infrastructure/redis/redis-reservation-store.js';
 import { RedisStockCounters } from '../../src/infrastructure/redis/redis-stock-counters.js';
 import { startReservationSweeper } from '../../src/interfaces/workers/reservation-sweeper.js';
+import { describeActiveRemainingContract } from '../support/reservation-active-remaining-contract.js';
 import {
   describeReservationStoreContract,
   MARKET,
@@ -112,6 +113,11 @@ afterAll(async () => {
 });
 
 describeReservationStoreContract('redis', async () => {
+  await connection.redis.flushall();
+  return { counters, reservations };
+});
+
+describeActiveRemainingContract('redis', async () => {
   await connection.redis.flushall();
   return { counters, reservations };
 });

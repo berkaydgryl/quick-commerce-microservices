@@ -12,8 +12,11 @@
  *  - Ayni siparis ikinci kez gelirse sayaclar tekrar dusmez: ilk bitis anini
  *    `alreadyReserved` ile dondurur (ADR-08'in stok tarafi).
  *  - Kullanicinin baska aktif rezervasyonu varsa RESERVATION_ACTIVE
- *    (ALREADY_EXISTS; B22, 30 Eylul karari (a)): ayrintida o siparisin kimligi.
- *    Eskisini birakip yenisini almak order'in karari (T11.2).
+ *    (ALREADY_EXISTS; B22, 30 Eylul karari (a)): ayrintida o siparisin kimligi
+ *    ve kilidinin kalan omru (activeExpiresInMs, ms; T15.3, bekleyen is 126).
+ *    Kalan omur bilinmiyorsa (negatif) alan yazilmaz. Eskisini birakip
+ *    yenisini almak order'in karari (T11.2); kaydi olmayan (yetim) kilidin
+ *    yasini order bununla bulur.
  *  - Negatif sayac (fazla satis izi) mevcut 0 olarak bildirilir ve UYARI
  *    yazilir: gizlenmez (CheckAvailability ile ayni kural).
  *  - Sureyi order verir (risk bandi); "simdi" servisin saatidir.
@@ -78,7 +81,12 @@ export function createReserveStock(deps: ReserveStockDeps): ReserveStock {
         return { expiresAt: new Date(outcome.expiresAt), alreadyReserved: true };
       case 'user-has-active':
         throw new AppError(ERROR_CODES.RESERVATION_ACTIVE, 'Kullanicinin aktif rezervasyonu var', {
-          details: { activeOrderId: outcome.activeOrderId },
+          details: {
+            activeOrderId: outcome.activeOrderId,
+            ...(outcome.activeExpiresInMs >= 0
+              ? { activeExpiresInMs: outcome.activeExpiresInMs }
+              : {}),
+          },
         });
       case 'insufficient': {
         const { sku, requested, counter, counterMissing } = outcome;

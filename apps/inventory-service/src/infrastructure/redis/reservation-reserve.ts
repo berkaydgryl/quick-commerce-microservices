@@ -66,7 +66,7 @@ export async function runReserve(
     case 'already':
       return { status: 'already-reserved', expiresAt: reply[1] };
     case 'user-active':
-      return { status: 'user-has-active', activeOrderId: reply[1] };
+      return { status: 'user-has-active', activeOrderId: reply[1], activeExpiresInMs: reply[2] };
     case 'insufficient': {
       const line = lineAt(command, reply[1]);
       return {

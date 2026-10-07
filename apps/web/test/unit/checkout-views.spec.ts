@@ -3,7 +3,7 @@
  * anahtar ve sayacli alan, Hediye Bilgileri (kapali/acik, zorunlu alanlar,
  * hata), Teslimat Yöntemi (etiketsiz, K4), Ödeme Yöntemi (secili kart yalnizca
  * ilk 4 ve son 4 hane; "Değiştir" ve "Kart ekle" F5'e kadar pasif, M4), Ödeme
- * Özeti (teslimat satiri M5; "Sipariş Ver" F4b'ye kadar pasif) ve sozlesme
+ * Özeti (teslimat satiri M5; "Sipariş Ver" eksik kosulda pasif, N1) ve sozlesme
  * onayi. Metinler icerik yedeginden.
  */
 
@@ -212,13 +212,19 @@ describe('PaymentMethodView (T17.1, M4, M7)', () => {
 });
 
 describe('OrderSummaryCard (T17.1, M5, M6)', () => {
-  const summary = (totals: CartTotals | undefined) =>
+  const summary = (
+    totals: CartTotals | undefined,
+    state: { blocker?: string; busy?: boolean } = {},
+  ) =>
     render(
       createElement(OrderSummaryCard, {
         totals,
         agreementsAccepted: false,
         onAgreementsChange: () => undefined,
         texts: TEXTS,
+        blocker: state.blocker,
+        busy: state.busy ?? false,
+        onPlace: () => undefined,
       }),
     );
 
@@ -247,9 +253,23 @@ describe('OrderSummaryCard (T17.1, M5, M6)', () => {
     expect(markup).toContain('>Mesafeli Satış Sözleşmesi</button>');
   });
 
-  it('"Sipariş Ver" ve tutari; siparis akisi (F4b) gelene kadar pasif', () => {
+  it('"Sipariş Ver" ve tutari; eksik kosul yokken etkin', () => {
     expect(summary(TOTALS)).toMatch(
-      /<button type="button"[^>]*aria-disabled="true"><span[^>]*>Sipariş Ver<\/span><span[^>]*>114,50 TL<\/span><\/button>/,
+      /<button type="button"[^>]*aria-disabled="false"><span[^>]*>Sipariş Ver<\/span><span[^>]*>114,50 TL<\/span><\/button>/,
+    );
+  });
+
+  it('eksik kosul (N1): dugme pasif, altinda ilk eksik; dugme ona bagli', () => {
+    const markup = summary(TOTALS, { blocker: TEXTS.blockerAgreementNotice });
+
+    expect(markup).toMatch(
+      /aria-disabled="true" aria-describedby="([^"]+)"[\s\S]*<p id="\1"[^>]*>Sipariş vermek için sözleşmeleri onayla\.<\/p>/,
+    );
+  });
+
+  it('istek surerken "Sipariş veriliyor…" ve pasif', () => {
+    expect(summary(TOTALS, { busy: true })).toMatch(
+      /aria-disabled="true"><span[^>]*>Sipariş veriliyor…<\/span>/,
     );
   });
 });

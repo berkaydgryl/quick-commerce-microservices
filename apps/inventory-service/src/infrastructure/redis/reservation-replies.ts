@@ -29,7 +29,7 @@ const lineIndex = integerReply.pipe(z.number().int().min(1));
 export const reserveReplySchema = z.union([
   z.tuple([z.literal('reserved'), integerReply]),
   z.tuple([z.literal('already'), integerReply]),
-  z.tuple([z.literal('user-active'), z.string().min(1)]),
+  z.tuple([z.literal('user-active'), z.string().min(1), integerReply]),
   z.tuple([z.literal('insufficient'), lineIndex, integerReply]),
   z.tuple([z.literal('missing'), lineIndex]),
   z.tuple([z.literal('corrupt'), lineIndex]),

@@ -153,7 +153,7 @@ export function describeReservationStoreContract(
 
       const outcome = await reserve(2, 1, [{ sku: 'KOLA-1L', quantity: 1 }]);
 
-      expect(outcome).toEqual({ status: 'user-has-active', activeOrderId: orderId(1) });
+      expect(outcome).toMatchObject({ status: 'user-has-active', activeOrderId: orderId(1) });
       expect(await counts(MARKET, ['SUT-1L', 'KOLA-1L'])).toEqual({ 'SUT-1L': 4, 'KOLA-1L': 3 });
       // Baska kullanici etkilenmez.
       expect((await reserve(3, 2, [{ sku: 'KOLA-1L', quantity: 1 }])).status).toBe('reserved');
@@ -284,7 +284,7 @@ export function describeReservationStoreContract(
       // Suresi dolmus ama supurulmemis ilk siparis birakilir (kaydi pay icinde).
       expect((await release(1)).status).toBe('released');
 
-      expect(await reserve(3, 1, [{ sku: 'CIPS-150', quantity: 1 }])).toEqual({
+      expect(await reserve(3, 1, [{ sku: 'CIPS-150', quantity: 1 }])).toMatchObject({
         status: 'user-has-active',
         activeOrderId: orderId(2),
       });
@@ -514,7 +514,7 @@ export function describeReservationStoreContract(
       await extend(1, { additionalMs: 2_000 });
       await sleep(AFTER_SHORT_TTL_MS);
 
-      expect(await reserve(2, 1, [{ sku: 'KOLA-1L', quantity: 1 }])).toEqual({
+      expect(await reserve(2, 1, [{ sku: 'KOLA-1L', quantity: 1 }])).toMatchObject({
         status: 'user-has-active',
         activeOrderId: orderId(1),
       });
