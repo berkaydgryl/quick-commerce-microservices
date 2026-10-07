@@ -1,13 +1,20 @@
 /**
  * gRPC istek semalari (Zod). Proto bicimi dogrular, KURALI dogrulamaz; kurallar
- * (tutar pozitif, kartta jeton zorunlu, anahtar zorunlu) burada calisir (ADR-10).
+ * (tutar pozitif, kartta card_id ya da card_token'dan tam biri, anahtar zorunlu)
+ * burada calisir (ADR-10).
  */
 
-import { idempotencyKeySchema, OTP_PATTERN, refundReasonSchema } from '@getir/contracts';
+import {
+  cardIdSchema,
+  idempotencyKeySchema,
+  OTP_PATTERN,
+  refundReasonSchema,
+} from '@getir/contracts';
 import { CURRENCY } from '@getir/core';
 import { paymentV1 } from '@getir/proto';
 import { z } from 'zod';
 
+import type { CardSource } from '../../application/charge-card.js';
 import { PAYMENT_METHOD } from '../../domain/payment.js';
 import type { PaymentMethod } from '../../domain/payment.js';
 
@@ -56,7 +63,10 @@ export const chargeRequestSchema = z
     userId: requiredText('userId'),
     amount,
     method,
+    // DEPRECATED (T12.4): card_id kullanin; kart yonteminde ikisinden TAM biri.
     cardToken: z.string().trim(),
+    // Kayitli kart (T12.4): kasadaki kartin kimligi; bos = yok (proto3 varsayilani).
+    cardId: z.union([z.literal(''), cardIdSchema]),
     idempotencyKey: idempotencyKeySchema,
     // proto3 bool: gonderilmezse false (3DS'i banka karari belirler).
     requireThreeDs: z.boolean(),
@@ -71,26 +81,42 @@ export const chargeRequestSchema = z
         message: 'kapida odemede 3DS istenemez',
       });
     }
-    if (isCard && input.cardToken === '') {
+    const sources = [input.cardId, input.cardToken].filter((value) => value !== '').length;
+    if (isCard && sources === 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['cardToken'],
-        message: 'kartli odemede zorunlu',
+        path: ['cardId'],
+        message: 'kartli odemede card_id ya da card_token zorunlu',
       });
     }
-    // Kapida odemede jeton sessizce yok sayilmaz: istemci yontemi yanlis secmis olabilir.
-    if (!isCard && input.cardToken !== '') {
+    if (isCard && sources > 1) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['cardToken'],
-        message: 'kapida odemede bos olmali',
+        path: ['cardId'],
+        message: 'card_id ile card_token birlikte gonderilemez',
+      });
+    }
+    // Kapida odemede kart sessizce yok sayilmaz: istemci yontemi yanlis secmis olabilir.
+    if (!isCard && sources > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['cardId'],
+        message: 'kapida odemede kart bos olmali',
       });
     }
   })
-  .transform(({ cardToken, ...rest }) => ({
+  .transform(({ cardToken, cardId, ...rest }) => ({
     ...rest,
-    cardToken: cardToken === '' ? undefined : cardToken,
+    card: cardSourceOf(cardId, cardToken),
   }));
+
+/** Bos alanlar yok demektir (proto3); sema en fazla birinin dolu oldugunu garanti eder. */
+function cardSourceOf(cardId: string, cardToken: string): CardSource | undefined {
+  if (cardId !== '') {
+    return { cardId };
+  }
+  return cardToken === '' ? undefined : { cardToken };
+}
 
 export type ChargeRequestInput = z.infer<typeof chargeRequestSchema>;
 

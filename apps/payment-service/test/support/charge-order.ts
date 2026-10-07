@@ -11,6 +11,7 @@ import { THREEDS_CHALLENGE_TTL_MS } from '../../src/config/constants.js';
 import { PAYMENT_METHOD } from '../../src/domain/payment.js';
 import type { Payment } from '../../src/domain/payment.js';
 import type { PaymentRepository } from '../../src/domain/payment-repository.js';
+import { InMemoryCardStore } from '../../src/infrastructure/memory/in-memory-card-store.js';
 import { MockPaymentProvider } from '../../src/infrastructure/mock-provider/mock-payment-provider.js';
 
 export interface ChargeOrderOptions {
@@ -25,6 +26,7 @@ export interface ChargeOrderOptions {
 export function chargeOrder(options: ChargeOrderOptions): Promise<Payment> {
   const charge = createCharge({
     repository: options.repository,
+    cards: new InMemoryCardStore(),
     provider: new MockPaymentProvider(),
     clock: options.clock,
     challengeTtlMs: THREEDS_CHALLENGE_TTL_MS,
@@ -36,7 +38,7 @@ export function chargeOrder(options: ChargeOrderOptions): Promise<Payment> {
       userId: 'usr_1',
       amount: { amountMinor: 12_990, currency: 'TRY' },
       method: cashOnDelivery ? PAYMENT_METHOD.CASH_ON_DELIVERY : PAYMENT_METHOD.CARD,
-      cardToken: cashOnDelivery ? undefined : options.cardToken,
+      card: cashOnDelivery ? undefined : { cardToken: options.cardToken },
       idempotencyKey: `anahtar-${options.orderId}`,
       requireThreeDs: false,
     },

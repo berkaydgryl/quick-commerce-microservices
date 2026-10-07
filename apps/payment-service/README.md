@@ -9,7 +9,7 @@ idempotency ve durum makinesi baştan yerinde. Aynı sunucuda ikinci servis **ka
 
 | Uç                         | Durum                                                                                                            |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `Charge`                   | ✅ Test kartına göre onay / ret / 3DS; kapıda ödeme `PENDING`; risk 3DS isteyebilir (T7.1)                       |
+| `Charge`                   | ✅ Test kartına göre onay / ret / 3DS; kayıtlı kart `card_id` (T12.4); kapıda ödeme `PENDING`; risk 3DS (T7.1)   |
 | `Confirm3Ds`               | ✅ Sabit kod, 60 sn ömür, 3 yanlışta kilit, tekrar istek güvenli (T5.2)                                          |
 | `payments`                 | ✅ Mongo (`MOCK=false`) ya da bellek (`MOCK=true`); `attempts[]` geçmişi (T5.3)                                  |
 | `Refund`                   | ✅ Saga'nın telafisi (T7.1): yalnızca tamamlanmış çekim; tekrar istek `already_refunded`                         |
@@ -94,14 +94,27 @@ iz metninde aranmadan önce `@getir/core/testing` `withoutRandomNoise`'dan geçe
 ## Charge akışı ve çift çekim koruması
 
 1. Aynı `idempotency_key` ile kayıt varsa: aynı niyetse (sipariş, kullanıcı, tutar, yöntem) **ilk
-   kayıt döner**, sağlayıcıya gidilmez; farklıysa `CONFLICT` (ABORTED).
+   kayıt döner**, sağlayıcıya gidilmez; farklıysa `CONFLICT` (ABORTED). Kart niyete girmez: kart
+   sonradan silinmiş olsa da ilk kayıt döner, kart aranmaz.
 2. Siparişin başka anahtarla bir ödemesi varsa `CONFLICT` (sipariş başına tek ödeme).
-3. **Sağlayıcıdan önce** `PENDING` kayıt yazılır; sipariş ve anahtar sahiplenilir.
-4. Kartsa sağlayıcıya gidilir, karar aynı kayda işlenir. Kapıda ödemede sağlayıcı yok, `PENDING`
-   kalır (tutar teslimatta alınır).
+3. **Kayıtlı kart (T12.4, `card_id`):** kart kasada aranır (`application/charge-card.ts`): çağrının
+   doğrulanmış kullanıcısına (`user_id`; order onu gateway'in doğruladığı oturumdan alır) ait ve
+   `ACTIVE` olmalı. Değilse (silinmiş, başkasının, hiç olmamış) `NOT_FOUND`, ayrıntıda yalnızca
+   `resource: card` (kimlik yankılanmaz) ve **hiçbir kayıt yazılmaz**: anahtar harcanmaz, aynı sipariş
+   başka kartla yeniden çekilebilir. `card_id` ile eski `card_token` birlikte gelirse
+   `VALIDATION_FAILED`. Sağlayıcı jetonu yalnız bellekte: cevaba, günlüğe ve kayda girmez (kayıtta
+   yalnız `cardId`); sağlayıcı hatasının metni de günlüğe jetonsuz yazılır.
+4. **Sağlayıcıdan önce** `PENDING` kayıt yazılır; sipariş ve anahtar sahiplenilir.
+5. Kartsa sağlayıcıya gidilir, karar aynı kayda işlenir. Kapıda ödemede sağlayıcı yok, `PENDING`
+   kalır (tutar teslimatta alınır). 3DS istenirse cevapta `challenge_expires_at` (çekim + 60 sn,
+   payment'ın saati; tekrar istekte ilk çekiminki).
+
+Kart arama ile çekim arasında kart silinirse çekim okunan jetonla sürer: kullanıcı ödemeyi silmeden
+önce başlattı; silme (`ACTIVE` → `DELETED`, jeton belgeden kaldırılır) yalnız sonraki ödemeleri
+engeller.
 
 Sıra kasıtlı: sağlayıcıya önce gidilseydi aynı anahtarla eşzamanlı iki istek **iki kez çekim**
-yapabilirdi. Şimdi ikincisi 3. adımda çakışır, tekrar-istek yoluna düşer ve kazananın kaydını döner
+yapabilirdi. Şimdi ikincisi 4. adımda çakışır, tekrar-istek yoluna düşer ve kazananın kaydını döner
 (test: `charge.spec.ts` → "es zamanli ayni anahtar"). Sağlayıcıya ulaşılamazsa tutar çekilmemiştir;
 kayıt `FAILED` + `SERVICE_UNAVAILABLE` olur, `PENDING`'de takılı kalmaz.
 

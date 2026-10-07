@@ -54,6 +54,8 @@ export interface PaymentDocument extends BaseDocument {
   refundReason?: string;
   /** Yalnizca iptal edilmis (tahsil edilmeden kapatilmis) odemede yazilir (T11.2 PR 3). */
   cancelReason?: string;
+  /** Kayitli kartla odemede kartin kimligi (T12.4); jeton YOK. */
+  cardId?: string;
   attempts: AttemptDocument[];
   idempotencyKey: string;
   /** Iyimser kilit surumu; guncelleme filtresi bunu kosul olarak kullanir. */
