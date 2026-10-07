@@ -2983,6 +2983,11 @@ paths:
         teslimat adresi ve durum geçmişi. Başkasının siparişi `404` döner
         (403 değil): "bu kimlikte bir sipariş var" bilgisi bile sızmamalı.
         Kişisel veridir: önbelleğe alınmaz (T11.16'dan beri `no-store`).
+
+        `AWAITING_PAYMENT` siparişte bekleyen 3DS doğrulamasının durumu `threeDs`
+        alanındadır (#163 B1; anlamı `OrderThreeDs`). Alanın yokluğu "bilinmiyor ya
+        da doğrulama yok" demektir; süresi dolmuş ya da hakkı bitmiş doğrulama
+        alanla birlikte `ttlSeconds: 0` ya da `attemptsLeft: 0` olarak gelir.
       security:
         - bearerAuth: []
       parameters:
@@ -3004,6 +3009,95 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/Order"
+              examples:
+                threeDsOpen:
+                  summary: "3DS açık: kod girilebilir"
+                  value:
+                    success: true
+                    data:
+                      id: "ord_db77f4c0e24f49919cc1d78a649c9c94"
+                      status: AWAITING_PAYMENT
+                      marketId: mkt_migros-jet-moda
+                      lines: []
+                      subtotal: { amountMinor: 18990, currency: TRY }
+                      deliveryFee: { amountMinor: 0, currency: TRY }
+                      discount: { amountMinor: 0, currency: TRY }
+                      total: { amountMinor: 18990, currency: TRY }
+                      address:
+                        line: "Caferağa Mah. Moda Cad. No: 1, Kadıköy"
+                        location: { lat: 40.9853, lng: 29.0256 }
+                      timeline:
+                        - status: AWAITING_PAYMENT
+                          at: "2026-10-08T09:00:00.000Z"
+                      createdAt: "2026-10-08T09:00:00.000Z"
+                      threeDs:
+                        {
+                          challengeId: "tds_0009d7cd0e904b689aabcacf4458d520",
+                          ttlSeconds: 42,
+                          attemptsLeft: 2,
+                        }
+                threeDsExpired:
+                  summary: "3DS süresi doldu: jeton yok, yeni kod yok"
+                  value:
+                    success: true
+                    data:
+                      id: "ord_db77f4c0e24f49919cc1d78a649c9c94"
+                      status: AWAITING_PAYMENT
+                      marketId: mkt_migros-jet-moda
+                      lines: []
+                      subtotal: { amountMinor: 18990, currency: TRY }
+                      deliveryFee: { amountMinor: 0, currency: TRY }
+                      discount: { amountMinor: 0, currency: TRY }
+                      total: { amountMinor: 18990, currency: TRY }
+                      address:
+                        line: "Caferağa Mah. Moda Cad. No: 1, Kadıköy"
+                        location: { lat: 40.9853, lng: 29.0256 }
+                      timeline:
+                        - status: AWAITING_PAYMENT
+                          at: "2026-10-08T09:00:00.000Z"
+                      createdAt: "2026-10-08T09:00:00.000Z"
+                      threeDs: { ttlSeconds: 0, attemptsLeft: 2 }
+                threeDsExhausted:
+                  summary: "3DS hakkı bitti (PAYMENT_FAILED geçişine denk gelen okuma)"
+                  value:
+                    success: true
+                    data:
+                      id: "ord_db77f4c0e24f49919cc1d78a649c9c94"
+                      status: AWAITING_PAYMENT
+                      marketId: mkt_migros-jet-moda
+                      lines: []
+                      subtotal: { amountMinor: 18990, currency: TRY }
+                      deliveryFee: { amountMinor: 0, currency: TRY }
+                      discount: { amountMinor: 0, currency: TRY }
+                      total: { amountMinor: 18990, currency: TRY }
+                      address:
+                        line: "Caferağa Mah. Moda Cad. No: 1, Kadıköy"
+                        location: { lat: 40.9853, lng: 29.0256 }
+                      timeline:
+                        - status: AWAITING_PAYMENT
+                          at: "2026-10-08T09:00:00.000Z"
+                      createdAt: "2026-10-08T09:00:00.000Z"
+                      threeDs: { ttlSeconds: 31, attemptsLeft: 0 }
+                threeDsUnknown:
+                  summary: "Alan yok: bilinmiyor ya da doğrulama yok (istemci yeniden yoklar)"
+                  value:
+                    success: true
+                    data:
+                      id: "ord_db77f4c0e24f49919cc1d78a649c9c94"
+                      status: AWAITING_PAYMENT
+                      marketId: mkt_migros-jet-moda
+                      lines: []
+                      subtotal: { amountMinor: 18990, currency: TRY }
+                      deliveryFee: { amountMinor: 0, currency: TRY }
+                      discount: { amountMinor: 0, currency: TRY }
+                      total: { amountMinor: 18990, currency: TRY }
+                      address:
+                        line: "Caferağa Mah. Moda Cad. No: 1, Kadıköy"
+                        location: { lat: 40.9853, lng: 29.0256 }
+                      timeline:
+                        - status: AWAITING_PAYMENT
+                          at: "2026-10-08T09:00:00.000Z"
+                      createdAt: "2026-10-08T09:00:00.000Z"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
@@ -6220,6 +6314,70 @@ components:
           $ref: "#/components/schemas/OrderDetailsView"
         payment:
           $ref: "#/components/schemas/OrderPaymentView"
+        threeDs:
+          $ref: "#/components/schemas/OrderThreeDs"
+
+    OrderThreeDs:
+      description: |
+        Bekleyen 3DS doğrulamasının durumu (#163 B1): sayfa yenilense de doğrulama
+        kaldığı yerden sürer. Yalnızca sipariş `AWAITING_PAYMENT` iken ve yalnızca
+        siparişin sahibine döner (`no-store`). Kod (OTP) hiçbir zaman yoktur.
+
+        - **Açık** (`OpenOrderThreeDs`): `challengeId` vardır, kod
+          `POST /v1/orders/{id}/3ds` ile girilir.
+        - **Kapalı** (`ClosedOrderThreeDs`): `ttlSeconds = 0` süresi doldu,
+          `attemptsLeft = 0` hakkı bitti (ikisi birden ise "hakkı bitti").
+          `challengeId` yoktur ve yeni kod ucu yoktur. Süresi dolan sipariş stok
+          kilidi bitince kapanır; hakkı biten doğrulamada sipariş normalde anında
+          `PAYMENT_FAILED` olur (alan gelmez), "hakkı bitti" yalnızca o geçiş
+          anına denk gelen okumada görülür.
+        - **Alan yok:** bilinmiyor (ödeme servisine ulaşılamadı) ya da doğrulama yok.
+          İstemci siparişi bırakmaz, yeniden yoklar.
+
+        Gateway `ttlSeconds`'ı kendi saatiyle hesaplar ve `challengeId`'yi yalnızca
+        kendi hesabı açık diyorsa koyar (tek saat). `attemptsLeft` = en fazla hak −
+        yanlış kod sayısı; doğrulama hangi sebeple kapanmış olursa olsun. Biçim
+        jetona göre seçilir: jetonsuz durum her zaman kapalıdır (saat yarışında
+        ikisi de > 0 gelebilir; hak varsa "süresi doldu" sayılır).
+      oneOf:
+        - $ref: "#/components/schemas/OpenOrderThreeDs"
+        - $ref: "#/components/schemas/ClosedOrderThreeDs"
+
+    OpenOrderThreeDs:
+      type: object
+      description: Açık 3DS doğrulaması; kod girilebilir.
+      required: [challengeId, ttlSeconds, attemptsLeft]
+      properties:
+        challengeId:
+          type: string
+          pattern: "^tds_[0-9a-f]{32}$"
+          description: Confirm jetonu (`POST /v1/orders/{id}/3ds` gövdesine aynen gider).
+        ttlSeconds:
+          type: integer
+          minimum: 1
+          description: Kodun sunucunun saatiyle kalan geçerliliği, saniye.
+        attemptsLeft:
+          type: integer
+          minimum: 1
+          description: Kalan yanlış kod hakkı.
+
+    ClosedOrderThreeDs:
+      type: object
+      description: |
+        Kapalı 3DS doğrulaması: jeton yoktur. Normalde `ttlSeconds` ya da
+        `attemptsLeft` 0'dır; saat yarışında ikisi de > 0 gelebilir, yine kapalıdır.
+      required: [ttlSeconds, attemptsLeft]
+      not:
+        required: [challengeId]
+      properties:
+        ttlSeconds:
+          type: integer
+          minimum: 0
+          description: 0 = süresi doldu.
+        attemptsLeft:
+          type: integer
+          minimum: 0
+          description: 0 = hakkı bitti.
 
     OrderSummary:
       type: object
