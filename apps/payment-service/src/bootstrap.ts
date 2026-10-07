@@ -57,6 +57,8 @@ export function buildPaymentService(options: BootstrapOptions = {}): GrpcService
   // Iki use-case AYNI depoyu ve saglayiciyi paylasir: Charge'in actigi
   // dogrulamayi Confirm3Ds ayni kayitta bulur.
   const repository = options.repository ?? new InMemoryPaymentStore();
+  // YALNIZCA MOCK (bekleyen is 112): mock uretilmis her Luhn kartini onaylar.
+  // Gercek saglayici geldiginde burada o baglanir; mock HICBIR ortamda kalmamali.
   const provider = options.provider ?? new MockPaymentProvider();
   const clock = options.clock ?? systemClock;
 
@@ -105,6 +107,7 @@ export interface CardVaultOptions {
  */
 export function buildCardVaultService(options: CardVaultOptions = {}): GrpcServiceRegistration {
   const repository = options.repository ?? new InMemoryCardStore();
+  // YALNIZCA MOCK: kart dogrulamasi da mock'ta (yukaridaki uyari).
   const verifier = options.verifier ?? new MockPaymentProvider();
   const clock = options.clock ?? systemClock;
 

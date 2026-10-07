@@ -59,6 +59,18 @@ function setup(verifier: CardVerifier = new CountingVerifier()) {
 }
 
 describe('AddCard: onay', () => {
+  it('test karti olmayan (kart uretici) Luhn gecerli kart onaylanir: rastgele jeton, kayitta numara yok (bekleyen is 112)', async () => {
+    const { add, repository } = setup();
+
+    const card = await add({ number: '4111 1111 1111 1111' });
+
+    expect(card.providerToken).toMatch(/^tok_[0-9a-f]{32}$/);
+    expect(card).toMatchObject({ brand: 'VISA', first4: '4111', last4: '1111' });
+    const stored = withoutRandomNoise(JSON.stringify(await repository.listActive('usr_kasa')));
+    expect(stored).not.toContain('4111111111111111');
+    expect(stored).not.toContain('411111');
+  });
+
   it('onaylanan kart maskeli kaydedilir: ilk 4, son 4, marka, saglayici jetonu; numara ve CVV kartta yok (QA P2)', async () => {
     const { add, repository } = setup();
 
@@ -130,14 +142,6 @@ describe('AddCard: red', () => {
       await add({ expiryMonth: month, expiryYear: 2031 });
     }
     expect(await repository.listActive('usr_kasa')).toHaveLength(SAVED_CARDS_MAX);
-  });
-
-  it('saglayicinin tanimadigi (Luhn gecerli) kart reddedilir', async () => {
-    const { add } = setup();
-
-    await expect(add({ number: '4111 1111 1111 1111' })).rejects.toMatchObject({
-      code: ERROR_CODES.PAYMENT_DECLINED,
-    });
   });
 
   it('gecmis kart ve cok ileri yil: VALIDATION_FAILED alan cumlesiyle; saglayiciya gidilmez', async () => {
