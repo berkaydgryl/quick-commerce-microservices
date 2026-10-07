@@ -34,7 +34,6 @@
   --bg-toast: var(--palette-gray-900);
 
   /* Geri alinamaz eylemin dugmesi (T11.15 adres silme onayi). */
-  --bg-danger: var(--palette-red-600);
 
   /* Pencerenin (giris/kayit, T11.6) arkasindaki karartma. */
   --bg-overlay: rgb(25 25 25 / 55%);

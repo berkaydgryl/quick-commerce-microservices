@@ -53,7 +53,7 @@ export function CartPanel({ texts, marketHref, cartHref, titleVisible }: CartPan
       />
       {confirming && (
         <ClearCartDialog
-          texts={texts}
+          question={texts.clearConfirmQuestion}
           onConfirm={() => {
             clear();
             setConfirming(false);

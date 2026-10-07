@@ -47,12 +47,14 @@ export const marketListCartContentSchema = z.object({
   closedNotice: contentTextSchema,
   goToCartLabel: contentTextSchema,
   clearLabel: contentTextSchema,
-  /** Sepeti bosaltma onayi (T16.3): soru, alt not ve dugmeler; pencerenin basligi clearLabel. */
+  /** Sepeti bosaltma onayi (F13 ortak onay penceresi; panel ve /sepet ayni soru). */
   clearConfirmQuestion: contentTextSchema,
-  clearConfirmHint: contentTextSchema,
-  clearConfirmLabel: contentTextSchema,
-  cancelLabel: contentTextSchema,
-  closeLabel: contentTextSchema,
+  /**
+   * Baska marketten ekleme: sepet bosaltilir (F13; eskiden kodda sabitti). Soru
+   * hedef marketin adini tasir (aramada hangi market belli olsun): onek + ad + sonek.
+   */
+  switchConfirmPrefix: contentTextSchema,
+  switchConfirmSuffix: contentTextSchema,
   /** Adet dugmelerinin adi, urun adinin arkasina: "Saksıda Küçük Ağaç adedini azalt" (T16.3). */
   decreaseSuffix: contentTextSchema,
   increaseSuffix: contentTextSchema,

@@ -71,7 +71,16 @@ describe('pencerenin adimlari (P1, P3, P4)', () => {
       pendingId: OLD_MASTERCARD.id,
       focus: { kind: 'selected' },
       addSession: 0,
+      deletions: 0,
     });
+  });
+
+  it('F13: silme listeyi yeniden kurar (sayac artar): silinen kartin dugmesi kalkinca odak kaybolmaz', () => {
+    const opened = openMethodDialog(OLD_MASTERCARD.id, 'list');
+    const deleted = methodDialogReducer(opened, { type: 'deleted', cardId: OLD_MASTERCARD.id });
+
+    expect(deleted.deletions).toBe(opened.deletions + 1);
+    expect(deleted.focus).toEqual({ kind: 'selected' });
   });
 
   it('"Kart ekle" (kart yokken): dogrudan ekleme adimi; geri listeye, odak "+ Kredi/Banka Kartı"', () => {

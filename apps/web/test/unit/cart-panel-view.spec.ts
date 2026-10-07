@@ -16,7 +16,6 @@ import { describe, expect, it } from 'vitest';
 import type { CartItem } from '../../src/features/cart/services/cart-state';
 import { CartPanelView } from '../../src/features/cart/ui/CartPanelView';
 import type { CartPanelViewProps } from '../../src/features/cart/ui/CartPanelView';
-import { ClearCartDialog } from '../../src/features/cart/ui/ClearCartDialog';
 
 const TEXTS = CONTENT_FALLBACK.marketList.cart;
 const MARKET = { id: 'mkt_kelebek', name: 'Kelebek Çiçekçilik' };
@@ -139,24 +138,5 @@ describe('CartPanelView (T16.3)', () => {
 
   it('magaza sayfasinda baslik ekran okuyucuya kalir (gorunmez sinif)', () => {
     expect(render({ titleVisible: false })).toMatch(/<h2[^>]*title--hidden[^>]*>Sepetim<\/h2>/);
-  });
-});
-
-describe('ClearCartDialog (T16.3)', () => {
-  it('soru, not, "Vazgeç" ve "Boşalt"; konu (kalin) yok', () => {
-    const markup = renderToStaticMarkup(
-      createElement(ClearCartDialog, {
-        texts: TEXTS,
-        onConfirm: () => undefined,
-        onCancel: () => undefined,
-      }),
-    );
-
-    expect(markup).toContain(`>${TEXTS.clearLabel}</h2>`);
-    expect(markup).toContain(`>${TEXTS.clearConfirmQuestion}</p>`);
-    expect(markup).toContain(TEXTS.clearConfirmHint);
-    expect(markup).toContain(`>${TEXTS.cancelLabel}</button>`);
-    expect(markup).toContain(`>${TEXTS.clearConfirmLabel}</button>`);
-    expect(markup).not.toContain('<strong');
   });
 });

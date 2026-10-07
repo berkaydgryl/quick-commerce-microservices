@@ -3763,6 +3763,7 @@ components:
           cartPage,
           footer,
           checkout,
+          confirm,
         ]
       properties:
         header:
@@ -3824,6 +3825,18 @@ components:
           $ref: "#/components/schemas/FooterContent"
         checkout:
           $ref: "#/components/schemas/CheckoutContent"
+        confirm:
+          $ref: "#/components/schemas/ConfirmContent"
+
+    ConfirmContent:
+      type: object
+      description: |
+        Ortak onay penceresinin düğmeleri (F13): bütün silme onayları aynı pencere; solda
+        "Hayır", sağda "Evet". Soru silinen şeye göre ekranın kendi bloğunda.
+      required: [yesLabel, noLabel]
+      properties:
+        yesLabel: { $ref: "#/components/schemas/ContentText" }
+        noLabel: { $ref: "#/components/schemas/ContentText" }
 
     FavoritesContent:
       type: object
@@ -4036,12 +4049,8 @@ components:
           addOptions,
           editTitle,
           deleteLabel,
-          confirmTitle,
-          confirmQuestionSuffix,
-          confirmHint,
-          confirmLabel,
+          confirmQuestion,
           deletingLabel,
-          cancelLabel,
           deletedToastSuffix,
           updatedToast,
         ]
@@ -4065,12 +4074,10 @@ components:
               label: { $ref: "#/components/schemas/ContentText" }
         editTitle: { $ref: "#/components/schemas/ContentText" }
         deleteLabel: { $ref: "#/components/schemas/ContentText" }
-        confirmTitle: { $ref: "#/components/schemas/ContentText" }
-        confirmQuestionSuffix: { $ref: "#/components/schemas/ContentText" }
-        confirmHint: { $ref: "#/components/schemas/ContentText" }
-        confirmLabel: { $ref: "#/components/schemas/ContentText" }
+        confirmQuestion:
+          $ref: "#/components/schemas/ContentText"
+          description: Ortak onay penceresinin sorusu (F13).
         deletingLabel: { $ref: "#/components/schemas/ContentText" }
-        cancelLabel: { $ref: "#/components/schemas/ContentText" }
         deletedToastSuffix: { $ref: "#/components/schemas/ContentText" }
         updatedToast: { $ref: "#/components/schemas/ContentText" }
 
@@ -4404,12 +4411,8 @@ components:
           expiredLabel,
           lastFourLabel,
           deleteSuffix,
-          confirmTitle,
-          confirmQuestionSuffix,
-          confirmHint,
-          confirmLabel,
+          confirmQuestion,
           deletingLabel,
-          cancelLabel,
           deletedToastSuffix,
           closeLabel,
           backToListLabel,
@@ -4453,12 +4456,10 @@ components:
         expiredLabel: { $ref: "#/components/schemas/ContentText" }
         lastFourLabel: { $ref: "#/components/schemas/ContentText" }
         deleteSuffix: { $ref: "#/components/schemas/ContentText" }
-        confirmTitle: { $ref: "#/components/schemas/ContentText" }
-        confirmQuestionSuffix: { $ref: "#/components/schemas/ContentText" }
-        confirmHint: { $ref: "#/components/schemas/ContentText" }
-        confirmLabel: { $ref: "#/components/schemas/ContentText" }
+        confirmQuestion:
+          $ref: "#/components/schemas/ContentText"
+          description: Ortak onay penceresinin sorusu (F13).
         deletingLabel: { $ref: "#/components/schemas/ContentText" }
-        cancelLabel: { $ref: "#/components/schemas/ContentText" }
         deletedToastSuffix: { $ref: "#/components/schemas/ContentText" }
         closeLabel: { $ref: "#/components/schemas/ContentText" }
         backToListLabel: { $ref: "#/components/schemas/ContentText" }
@@ -4659,10 +4660,8 @@ components:
               goToCartLabel,
               clearLabel,
               clearConfirmQuestion,
-              clearConfirmHint,
-              clearConfirmLabel,
-              cancelLabel,
-              closeLabel,
+              switchConfirmPrefix,
+              switchConfirmSuffix,
               decreaseSuffix,
               increaseSuffix,
               removeSuffix,
@@ -4684,10 +4683,10 @@ components:
             goToCartLabel: { $ref: "#/components/schemas/ContentText" }
             clearLabel: { $ref: "#/components/schemas/ContentText" }
             clearConfirmQuestion: { $ref: "#/components/schemas/ContentText" }
-            clearConfirmHint: { $ref: "#/components/schemas/ContentText" }
-            clearConfirmLabel: { $ref: "#/components/schemas/ContentText" }
-            cancelLabel: { $ref: "#/components/schemas/ContentText" }
-            closeLabel: { $ref: "#/components/schemas/ContentText" }
+            switchConfirmPrefix:
+              $ref: "#/components/schemas/ContentText"
+              description: Başka marketten eklerken sepeti boşaltma sorusu (F13); önek + hedef market + sonek.
+            switchConfirmSuffix: { $ref: "#/components/schemas/ContentText" }
             decreaseSuffix: { $ref: "#/components/schemas/ContentText" }
             increaseSuffix: { $ref: "#/components/schemas/ContentText" }
             removeSuffix: { $ref: "#/components/schemas/ContentText" }

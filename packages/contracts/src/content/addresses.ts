@@ -36,13 +36,9 @@ export const addressesContentSchema = z.object({
   /** Duzenleme penceresi (T11.8'in iki adimi) ve icindeki "Adresi sil" (T1). */
   editTitle: contentTextSchema,
   deleteLabel: contentTextSchema,
-  /** Silme onayi (T5): soru adin arkasina eklenir; altinda siparislerin etkilenmedigi. */
-  confirmTitle: contentTextSchema,
-  confirmQuestionSuffix: contentTextSchema,
-  confirmHint: contentTextSchema,
-  confirmLabel: contentTextSchema,
+  /** Silme onayi (F13 ortak onay penceresi): tek soru; "Evet" beklerken deletingLabel. */
+  confirmQuestion: contentTextSchema,
   deletingLabel: contentTextSchema,
-  cancelLabel: contentTextSchema,
   /** Bildirimler: silinen adin arkasina eklenir / guncelleme. */
   deletedToastSuffix: contentTextSchema,
   updatedToast: contentTextSchema,

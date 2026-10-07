@@ -34,13 +34,9 @@ export const paymentMethodsContentSchema = z.object({
   lastFourLabel: contentTextSchema,
   /** Cop kutusunun adi, kartin okunan adinin arkasina: "Visa, son dört hane 4242 kartını sil". */
   deleteSuffix: contentTextSchema,
-  /** Silme onayi. */
-  confirmTitle: contentTextSchema,
-  confirmQuestionSuffix: contentTextSchema,
-  confirmHint: contentTextSchema,
-  confirmLabel: contentTextSchema,
+  /** Silme onayi (F13 ortak onay penceresi): tek soru; "Evet" beklerken deletingLabel. */
+  confirmQuestion: contentTextSchema,
   deletingLabel: contentTextSchema,
-  cancelLabel: contentTextSchema,
   deletedToastSuffix: contentTextSchema,
   /** Pencerelerin X dugmesi (silme onayi, kosullar); icerik gelmese de yedekten (QA C5). */
   closeLabel: contentTextSchema,
