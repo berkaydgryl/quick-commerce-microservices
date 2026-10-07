@@ -81,4 +81,5 @@ export const CHECKOUT_FALLBACK: CheckoutContent = {
   deleteCardLabel: 'Kartı Sil',
   chooseLabel: 'Seç',
   backLabel: 'Geri',
+  cardMissingNotice: 'Bu kart artık kayıtlı değil, başka kart seç.',
 };

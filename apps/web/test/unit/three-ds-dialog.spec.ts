@@ -15,7 +15,7 @@ import { ThreeDsDialog } from '../../src/features/checkout/ui/ThreeDsDialog';
 const TEXTS = CONTENT_FALLBACK.checkout;
 
 function dialog(
-  remaining: number,
+  remaining: number | undefined,
   failure?: { message: string; attemptsLeft: number },
   verifying = false,
 ) {
@@ -40,6 +40,14 @@ describe('ThreeDsDialog (T12.4, T17.1)', () => {
     expect(markup).toMatch(/role="timer" class="[^"]*c-three-ds__time[^"]*">1:00</);
     expect(markup).not.toContain('is-warning');
     expect(markup).toMatch(/aria-live="polite"><\/p>/);
+  });
+
+  it('K1: sunucu sure bildirmediyse sayac YOK (istemci sure tahmin etmez); kod alani yine var', () => {
+    const html = dialog(undefined);
+
+    expect(html).not.toContain('role="timer"');
+    expect(html).not.toContain(TEXTS.threeDsRemainingLabel);
+    expect(html).toContain('autoComplete="one-time-code"');
   });
 
   it('son 30 saniye: uyari sinifi ve "Son 30 saniye" (aria-live)', () => {

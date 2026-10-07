@@ -1,13 +1,19 @@
-import type { Market, Money, ReserveCartRequest, SavedAddress, SavedCard } from '@getir/contracts';
+import type {
+  CreateOrderRequest,
+  Market,
+  Money,
+  ReserveCartRequest,
+  SavedAddress,
+  SavedCard,
+} from '@getir/contracts';
 import { CURRENCY } from '@getir/core';
 import type { CartTotals } from '@getir/pricing';
 
 import type { CartItem } from '../../cart/services/cart-state';
 
 import type { CheckoutForm } from './checkout-rules';
-import { buildPlaceOrderDraft } from './order-draft';
-import type { PlaceOrderDraft } from './order-draft';
 import { orderBlocker } from './order-readiness';
+import { buildOrderRequest } from './order-request';
 import { buildReserveRequest } from './reserve-request';
 
 export interface PrepareOrderInput {
@@ -23,7 +29,7 @@ export interface PrepareOrderInput {
 
 export interface PreparedOrder {
   readonly request: ReserveCartRequest;
-  readonly draft: (orderId: string) => PlaceOrderDraft;
+  readonly orderBody: (orderId: string) => CreateOrderRequest;
 }
 
 /**
@@ -63,6 +69,6 @@ export function prepareOrder({
   const expectedTotal: Money = { amountMinor: totals.totalMinor, currency: CURRENCY };
   return {
     request: buildReserveRequest(market.id, items, address, expectedTotal),
-    draft: (orderId) => buildPlaceOrderDraft(orderId, card.id, form),
+    orderBody: (orderId) => buildOrderRequest(orderId, card.id, form),
   };
 }

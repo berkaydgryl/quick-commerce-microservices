@@ -73,4 +73,6 @@ type Checkout struct {
 	DeleteCardLabel    string `json:"deleteCardLabel"`
 	ChooseLabel        string `json:"chooseLabel"`
 	BackLabel          string `json:"backLabel"`
+	// Secili kart artik yok (siparis 404, resource "card"; T12.4).
+	CardMissingNotice string `json:"cardMissingNotice"`
 }

@@ -507,6 +507,7 @@
     "onlinePaymentTitle": "Online Ödeme",
     "deleteCardLabel": "Kartı Sil",
     "chooseLabel": "Seç",
-    "backLabel": "Geri"
+    "backLabel": "Geri",
+    "cardMissingNotice": "Bu kart artık kayıtlı değil, başka kart seç."
   }
 }

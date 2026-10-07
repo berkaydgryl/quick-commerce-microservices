@@ -4268,6 +4268,7 @@ components:
           deleteCardLabel,
           chooseLabel,
           backLabel,
+          cardMissingNotice,
         ]
       properties:
         title: { $ref: "#/components/schemas/ContentText" }
@@ -4344,6 +4345,7 @@ components:
         deleteCardLabel: { $ref: "#/components/schemas/ContentText" }
         chooseLabel: { $ref: "#/components/schemas/ContentText" }
         backLabel: { $ref: "#/components/schemas/ContentText" }
+        cardMissingNotice: { $ref: "#/components/schemas/ContentText" }
 
     PaymentMethodsContent:
       type: object

@@ -6,7 +6,8 @@ import { ThreeDsDialog } from './ThreeDsDialog';
 import type { ThreeDsTexts } from './ThreeDsDialog';
 
 interface ThreeDsStepProps {
-  readonly deadline: number;
+  /** Son an; sunucu sure bildirmediyse undefined (geri sayim yok). */
+  readonly deadline: number | undefined;
   readonly verifying: boolean;
   readonly failure: { readonly message: string; readonly attemptsLeft: number } | undefined;
   readonly texts: ThreeDsTexts;

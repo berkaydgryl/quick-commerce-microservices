@@ -2,7 +2,7 @@
  * Istekten hemen onceki son kapi (T12.4; QA N3): kart kasasi kapali, kart,
  * hesap adresi, market ya da kurallar yok, hediye hatali ya da sozlesme
  * onaysizsa istek KURULMAZ (dugmenin pasifligine guvenilmez). Hazirsa
- * rezervasyon istegi ve taslak govde (yalniz cardId).
+ * rezervasyon istegi ve siparis govdesi (yalniz cardId).
  */
 
 import type { SavedAddress, SavedCard } from '@getir/contracts';
@@ -64,7 +64,7 @@ const READY: PrepareOrderInput = {
 const ORDER_ID = `ord_${'b'.repeat(32)}`;
 
 describe('prepareOrder (T12.4, QA N3)', () => {
-  it('hazir: rezervasyon istegi (beklenen tutar = Ödenecek Tutar) ve taslak govde (yalniz cardId)', () => {
+  it('hazir: rezervasyon istegi (beklenen tutar = Ödenecek Tutar) ve siparis govdesi (yalniz cardId)', () => {
     const prepared = prepareOrder(READY);
 
     expect(prepared?.request).toEqual({
@@ -73,7 +73,7 @@ describe('prepareOrder (T12.4, QA N3)', () => {
       address: { line: 'Moda Cad. No:12', location: { lat: 40.98, lng: 29.02 } },
       expectedTotal: { amountMinor: 8410, currency: 'TRY' },
     });
-    expect(prepared?.draft(ORDER_ID).payment).toEqual({ method: 'CARD', cardId: CARD.id });
+    expect(prepared?.orderBody(ORDER_ID).payment).toEqual({ method: 'CARD', cardId: CARD.id });
   });
 
   it('kart kasasi kapali (production paketi): istek kurulmaz', () => {

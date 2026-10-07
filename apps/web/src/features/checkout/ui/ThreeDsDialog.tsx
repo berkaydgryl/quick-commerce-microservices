@@ -23,8 +23,8 @@ export type ThreeDsTexts = Pick<
 
 interface ThreeDsDialogProps {
   readonly texts: ThreeDsTexts;
-  /** Kalan saniye (useCountdown). */
-  readonly remaining: number;
+  /** Kalan saniye (useCountdown); sure bilinmiyorsa undefined (sayac gosterilmez). */
+  readonly remaining: number | undefined;
   readonly verifying: boolean;
   readonly failure: { readonly message: string; readonly attemptsLeft: number } | undefined;
   readonly onSubmit: (otp: string) => void;
@@ -50,7 +50,7 @@ export function ThreeDsDialog({
 }: ThreeDsDialogProps) {
   const id = useId();
   const [otp, setOtp] = useState('');
-  const warning = isCountdownWarning(remaining);
+  const warning = remaining !== undefined && isCountdownWarning(remaining);
   const failureId = `${id}-hata`;
 
   return (
@@ -69,19 +69,21 @@ export function ThreeDsDialog({
         }}
       >
         <p>{texts.threeDsDescription}</p>
-        <p className={styles['c-three-ds__timer']}>
-          <span>{texts.threeDsRemainingLabel}</span>
-          <span
-            role="timer"
-            className={
-              warning
-                ? `${styles['c-three-ds__time']} ${styles['is-warning']}`
-                : styles['c-three-ds__time']
-            }
-          >
-            {formatCountdown(remaining)}
-          </span>
-        </p>
+        {remaining !== undefined && (
+          <p className={styles['c-three-ds__timer']}>
+            <span>{texts.threeDsRemainingLabel}</span>
+            <span
+              role="timer"
+              className={
+                warning
+                  ? `${styles['c-three-ds__time']} ${styles['is-warning']}`
+                  : styles['c-three-ds__time']
+              }
+            >
+              {formatCountdown(remaining)}
+            </span>
+          </p>
+        )}
         <p className={styles['c-three-ds__sr']} aria-live="polite">
           {warning ? texts.threeDsLastSecondsNotice : ''}
         </p>

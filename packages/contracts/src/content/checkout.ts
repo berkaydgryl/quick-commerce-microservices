@@ -97,6 +97,11 @@ export const checkoutContentSchema = z.object({
   deleteCardLabel: contentTextSchema,
   chooseLabel: contentTextSchema,
   backLabel: contentTextSchema,
+  /**
+   * Secili kayitli kart artik yok (POST /v1/orders 404, ayrinti resource
+   * "card"; T12.4): siparis odeme bekler kalir, baska kartla yeniden verilir.
+   */
+  cardMissingNotice: contentTextSchema,
 });
 
 export type CheckoutContent = z.infer<typeof checkoutContentSchema>;

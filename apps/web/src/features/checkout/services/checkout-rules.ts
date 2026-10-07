@@ -1,20 +1,12 @@
 /**
- * Odeme formunun kurallari (T17.1) - TASLAK (PM karari M3): siparis govdesinin
- * hediye ve not alanlari backend'de henuz yok (B2). Sinirlar ve cumleler burada
- * bekler; B1/B2 birlesince @getir/contracts'a tasinir ve gateway ayni kurali
- * uygular. Telefon kurali ve cumlesi bugun de sozlesmeden (PHONE_PATTERN).
+ * Odeme formunun durumu ve hatalari (T17.1). Sinirlar ve cumleler sozlesmeden
+ * (@getir/contracts checkout-rules: CHECKOUT_TEXT_MAX, GIFT_NAME_MAX,
+ * giftDetailsSchema; B2): gateway ayni kurali uygular, istemci kopya tutmaz.
  */
 
-import { PHONE_MESSAGE, PHONE_PATTERN } from '@getir/contracts';
+import { giftDetailsSchema } from '@getir/contracts';
 
 import { toE164 } from '../../auth/services/phone';
-
-/** Hediye kartı notu ve siparis notu en fazla bu kadar karakter (B2 taslagi). */
-export const CHECKOUT_TEXT_MAX = 250;
-/** Gonderici ve alici adi en fazla bu kadar karakter (B2 taslagi). */
-export const GIFT_NAME_MAX = 60;
-
-export const RECIPIENT_NAME_MESSAGE = 'Alıcının adını yaz';
 
 /** Hediye bilgileri: alici adi ve telefonu hediye acikken zorunludur. */
 export interface GiftForm {
@@ -42,16 +34,31 @@ export const EMPTY_CHECKOUT_FORM: CheckoutForm = {
 
 export type GiftFieldErrors = Partial<Record<'recipientName' | 'recipientPhone', string>>;
 
+/** Formda hatasi gosterilen hediye alanlari (sinirlar alanin maxLength'iyle tutulur). */
+const SHOWN_FIELDS: readonly (keyof GiftFieldErrors)[] = ['recipientName', 'recipientPhone'];
+
 /**
- * Hediye alanlarinin hatalari: hediye kapaliysa yok. Alici adi bosluktan ibaret
- * olamaz; telefon Turkiye cep numarasi olmali (giris ve kayitla ayni kural).
+ * Hediye alanlarinin hatalari: hediye kapaliysa yok. Kural ve cumle sozlesmenin
+ * giftDetailsSchema'sindan (alici adi bosluktan ibaret olamaz, telefon E.164
+ * cep numarasi): siparis govdesi de ayni semayla dogrulanir.
  */
 export function giftFieldErrors(gift: GiftForm): GiftFieldErrors {
   if (!gift.enabled) {
     return {};
   }
-  return {
-    ...(gift.recipientName.trim() === '' ? { recipientName: RECIPIENT_NAME_MESSAGE } : {}),
-    ...(PHONE_PATTERN.test(toE164(gift.recipientPhone)) ? {} : { recipientPhone: PHONE_MESSAGE }),
-  };
+  const parsed = giftDetailsSchema.safeParse({
+    enabled: true,
+    message: gift.message,
+    senderName: gift.senderName,
+    recipientName: gift.recipientName,
+    recipientPhone: toE164(gift.recipientPhone),
+  });
+  const errors: { -readonly [Field in keyof GiftFieldErrors]: string } = {};
+  for (const issue of parsed.error?.issues ?? []) {
+    const field = SHOWN_FIELDS.find((name) => name === issue.path[0]);
+    if (field !== undefined) {
+      errors[field] ??= issue.message;
+    }
+  }
+  return errors;
 }
