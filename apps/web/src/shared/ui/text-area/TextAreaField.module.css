@@ -1,0 +1,34 @@
+/* Cok satirli alan (T17.1): kimlik formu alaniyla ayni cerceve; sayac sag altta. */
+.c-text-area {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.c-text-area__label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.c-text-area__input {
+  min-block-size: var(--size-text-area-min);
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  resize: vertical;
+  background: var(--bg-surface);
+  border: var(--border-width-thin) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.c-text-area__input::placeholder {
+  color: var(--text-muted);
+}
+
+.c-text-area__input:focus {
+  border-color: var(--color-brand-primary);
+}
+
+.c-text-area__counter {
+  justify-self: end;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}

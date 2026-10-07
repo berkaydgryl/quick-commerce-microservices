@@ -1,0 +1,81 @@
+/*
+ * Hediye bilgileri (T17.1; referans #33): ust satirda solda cerceveli mor
+ * "Hazır Not Ekle", sagda anahtar; alanlar genis ekranda tek satirda (3
+ * sutun), dar ekranda alt alta; en altta bilgi ikonu ve notu.
+ */
+.c-gift__top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  align-items: center;
+}
+
+.c-gift__switch {
+  margin-inline-start: auto;
+}
+
+.c-gift__preset {
+  padding: var(--space-2) var(--space-4);
+  font: inherit;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+  cursor: pointer;
+  background: var(--bg-surface);
+  border: var(--border-width-thin) solid var(--color-brand-primary);
+  border-radius: var(--radius-md);
+}
+
+.c-gift__preset:hover {
+  background: var(--color-brand-primary-subtle);
+}
+
+.c-gift__fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.c-gift__info-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  align-items: center;
+}
+
+/* Dokunma alani en az 44 px; gorunen gri yuvarlak icinde. */
+.c-gift__info {
+  display: grid;
+  place-items: center;
+  inline-size: var(--size-touch-min);
+  block-size: var(--size-touch-min);
+  padding: 0;
+  margin-inline-start: calc(var(--space-3) * -1);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--radius-pill);
+}
+
+.c-gift__info-dot {
+  display: grid;
+  place-items: center;
+  inline-size: var(--size-checkbox);
+  block-size: var(--size-checkbox);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-extrabold);
+  color: var(--text-on-brand);
+  background: var(--text-muted);
+  border-radius: var(--radius-pill);
+}
+
+.c-gift__info-text {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+@media (--bp-md) {
+  .c-gift__fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

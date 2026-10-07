@@ -2,6 +2,7 @@ import type { CartPageContent, MarketListCartContent } from '@getir/contracts';
 import { CURRENCY } from '@getir/core';
 import type { CartTotals } from '@getir/pricing';
 import { useId } from 'react';
+import { Link } from 'react-router-dom';
 
 import { formatMoney } from '../../../shared/services/format';
 
@@ -17,15 +18,18 @@ interface CartTotalsCardProps {
   >;
   /** "Minimum sepet tutarına kalan" (sepet paneliyle ayni metin). */
   readonly cartTexts: Pick<MarketListCartContent, 'minBasketRemainingLabel'>;
+  /** Odeme sayfasi (T17.1); sayfa verir: sepet odeme sayfasini tanimaz. */
+  readonly checkoutHref: string;
 }
 
 /**
  * "Sepet Toplamı" (T16.3; referans getircarsi): "Sepet Tutarı" ve mor tutar;
  * altinda minimum sepete ve ucretsiz teslimata kalan (T16.3 olcutu), sonra mor
- * "Ödemeye Geç". Dugme odeme sayfasi (F4) gelene kadar PASIF (aria-disabled,
- * PM karari L1): kirik baglanti olmasin. Hesap @getir/pricing'te; durumsuz.
+ * "Ödemeye Geç": odeme sayfasina (T17.1) baglanti. Minimum sepet tutmazsa ya
+ * da kurallar gelmediyse PASIF (aria-disabled): odeme sayfasinda da siparis
+ * verilemezdi. Hesap @getir/pricing'te; durumsuz.
  */
-export function CartTotalsCard({ totals, texts, cartTexts }: CartTotalsCardProps) {
+export function CartTotalsCard({ totals, texts, cartTexts, checkoutHref }: CartTotalsCardProps) {
   const titleId = useId();
   return (
     <section className={styles['c-cart-totals']} aria-labelledby={titleId}>
@@ -56,9 +60,15 @@ export function CartTotalsCard({ totals, texts, cartTexts }: CartTotalsCardProps
           </p>
         )}
       </div>
-      <button type="button" className={styles['c-cart-totals__checkout']} aria-disabled="true">
-        {texts.checkoutLabel}
-      </button>
+      {totals?.canCheckout === true ? (
+        <Link to={checkoutHref} className={styles['c-cart-totals__checkout']}>
+          {texts.checkoutLabel}
+        </Link>
+      ) : (
+        <button type="button" className={styles['c-cart-totals__checkout']} aria-disabled="true">
+          {texts.checkoutLabel}
+        </button>
+      )}
     </section>
   );
 }

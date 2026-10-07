@@ -1,0 +1,16 @@
+/* Teslimat yontemi (T17.1): tek, secili radyo ve satiri. */
+.c-delivery-method {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-block-size: var(--size-touch-min);
+  font-weight: var(--font-weight-semibold);
+}
+
+.c-delivery-method__radio {
+  flex-shrink: 0;
+  inline-size: var(--size-checkbox);
+  block-size: var(--size-checkbox);
+  margin: 0;
+  accent-color: var(--color-brand-primary);
+}

@@ -13,6 +13,7 @@ import { appDownloadContentSchema, featureContentSchema } from './app-download.j
 import { appHeaderContentSchema } from './app-header.js';
 import { bannerSchema } from './banner.js';
 import { cartPageContentSchema, footerContentSchema } from './cart-page.js';
+import { checkoutContentSchema } from './checkout.js';
 import { contentTextSchema } from './content-text.js';
 import { favoritesContentSchema } from './favorites.js';
 import { loginCardContentSchema } from './login-card.js';
@@ -60,6 +61,8 @@ export const welcomeContentSchema = z.object({
   /** Sepet sayfasi ve alt bilgi (T16.3). */
   cartPage: cartPageContentSchema,
   footer: footerContentSchema,
+  /** Odeme sayfasi (T17.1). */
+  checkout: checkoutContentSchema,
 });
 
 export type WelcomeContent = z.infer<typeof welcomeContentSchema>;

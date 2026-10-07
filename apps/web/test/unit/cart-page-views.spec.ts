@@ -2,8 +2,9 @@
  * Sepet sayfasinin gorunumleri (T16.3; referans getircarsi sepet sayfasi):
  * magaza kutusu (magaza baglantisi, satirda gorsel, ad, mor kalem tutari,
  * "Son N adet", adet kutusu; satir sonunda cop YOK, L3), "Sepet Toplamı"
- * (tutar, minimum sepete ve ucretsiz teslimata kalan; "Ödemeye Geç" F4'e
- * kadar pasif, L1), teslim suresi cipi, "Son N adet" esigi ve alt bilgi.
+ * (tutar, minimum sepete ve ucretsiz teslimata kalan; "Ödemeye Geç" odeme
+ * sayfasina, minimum sepet tutmazsa pasif), teslim suresi cipi, "Son N adet"
+ * esigi ve alt bilgi.
  */
 
 import { CONTENT_FALLBACK } from '@getir/contracts';
@@ -68,7 +69,16 @@ function card(items: readonly CartItem[]): string {
 
 function totals(value: CartTotals | undefined): string {
   return renderToStaticMarkup(
-    createElement(CartTotalsCard, { totals: value, texts: PAGE, cartTexts: CART }),
+    createElement(
+      MemoryRouter,
+      null,
+      createElement(CartTotalsCard, {
+        totals: value,
+        texts: PAGE,
+        cartTexts: CART,
+        checkoutHref: '/odeme',
+      }),
+    ),
   );
 }
 
@@ -135,13 +145,19 @@ describe('CartTotalsCard (T16.3)', () => {
     expect(totals(undefined)).not.toContain('TL');
   });
 
-  it('"Ödemeye Geç" F4 gelene kadar pasif (aria-disabled), baglanti degil (L1)', () => {
-    const markup = totals(TOTALS);
+  it('"Ödemeye Geç": minimum sepet tutuyorsa odeme sayfasina baglanti (T17.1)', () => {
+    expect(totals(TOTALS)).toMatch(/<a[^>]*href="\/odeme"[^>]*>Ödemeye Geç<\/a>/);
+  });
 
-    expect(markup).toMatch(
-      /<button type="button"[^>]*aria-disabled="true"[^>]*>Ödemeye Geç<\/button>/,
-    );
-    expect(markup).not.toContain('href=');
+  it('"Ödemeye Geç": minimum sepet tutmuyorsa ya da kurallar yoksa pasif dugme, baglanti degil', () => {
+    for (const value of [{ ...TOTALS, canCheckout: false }, undefined]) {
+      const markup = totals(value);
+
+      expect(markup).toMatch(
+        /<button type="button"[^>]*aria-disabled="true"[^>]*>Ödemeye Geç<\/button>/,
+      );
+      expect(markup).not.toContain('href=');
+    }
   });
 });
 

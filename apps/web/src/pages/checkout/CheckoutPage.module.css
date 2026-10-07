@@ -1,0 +1,35 @@
+/*
+ * Odeme sayfasi duzeni (T17.1; referans getircarsi). Sepet sayfasiyla ayni:
+ * mobilde tek sutun (bolumler, adres, ozet); genis ekranda (64rem) solda
+ * bolumler, sagda adres ve ozet (7:3).
+ */
+.c-checkout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+}
+
+/* Sayfanin h1'i gorunmez: bolum basliklari gorunur (referans), ekran okuyucu sayfayi adiyla bulur. */
+.c-checkout__title {
+  position: absolute;
+  width: var(--size-visually-hidden);
+  height: var(--size-visually-hidden);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.c-checkout__main,
+.c-checkout__side {
+  display: grid;
+  gap: var(--space-5);
+  align-content: start;
+  min-width: 0;
+}
+
+@media (--bp-lg) {
+  .c-checkout {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
+    align-items: start;
+  }
+}

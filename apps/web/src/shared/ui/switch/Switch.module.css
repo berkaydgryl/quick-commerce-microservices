@@ -1,0 +1,57 @@
+/* Anahtar (T17.1): durum metni ve ray; acikken ray mor, top saga kayar. */
+.c-switch {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-1);
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-default);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+}
+
+/* Durum metni ("Evet" / "Hayır"): genislik iki metin arasinda ziplamasin. */
+.c-switch__state {
+  min-inline-size: var(--size-switch-track);
+  text-align: end;
+}
+
+.c-switch__track {
+  position: relative;
+  display: inline-block;
+  inline-size: var(--size-switch-track);
+  block-size: var(--size-switch-thumb);
+  padding: var(--border-width-cart-panel);
+  background: var(--border-subtle);
+  border-radius: var(--radius-pill);
+  transition: background var(--duration-fast) var(--easing-standard);
+}
+
+.c-switch__thumb {
+  position: absolute;
+  inset-block: var(--border-width-cart-panel);
+  inset-inline-start: var(--border-width-cart-panel);
+  inline-size: calc(var(--size-switch-thumb) - var(--border-width-cart-panel) * 2);
+  background: var(--bg-surface);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-surface);
+  transition: transform var(--duration-fast) var(--easing-standard);
+}
+
+.c-switch.is-on .c-switch__track {
+  background: var(--color-brand-primary);
+}
+
+.c-switch.is-on .c-switch__thumb {
+  transform: translateX(calc(var(--size-switch-track) - var(--size-switch-thumb)));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-switch__track,
+  .c-switch__thumb {
+    transition: none;
+  }
+}

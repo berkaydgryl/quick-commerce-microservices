@@ -1,0 +1,59 @@
+import type { CheckoutContent } from './checkout.js';
+
+/**
+ * Odeme sayfasinin yedegi (T17.1): icerik gelmese de form doldurulur. Degerler
+ * welcome.json checkout ile AYNIDIR. Sozlesme paragraflari DEMO yer tutucu.
+ */
+export const CHECKOUT_FALLBACK: CheckoutContent = {
+  title: 'Ödeme',
+  giftTitle: 'Hediye Bilgileri',
+  giftToggleLabel: 'Hediye olarak gönder',
+  giftYesLabel: 'Evet',
+  giftNoLabel: 'Hayır',
+  giftInfoLabel: 'Hediye bilgisi',
+  giftInfoText: 'Hediye notu ve alıcı bilgileri siparişle birlikte teslimata iletilir.',
+  presetNoteLabel: 'Hazır Not Ekle',
+  presetNotesTitle: 'Hazır Notlar',
+  presetNotes: [
+    'İyi ki doğdun! Nice mutlu yıllara.',
+    'Geçmiş olsun, en kısa zamanda iyileşmeni dilerim.',
+    'Tebrikler! Başarılarının devamını dilerim.',
+    'Seni düşündüm, afiyet olsun.',
+  ],
+  giftMessageLabel: 'Hediye Kartı Notu',
+  senderNameLabel: 'Göndericinin Adı',
+  recipientNameLabel: 'Alıcının Adı',
+  recipientPhoneLabel: 'Alıcının Telefon Numarası',
+  deliveryTitle: 'Teslimat Yöntemi',
+  deliveryFeeLabel: 'Teslimat ücreti',
+  freeDeliveryLabel: 'Ücretsiz Teslimat',
+  noteTitle: 'Not Ekle',
+  noteLabel: 'Sipariş notu',
+  notePlaceholder: 'Sipariş notunu buraya yazabilirsin.',
+  doNotRingLabel: 'Zili Çalma',
+  paymentTitle: 'Ödeme Yöntemi',
+  changeLabel: 'Değiştir',
+  addCardLabel: 'Kart ekle',
+  cardsLoadingLabel: 'Kartların yükleniyor…',
+  noCardNotice: 'Kayıtlı kartın yok.',
+  securityNote: "Kart numaranın tamamını ve CVV'ni saklamıyoruz; ödeme kayıtlı kartınla alınır.",
+  summaryTitle: 'Ödeme Özeti',
+  subtotalLabel: 'Sepet Tutarı',
+  deliveryFeeRowLabel: 'Teslimat Ücreti',
+  freeLabel: 'Ücretsiz',
+  payableLabel: 'Ödenecek Tutar',
+  preInfoLinkLabel: 'Ön Bilgilendirme Formu',
+  agreementJoiner: 've',
+  distanceSalesLinkLabel: 'Mesafeli Satış Sözleşmesi',
+  agreementSuffix: "'ni okudum, kabul ediyorum.",
+  preInfoParagraphs: [
+    'Bu bir demo uygulamasıdır: Ön Bilgilendirme Formu metni henüz eklenmedi.',
+    'Gerçek metin eklendiğinde bu pencerede gösterilecek.',
+  ],
+  distanceSalesParagraphs: [
+    'Bu bir demo uygulamasıdır: Mesafeli Satış Sözleşmesi metni henüz eklenmedi.',
+    'Gerçek metin eklendiğinde bu pencerede gösterilecek.',
+  ],
+  closeLabel: 'Kapat',
+  placeOrderLabel: 'Sipariş Ver',
+};

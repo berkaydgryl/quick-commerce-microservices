@@ -1,0 +1,78 @@
+/*
+ * Odeme ozeti (T17.1; referans getircarsi): baslik, beyaz kartta tutar
+ * satirlari ve sozlesme onayi; altta mor "Sipariş Ver" ve sagda beyaz kutuda
+ * tutar (Sepetim panelinin "Sepete git"i gibi). Siparis akisi (F4b) gelene
+ * kadar dugme pasif gorunur.
+ */
+.c-order-summary {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.c-order-summary__title {
+  font-size: var(--font-size-md);
+}
+
+.c-order-summary__card {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-order-summary__lines {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.c-order-summary__line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: space-between;
+}
+
+.c-order-summary__line--total {
+  padding-block-start: var(--space-2);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+  border-block-start: var(--border-width-thin) solid var(--border-faint);
+}
+
+.c-order-summary__place {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 0;
+  overflow: hidden;
+  font: inherit;
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+  background: none;
+  border: var(--border-width-cart-panel) solid var(--color-brand-primary);
+  border-radius: var(--radius-md);
+}
+
+.c-order-summary__place-label {
+  flex: 1 1 auto;
+  padding: var(--space-3) var(--space-4);
+  color: var(--text-on-brand);
+  white-space: nowrap;
+  background: var(--color-brand-primary);
+}
+
+.c-order-summary__place-amount {
+  flex: 1 0 auto;
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-brand-primary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  background: var(--bg-surface);
+}
+
+/* Siparis akisi (F4b) gelene kadar pasif: odaklanir, basilmaz. */
+.c-order-summary__place[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
+}
