@@ -6,6 +6,7 @@ import { AppError, ERROR_CODES, fixedClock, ORDER_STATUS, RISK_BANDS } from '@ge
 import { describe, expect, it } from 'vitest';
 
 import type { OrderRepository } from '../../src/domain/order-repository.js';
+import type { OrderDetails } from '../../src/domain/order-details.js';
 import type { Order } from '../../src/domain/order.js';
 import { TIMELINE_NOTE, transitionOrder } from '../../src/domain/order.js';
 import type { OrderStoreFixtures } from './order-store-fixtures.js';
@@ -37,6 +38,46 @@ export function describeOrderRepositoryContract(
       const read = await store.findById(reserved.id);
       expect(read).toEqual(reserved);
       expect(read?.timeline[1]?.at).toBeInstanceOf(Date);
+    });
+
+    it('siparis ayrintisi (T12.4) update ile yazilir, sonraki gecislerde KAYBOLMAZ', async () => {
+      const store = getStore();
+      const draft = draftAt(newUserId(), START_MS);
+      await store.insert(draft, []);
+      const details: OrderDetails = {
+        gift: {
+          message: 'Mutlu yıllar',
+          senderName: '',
+          recipientName: 'Alıcı Adı',
+          recipientPhone: '+905321234567',
+        },
+        note: 'Zili çalma',
+        doNotRingBell: true,
+        agreementsAcceptedAt: new Date(START_MS + 1_000),
+      };
+      const checked: Order = {
+        ...transitionOrder(draft, ORDER_STATUS.RISK_CHECK, fixedClock(START_MS + 1_000)),
+        details,
+      };
+      await store.update(checked, draft.version, []);
+      const reserved = transitionOrder(
+        checked,
+        ORDER_STATUS.RESERVED,
+        fixedClock(START_MS + 2_000),
+      );
+      await store.update(reserved, checked.version, []);
+
+      const read = await store.findById(draft.id);
+      expect(read?.details).toEqual(details);
+      expect(read?.details?.agreementsAcceptedAt).toBeInstanceOf(Date);
+
+      // Hediyesiz ayrinti: gift alani HIC yok (bos nesne degil).
+      const plain = draftAt(newUserId(), START_MS);
+      const { gift: _gift, ...withoutGift } = details;
+      await store.insert({ ...plain, details: withoutGift }, []);
+      const plainRead = await store.findById(plain.id);
+      expect(plainRead?.details).toEqual(withoutGift);
+      expect(plainRead?.details).not.toHaveProperty('gift');
     });
 
     it('olmayan kimlik: null', async () => {

@@ -16,13 +16,13 @@ import type { CreateDraftOrder } from '../../application/create-draft-order.js';
 import type { CreateOrder } from '../../application/create-order.js';
 import type { GetOrder } from '../../application/get-order.js';
 import type { ListMyOrders } from '../../application/list-my-orders.js';
+import { createOrderRequestSchema } from './create-order-schema.js';
 import { toProtoOrder, toProtoOrderStatus } from './mappers.js';
 import { encodePageToken } from './page-token.js';
 import {
   cancelOrderRequestSchema,
   confirmPaymentRequestSchema,
   createDraftOrderRequestSchema,
-  createOrderRequestSchema,
   getOrderRequestSchema,
   listMyOrdersRequestSchema,
 } from './schemas.js';
@@ -79,13 +79,15 @@ export function createOrderImplementation(deps: OrderHandlerDeps): UntypedServic
       schema: createOrderRequestSchema,
       ...(logger === undefined ? {} : { logger }),
       handle: async (input, ctx): Promise<orderV1.CreateOrderResponse> => {
-        const { order, challengeId } = await deps.createOrder(
+        const { order, challengeId, challengeExpiresAt } = await deps.createOrder(
           {
             orderId: input.orderId,
             userId: input.userId,
             method: input.paymentMethod,
+            ...(input.cardId === undefined ? {} : { cardId: input.cardId }),
             ...(input.cardToken === undefined ? {} : { cardToken: input.cardToken }),
             signals: input.signals,
+            details: input.details,
           },
           // risk ve payment cagrilari bu requestId'yi AYNEN tasir.
           { requestId: ctx.requestId, logger: ctx.logger },
@@ -96,6 +98,7 @@ export function createOrderImplementation(deps: OrderHandlerDeps): UntypedServic
           orderId: order.id,
           status: toProtoOrderStatus(order.status),
           challengeId: challengeId ?? '',
+          ...(challengeExpiresAt === undefined ? {} : { challengeExpiresAt }),
         };
       },
     }),
@@ -123,7 +126,8 @@ export function createOrderImplementation(deps: OrderHandlerDeps): UntypedServic
       schema: getOrderRequestSchema,
       ...(logger === undefined ? {} : { logger }),
       handle: async (input): Promise<orderV1.GetOrderResponse> => ({
-        order: toProtoOrder(await deps.getOrder(input)),
+        // Ayrinti yalnizca burada: tek siparis, sahibine (getOrder sahipligi denetler).
+        order: toProtoOrder(await deps.getOrder(input), { withDetails: true }),
       }),
     }),
 
@@ -139,7 +143,8 @@ export function createOrderImplementation(deps: OrderHandlerDeps): UntypedServic
         });
         const nextPageToken = result.next === undefined ? '' : encodePageToken(result.next);
         return {
-          orders: result.orders.map(toProtoOrder),
+          // Liste ayrinti TASIMAZ (T12.4): kisisel veri yalnizca GetOrder'da.
+          orders: result.orders.map((order) => toProtoOrder(order)),
           page: { nextPageToken, totalSize: TOTAL_SIZE_NOT_COUNTED },
         };
       },

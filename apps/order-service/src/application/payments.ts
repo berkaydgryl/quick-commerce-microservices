@@ -20,7 +20,9 @@ export interface ChargeRequest {
   readonly amountMinor: number;
   readonly currency: string;
   readonly method: PaymentMethod;
-  /** Yalnizca kartli odemede. */
+  /** Kayitli kart (T12.4); kartli odemede bu ya da cardToken, TAM biri. */
+  readonly cardId?: string;
+  /** Yalnizca kartli odemede (DEPRECATED test jetonu). */
   readonly cardToken?: string;
   readonly idempotencyKey: string;
   /** Orta risk bandi: banka onaylasa bile 3DS istenir. */

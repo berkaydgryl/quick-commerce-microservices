@@ -19,6 +19,8 @@
 import { ORDER_STATUS } from '@getir/core';
 
 import type { CheckoutSignals } from '../domain/checkout-risk.js';
+import { differsFromRecorded } from '../domain/order-details.js';
+import type { OrderDetailsInput } from '../domain/order-details.js';
 import type { OrderHistoryReader } from '../domain/order-history-reader.js';
 import type { OrderOutbox } from '../domain/order-outbox.js';
 import type { OrderRepository } from '../domain/order-repository.js';
@@ -51,12 +53,17 @@ export interface CreateOrderInput extends PaymentChoice {
    * tekrar denemede (AWAITING_PAYMENT) risk yeniden sorulmadigi icin kullanilmaz.
    */
   readonly signals?: CheckoutSignals | undefined;
+  /**
+   * Siparis ayrintilari (T12.4): risk adiminin yaziminda siparise yazilir.
+   * Tekrar denemede ILK yazilan gecerli; farkli gelen sessizce yok sayilir.
+   */
+  readonly details?: OrderDetailsInput | undefined;
 }
 
 export type CreateOrder = (input: CreateOrderInput, scope: RequestScope) => Promise<CheckoutResult>;
 
 export function createCreateOrder(deps: CreateOrderDeps): CreateOrder {
-  return async ({ orderId, userId, signals = {}, ...choice }, scope) => {
+  return async ({ orderId, userId, signals = {}, details, ...choice }, scope) => {
     const order = await findOwnOrder(deps.repository, orderId, userId);
     if (order.status === ORDER_STATUS.DRAFT && !hasLiveReservation(order, deps.clock.date())) {
       // Kilidi dusmus taslak (T11.2, karar "iptal + 410"): kilitsiz stokla odeme
@@ -64,10 +71,14 @@ export function createCreateOrder(deps: CreateOrderDeps): CreateOrder {
       return { order: await resolveLapsedOrder(deps, order, scope) };
     }
 
-    const awaitingPayment =
-      order.status === ORDER_STATUS.AWAITING_PAYMENT
-        ? order
-        : await passRiskStep(deps, order, choice.method, signals, scope);
+    const retrying = order.status === ORDER_STATUS.AWAITING_PAYMENT;
+    if (retrying && details !== undefined && differsFromRecorded(order, details)) {
+      // Ilk yazilan ayrinti gecerli. Deger YAZILMAZ (kisisel veri); yok sayildigi bilinsin.
+      scope.logger.info({ orderId }, 'tekrar denemede farkli siparis ayrintisi yok sayildi');
+    }
+    const awaitingPayment = retrying
+      ? order
+      : await passRiskStep(deps, order, { method: choice.method, signals, details }, scope);
 
     return chargeOrder(deps, awaitingPayment, choice, scope);
   };
