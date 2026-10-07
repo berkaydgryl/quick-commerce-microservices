@@ -178,13 +178,14 @@ func Load(getenv Getenv) (Config, error) {
 		problems = append(problems, err)
 	}
 
-	// Servis listesi sabittir: gateway'in dogrudan konustugu uc servis (stok
-	// T8.4'ten beri). Yeni servis geldiginde buraya bir satir eklenir; adres yine
-	// ortamdan gelir. /healthz listedeki her servisi yoklar.
+	// Servis listesi sabittir: gateway'in dogrudan konustugu servisler (stok
+	// T8.4'ten, kurye takibi T14.2'den beri). Yeni servis geldiginde buraya bir
+	// satir eklenir; adres yine ortamdan gelir. /healthz listedeki her servisi yoklar.
 	services := []ServiceTarget{
 		{Name: CatalogService, Address: readString(getenv, "CATALOG_GRPC_ADDR", defaultCatalogAddress)},
 		{Name: InventoryService, Address: readString(getenv, "INVENTORY_GRPC_ADDR", defaultInventoryAddress)},
 		{Name: OrderService, Address: readString(getenv, "ORDER_GRPC_ADDR", defaultOrderAddress)},
+		{Name: CourierService, Address: readString(getenv, "COURIER_GRPC_ADDR", defaultCourierAddress)},
 	}
 	services = append(services, cardVaultTargets(getenv, nodeEnv)...) // T11.17, cards.go
 

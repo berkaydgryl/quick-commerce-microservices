@@ -13,14 +13,18 @@ import type { Courier, GeoPoint } from '../../domain/courier.js';
 import { comparePoolCandidates, isWithinPool } from '../../domain/courier-pool.js';
 import type { PoolCandidate } from '../../domain/courier-pool.js';
 import type {
+  CourierBatchReader,
   CourierRepository,
   CourierSeedWriter,
   NearestClaimRequest,
+  ReleaseOptions,
 } from '../../domain/courier-repository.js';
 import { distanceMeters } from '../../domain/geo.js';
 import type { MarketLocation, MarketLocator } from '../../domain/market-locator.js';
 
-export class InMemoryCourierStore implements CourierRepository, CourierSeedWriter, MarketLocator {
+export class InMemoryCourierStore
+  implements CourierRepository, CourierBatchReader, CourierSeedWriter, MarketLocator
+{
   private readonly couriers = new Map<string, Courier>();
   private readonly markets = new Map<string, GeoPoint>();
 
@@ -39,6 +43,15 @@ export class InMemoryCourierStore implements CourierRepository, CourierSeedWrite
 
   findByOrder(orderId: string): Promise<Courier | null> {
     return Promise.resolve(this.carrierOf(orderId));
+  }
+
+  findByIds(ids: readonly string[]): Promise<readonly Courier[]> {
+    return Promise.resolve(
+      ids.flatMap((id) => {
+        const courier = this.couriers.get(id);
+        return courier === undefined ? [] : [courier];
+      }),
+    );
   }
 
   claimNearest({ orderId, near, rule, at }: NearestClaimRequest): Promise<Courier | null> {
@@ -69,13 +82,15 @@ export class InMemoryCourierStore implements CourierRepository, CourierSeedWrite
     return Promise.resolve(claimed);
   }
 
-  releaseByOrder(orderId: string, at: Date): Promise<Courier | null> {
+  releaseByOrder(orderId: string, at: Date, options: ReleaseOptions = {}): Promise<Courier | null> {
+    const { location, courierId } = options;
     const carrier = this.carrierOf(orderId);
-    if (carrier === null) {
+    if (carrier === null || (courierId !== undefined && carrier.id !== courierId)) {
       return Promise.resolve(null);
     }
     const { currentOrderId: _released, ...rest } = carrier;
-    const released: Courier = { ...rest, status: COURIER_STATUS.IDLE, idleSince: at };
+    const moved = location === undefined ? {} : { lastLocation: location, lastLocationAt: at };
+    const released: Courier = { ...rest, ...moved, status: COURIER_STATUS.IDLE, idleSince: at };
     this.couriers.set(released.id, released);
     return Promise.resolve(released);
   }

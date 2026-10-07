@@ -3,8 +3,8 @@
 // ID_BODY_PATTERN); Node servisleri kimligi ayni bicimde uretir.
 //
 // NEDEN TEK PAKET: korelasyon kimligi (req), kullanici (usr), oturum (ses) ve
-// cihaz (dvc), kayitli adres (adr) ve kayitli kart (crd) ayni bicimi kullanir; bicim iki yerde
-// yazilsaydi bir gun ayrisirdi.
+// cihaz (dvc), kayitli adres (adr), kayitli kart (crd) ve siparis (ord) ayni bicimi
+// kullanir; bicim iki yerde yazilsaydi bir gun ayrisirdi.
 package ids
 
 import (
@@ -23,6 +23,9 @@ const (
 	Address = "adr"
 	// Card, kayitli kart (T11.17); kasa payment'tadir, gateway yalniz bicimi denetler.
 	Card = "crd"
+	// Order, siparis; order-service uretir, gateway yol kimliginin bicimini
+	// RPC'den once denetler (kurye takibi, T14.2).
+	Order = "ord"
 )
 
 // bodyBytes, kimlik govdesinin rastgele bayt sayisi: 16 bayt = 32 onaltilik.

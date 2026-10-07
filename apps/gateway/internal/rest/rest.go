@@ -1,12 +1,18 @@
 // Package rest, REST sozlesmesinin (@getir/contracts common.ts) birden fazla
-// servis adaptorunun urettigi ilkel tipleridir: para ve konum.
+// servis adaptorunun urettigi ilkel tipleridir: para, konum ve zaman.
 //
 // NEDEN AYRI PAKET (T7.5): tipler once yalnizca catalog adaptorundeydi; order
 // adaptoru de ayni bicimi uretiyor. Kopyasi olsaydi bir gun biri para birimi
 // kuralini degistirir, digeri eski bicimle kalirdi.
 package rest
 
-import commonv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/common/v1"
+import (
+	"time"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	commonv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/common/v1"
+)
 
 // DefaultCurrency, proto'da bos para birimi TRY demektir; REST sozlesmesi
 // (moneySchema) ise alani acikca "TRY" ister.
@@ -36,4 +42,13 @@ func MoneyFromProto(money *commonv1.Money) Money {
 // GeoPointFromProto, proto konumunu REST bicimine cevirir.
 func GeoPointFromProto(point *commonv1.GeoPoint) GeoPoint {
 	return GeoPoint{Lat: point.GetLat(), Lng: point.GetLng()}
+}
+
+// TimeText, proto zamanini sozlesmedeki metne cevirir (isoDateTimeSchema, UTC).
+// Gonderilmeyen zaman bos metindir; alan "omitempty" ile hic yazilmaz.
+func TimeText(ts *timestamppb.Timestamp) string {
+	if ts == nil {
+		return ""
+	}
+	return ts.AsTime().UTC().Format(time.RFC3339Nano)
 }

@@ -16,22 +16,29 @@ const S = ORDER_STATUS;
 const AT = new Date('2026-10-07T10:00:00.000Z');
 const clock = fixedClock(AT.getTime());
 
-/** Durum basina beklenen: [odeme kaydi yok, odeme kaydi var]. Her durum yazili. */
-const EXPECTED: Readonly<Record<OrderStatus, readonly [boolean, boolean]>> = {
-  [S.DRAFT]: [false, false],
-  [S.RISK_CHECK]: [false, false],
-  [S.REVIEW]: [true, true],
-  [S.RESERVED]: [false, false],
-  [S.AWAITING_PAYMENT]: [false, false],
-  [S.PAID]: [true, true],
-  [S.PAYMENT_FAILED]: [false, false],
-  [S.EXPIRED]: [false, false],
-  [S.CANCELLED]: [false, true],
-  [S.REJECTED]: [false, false],
-  [S.PREPARING]: [true, true],
-  [S.ON_THE_WAY]: [true, true],
-  [S.DELIVERED]: [true, true],
+/** Para izi: yok, zaman cizelgesinde PAID, yalnizca iade isareti (#166). */
+type Charge = 'none' | 'paid' | 'refund';
+const CHARGES: readonly Charge[] = ['none', 'paid', 'refund'];
+
+/** Durum basina beklenen, CHARGES sirasiyla. Her durum yazili. */
+const EXPECTED: Readonly<Record<OrderStatus, readonly [boolean, boolean, boolean]>> = {
+  [S.DRAFT]: [false, false, false],
+  [S.RISK_CHECK]: [false, false, false],
+  [S.REVIEW]: [true, true, true],
+  [S.RESERVED]: [false, false, false],
+  [S.AWAITING_PAYMENT]: [false, false, false],
+  [S.PAID]: [true, true, true],
+  [S.PAYMENT_FAILED]: [false, false, false],
+  [S.EXPIRED]: [false, false, false],
+  // Parasi alinip iptal: PAID kaydi ya da iade isareti (kilidi dusmus odeme).
+  [S.CANCELLED]: [false, true, true],
+  [S.REJECTED]: [false, false, false],
+  [S.PREPARING]: [true, true, true],
+  [S.ON_THE_WAY]: [true, true, true],
+  [S.DELIVERED]: [true, true, true],
 };
+
+const REFUND = { reason: 'reservation_expired', requestedAt: AT };
 
 function timeline(status: OrderStatus, paid: boolean): TimelineEntry[] {
   const entries: TimelineEntry[] = [{ status: S.DRAFT, at: AT }];
@@ -55,11 +62,16 @@ const TO_AWAITING: readonly OrderStatus[] = [S.RISK_CHECK, S.RESERVED, S.AWAITIN
 
 describe('isListedInHistory (#101)', () => {
   const cases = Object.values(S).flatMap((status) =>
-    [false, true].map((paid) => [status, paid, EXPECTED[status][paid ? 1 : 0]] as const),
+    CHARGES.map((charge, index) => [status, charge, EXPECTED[status][index]] as const),
   );
 
-  it.each(cases)('%s, odeme kaydi %s -> gorunur: %s', (status, paid, listed) => {
-    expect(isListedInHistory({ status, timeline: timeline(status, paid) })).toBe(listed);
+  it.each(cases)('%s, para izi %s -> gorunur: %s', (status, charge, listed) => {
+    const order = {
+      status,
+      timeline: timeline(status, charge === 'paid'),
+      ...(charge === 'refund' ? { refund: REFUND } : {}),
+    };
+    expect(isListedInHistory(order)).toBe(listed);
   });
 
   it('tablo butun durumlari kapsar (yeni durum karar ister)', () => {
@@ -75,6 +87,13 @@ describe('isListedInHistory (#101)', () => {
     ['odeme hatasindan iptal', [...TO_AWAITING, S.PAYMENT_FAILED, S.CANCELLED], undefined],
   ] as const)('odenmeden iptal GIZLI: %s', (_name, steps, note) => {
     expect(isListedInHistory(through(steps, note))).toBe(false);
+  });
+
+  it('kilidi dusup parasi iade edilen (iade isareti, PAID kaydi yok) GORUNUR (#166)', () => {
+    const lapsed = through([...TO_AWAITING, S.CANCELLED], 'RESERVATION_EXPIRED');
+
+    expect(isListedInHistory(lapsed)).toBe(false);
+    expect(isListedInHistory({ ...lapsed, refund: REFUND })).toBe(true);
   });
 
   it('odendikten sonra iptal (iade) GORUNUR', () => {

@@ -54,4 +54,12 @@ export interface RouteDocument extends BaseDocument {
   distanceMeters: number;
   etaSeconds: number;
   createdAt: Date;
+  // T13.3: alanlar T13.3 oncesi belgede yok; durumu olmayan rota ilerliyor sayilir.
+  marketId?: string;
+  state?: 'MOVING' | 'DONE' | 'ENDED';
+  pickedUpAt?: Date;
+  pickupPublished?: boolean;
+  deliveredAt?: Date;
+  deliveryPublished?: boolean;
+  endedAt?: Date;
 }

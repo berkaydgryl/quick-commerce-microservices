@@ -13,7 +13,7 @@
 import { AppError } from '@getir/core';
 import type { Logger } from '@getir/core';
 
-import { COURIER_STATUS } from '../domain/courier.js';
+import { carriesOrder } from '../domain/courier.js';
 import type { CourierRepository } from '../domain/courier-repository.js';
 import type { Route } from '../domain/route.js';
 import type { RouteRepository } from '../domain/route-repository.js';
@@ -48,7 +48,7 @@ export function createStartRoute(
       throw notFound(command);
     }
     const courier = await couriers.findById(command.courierId);
-    if (courier?.status !== COURIER_STATUS.BUSY || courier.currentOrderId !== command.orderId) {
+    if (!carriesOrder(courier, command.orderId)) {
       throw notFound(command);
     }
     logger.debug({ orderId: route.orderId, courierId: route.courierId }, 'rota okundu');

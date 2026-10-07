@@ -44,6 +44,7 @@ import { RouteMongoStore } from '../../src/infrastructure/mongo/route-mongo-stor
 import { RoutesCollection } from '../../src/infrastructure/mongo/routes-collection.js';
 import { MongoCourierSeedWriter } from '../../src/infrastructure/mongo/mongo-courier-seed-writer.js';
 import { describeCourierStoreContract } from '../support/courier-store-contract.js';
+import { describeMovingRouteStoreContract } from '../support/moving-route-store-contract.js';
 import { describeRouteStoreContract } from '../support/route-store-contract.js';
 import {
   courier,
@@ -117,6 +118,7 @@ afterAll(async () => {
 
 describeCourierStoreContract('mongo', reset);
 describeRouteStoreContract('mongo', () => routes);
+describeMovingRouteStoreContract('mongo', () => routes);
 
 describe('indeksler', () => {
   it('havuz indeksi (2dsphere + durum) ve kismi benzersiz currentOrderId kurulu; eski market indeksi yok', async () => {
@@ -160,6 +162,39 @@ describe('indeksler', () => {
     expect(text).toContain('GEO_NEAR_2DSPHERE');
     expect(text).toContain('lastLocation_2dsphere_status');
     expect(text).not.toContain('COLLSCAN');
+  });
+
+  it('tick sorgusu (T13.3) state_createdAt_id indeksinden okur; koleksiyonu taramaz, bitmis rota okunmaz', async () => {
+    const collection = new RoutesCollection(connection.db);
+    await collection.ensureIndexes();
+    const plan = planRoute(
+      { from: MARKET_LOCATION, pickup: MARKET_LOCATION, dropoff: DELIVERY },
+      ROUTE_RULE,
+    );
+    for (const [index, state] of (['MOVING', 'DONE', 'ENDED', undefined] as const).entries()) {
+      await routes.insertOnce({
+        orderId: orderId(),
+        courierId: courier(index + 1).id,
+        ...plan,
+        createdAt: new Date(NOW_MS + index),
+        ...(state === undefined ? {} : { state }),
+      });
+    }
+
+    // routes-collection.ts findMoving ile ayni sorgu.
+    const explained = await connection.db
+      .collection(COLLECTIONS.ROUTES)
+      .find({ state: { $nin: ['DONE', 'ENDED'] } })
+      .sort({ createdAt: 1, _id: 1 })
+      .limit(200)
+      .explain('queryPlanner');
+
+    const text = JSON.stringify(explained);
+    expect(text).toContain('state_createdAt_id');
+    expect(text).not.toContain('COLLSCAN');
+    const moving = await routes.listMoving(200);
+    expect(moving.map((route) => route.state ?? 'yok')).not.toContain('DONE');
+    expect(moving.map((route) => route.state ?? 'yok')).not.toContain('ENDED');
   });
 });
 

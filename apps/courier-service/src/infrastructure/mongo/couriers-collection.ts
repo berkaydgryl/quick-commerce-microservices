@@ -47,6 +47,11 @@ export class CouriersCollection extends MongoRepository<CourierDocument> {
     return this.findOne({ currentOrderId: orderId });
   }
 
+  /** Kimlikleriyle toplu okuma (T13.3 tick); birincil anahtardan. */
+  async findByIds(ids: readonly string[]): Promise<CourierDocument[]> {
+    return this.run('findByIds', () => this.collection.find({ _id: { $in: [...ids] } }).toArray());
+  }
+
   /**
    * Havuzun ilk `limit` adayinin kimlikleri, sira kuralina gore: `near`'a
    * `rule.radiusMeters` icindeki IDLE kuryeler ($geoNear, 2dsphere indeksi).
@@ -104,14 +109,24 @@ export class CouriersCollection extends MongoRepository<CourierDocument> {
   }
 
   /**
-   * Siparisi tasiyan kuryeyi IDLE'a dondurur; bosta beklemesi `at`'te baslar.
-   * lastAssignedAt ve konum kalir (kurye oldugu yerde bekler).
+   * Siparisi tasiyan (`courierId` verildiyse yalnizca O) kuryeyi IDLE'a
+   * dondurur; bosta beklemesi `at`'te baslar. lastAssignedAt kalir. `location`
+   * verilirse (teslimat noktasi) konum ve ani yazilir; verilmezse konum kalir.
    */
-  async releaseByOrder(orderId: string, at: Date): Promise<CourierDocument | null> {
+  async releaseByOrder(
+    orderId: string,
+    at: Date,
+    options: { location?: CourierDocument['lastLocation']; courierId?: string } = {},
+  ): Promise<CourierDocument | null> {
+    const { location, courierId } = options;
+    const moved = location === undefined ? {} : { lastLocation: location, lastLocationAt: at };
     return this.run('releaseByOrder', () =>
       this.collection.findOneAndUpdate(
-        { currentOrderId: orderId },
-        { $set: { status: COURIER_STATUS.IDLE, idleSince: at }, $unset: { currentOrderId: '' } },
+        { currentOrderId: orderId, ...(courierId === undefined ? {} : { _id: courierId }) },
+        {
+          $set: { status: COURIER_STATUS.IDLE, idleSince: at, ...moved },
+          $unset: { currentOrderId: '' },
+        },
         { returnDocument: 'after' },
       ),
     );

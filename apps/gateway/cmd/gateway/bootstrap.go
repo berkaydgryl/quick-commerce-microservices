@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/health/grpc_health_v1"
 
 	catalogv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/catalog/v1"
+	courierv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/courier/v1"
 	inventoryv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/inventory/v1"
 	orderv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/order/v1"
 
@@ -31,6 +32,7 @@ import (
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rpc"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/storefront"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/telemetry"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/tracking"
 )
 
 // bootstrap, parcalari BAGLAR: baglanti havuzu, kimlik servisi (T8.1), tekrar
@@ -124,6 +126,11 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 		cleanup()
 		return nil, nil, fmt.Errorf("%s baglantisi havuzda yok", config.OrderService)
 	}
+	courierConn, ok := pool.Conn(config.CourierService)
+	if !ok {
+		cleanup()
+		return nil, nil, fmt.Errorf("%s baglantisi havuzda yok", config.CourierService)
+	}
 
 	// Tek katalog adaptoru butun katalog uclarini karsilar; yonlendirici her
 	// ucu ayri, dar bir arayuzle gorur (bkz. httpapi.Deps).
@@ -151,6 +158,10 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 		},
 		roomtoken.NewSigner(cfg.RealtimeTokenSecret.Bytes(), time.Now),
 	)
+
+	// Kurye takibi (T14.2): sahiplik ve durum order GetOrder'dan, takip
+	// courier'dan; courier kullaniciyi bilmez.
+	courierTracking := tracking.New(orderService, courierv1.NewCourierServiceClient(courierConn), cfg.RequestTimeout)
 
 	// Favori marketler (T11.13): kayit kullanici deposunda, market bilgisi
 	// katalogdan tek cagriyla (BatchGetMarkets).
@@ -203,6 +214,7 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 		OrderGetter:         orderService,
 		OrderLister:         orderhistory.New(orderService, catalogService),
 		OrderRoomTokens:     roomTokens,
+		OrderTracking:       courierTracking,
 		// Tek kimlik servisi bes kimlik ucunu karsilar (T8.1).
 		UserRegistrar:     identity.service,
 		UserAuthenticator: identity.service,

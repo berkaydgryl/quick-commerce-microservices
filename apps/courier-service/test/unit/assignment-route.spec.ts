@@ -24,6 +24,7 @@ import {
   ROUTE_RULE,
   TEST_MARKETS,
 } from '../support/couriers.js';
+import { ROUTE_STATE } from '../../src/domain/route.js';
 
 let routes: InMemoryRouteStore;
 let lines: LogLine[];
@@ -55,7 +56,7 @@ const request = (
 });
 
 describe('createAssignmentRoute', () => {
-  it('uretir ve yazar: kurye -> market -> adres, siparis ve kurye kimligiyle, atama aninda', async () => {
+  it('uretir ve yazar: kurye -> market -> adres, siparis, kurye ve market kimligiyle, atama aninda; ilerliyor (T13.3)', async () => {
     const order = orderId();
 
     const route = await routeOf(request(order), recordingLogger(lines));
@@ -65,6 +66,8 @@ describe('createAssignmentRoute', () => {
       courierId: courierId(1),
       ...planRoute({ from: away, pickup: MARKET_LOCATION, dropoff: DELIVERY }, ROUTE_RULE),
       createdAt: new Date(NOW_MS),
+      marketId: MARKET,
+      state: ROUTE_STATE.MOVING,
     });
     expect(await routes.findByOrder(order)).toEqual(route);
     expect(lines).toEqual([]);

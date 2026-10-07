@@ -200,3 +200,11 @@ export const COURIER_MILESTONE_WRITE_ATTEMPTS = 3;
  * basmaz, siparis PREPARING'de kalirdi. Teslim sayisi main.ts'te bundan cikar.
  */
 export const COURIER_EVENT_RETRY_WINDOW_MS = 2 * COURIER_FAILURE_BACKOFF_MAX_MS;
+
+/**
+ * Iade isaretinin ayri yazimi (#166, refund-record.ts) surum cakismasinda
+ * siparisi yeniden okuyup en fazla bu kadar dener. Cakisma yalnizca ayni
+ * siparise eszamanli yazimda olur (supurucu, ikinci order ornegi); surerse
+ * WARN yazilir, iade geri alinmaz.
+ */
+export const REFUND_RECORD_WRITE_ATTEMPTS = 3;
