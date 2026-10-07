@@ -294,9 +294,16 @@ ayarlanır (`application/lock-timing.ts`; inventory `ShortenReservation`, `Exten
 | Aynı an, kalan süre < 60 sn                      | `RESERVATION_EXTEND_SECONDS` (60) uzatılır; yeni bitiş **hemen** yazılır (sürüm +1, olay yok)             | —                              |
 | Uzatmada bitiş siparişinkinden farklı (T15.3)    | hak harcanmaz; güncel bitiş yazılır; kalan süre hâlâ < 60 sn ise yeni beklenenle bir tur daha             | —                              |
 | Uzatma hakkı bitmiş (inventory'de 3)             | süre aynı, WARN; ödeme kalan süreyle (kesinleştirmede kilit düşmüşse iade, değişmedi)                     | —                              |
-| Kısaltma ya da uzatmada kilit düşmüş             | sipariş `CANCELLED` (`RESERVATION_EXPIRED`), kilit bırakılır; **para çekilmez**, 3DS kodu gönderilmez     | `RESERVATION_EXPIRED` (410)    |
+| Kısaltma ya da uzatmada kilit düşmüş             | `CANCELLED`, kilit bırakılır; para çekilmez, 3DS gönderilmez; önceki deneme çektiyse iade (iş 122)        | `RESERVATION_EXPIRED` (410)    |
+| Kilit düşmüş, kart çekimi sürüyor (T15.3)        | hiçbir şey yazılmaz; çekim bitince saga ya da süpürücü kapatır (`lapsed-order.ts`)                        | `REQUEST_IN_PROGRESS`          |
+| Kilit düşmüş, payment'a ulaşılamadı              | hiçbir şey yazılmaz; sipariş `AWAITING_PAYMENT` kalır, kilit bırakılmaz                                   | `SERVICE_UNAVAILABLE`          |
+| Kilit düşmüş, kapatma çakıştı                    | başka yol (süpürücü, eş zamanlı istek) iptal ettiyse 410; sipariş ilerlediyse (`PAID`) 409                | 410 ya da `CONFLICT`           |
 | inventory'ye ulaşılamadı                         | hiçbir şey yazılmaz; risk adımında sipariş `DRAFT`, ödemede `AWAITING_PAYMENT` kalır                      | `SERVICE_UNAVAILABLE`          |
 
+- **Kilidi düşmüş siparişin kapatılması (T15.3, iş 122):** karar `application/lapsed-order.ts`'te,
+  süpürücüyle aynı tablo. Para alınmışsa iade komutu (`payment.refund_requested`) `CANCELLED` ile
+  **aynı yazımda** kaydedilir (servis hemen çökse de kaybolmaz), ardından doğrudan iade denenir.
+  Komut iadeden sonra da gelse payment "zaten iade edilmiş" der; para iki kez geri verilmez.
 - **Beklenen bitiş (T15.3):** uzatma siparişin bildiği bitişle gider. Kilidin bitişi farklıysa (`moved`)
   güncel bitiş yazılır ve en çok bir tur daha uzatılır; ikinci turda inventory'ye ulaşılamazsa ilk turda
   yazılan güncel bitiş kalır, iki tur da `moved` dönerse WARN. inventory'nin cevabı tam pencere kadar
@@ -318,9 +325,10 @@ toparlar: kilidi dolmuş `DRAFT` ve `AWAITING_PAYMENT` siparişleri kapatır
 - **Sıklık:** `ORDER_SWEEPER_INTERVAL_MS` (varsayılan 10 sn, 1 sn–10 dk), turda en fazla 100
   sipariş, kilidi önce dolan önce. Kilidi olmayan eski (T11.2 öncesi) siparişe dokunmaz.
 - **Ödeme bekleyen sipariş:** önce payment-svc'ye sorulur (`GetPayment`,
-  `domain/payment-standing.ts`). Para alınmışsa sipariş `CANCELLED` olur ve tutar iade edilir
-  (önce doğrudan, olmazsa `payment.refund_requested` komutu; saga'yla aynı yol,
-  `application/refund-step.ts`). Kart çekimi sürüyorsa (`PENDING`) o tur atlanır. Kapıda ödemenin
+  `domain/payment-standing.ts`). Para alınmışsa sipariş `CANCELLED` olur, iade komutu
+  (`payment.refund_requested`) aynı yazımda kaydedilir ve doğrudan iade denenir (T15.3; karar
+  `application/lapsed-order.ts`, kilidi düşmüş ödemeyle aynı tablo). Kart çekimi sürüyorsa
+  (`PENDING`) o tur atlanır. Kapıda ödemenin
   `PENDING`'i "para alındı" sayılmaz: tutar teslimatta alınır.
 - **Sıra:** önce sipariş yazılır (sürüm kontrollü), sonra kilit ve iade. Sipariş o arada başka bir
   yazımla değiştiyse dokunulmaz.
@@ -422,7 +430,7 @@ yayınlanmamış olayları sonra `stream:events`'e basar.
 | -------------------------- | -------------------------------------------------- | ------------------------------------------------------------------ |
 | `order.created`            | Taslak açılınca (B8: kimlik burada doğar)          | `orderId, userId, marketId, status, totalMinor, currency, version` |
 | `order.status_changed`     | Her geçişte, **geçiş başına bir olay**             | `orderId, userId, marketId, from, to, note?, version`              |
-| `payment.refund_requested` | Telafi: doğrudan iade başarısız (T7.1 borcu)       | `orderId, reason, idempotencyKey`                                  |
+| `payment.refund_requested` | İade telafisi (T7.1); düşmüş kilit (T15.3)         | `orderId, reason, idempotencyKey`                                  |
 | `payment.cancel_requested` | Ödeme aşamasından `CANCELLED`'a geçiş (T11.2 PR 3) | `orderId, reason` (`order_cancelled`)                              |
 
 - **Olay unutulamaz:** `OrderRepository.insert/update` olayları **zorunlu** parametre olarak
@@ -483,7 +491,7 @@ src/
 │   ├── checkout-risk.ts         # saga risk adımı: bant → karar/politika, risk bağlamı (T7.1)
 │   ├── checkout-payment.ts      # saga ödeme adımı: ödeme sonucu → sipariş, anahtarlar (T7.1)
 │   ├── stock-reservation.ts     # stok kilidi kuralları: bırakma gerekçeleri, sistem iptalleri (T11.2), banda göre kilit ve uzatma kararı (T11.3)
-│   ├── payment-standing.ts      # para alındı mı, çekim sürüyor mu (T11.2 PR 2)
+│   ├── payment-standing.ts      # para alındı mı, çekim sürüyor mu (T11.2 PR 2); REQUEST_IN_PROGRESS cevabı
 │   ├── expired-order-finder.ts  # port: kilidi dolmuş siparişler, süpürücünün kuyruğu (T11.2 PR 2)
 │   ├── courier-dispatch.ts      # kurye bekleyen sipariş, kuryeyle/kuryesiz PREPARING, telafi kararı (T13.1), kuyruk sırası (#92)
 │   ├── awaiting-courier-finder.ts  # port: kurye bekleyen siparişler, kurye işçisinin kuyruğu (T13.1)
@@ -495,6 +503,7 @@ src/
 │   ├── draft-reservation.ts     # taslağın stok kilidi: kilitle / yetmedi / sepeti yenile (T11.2)
 │   ├── stock-step.ts            # saga'nın kesinleştirme ve en iyi gayretle bırakma adımı (T11.2)
 │   ├── lock-timing.ts           # kilidin süresi: orta bantta kısaltma, ödeme öncesi uzatma, düşmüş kilit (T11.3)
+│   ├── lapsed-order.ts          # kilidi düşmüş siparişi kapatma tablosu: saga ve süpürücü (T15.3)
 │   ├── refund-step.ts           # telafi iadesi: doğrudan, olmazsa outbox komutu (T7.1, T7.3)
 │   ├── sweep-expired-reservations.ts  # süpürücünün tek turu (T11.2 PR 2)
 │   ├── dispatch-couriers.ts     # kurye işçisinin tek turu (T13.1 PR 2; kuyruk, kaynak, geri çekilme T13.2)

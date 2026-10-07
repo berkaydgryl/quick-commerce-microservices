@@ -10,7 +10,9 @@
  *   order.status_changed  her durum gecisinde, gecis basina BIR olay
  *   payment.cancel_requested  iptal komutu: siparis odeme asamasindan CANCELLED'a
  *                         gecti; status_changed ile AYNI yazimda (T11.2 PR 3)
- *   payment.refund_requested  telafi komutu: iade dogrudan yapilamadi (T7.1 borcu)
+ *   payment.refund_requested  telafi komutu: iade dogrudan yapilamadi (T7.1 borcu);
+ *                         kilidi dusmus, parasi alinmis sipariste CANCELLED ile
+ *                         AYNI yazimda, dogrudan iadeden once (T15.3)
  */
 
 import type {
@@ -141,6 +143,8 @@ export interface RefundRequest {
 /**
  * Telafi komutu: tutar alindi, siparis PAID yazilamadi ve dogrudan iade de
  * basarisiz oldu. Siparis DEGISMEDEN outbox'a yazilir; payment-svc dinler (T7.4).
+ * Kilidi dusmus, parasi alinmis sipariste ise CANCELLED ile AYNI yazimda,
+ * dogrudan iadeden once (T15.3; lapsed-order.ts).
  * Govde sozlesme tipindedir (@getir/contracts): payment ayni semayla dogrular,
  * alan adi burada degisirse derleme kirilir.
  */

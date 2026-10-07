@@ -14,29 +14,28 @@
  *     harcamaz, guncel bitisi doner; o yazilir ve kalan sure hala yetmiyorsa
  *     yeni beklenenle bir tur daha uzatilir.
  *
- * Kilit dusmusse siparis CANCELLED + RESERVATION_EXPIRED (410): kilitsiz stokla
- * para CEKILMEZ. inventory'ye ulasilamazsa hata yukari gider, hicbir sey yazilmaz;
- * uzatmanin ikinci turunda ise ilk turda yazilan guncel bitis kalir.
+ * Kilit dusmusse kilitsiz stokla para CEKILMEZ; siparis lapsed-order.ts'in
+ * tablosuyla kapatilir (cancelLapsedOrder). inventory'ye ulasilamazsa hata yukari
+ * gider, hicbir sey yazilmaz; uzatmanin ikinci turunda ise ilk turda yazilan
+ * guncel bitis kalir.
  */
 
 import { AppError, ERROR_CODES, ORDER_STATUS } from '@getir/core';
-import type { Clock, RiskBand } from '@getir/core';
+import type { RiskBand } from '@getir/core';
 
 import { MS_PER_SECOND } from '../config/constants.js';
-import { statusChangedEvents } from '../domain/order-events.js';
 import type { OrderRepository } from '../domain/order-repository.js';
 import type { Order } from '../domain/order.js';
-import { transitionOrder } from '../domain/order.js';
+import { paymentInProgress } from '../domain/payment-standing.js';
 import {
   needsLockExtension,
-  RELEASE_REASON,
   rescheduleReservation,
   shortensLock,
   withReservationExpiry,
 } from '../domain/stock-reservation.js';
+import { closeLapsedOrder } from './lapsed-order.js';
+import type { LapseDeps } from './lapsed-order.js';
 import type { RequestScope } from './request-scope.js';
-import { releaseStock } from './stock-step.js';
-import type { StockStepDeps } from './stock-step.js';
 
 /** Banda gore kilit ve odeme oncesi uzatma ayarlari (ortamdan, sn). */
 export interface LockPolicy {
@@ -46,13 +45,10 @@ export interface LockPolicy {
   readonly extendSeconds: number;
 }
 
-/** Kilidi dusmus siparisin kapatilmasi icin gerekenler. */
-export interface LapseDeps extends StockStepDeps {
-  readonly repository: Pick<OrderRepository, 'update'>;
-  readonly clock: Clock;
-}
-
+/** Kilit suresi ayarlari ve kilidi dusmus siparisin kapatilmasi icin gerekenler. */
 export interface LockTimingDeps extends LapseDeps {
+  /** findById: kapatma cakisirsa siparisin son hali (cancelLapsedOrder). */
+  readonly repository: Pick<OrderRepository, 'update' | 'findById'>;
   readonly lockPolicy: LockPolicy;
 }
 
@@ -168,25 +164,41 @@ async function recordExpiry(deps: LockTimingDeps, order: Order, expiresAt: Date)
 }
 
 /**
- * Kilidi dusmus siparis (T11.2 karari "iptal + 410"): CANCELLED, not
- * RESERVATION_EXPIRED; kilit birakilir (supurucu birakmadiysa, en iyi gayret),
- * istemci RESERVATION_EXPIRED alir ve sepeti yeniden onaylar. Kilitsiz stokla
- * odeme alinmaz.
+ * Kilidi dusmus siparis (T11.2 karari "iptal + 410"): kilitsiz stokla odeme
+ * alinmaz. Kapatma karari lapsed-order.ts'te (supurucuyle ayni tablo; T15.3,
+ * bekleyen is 122): odeme alinmissa iptal ve IADE, kart cekimi suruyorsa hicbir
+ * sey yazilmaz (REQUEST_IN_PROGRESS), aksi halde iptal. Istemci iptalde
+ * RESERVATION_EXPIRED alir ve sepeti yeniden onaylar. Kapatma cakisirsa siparisin
+ * son haline bakilir: baska yol (supurucu, es zamanli istek) iptal ettiyse yine
+ * 410, siparis ilerlediyse 409.
  */
 export async function cancelLapsedOrder(
-  deps: LapseDeps,
+  deps: LockTimingDeps,
   order: Order,
   scope: RequestScope,
 ): Promise<never> {
-  const cancelled = transitionOrder(
-    order,
-    ORDER_STATUS.CANCELLED,
-    deps.clock,
-    ERROR_CODES.RESERVATION_EXPIRED,
-  );
-  await deps.repository.update(cancelled, order.version, statusChangedEvents(order, cancelled));
-  await releaseStock(deps, order, RELEASE_REASON.RESERVATION_EXPIRED, scope);
-  throw new AppError(ERROR_CODES.RESERVATION_EXPIRED, 'Rezervasyon suresi doldu', {
-    details: { orderId: order.id, status: ORDER_STATUS.CANCELLED },
+  const outcome = await closeLapsedOrder(deps, order, scope);
+  switch (outcome.kind) {
+    case 'in-flight':
+      throw paymentInProgress(order.id, outcome.paymentStatus);
+    case 'conflict':
+      if ((await deps.repository.findById(order.id))?.status !== ORDER_STATUS.CANCELLED) {
+        throw AppError.conflict(undefined, { details: { orderId: order.id } });
+      }
+      throw reservationExpired(order.id, {});
+    case 'closed':
+      throw reservationExpired(order.id, { refunded: false });
+    case 'refunded':
+      throw reservationExpired(order.id, { refunded: true });
+  }
+}
+
+/**
+ * 410: siparis CANCELLED. `refunded` yalniz bu istek kapattiysa: true = iade
+ * komutu siparisle birlikte yazildi (para payment-svc'de geri verilir).
+ */
+function reservationExpired(orderId: string, extra: { readonly refunded?: boolean }): AppError {
+  return new AppError(ERROR_CODES.RESERVATION_EXPIRED, 'Rezervasyon suresi doldu', {
+    details: { orderId, status: ORDER_STATUS.CANCELLED, ...extra },
   });
 }
