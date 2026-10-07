@@ -7,16 +7,16 @@ idempotency ve durum makinesi baştan yerinde. Aynı sunucuda ikinci servis **ka
 
 ## Bugünkü durum (T7.4 — iade komutu tüketicisi)
 
-| Uç                         | Durum                                                                                                            |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `Charge`                   | ✅ Test kartına göre onay / ret / 3DS; kayıtlı kart `card_id` (T12.4); kapıda ödeme `PENDING`; risk 3DS (T7.1)   |
-| `Confirm3Ds`               | ✅ Sabit kod, 60 sn ömür, 3 yanlışta kilit, tekrar istek güvenli (T5.2)                                          |
-| `payments`                 | ✅ Mongo (`MOCK=false`) ya da bellek (`MOCK=true`); `attempts[]` geçmişi (T5.3)                                  |
-| `Refund`                   | ✅ Saga'nın telafisi (T7.1): yalnızca tamamlanmış çekim; tekrar istek `already_refunded`                         |
-| `payment.refund_requested` | ✅ Olay tüketicisi (T7.4): saga'nın kalıcı iade komutu `stream:events`'ten, grup `payment`                       |
-| `payment.cancel_requested` | ✅ Olay tüketicisi (T11.2 PR 3): tahsil edilmemiş ödeme `CANCELLED`, alınmışsa iade (T15.3)                      |
-| `GetPayment`               | ✅ Siparişin ödeme kaydı (yöntem, durum); kayıt yoksa `NOT_FOUND`. Çağıran order: iptal ve süpürücü (T11.2 PR 2) |
-| `CardVaultService`         | ✅ Kart kasası (T11.17): `AddCard` (0 TL doğrulama), `ListCards`, `DeleteCard`; maskeli, en çok 10 kart          |
+| Uç                         | Durum                                                                                                                                                                                         |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Charge`                   | ✅ Test kartına göre onay / ret / 3DS; kayıtlı kart `card_id` (T12.4); kapıda ödeme `PENDING`; risk 3DS (T7.1)                                                                                |
+| `Confirm3Ds`               | ✅ Sabit kod, 60 sn ömür, 3 yanlışta kilit, tekrar istek güvenli (T5.2)                                                                                                                       |
+| `payments`                 | ✅ Mongo (`MOCK=false`) ya da bellek (`MOCK=true`); `attempts[]` geçmişi (T5.3)                                                                                                               |
+| `Refund`                   | ✅ Saga'nın telafisi (T7.1): yalnızca tamamlanmış çekim; tekrar istek `already_refunded`                                                                                                      |
+| `payment.refund_requested` | ✅ Olay tüketicisi (T7.4): saga'nın kalıcı iade komutu `stream:events`'ten, grup `payment`                                                                                                    |
+| `payment.cancel_requested` | ✅ Olay tüketicisi (T11.2 PR 3): tahsil edilmemiş ödeme `CANCELLED`, alınmışsa iade (T15.3)                                                                                                   |
+| `GetPayment`               | ✅ Siparişin ödeme kaydı (yöntem, durum) ve 3DS durumu (`three_ds`, #163 B1); kayıt yoksa `NOT_FOUND`. Çağıran order: iptal ve süpürücü; sipariş ayrıntısı (#163 B1 P3) 3DS durumunu okuyacak |
+| `CardVaultService`         | ✅ Kart kasası (T11.17): `AddCard` (0 TL doğrulama), `ListCards`, `DeleteCard`; maskeli, en çok 10 kart                                                                                       |
 
 ## Test kartları
 
@@ -265,6 +265,17 @@ sağlayıcı doğrular (`PaymentProvider.verifyChallenge`).
 kod gelirse ikinci yazma çakışır, kayıt yeniden okunur ve kural güncel sayaçla uygulanır: iki deneme
 iki hak yakar, tek değil. Bankaya istek başına bir kez gidilir; kodun doğruluğu kaydın durumuna bağlı
 değildir.
+
+**Sipariş ayrıntısındaki durum (`GetPayment.three_ds`, #163 B1):** sayfa yenilense de doğrulama
+sürdürülsün diye order bunu sipariş ayrıntısına taşır (`domain/three-ds-status.ts`).
+
+- Var: ödeme `REQUIRES_3DS` (açık ya da süresi dolmuş, henüz kapatılmamış) ya da doğrulaması kapanıp
+  `FAILED` olmuş. Yok: doğrulama hiç yok, ödeme başarılı/iade/iptal ya da kart reddiyle `FAILED`.
+- `challenge_id` yalnızca doğrulama **açıkken** (süresi payment'in saatiyle dolmamış, hak var) dolu;
+  kapalıda boş metin. `expires_at` her zaman. `attempts_left` = en fazla hak − yanlış kod, kapanma
+  sebebinden bağımsız (Confirm3Ds hata ayrıntısındaki `expired → 0` ile karışmasın: o cevap kapanışı anlatır).
+- **Güvenlik:** jeton bir yetenek jetonudur (oturumla kod girmeye yeter); hiçbir günlükte, hata
+  ayrıntısında ya da metrikte yok (testli). Kod (OTP) hiçbir kayıtta tutulmaz.
 
 ## Katmanlar
 

@@ -194,9 +194,10 @@ message GetPaymentRequest {
 message GetPaymentResponse {
   Payment payment = 1;
 
-  // 3DS dogrulamasinin durumu (#163 B1): odeme bir 3DS dogrulamasi baslattiysa
-  // ve sonuclanmadiysa (acik, suresi dolmus ya da hakki bitmis) dolu; dogrulama
-  // yoksa ya da odeme basarili sonuclandiysa bos.
+  // 3DS dogrulamasinin durumu (#163 B1): odeme 3DS bekliyorsa (acik ya da
+  // suresi dolmus) ya da dogrulamasi kapanip FAILED olduysa (suresi doldu, hakki
+  // bitti) dolu; dogrulama yoksa ya da odeme 3DS disinda sonuclandiysa
+  // (basarili, iade, iptal, kart reddi) bos.
   ThreeDsStatus three_ds = 2;
 }
 

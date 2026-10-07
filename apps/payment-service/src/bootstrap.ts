@@ -87,7 +87,7 @@ export function buildPaymentService(options: BootstrapOptions = {}): GrpcService
       charge,
       confirm3Ds,
       refund: createRefund({ repository, clock }),
-      getPayment: createGetPayment({ repository }),
+      getPayment: createGetPayment({ repository, clock, maxAttempts: THREEDS_MAX_ATTEMPTS }),
       ...(logger === undefined ? {} : { logger }),
     }),
   };
