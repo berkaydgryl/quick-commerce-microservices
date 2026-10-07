@@ -1,0 +1,32 @@
+/* Puanin yildizlari (T16.2): gri zemin yildizi, ustunde sari dolgu; yarimda sol yarisi. */
+.c-rating-stars {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+.c-rating-stars__star {
+  position: relative;
+  display: grid;
+  width: var(--size-rating-star);
+  height: var(--size-rating-star);
+  color: var(--border-subtle);
+}
+
+.c-rating-stars__fill {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  color: var(--color-brand-accent);
+}
+
+.c-rating-stars__fill--full {
+  clip-path: none;
+}
+
+.c-rating-stars__fill--half {
+  clip-path: inset(0 50% 0 0);
+}
+
+.c-rating-stars__fill--empty {
+  display: none;
+}

@@ -1,75 +1,111 @@
-import type { Product } from '@getir/contracts';
+import type { MarketPageContent, Product } from '@getir/contracts';
 
 import { canAdd, isSoldOut, quantityOf } from '../services/cart-state';
 import { useCartStore } from '../stores/useCartStore';
 
-import styles from './Cart.module.css';
+import { CartQuantityStepper } from './CartQuantityStepper';
+import type { CartStepperOrientation, CartStepperTexts } from './CartQuantityStepper';
+import styles from './ProductCartAction.module.css';
+
+/** Adet kutusunun metinleri (marketList.cart) ve kartin kendi metinleri (marketPage). */
+export type ProductCartTexts = CartStepperTexts &
+  Pick<MarketPageContent, 'addSuffix' | 'soldOutLabel' | 'unavailableLabel'>;
 
 interface ProductCartActionProps {
   readonly product: Product;
   readonly onAdd: (product: Product) => void;
+  readonly texts: ProductCartTexts;
+  /** Magaza sayfasinin karti dikey, ana sayfa aramasinin satiri yatay (T9.6: ayni bilesen). */
+  readonly orientation?: CartStepperOrientation | undefined;
 }
 
 /**
- * Urunun sepet dugmesi - TASARIMSIZ KABUK (T6.4). Sepette yoksa "Ekle", varsa
- * "- adet +"; satista olmayan teklifte basilamayan "Satista degil" (T7.6),
- * stogu biten teklifte "Tukendi" (T8.4). "Eklenebilir mi" ve "tukendi mi"
- * kararlarini bilesen VERMEZ, cart-state'e sorar (D11): stok ve satis kurallari
- * tek yerde. Tasarim degisince bilesen yeniden yazilabilir.
+ * Urunun sepet dugmesi (T6.4; T16.2'de referans getircarsi): sepet deposunu
+ * okur, gorunumu besler. "Eklenebilir mi" ve "tukendi mi" kararlarini bilesen
+ * VERMEZ, cart-state'e sorar (D11): stok ve satis kurallari tek yerde.
  */
-export function ProductCartAction({ product, onAdd }: ProductCartActionProps) {
+export function ProductCartAction({ product, onAdd, texts, orientation }: ProductCartActionProps) {
   const quantity = useCartStore((cart) => quantityOf(cart, product.offerId));
   const addable = useCartStore((cart) => canAdd(cart, product));
   const decrement = useCartStore((cart) => cart.decrement);
 
-  // Sepette zaten varsa (satistan sonra kaldirildiysa) adet dugmeleri kalir:
-  // kullanici azaltip cikarabilsin; "+" canAdd geregi kapali.
-  if (quantity === 0 && !product.isActive) {
-    return <span className={styles['c-cart-action__unavailable']}>Satışta değil</span>;
-  }
+  return (
+    <ProductCartActionView
+      product={product}
+      quantity={quantity}
+      addable={addable}
+      soldOut={isSoldOut(product)}
+      texts={texts}
+      orientation={orientation}
+      onAdd={() => onAdd(product)}
+      onDecrement={() => decrement(product.offerId)}
+    />
+  );
+}
 
-  // Sepette zaten varsa (stok sonradan bittiyse) yukaridaki gibi adet
-  // dugmeleri kalir, "+" kapali; rezervasyonun cevabi T11.5'te gosterilir.
-  if (quantity === 0 && isSoldOut(product)) {
-    return <span className={styles['c-cart-action__unavailable']}>Tükendi</span>;
+interface ProductCartActionViewProps {
+  readonly product: Product;
+  /** Sepetteki adet; 0: sepette yok. */
+  readonly quantity: number;
+  /** cart-state canAdd: "+" acik mi. */
+  readonly addable: boolean;
+  /** cart-state isSoldOut. */
+  readonly soldOut: boolean;
+  readonly texts: ProductCartTexts;
+  readonly orientation?: CartStepperOrientation | undefined;
+  readonly onAdd: () => void;
+  readonly onDecrement: () => void;
+}
+
+/**
+ * Dugmenin gorunumu: sepette yoksa "+", varsa sepet panelinin adet kutusu
+ * (adet 1'de "−" yerine cop kutusu). Satista olmayan teklifte "Satışta değil"
+ * (T7.6), stogu bitende "Tükendi" (T8.4); ikisi de dugme degil. Durumsuz.
+ */
+export function ProductCartActionView({
+  product,
+  quantity,
+  addable,
+  soldOut,
+  texts,
+  orientation,
+  onAdd,
+  onDecrement,
+}: ProductCartActionViewProps) {
+  // Sepette zaten varsa (satistan sonra kaldirildiysa ya da stok sonradan
+  // bittiyse) adet kutusu kalir: kullanici azaltip cikarabilsin; "+" canAdd
+  // geregi kapali. Rezervasyonun cevabi T11.5'te gosterilir.
+  if (quantity === 0 && (!product.isActive || soldOut)) {
+    return (
+      <span className={styles['c-product-cart-action__unavailable']}>
+        {product.isActive ? texts.soldOutLabel : texts.unavailableLabel}
+      </span>
+    );
   }
 
   if (quantity === 0) {
     return (
       <button
         type="button"
-        className={styles['c-cart-action__add']}
-        aria-label={`${product.name} sepete ekle`}
+        className={styles['c-product-cart-action__add']}
+        aria-label={`${product.name} ${texts.addSuffix}`}
         disabled={!addable}
-        onClick={() => onAdd(product)}
+        onClick={onAdd}
       >
-        Ekle
+        <span aria-hidden="true">+</span>
       </button>
     );
   }
 
   return (
-    <div className={styles['c-cart-action']} role="group" aria-label={`${product.name} adedi`}>
-      <button
-        type="button"
-        className={styles['c-cart-action__step']}
-        aria-label={`${product.name} bir azalt`}
-        onClick={() => decrement(product.offerId)}
-      >
-        −
-      </button>
-      <span className={styles['c-cart-action__quantity']} aria-live="polite">
-        {quantity}
-      </span>
-      <button
-        type="button"
-        className={styles['c-cart-action__step']}
-        aria-label={`${product.name} bir artir`}
-        disabled={!addable}
-        onClick={() => onAdd(product)}
-      >
-        +
-      </button>
-    </div>
+    <CartQuantityStepper
+      name={product.name}
+      quantity={quantity}
+      canIncrement={addable}
+      texts={texts}
+      orientation={orientation}
+      onIncrement={onAdd}
+      onDecrement={onDecrement}
+    />
   );
 }

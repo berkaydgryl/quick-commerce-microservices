@@ -288,14 +288,14 @@ Karar ve hesap **veri katmanında**, arayüz yalnızca çizer. Tasarım baştan 
 modal, çekmece, ayrı sepet sayfası) yalnızca `features/cart/ui/*` değişir; testlerin hepsi veri
 katmanındadır.
 
-| Katman       | Dosya                                                  | İş                                                                                   |
-| ------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| Saf kurallar | `features/cart/services/cart-state.ts`                 | Tek market + onay, adet (99 ya da stok) ve kalem (50) sınırı, satış durumu, `canAdd` |
-| Kalıcılık    | `features/cart/services/cart-persistence.ts`           | `getir.cart`: sürüm, 24 saat, okunan kaydın doğrulanması                             |
-| Toplam       | `features/cart/services/cart.service.ts`               | `@getir/pricing` `calculateCart`; kurallar **sepetin marketinden**                   |
-| Depo         | `features/cart/stores/useCartStore.ts`                 | Zustand; saf fonksiyonları bağlar, kural yazmaz                                      |
-| Hook'lar     | `useCartTotals`, `useAddToCart`, `useCartStorageSync`  | Toplam; onay bekleyen market değişimi; sekmeler arası eşitleme                       |
-| Kabuk        | `ProductCartAction`, `CartSwitchPrompt`, `CartSummary` | Ekle / − adet +, onay satırı, özet                                                   |
+| Katman       | Dosya                                                          | İş                                                                                     |
+| ------------ | -------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Saf kurallar | `features/cart/services/cart-state.ts`                         | Tek market + onay, adet (99 ya da stok) ve kalem (50) sınırı, satış durumu, `canAdd`   |
+| Kalıcılık    | `features/cart/services/cart-persistence.ts`                   | `getir.cart`: sürüm, 24 saat, okunan kaydın doğrulanması                               |
+| Toplam       | `features/cart/services/cart.service.ts`                       | `@getir/pricing` `calculateCart`; kurallar **sepetin marketinden**                     |
+| Depo         | `features/cart/stores/useCartStore.ts`                         | Zustand; saf fonksiyonları bağlar, kural yazmaz                                        |
+| Hook'lar     | `useCartTotals`, `useAddToCart`, `useCartStorageSync`          | Toplam; onay bekleyen market değişimi; sekmeler arası eşitleme                         |
+| Düğmeler     | `ProductCartAction`, `CartQuantityStepper`, `CartSwitchPrompt` | "+" ya da adet kutusu (ürün kartında dikey, arama satırında yatay; T16.2), onay satırı |
 
 - **Tek market:** sepette Migros ürünü varken A101'den eklemede ekleme **yapılmaz**, onay istenir:
   "Sepetinde Migros Jet – Moda ürünleri var. Sepeti boşaltıp A101 – Caferağa ile devam edilsin mi?"
@@ -356,10 +356,29 @@ katmanındadır.
 - **"Görünüm aynı" ölçülerek:** D11'de değişiklik öncesi ve sonrası 7 sahne başsız Chrome'da
   çekildi, görüntüler bayt bayt aynı çıktı (yöntem D11 raporunda).
 
+## Mağaza sayfası (T16.2)
+
+`/markets/:marketId`; referans getirçarşı işletme sayfası. Sayfa birleştirir: katalog sepeti, sepet katalogu,
+markets favorileri tanımaz.
+
+| Bölge         | Dosya                                                                        | İş                                                                                     |
+| ------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Ekran         | `pages/market/MarketPage.tsx`                                                | ≥64rem solda sayfa, sağda başlıksız Sepetim (3:1); altında tek sütun ve sepet çubuğu   |
+| Baş           | `features/markets/ui/MarketHeroSection.tsx`, `MarketHero.tsx`, `RatingStars` | Kapak + baş harf rozeti, ad, yıldızlar ve puan, kalp, süre ve min., açık/kapalı, rozet |
+| Hakkında      | `features/markets/ui/MarketAboutDialog.tsx`                                  | Marka, süre, minimum sepet, teslimat ücreti, ücretsiz teslimat eşiği                   |
+| Kategoriler   | `features/catalog/ui/MarketCategoryNav.tsx`                                  | Genişte dikey liste (görsel, ad, ok), dar ekranda kayan şerit; başta "Tümü"            |
+| Ürünler       | `MarketCatalogSection.tsx`, `MarketProductGrid.tsx`, `ProductCard.tsx`       | Başlık (kategori, "Tüm Ürünler" ya da "Arama Sonuçları"), kart ızgarası, "Daha fazla"  |
+| Sepet düğmesi | `features/cart/ui/ProductCartAction.tsx`                                     | "+"; sepetteyse Sepetim'in adet kutusu (dikey); ana sayfa aramasında aynı düğme yatay  |
+
+- **Metinler içerikten:** `marketPage` bloğu; puan, "Min.", "Kapalı", eşik, "Kategoriler", "Tümü" ve adet kutusunun
+  adları market listesiyle ortak (`marketList`). İçerik gelmezse yedek (`CONTENT_FALLBACK.marketPage`).
+- **Veri olmayanlar (B3, backend):** kapanış saati (yerine açık/kapalı), ürün görsel dosyaları (kartın görseli ürünün
+  kategorisinin; `product.imageUrl` istenmez, her ürün 404 verirdi), alt kategori (katalog düz) ve indirim verisi.
+- **Teslimat satırı etiketsiz** ("15-25 dk · Min. 40,00 TL"): kuryeyi platform atar (T13), "İşletme getirsin" değil.
+
 ## Market ekranları (T5.4) — tasarımsız kabuk
 
-Ekranların **görsel tasarımı kullanıcının kararıdır** ve zamanı gelince yapılacak (T16.2). Bu görev
-yalnızca veri katmanını ve okunur bir kabuğu kurar; yeni görsel karar yoktur, mevcut token'lar kullanılır.
+Market sayfasının görsel tasarımı T16.2'de geldi (yukarıda). Bu bölüm T5.4'ün veri katmanı kararlarını tutar.
 
 - **Konum:** seçili teslimat adresi (T9.5, `features/address`); oturumsuzken varsayılan "Ev".
 - **Ana sayfa ve `/markets`:** market listesi (T11.12, yukarıda; ana sayfada liste başlığı h2, `/markets`'ta

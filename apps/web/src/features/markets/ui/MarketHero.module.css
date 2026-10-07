@@ -1,0 +1,157 @@
+/*
+ * Magaza sayfasinin basi (T16.2; referans getircarsi): beyaz kartta ustte genis
+ * kapak, altta bilgiler. Mobilde satirlar alt alta; genis ekranda ad ile puan,
+ * teslimat ile "Hakkında" ayni satirda, iki uca yaslanir.
+ */
+.c-market-hero {
+  display: grid;
+  overflow: hidden;
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-market-hero__media {
+  position: relative;
+  aspect-ratio: var(--ratio-market-hero);
+  background: var(--color-brand-primary-subtle);
+}
+
+.c-market-hero__cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Logonun yerine bas harf rozeti (referanstaki beyaz logo kutusu). */
+.c-market-hero__badge {
+  position: absolute;
+  inset-block-end: var(--space-4);
+  inset-inline-start: var(--space-4);
+  display: grid;
+  place-items: center;
+  width: var(--size-market-hero-badge);
+  height: var(--size-market-hero-badge);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-extrabold);
+  color: var(--color-brand-primary);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-market-hero__body {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+}
+
+.c-market-hero__top,
+.c-market-hero__details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.c-market-hero__name {
+  min-width: 0;
+  font-size: var(--font-size-xl);
+  overflow-wrap: anywhere;
+}
+
+.c-market-hero__score {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.c-market-hero__rating {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+  border: var(--border-width-thin) solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.c-market-hero__star {
+  width: var(--size-rating-icon);
+  height: var(--size-rating-icon);
+}
+
+.c-market-hero__count {
+  font-weight: var(--font-weight-regular);
+  color: var(--text-muted);
+}
+
+.c-market-hero__delivery {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.c-market-hero__links {
+  display: inline-flex;
+  gap: var(--space-4);
+  align-items: center;
+}
+
+.c-market-hero__status {
+  font-size: var(--font-size-sm);
+  color: var(--text-success);
+}
+
+.c-market-hero__status--closed {
+  color: var(--text-muted);
+}
+
+.c-market-hero__about {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+  padding: 0;
+  font: inherit;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+.c-market-hero__about:hover {
+  text-decoration: underline;
+}
+
+.c-market-hero__chevron {
+  display: grid;
+  width: var(--size-link-icon);
+}
+
+.c-market-hero__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.c-market-hero__tag {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-brand-primary);
+  background: var(--color-brand-primary-subtle);
+  border-radius: var(--radius-sm);
+}
+
+/* Ekranda gorunmez, ekran okuyucu okur ("Puan 4,7 (1200 değerlendirme)"). */
+.c-market-hero__sr {
+  position: absolute;
+  width: var(--size-visually-hidden);
+  height: var(--size-visually-hidden);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

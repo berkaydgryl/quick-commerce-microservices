@@ -20,6 +20,12 @@
   filter: drop-shadow(var(--shadow-surface));
 }
 
+/* Beyaz kartta (magaza sayfasi, T16.2): gri cizgi, golgesiz; favoriyken yine marka moru. */
+.c-favorite--surface {
+  color: var(--text-muted);
+  filter: none;
+}
+
 .c-favorite:focus-visible {
   box-shadow: 0 0 0 var(--focus-ring-offset) var(--text-on-brand);
 }

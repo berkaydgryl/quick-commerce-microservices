@@ -1,0 +1,20 @@
+/* Urun satirlari (T9.6 ana sayfa aramasi; T5.4 kabugundan): ad, fiyat ve sepet dugmesi. */
+.c-product-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.c-product-list__item {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding-block: var(--space-2);
+  border-block-end: var(--border-width-thin) solid var(--border-subtle);
+}
+
+.c-product-list__price {
+  margin-inline-start: auto;
+  font-weight: var(--font-weight-bold);
+  white-space: nowrap;
+}
