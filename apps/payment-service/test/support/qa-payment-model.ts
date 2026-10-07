@@ -42,11 +42,19 @@ const CLOCK_STEP_MS = 20_000;
 const SAVED_NUMBERS = ['5555 5555 5555 4444', '9792 0000 0000 0003'] as const;
 export const SAVED_TOKENS: readonly string[] = SAVED_NUMBERS.map(tokenOf);
 
-/** QA_PAYMENT_SEED (ondalik ya da 0x...) ya da sabit tohum; gecersiz deger sessizce yutulmaz. */
-export function seedOf(raw: string | undefined): number {
-  if (raw === undefined || raw === '') return DEFAULT_SEED;
-  const seed = Number(raw);
-  if (!Number.isSafeInteger(seed) || seed < 0) throw new Error(`QA_PAYMENT_SEED gecersiz: ${raw}`);
+/**
+ * Tohum: ortam degiskeni (ondalik ya da 0x..., en fazla 32 bit) ya da sabit tohum; gecersiz deger
+ * sessizce yutulmaz. Varsayilan payment PQ1'in; order OQ1 kendi degisken adi ve tohumuyla cagirir.
+ */
+export function seedOf(
+  raw: string | undefined,
+  name = 'QA_PAYMENT_SEED',
+  fallback = DEFAULT_SEED,
+): number {
+  if (raw === undefined || raw === '') return fallback;
+  const seed = /^(0x[0-9a-f]+|[0-9]+)$/i.test(raw) ? Number(raw) : Number.NaN;
+  // Uretec 32 bitlik durumla calisir: buyuk tohum kesilip baska tohumun planini kosmasin.
+  if (!Number.isSafeInteger(seed) || seed > 0xffffffff) throw new Error(`${name} gecersiz: ${raw}`);
   return seed;
 }
 
