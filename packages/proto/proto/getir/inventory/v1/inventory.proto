@@ -251,8 +251,14 @@ message CheckAvailabilityResponse {
 //
 // Kullanicinin BASKA bir siparis icin aktif rezervasyonu varsa yenisi acilmaz
 // (B22): ALREADY_EXISTS + ErrorDetail.code = "RESERVATION_ACTIVE", metadata
-// "activeOrderId". Eskisini birakip yenisini almak cagiranin (order-svc)
-// kararidir.
+// "activeOrderId" ve "activeExpiresInMs". activeExpiresInMs: aktif kilidin
+// cevap anindaki kalan omru, milisaniye, JSON sayisi - "requested" ve
+// "available" gibi (T15.3; bekleyen is 126). Kullanici kilidinin kalan
+// suresinden okunur; goreli oldugu icin saat farkindan etkilenmez. Eski sunucu
+// gondermez: cagiran yoklugunu, tam sayi olmayan ya da negatif degeri
+// "bilinmiyor" sayar. Aktif kilidin marketi ayrintida YOKTUR (kullanici kilidi
+// yalnizca siparis kimligini tutar). Eskisini birakip yenisini almak cagiranin
+// (order-svc) kararidir.
 //
 // Ayni SKU iki kalemde gelirse VALIDATION_FAILED: ikisi de ayri ayri yeterli
 // gorunur ve sayac iki kez dusurulurdu.

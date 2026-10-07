@@ -224,9 +224,17 @@ message CreateDraftOrderRequest {
 //   - stok yetmezse taslak CANCELLED yazilir ve FAILED_PRECONDITION +
 //     "STOCK_INSUFFICIENT" doner (ayrinti: sku, requested, available);
 //   - kullanicinin odeme asamasinda baska siparisi varsa ALREADY_EXISTS +
-//     "RESERVATION_ACTIVE" doner (ayrinti: activeOrderId);
+//     "RESERVATION_ACTIVE" doner (ayrinti: activeOrderId, varsa
+//     activeExpiresInMs - inventory'nin ayrintisi aynen);
 //   - kullanicinin eski taslagi kilit tutuyorsa o taslak iptal edilir
-//     (CART_REPLACED), kilidi yeni sepete gecer.
+//     (CART_REPLACED), kilidi yeni sepete gecer;
+//   - kilidin siparis KAYDI yoksa (yetim: Reserve cevabi kaybolmus, T15.3)
+//     kilit yalnizca ORPHAN_LOCK_MIN_AGE_SECONDS'tan (30 sn) eskiyse ve yeni
+//     sepetle AYNI markette ise birakilir, yeni sepet kilitlenir; daha gencse
+//     ya da baska marketteyse RESERVATION_ACTIVE (es zamanli ikinci istegin
+//     kilidi korunur; baska marketteki yetim kilit suresi dolunca duser). Yas,
+//     RESERVATION_TTL_SECONDS eksi kalan omurdur (activeExpiresInMs): kilit
+//     suresi o arada ARTIRILDIYSA taze kilit eski gorunebilir.
 // Risk taslakta sorulmaz; CreateOrder'da sorulur (T7.1).
 message CreateDraftOrderResponse {
   string order_id = 1;
