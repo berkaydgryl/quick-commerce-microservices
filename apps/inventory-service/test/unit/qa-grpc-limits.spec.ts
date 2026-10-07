@@ -242,6 +242,8 @@ describe('QA IQ7 reddedilen degisiklik rezervasyona dokunmaz', () => {
         expiresAt: at(TTL_SECONDS + count * 60),
         alreadyExtended: false,
         extensionCount: count,
+        // Beklenen bitis gonderilmedi (T15.3 denetimi yok): uzatma gercekten yapildi.
+        expiryMismatch: false,
       });
     }
     expect((await extend(ids.orderId, 60)).response?.alreadyExtended).toBe(true);
