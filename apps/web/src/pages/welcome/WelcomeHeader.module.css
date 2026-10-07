@@ -5,6 +5,9 @@
  * gorunur.
  */
 .c-welcome-header {
+  /* Mor zeminde mor odak halkasi gorunmezdi: bardaki her odak beyaz (Profil dahil; PageLayout gibi). */
+  --focus-ring-color: var(--text-on-brand);
+
   position: sticky;
   top: 0;
   z-index: var(--z-header);

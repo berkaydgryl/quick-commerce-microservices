@@ -1,7 +1,8 @@
 /**
  * Sade ust bar (T16.3; sepet ve odeme sayfalari; referans getircarsi sepet
  * sayfasi): logo ve beyaz kutuda teslimat adresi, yaninda sayfanin cipi;
- * arama ve Profil YOK. Alt bilgi govdenin altinda. Tam bar degismez.
+ * arama YOK, en sagda Profil (07.10 kullanici istegi: Profil her sayfada; ayrinti
+ * navbar-profil.spec). Alt bilgi govdenin altinda. Tam bar degismez.
  */
 
 import { createElement } from 'react';
@@ -25,7 +26,7 @@ function render(props: Parameters<typeof PageLayout>[0]): string {
 }
 
 describe('PageLayout sade bar (T16.3)', () => {
-  it('logo, adres kutusu ve sayfanin cipi; arama ve Profil yok', () => {
+  it('logo, adres kutusu ve sayfanin cipi, en sagda Profil; arama yok', () => {
     const markup = render({ variant: 'minimal', headerExtra: 'TVS', children: 'GOVDE' });
     const header = /<header[\s\S]*<\/header>/.exec(markup)?.[0] ?? '';
 
@@ -33,7 +34,8 @@ describe('PageLayout sade bar (T16.3)', () => {
     expect(header).toMatch(/c-page-layout__chip[^"]*">ADRES</);
     expect(header).toContain('TVS');
     expect(header).not.toContain('ARAMA');
-    expect(header).not.toContain('PROFIL');
+    expect(header).toMatch(/c-page-layout__actions[^"]*">PROFIL</);
+    expect(header.indexOf('PROFIL')).toBeGreaterThan(header.indexOf('TVS'));
   });
 
   it('alt bilgi govdenin (main) altinda; ekran yuksekliginde sutunun icinde (dipte durur)', () => {

@@ -35,6 +35,11 @@ const renderDemo = __DEMO_PERSONAS__
 interface WelcomePageProps {
   /** Ekranin ustunde acilan pencere (giris ya da kayit; /giris, /kayit). */
   readonly renderDialog?: ((content: WelcomeContent) => ReactNode) | undefined;
+  /**
+   * Ust barin hesap alani: adres kurulumu (oturum acik) Profil menusunu verir
+   * (07.10 kullanici istegi); oturumsuz sayfalar vermez, barda "Giriş yap / Kayıt ol".
+   */
+  readonly headerAccount?: ReactNode;
 }
 
 /**
@@ -51,7 +56,7 @@ interface WelcomePageProps {
  * penceresini telefon ve sifre dolu acar. Numara adrese yazilmaz, gecmis
  * durumunda tasinir (auth-route-state.ts).
  */
-export function WelcomePage({ renderDialog }: WelcomePageProps) {
+export function WelcomePage({ renderDialog, headerAccount }: WelcomePageProps) {
   const navigate = useNavigate();
   const [entry, setEntry] = useState<PhoneEntry | null>(null);
   const openLogin = (): void => navigate(AUTH_ROUTES.login, { state: FROM_APP });
@@ -72,7 +77,7 @@ export function WelcomePage({ renderDialog }: WelcomePageProps) {
         };
         return (
           <>
-            <WelcomeHeader header={content.header} linkState={FROM_APP} />
+            <WelcomeHeader header={content.header} linkState={FROM_APP} account={headerAccount} />
             <main>
               <WelcomeHero hero={content.hero}>
                 <AuthCard title={content.loginCard.title} headingLevel={2}>
