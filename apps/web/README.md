@@ -190,6 +190,12 @@ getirçarşı. Karşılama ekranının barıyla aynı renk; logo sarı "getir" +
 | Profil          | `features/auth/ui/HeaderAccount.tsx`                                   | Menü: hesap sayfaları (sol menüyle aynı liste, T11.16) ve altta ayrı satırda "Çıkış yap"; oturumsuzken "Giriş yap"                                                                                                         |
 | Açılır listeler | `shared/ui/disclosure/useDisclosure.ts`                                | Esc, dışarı tıklama ve seçim kapatır; odak düğmeye döner                                                                                                                                                                   |
 
+- **Profil her sayfada (07.10 kullanıcı isteği):** oturum açık her sayfada Profil menüsü barın en sağında, aynı hesap
+  yuvasıyla: sade barda (sepet, ödeme) logo … adres, TVS, Profil; telefonda üstte logo ve Profil, altta çipler.
+  Adres kurulumu ekranı (oturum açık, adres yok) karşılama barını kullanır; orada da "Giriş yap / Kayıt ol" yerine
+  Profil (hesap alanını yalnız `AddressSetupPage` geçirir: `headerAccount`). Adres penceresi modal olduğu için
+  açıkken bar etkisizdir; çıkış pencereyi kapatmaktır. Oturumsuz sayfalar (karşılama, giriş, kayıt, şifremi unuttum)
+  "Giriş yap" ve "Kayıt ol" gösterir.
 - **Neden başka sayfada Enter:** yazarken ana sayfaya geçilseydi bar yeniden kurulur, klavye odağı kaybolurdu.
   Oturumsuz ziyaretçinin Enter'ı giriş ekranına gider, dönüş arama sonuçlarıdır (`app/header-search-href.ts`;
   ana sayfası karşılama ekranı olduğu için arama orada kaybolurdu).
@@ -390,14 +396,14 @@ markets favorileri tanımaz.
 `/sepet`; referans getirçarşı sepet sayfası. Oturum ister (girişle geri döner, `?next=/sepet`). Sepetim panelinin ve
 sepet çubuğunun "Sepete git"i buraya gelir.
 
-| Bölge        | Dosya                                                                            | İş                                                                                         |
-| ------------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Ekran        | `pages/cart/CartPage.tsx`, `CartScreen.tsx`                                      | Sade bar + alt bilgi; ≥64rem solda sepet, sağda adres ve toplam (7:3); boş sepet           |
-| Sade bar     | `shared/ui/page-layout/PageLayout.tsx` (`variant="minimal"`), `DeliveryTimeChip` | Logo, beyaz kutuda teslimat adresi, sarı "TVS 20-30 dk" (sepetin marketi); arama yok       |
-| Sepet kutusu | `features/cart/ui/CartItemsCard.tsx`, `CartPageItem.tsx`                         | Mağaza (bağlantı), satır: kategori görseli, ad, mor tutar, "Son N adet", adet kutusu       |
-| Toplam       | `features/cart/ui/CartTotalsCard.tsx`                                            | "Sepet Tutarı", minimum sepete ve ücretsiz teslimata kalan, "Ödemeye Geç" (F4'e dek pasif) |
-| Adres        | `features/address/ui/DeliveryAddressSection.tsx`, `services/address-text.ts`     | Üst bardaki seçimle aynı adres; satır, bina, kat, daire                                    |
-| Alt bilgi    | `shared/ui/site-footer/SiteFooter.tsx`                                           | Telif satırı; sosyal ikon ve bağlantı gerçek adresler gelene kadar yok                     |
+| Bölge        | Dosya                                                                            | İş                                                                                                    |
+| ------------ | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Ekran        | `pages/cart/CartPage.tsx`, `CartScreen.tsx`                                      | Sade bar + alt bilgi; ≥64rem solda sepet, sağda adres ve toplam (7:3); boş sepet                      |
+| Sade bar     | `shared/ui/page-layout/PageLayout.tsx` (`variant="minimal"`), `DeliveryTimeChip` | Logo, beyaz kutuda teslimat adresi, sarı "TVS 20-30 dk" (sepetin marketi), en sağda Profil; arama yok |
+| Sepet kutusu | `features/cart/ui/CartItemsCard.tsx`, `CartPageItem.tsx`                         | Mağaza (bağlantı), satır: kategori görseli, ad, mor tutar, "Son N adet", adet kutusu                  |
+| Toplam       | `features/cart/ui/CartTotalsCard.tsx`                                            | "Sepet Tutarı", minimum sepete ve ücretsiz teslimata kalan, "Ödemeye Geç" (F4'e dek pasif)            |
+| Adres        | `features/address/ui/DeliveryAddressSection.tsx`, `services/address-text.ts`     | Üst bardaki seçimle aynı adres; satır, bina, kat, daire                                               |
+| Alt bilgi    | `shared/ui/site-footer/SiteFooter.tsx`                                           | Telif satırı; sosyal ikon ve bağlantı gerçek adresler gelene kadar yok                                |
 
 - **"Son N adet"** (`shared/services/low-stock.ts`, N = 5): ürün kartında stok, sepet satırında kalemin stok sınırı.
   Bilgi amaçlı; bağlayıcı kontrol rezervasyonda (ADR-13).

@@ -58,12 +58,15 @@
   flex: 1 0 auto;
 }
 
-/* Sade bar (T16.3): telefonda ustte logo, altta yan yana cipler; genis ekranda tek satir. */
+/*
+ * Sade bar (T16.3; 07.10: Profil her sayfada): telefonda ustte logo ve sagda
+ * Profil, altta yan yana cipler; genis ekranda tek satir: logo … cipler, Profil.
+ */
 .c-page-layout__bar--minimal {
   grid-template-areas:
-    'brand'
-    'chips';
-  grid-template-columns: minmax(0, 1fr);
+    'brand actions'
+    'chips chips';
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .c-page-layout__chips {
@@ -98,8 +101,8 @@
   }
 
   .c-page-layout__bar--minimal {
-    grid-template-areas: 'brand chips';
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: 'brand chips actions';
+    grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
   .c-page-layout__chips {

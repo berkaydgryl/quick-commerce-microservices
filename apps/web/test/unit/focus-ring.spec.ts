@@ -27,6 +27,12 @@ describe('ust bar icindeki beyaz yuzeylerde odak halkasi', () => {
     ).toContain('--focus-ring-color: var(--text-on-brand)');
   });
 
+  it('karsilama bari da halkayi beyaza ceker (adres kurulumunda Profil orada, 07.10)', () => {
+    expect(block(css('pages/welcome/WelcomeHeader.module.css'), '.c-welcome-header')).toContain(
+      '--focus-ring-color: var(--text-on-brand)',
+    );
+  });
+
   it('arama kutusu: mor halka, kutunun icine cizilir', () => {
     const search = block(css('features/search/ui/HeaderSearch.module.css'), '.c-header-search');
     expect(search).toContain('--focus-ring-color: var(--color-brand-primary)');

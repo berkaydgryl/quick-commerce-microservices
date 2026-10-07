@@ -6,7 +6,10 @@ import { PageContainer } from '../page-container/PageContainer';
 import { useHeaderSlots } from './header-slot';
 import styles from './PageLayout.module.css';
 
-/** Ust bar: tam (arama ve Profil) ya da sade (sepet ve odeme: logo ve adres, T16.3). */
+/**
+ * Ust bar: tam (arama ve Profil) ya da sade (sepet ve odeme: logo, adres,
+ * sayfanin cipi ve Profil; T16.3, 07.10).
+ */
 export type PageLayoutVariant = 'full' | 'minimal';
 
 interface PageLayoutProps {
@@ -31,8 +34,9 @@ interface PageLayoutProps {
  * genislikte arama (tek satira sigmazdi). Yuvalari (logo dahil: metni
  * icerikten) uygulama doldurur (header-slot.ts).
  *
- * Sade bar (T16.3; referans getircarsi sepet sayfasi): logo ve sagda beyaz
- * kutularda teslimat adresi ile sayfanin cipi; arama ve Profil yok.
+ * Sade bar (T16.3; referans getircarsi sepet sayfasi): logo, sagda beyaz
+ * kutularda teslimat adresi ile sayfanin cipi ve en sagda Profil (07.10
+ * kullanici istegi: Profil her sayfada; ayni hesap yuvasi); arama yok.
  *
  * Bar ve govde karsilama ekraniyla ayni genis kapsayicidadir (T11.12):
  * karsilamadan girince logo ve Profil yerinden kaymaz.
@@ -65,6 +69,7 @@ export function PageLayout({
                 <div className={styles['c-page-layout__chip']}>{address}</div>
                 {headerExtra}
               </div>
+              <div className={styles['c-page-layout__actions']}>{account}</div>
             </div>
           ) : (
             <div className={styles['c-page-layout__bar']}>
