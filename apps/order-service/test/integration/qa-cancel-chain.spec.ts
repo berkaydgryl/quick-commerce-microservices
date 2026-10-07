@@ -12,9 +12,10 @@
  *   Baskasinin siparisi NOT_FOUND; odenmis siparis ORDER_STATE_INVALID (409); parasi alinmis odeme
  *     bekleyen siparis REQUEST_IN_PROGRESS. Ucunde de kilit ve stok yerinde kalir.
  *   Taslagin bitisi inventory'deki bitisle AYNI (indeks puani).
- *   Bulgu (#126): Reserve inventory'de uygulanir ama cevabi order'in sure sinirindan sonra gelirse
- *     taslak yazilmaz, kilit KAYDI OLMAYAN siparis adina kalir; kullanicinin yeni sepeti kilit
- *     omru boyunca RESERVATION_ACTIVE alir (MEVCUT davranis belgelenir).
+ *   Bulgu (#126, T15.3'te duzeltildi): Reserve inventory'de uygulanir ama cevabi order'in sure
+ *     sinirindan sonra gelirse taslak yazilmaz. Order ayni siparisi telafi olarak birakir
+ *     (draft_not_saved): yetim kilit kalmaz. Reserve telafiden SONRA uygulanirsa (gec yazim) kilit
+ *     yine yetim kalir; kullanicinin sonraki sepeti onu yas esigini gecince birakir (stale_lock).
  */
 
 import { ERROR_CODES, fixedClock, GRPC_STATUS, silentLogger } from '@getir/core';
@@ -28,7 +29,7 @@ import { MongoDBContainer } from '@testcontainers/mongodb';
 import type { StartedMongoDBContainer } from '@testcontainers/mongodb';
 import { RedisContainer } from '@testcontainers/redis';
 import type { StartedRedisContainer } from '@testcontainers/redis';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createSeedStock } from '../../../inventory-service/src/application/seed-stock.js';
 import { buildInventoryService } from '../../../inventory-service/src/bootstrap.js';
@@ -71,6 +72,8 @@ const T0 = Date.parse('2026-10-07T10:00:00.000Z');
 const clock = fixedClock(T0);
 /** Gec cevap: order'in tek sure siniri dolsun (cagri icinde tekrar firsati kalmaz). */
 const SLOW_REPLY_MS = FUNCTIONAL_TIMEOUT_MS + 500;
+/** Gec yazim: telafi Release (sure sinirinda) yuklu CI'da da once ulassin diye genis pay. */
+const LATE_WRITE_MS = FUNCTIONAL_TIMEOUT_MS + 3_000;
 const orders = orderV1.OrderServiceService;
 const S = orderV1.OrderStatus;
 
@@ -84,23 +87,35 @@ let stock: GrpcStockReservations;
 const payments = new FakePayments();
 let userCounter = 0;
 
-/** Siradaki Reserve inventory'de UYGULANIR, cevabi order'in sure sinirindan sonra gelir. */
+/**
+ * Siradaki Reserve: `arm` inventory'de HEMEN uygulanir, cevabi order'in sure sinirindan sonra
+ * gelir; `armLateWrite` inventory'de sure sinirindan SONRA uygulanir (gec yazim, IQ8 Redis donmasi).
+ */
 class SlowNextReserve {
-  private armed = false;
+  private mode: 'none' | 'slow-reply' | 'late-write' = 'none';
 
   arm(): void {
-    this.armed = true;
+    this.mode = 'slow-reply';
+  }
+
+  armLateWrite(): void {
+    this.mode = 'late-write';
   }
 
   wrap(registration: GrpcServiceRegistration): GrpcServiceRegistration {
     const original = registration.implementation['reserve'] as handleUnaryCall<unknown, unknown>;
     const reserve: handleUnaryCall<unknown, unknown> = (call, callback) => {
+      const mode = this.mode;
+      this.mode = 'none';
+      if (mode === 'late-write') {
+        setTimeout(() => original(call, callback), LATE_WRITE_MS);
+        return;
+      }
       original(call, (...reply: Parameters<sendUnaryData<unknown>>) => {
-        if (!this.armed) {
+        if (mode === 'none') {
           callback(...reply);
           return;
         }
-        this.armed = false;
         setTimeout(() => callback(...reply), SLOW_REPLY_MS);
       });
     };
@@ -373,39 +388,99 @@ describe('QA IQ4 iptal zinciri: order CancelOrder -> inventory Release', () => {
   });
 });
 
-// #126: duzeltmeyle TERSINE donecek (telafi Release + kaydi olmayan eski kilidin birakilmasi): yeni
-// sepet kilitlenir, yetim kilit kalmaz.
-describe('QA IQ4 bulgu (#126): gec gelen Reserve cevabi kaydi olmayan kilit birakir', () => {
-  it("MEVCUT davranis: ilk sepet SERVICE_UNAVAILABLE ama kilit inventory'de; yeni sepet RESERVATION_ACTIVE", async () => {
+// #126 (T15.3): duzeltmeyle TERSINE dondu. Once belgelenen: ilk sepet SERVICE_UNAVAILABLE, kilit
+// kaydi olmayan siparis adina kalir, yeni sepet kilit omru boyunca RESERVATION_ACTIVE alirdi.
+describe('QA IQ4 bulgu (#126, duzeltildi): gec gelen Reserve cevabi yetim kilit BIRAKMAZ', () => {
+  it("ilk sepet SERVICE_UNAVAILABLE; inventory'deki kilit telafi Release ile doner; yeni sepet kilitlenir", async () => {
     const userId = nextUser();
     const before = await counter();
+    const compensatedBefore = await releasedOrders(RELEASE_REASON.DRAFT_NOT_SAVED);
     slowReserve.arm();
 
     const first = await orderServer.call(orders.createDraftOrder, { ...draftRequest, userId });
 
     expect(appErrorOf(first.error)?.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
-    // inventory uyguladi: stok dustu, kullanici kilidi order'in BILMEDIGI siparis adina.
-    const orphanId = await userLock(userId);
-    expect(orphanId).toMatch(/^ord_/);
-    expect(await counter()).toBe(before - DRAFT_QUANTITY);
-    const lookup = await orderServer.call(orders.getOrder, { orderId: orphanId ?? '', userId });
+    // inventory uyguladi ama order ayni siparisi telafi olarak birakti: stok ve kullanici kilidi geri.
+    expect(await userLock(userId)).toBeNull();
+    expect(await counter()).toBe(before);
+    const compensated = (await releasedOrders(RELEASE_REASON.DRAFT_NOT_SAVED)).filter(
+      (orderId) => !compensatedBefore.includes(orderId),
+    );
+    expect(compensated).toHaveLength(1);
+    const lookup = await orderServer.call(orders.getOrder, {
+      orderId: compensated[0] ?? '',
+      userId,
+    });
     expect(appErrorOf(lookup.error)?.code).toBe(ERROR_CODES.NOT_FOUND);
 
-    // Kullanici tekrar dener: onceki kilidin siparisi yok, order onu birakamaz.
-    const second = await orderServer.call(orders.createDraftOrder, { ...draftRequest, userId });
+    // Kullanici tekrar dener: yeni sepet kilitlenir.
+    const second = await draftFor(userId);
 
-    expect(second.error?.code).toBe(GRPC_STATUS.ALREADY_EXISTS);
-    expect(appErrorOf(second.error)).toMatchObject({
-      code: ERROR_CODES.RESERVATION_ACTIVE,
-      details: { activeOrderId: orphanId },
-    });
-    expect(await counter()).toBe(before - DRAFT_QUANTITY);
-
-    // Temizlik: yetim kilit elle birakilir (sonraki testlerin sayaci).
-    await stock.release(
-      { orderId: orphanId ?? '', marketId: MARKET, reason: RELEASE_REASON.STALE_LOCK },
-      { requestId: 'req_qa_yetim_kilit', logger: silentLogger },
-    );
+    await expectStillLocked(second.orderId, userId, before);
+    await cancel(second.orderId, userId);
     expect(await counter()).toBe(before);
   });
+
+  it('gec yazim (Reserve telafiden SONRA uygulanir): yetim kalir; sonraki sepet esigi gecince birakir', async () => {
+    const userId = nextUser();
+    const before = await counter();
+    // Esik 0: yetim kilit hemen "eski" (uretimde ORPHAN_LOCK_MIN_AGE_SECONDS, 30 sn).
+    const impatient = await startTestGrpcServer({
+      serviceName: 'qa-order-esik-0',
+      logger: silentLogger,
+      services: [
+        buildOrderService({
+          catalog: new FakeCatalogPricing(),
+          risk: new FakeRiskAssessment(),
+          payments,
+          stock,
+          clock,
+          orphanLockMinAgeSeconds: 0,
+        }),
+      ],
+    });
+    try {
+      slowReserve.armLateWrite();
+
+      const first = await impatient.call(orders.createDraftOrder, { ...draftRequest, userId });
+
+      expect(appErrorOf(first.error)?.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+      // Telafi bos dondu (kilit yoktu); Reserve simdi uygulanir: kilit kaydi olmayan siparis adina.
+      await vi.waitFor(async () => expect(await userLock(userId)).toMatch(/^ord_/), {
+        timeout: 2 * LATE_WRITE_MS,
+      });
+      const orphanId = await userLock(userId);
+      expect(await counter()).toBe(before - DRAFT_QUANTITY);
+      // Yas = omur - kalan (ms cozunurluk): esik 0 iken yas 0 olmasin.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      const second = await impatient.call(orders.createDraftOrder, { ...draftRequest, userId });
+
+      expect(second.error).toBeUndefined();
+      expect(second.response?.orderId).toMatch(/^ord_/);
+      const orphanReleases = (await ledger(orphanId ?? '')).filter(
+        (entry) => entry.kind === LEDGER_KINDS.RELEASE,
+      );
+      expect(orphanReleases.map((entry) => entry.reason)).toEqual([RELEASE_REASON.STALE_LOCK]);
+      const secondId = second.response?.orderId ?? '';
+      await expectStillLocked(secondId, userId, before);
+      // Bu sunucunun deposu kendine ait (bellek): iptal de ondan.
+      await impatient.call(
+        orders.cancelOrder,
+        cancelOrderRequest(secondId, { userId, reason: '' }),
+      );
+      expect(await counter()).toBe(before);
+    } finally {
+      await impatient.stop();
+    }
+  });
 });
+
+/** Defterde verilen gerekceyle birakilmis siparisler. */
+async function releasedOrders(reason: string): Promise<string[]> {
+  const entries = await stores.mongo.db
+    .collection<StockLedgerDocument>(COLLECTIONS.STOCK_LEDGER)
+    .find({ marketId: MARKET, kind: LEDGER_KINDS.RELEASE, reason })
+    .toArray();
+  return entries.flatMap((entry) => (entry.orderId === undefined ? [] : [entry.orderId]));
+}
