@@ -230,12 +230,19 @@ describe('CreateOrder - kilit odeme sirasinda dustu (Commit NOT_FOUND)', () => {
       create({ orderId: id, userId: 'usr_1', ...byCard() }, scope),
     ).rejects.toMatchObject({
       code: ERROR_CODES.RESERVATION_EXPIRED,
-      details: { orderId: id, status: ORDER_STATUS.CANCELLED },
+      details: { orderId: id, status: ORDER_STATUS.CANCELLED, refunded: true },
     });
 
     expect(payments.refunds).toEqual([
       { orderId: id, reason: 'reservation_expired', idempotencyKey: `refund-${id}` },
     ]);
+    // Iade komutu iptalle AYNI yazimda (T15.3): kilidi dusmus siparisle ayni kapatma.
+    expect(
+      repository.recordedEvents
+        .filter((event) => event.orderId === id)
+        .slice(-3)
+        .map((event) => event.topic),
+    ).toEqual(['order.status_changed', 'payment.cancel_requested', 'payment.refund_requested']);
     expect(lastNoteOf(await stored(id))).toEqual([
       ORDER_STATUS.CANCELLED,
       ERROR_CODES.RESERVATION_EXPIRED,

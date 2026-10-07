@@ -1,7 +1,9 @@
 /**
  * Saga'nin telafi adimi: alinan tutarin iadesi (T7.1, T7.3); odeme adimi
- * (payment-step.ts) kullanir. Kilidi dusmus siparisin iadesi bu yoldan GITMEZ:
- * iade komutu iptalle ayni yazimda (lapsed-order.ts, T15.3).
+ * (payment-step.ts) kullanir. Kilidi dusmus siparisi KENDISI iptal eden yol bu
+ * yoldan gitmez: iade komutu iptalle ayni yazimda (lapsed-order.ts, T15.3).
+ * Siparisi baska yol iptal ettiyse ve para alinmissa lapsed-order.ts de burayi
+ * kullanir (bekleyen is 124).
  */
 
 import type { Clock } from '@getir/core';

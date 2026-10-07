@@ -257,12 +257,13 @@ değişken), süre sınırı 1 sn.
 | `CreateOrder`, kilit süresi dolmuş taslak    | `CANCELLED` (`RESERVATION_EXPIRED`), kilit bırakılır; risk sorulmaz, ödeme alınmaz         | `RESERVATION_EXPIRED` (REST 410)           |
 | Risk `REVIEW` / `REJECTED`, kart reddi       | kilit bırakılır (`risk_review`, `risk_rejected`, `payment_failed`)                         | adımın kendi hatası                        |
 | Ödeme alındı                                 | `Commit`, sonra `PAID`                                                                     | —                                          |
-| Ödeme alındı ama kilit düşmüş (`NOT_FOUND`)  | tutar iade (`reservation_expired`), sipariş `CANCELLED` (`RESERVATION_EXPIRED`)            | `RESERVATION_EXPIRED`                      |
+| Ödeme alındı ama kilit düşmüş (`NOT_FOUND`)  | `CANCELLED` + iade komutu aynı yazımda, sonra doğrudan iade (`reservation_expired`)        | `RESERVATION_EXPIRED`                      |
 | `Commit`'e ulaşılamadı                       | sipariş `AWAITING_PAYMENT` kalır; tekrar isteği aynı çekimi alıp yeniden kesinleştirir     | `SERVICE_UNAVAILABLE`                      |
 | Kullanıcı iptali                             | kilit bırakılır (`user_cancelled`)                                                         | `CANCELLED`                                |
-| İptal, ödeme bekleyen ve parası alınmış      | iptal edilmez; saga tamamlar ya da kilit dolunca süpürücü iade eder                        | `REQUEST_IN_PROGRESS` (`paymentStatus`)    |
+| İptal, ödeme bekleyen ve parası alınmış      | iptal edilmez; saga tamamlar ya da kilit dolunca süpürücü kapatır (`PAID` ya da iade)      | `REQUEST_IN_PROGRESS` (`paymentStatus`)    |
 | Süpürücü, kilidi dolmuş taslak               | `CANCELLED` (`RESERVATION_EXPIRED`), kilit bırakılır                                       | —                                          |
 | Süpürücü, kilidi dolmuş ödeme bekleyen       | önce ödeme: alınmışsa `CANCELLED` + iade, çekim sürüyorsa sonraki tur, değilse `CANCELLED` | —                                          |
+| Süpürücü, parası alınmış, stoğu kesinleşmiş  | `PAID` (iş 124): ilk deneme `PAID` yazamamıştı; iade yok, kilit bırakılmaz                 | —                                          |
 
 - **Bırakma en iyi gayretle:** başarısızsa WARN yazılır, saga sonucunu yine döner; kilit süresi
   dolunca inventory'nin süpürücüsü stoku geri verir. Bu arada kullanıcı yeni sepet açarsa eski
@@ -295,15 +296,27 @@ ayarlanır (`application/lock-timing.ts`; inventory `ShortenReservation`, `Exten
 | Uzatmada bitiş siparişinkinden farklı (T15.3)    | hak harcanmaz; güncel bitiş yazılır; kalan süre hâlâ < 60 sn ise yeni beklenenle bir tur daha             | —                              |
 | Uzatma hakkı bitmiş (inventory'de 3)             | süre aynı, WARN; ödeme kalan süreyle (kesinleştirmede kilit düşmüşse iade, değişmedi)                     | —                              |
 | Kısaltma ya da uzatmada kilit düşmüş             | `CANCELLED`, kilit bırakılır; para çekilmez, 3DS gönderilmez; önceki deneme çektiyse iade (iş 122)        | `RESERVATION_EXPIRED` (410)    |
+| Kilit düşmüş, para alınmış, stok kesinleşmiş     | `PAID` yazılır (iş 124); yeniden çekim, 3DS ve iade yok                                                   | başarı (`PAID`)                |
 | Kilit düşmüş, kart çekimi sürüyor (T15.3)        | hiçbir şey yazılmaz; çekim bitince saga ya da süpürücü kapatır (`lapsed-order.ts`)                        | `REQUEST_IN_PROGRESS`          |
 | Kilit düşmüş, payment'a ulaşılamadı              | hiçbir şey yazılmaz; sipariş `AWAITING_PAYMENT` kalır, kilit bırakılmaz                                   | `SERVICE_UNAVAILABLE`          |
-| Kilit düşmüş, kapatma çakıştı                    | başka yol (süpürücü, eş zamanlı istek) iptal ettiyse 410; sipariş ilerlediyse (`PAID`) 409                | 410 ya da `CONFLICT`           |
+| Kilit düşmüş, kapatma çakıştı                    | başka yol iptal ettiyse 410 (para alınmışsa yine iade); sipariş ilerlediyse (`PAID`) 409                  | 410 ya da `CONFLICT`           |
 | inventory'ye ulaşılamadı                         | hiçbir şey yazılmaz; risk adımında sipariş `DRAFT`, ödemede `AWAITING_PAYMENT` kalır                      | `SERVICE_UNAVAILABLE`          |
 
 - **Kilidi düşmüş siparişin kapatılması (T15.3, iş 122):** karar `application/lapsed-order.ts`'te,
   süpürücüyle aynı tablo. Para alınmışsa iade komutu (`payment.refund_requested`) `CANCELLED` ile
   **aynı yazımda** kaydedilir (servis hemen çökse de kaybolmaz), ardından doğrudan iade denenir.
   Komut iadeden sonra da gelse payment "zaten iade edilmiş" der; para iki kez geri verilmez.
+- **Para alınmışsa önce `Commit` (T15.3, iş 124):** inventory kesinleşmiş kilidin uzatma ve
+  kısaltmasına da `RESERVATION_EXPIRED` döner. `Commit` ise kesinleşmiş kilidi tanır
+  (`ALREADY_APPLIED`; süresi geçmiş ama bırakılmamış kilidi de alır, `APPLIED`): sipariş `PAID`
+  yazılır, istemci başarı alır. Kilit yoksa (`NOT_FOUND`) iptal ve iade. inventory'ye
+  ulaşılamazsa hiçbir şey yazılmaz (`SERVICE_UNAVAILABLE`). Yalnız kartla alınmış para için:
+  kapıda ödeme "para alınmamış" sayılır, `Commit` yoklanmaz (bekleyen iş 128).
+- **Çakışmada para (T15.3, iş 124):** iptal ya da `PAID` yazımı çakıştı ve sipariş başka yolda
+  `CANCELLED` olduysa (kullanıcı 3DS onayıyla aynı anda iptal etti ya da süpürücü ödemeyi henüz
+  görmeden kapattı), para alınmışsa iade yine yapılır: doğrudan, olmazsa `payment.refund_requested`
+  outbox'a. Sabit anahtar ikinci iadeyi önler. Sipariş açık kaldıysa (yalnız sürüm arttı) dokunulmaz;
+  karar süpürücünün.
 - **Beklenen bitiş (T15.3):** uzatma siparişin bildiği bitişle gider. Kilidin bitişi farklıysa (`moved`)
   güncel bitiş yazılır ve en çok bir tur daha uzatılır; ikinci turda inventory'ye ulaşılamazsa ilk turda
   yazılan güncel bitiş kalır, iki tur da `moved` dönerse WARN. inventory'nin cevabı tam pencere kadar
@@ -325,24 +338,30 @@ toparlar: kilidi dolmuş `DRAFT` ve `AWAITING_PAYMENT` siparişleri kapatır
 - **Sıklık:** `ORDER_SWEEPER_INTERVAL_MS` (varsayılan 10 sn, 1 sn–10 dk), turda en fazla 100
   sipariş, kilidi önce dolan önce. Kilidi olmayan eski (T11.2 öncesi) siparişe dokunmaz.
 - **Ödeme bekleyen sipariş:** önce payment-svc'ye sorulur (`GetPayment`,
-  `domain/payment-standing.ts`). Para alınmışsa sipariş `CANCELLED` olur, iade komutu
-  (`payment.refund_requested`) aynı yazımda kaydedilir ve doğrudan iade denenir (T15.3; karar
-  `application/lapsed-order.ts`, kilidi düşmüş ödemeyle aynı tablo). Kart çekimi sürüyorsa
+  `domain/payment-standing.ts`). Para alınmışsa önce `Commit`: stok kesinleşmişse sipariş `PAID`
+  olur (iş 124); kilit yoksa `CANCELLED` olur, iade komutu (`payment.refund_requested`) aynı
+  yazımda kaydedilir ve doğrudan iade denenir (T15.3; karar `application/lapsed-order.ts`,
+  kilidi düşmüş ödemeyle aynı tablo). Kart çekimi sürüyorsa
   (`PENDING`) o tur atlanır. Kapıda ödemenin
   `PENDING`'i "para alındı" sayılmaz: tutar teslimatta alınır.
 - **Sıra:** önce sipariş yazılır (sürüm kontrollü), sonra kilit ve iade. Sipariş o arada başka bir
-  yazımla değiştiyse dokunulmaz.
+  yazımla değiştiyse dokunulmaz; para alınmış ve siparişi başka yol iptal etmişse iade yine yapılır.
 - **Birden fazla örnek:** lider kilidi yok. Sürüm kontrolü ve iadenin sabit anahtarı
   (`refund-<orderId>`) aynı siparişin iki kez kapanmasını ya da iki kez iade edilmesini önler. Redis
   gerekmez; MOCK modunda da çalışır.
 - **Hata:** bir siparişin hatası (payment kapalı) turu durdurmaz; sayılır, sonraki turda tekrar
   denenir. Her sipariş kendi istek kimliğiyle kapanır (payment ve inventory günlüğünde tek iz).
 - **Metrikler:** `order_sweeper_closed_total{status}` (kapanmadan önceki durum: `DRAFT`,
-  `AWAITING_PAYMENT`) ve `order_sweeper_errors_total` (kapanamayan sipariş, düşen tur); uç
+  `AWAITING_PAYMENT`), `order_sweeper_completed_paid_total` (stoğu kesinleşmiş, parası alınmış
+  sipariş `PAID` yazıldı; iş 124) ve `order_sweeper_errors_total` (kapanamayan sipariş, düşen tur); uç
   `localhost:51053/metrics`. Bir şey kapandıysa turda tek özet satırı.
-- **Bilinen sınır:** `Commit` uygulandıktan sonra sipariş `PAID` yazılamadan süreç çökerse (ya da
-  kullanıcı tam o anda 3DS'i onaylarken iptal ederse) sipariş kapanır ve para iade edilir ama
-  kesinleşmiş stok geri dönmez: eksik satış yönü, fazla satış yok (bekleyen işler #70).
+- **Bilinen sınır:** kartla ödemede `Commit` uygulandıktan sonra sipariş `PAID` yazılamadan süreç
+  çökerse sipariş artık tamamlanır: tekrar istek ya da süpürücü `Commit`'ten `ALREADY_APPLIED` alır
+  ve `PAID` yazar (T15.3, iş 124). Kapıda ödemede bu kurtarma yok: kilidi düşmüş yol (süpürücü ya
+  da kalan süresi kısa tekrar) siparişi kapatır, kesinleşmiş stok geri dönmez (bekleyen iş 128).
+  Kalan süre yetiyorsa tekrar istek normal yoldan tamamlar. Kullanıcı tam o anda 3DS'i onaylarken iptal ederse sipariş
+  kapanır ve para iade edilir ama kesinleşmiş stok geri dönmez: eksik satış yönü, fazla satış yok
+  (bekleyen işler #70).
 
 ## Kurye ataması (T13.1 PR 2, sıra T13.2 PR 2)
 
@@ -504,6 +523,7 @@ src/
 │   ├── stock-step.ts            # saga'nın kesinleştirme ve en iyi gayretle bırakma adımı (T11.2)
 │   ├── lock-timing.ts           # kilidin süresi: orta bantta kısaltma, ödeme öncesi uzatma, düşmüş kilit (T11.3)
 │   ├── lapsed-order.ts          # kilidi düşmüş siparişi kapatma tablosu: saga ve süpürücü (T15.3)
+│   ├── order-transition.ts      # sürüm kontrollü geçiş yazımı ve PAID (payment-step, lapsed-order)
 │   ├── refund-step.ts           # telafi iadesi: doğrudan, olmazsa outbox komutu (T7.1, T7.3)
 │   ├── sweep-expired-reservations.ts  # süpürücünün tek turu (T11.2 PR 2)
 │   ├── dispatch-couriers.ts     # kurye işçisinin tek turu (T13.1 PR 2; kuyruk, kaynak, geri çekilme T13.2)

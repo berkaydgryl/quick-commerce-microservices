@@ -151,6 +151,7 @@ const { handle, store, events } = await startOrExit(
       repository: opened.repository,
       payments,
       stock,
+      outbox: opened.outbox,
       logger,
       intervalMs: env.ORDER_SWEEPER_INTERVAL_MS,
     });

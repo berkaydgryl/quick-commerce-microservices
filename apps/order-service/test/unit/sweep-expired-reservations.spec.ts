@@ -19,6 +19,7 @@ import { startReservationSweeping } from '../../src/bootstrap.js';
 import { PAYMENT_METHOD, PAYMENT_STATUS } from '../../src/domain/checkout-payment.js';
 import type { PaymentMethod, PaymentStatus } from '../../src/domain/checkout-payment.js';
 import type { Order } from '../../src/domain/order.js';
+import { transitionOrder } from '../../src/domain/order.js';
 import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-order-store.js';
 import { FakePayments } from '../support/fake-payments.js';
 import { FakeStockReservations } from '../support/fake-stock-reservations.js';
@@ -40,6 +41,7 @@ function sweep(batchSize = BATCH) {
     repository,
     payments,
     stock,
+    outbox: repository,
     clock: fixedClock(NOW_MS),
     batchSize,
     newRequestId: () => `req_supurucu_${(requestIds += 1)}`,
@@ -53,7 +55,15 @@ const lock = (expiresAtMs = NOW_MS - 1) => ({
 
 const expiredDraft = (expiresAtMs?: number) =>
   insertDraft(repository, openedAt, {}, lock(expiresAtMs));
-const expiredAwaiting = () => insertAwaitingPayment(repository, openedAt, RISK_BANDS.LOW, lock());
+const insertExpiredAwaiting = () =>
+  insertAwaitingPayment(repository, openedAt, RISK_BANDS.LOW, lock());
+
+/** Odeme bekleyen, kilidi dolmus; inventory'nin supurucusu kilidi birakmis (Commit NOT_FOUND). */
+async function expiredAwaiting(): Promise<Order> {
+  const order = await insertExpiredAwaiting();
+  stock.expire(order.id);
+  return order;
+}
 
 function paidBy(
   order: Order,
@@ -187,6 +197,60 @@ describe('SweepExpiredReservations - odeme bekleyen', () => {
     ).toEqual([EVENTS.ORDER_STATUS_CHANGED, EVENTS.PAYMENT_CANCEL_REQUESTED]);
   });
 
+  it('para alinmis, stok kesinlesmis (ilk deneme PAID yazamamis): PAID; iade yok, kilit birakilmaz (bekleyen is 124)', async () => {
+    const awaiting = await insertExpiredAwaiting();
+    await stock.commit({ orderId: awaiting.id, marketId: awaiting.marketId });
+    paidBy(awaiting, PAYMENT_STATUS.SUCCEEDED);
+
+    const round = await sweep();
+
+    expect(round).toMatchObject({ completedPaid: 1, closedAwaitingPayment: 0, refunded: 0 });
+    expect((await stored(awaiting.id))?.status).toBe(ORDER_STATUS.PAID);
+    expect(payments.refunds).toEqual([]);
+    expect(stock.releases).toEqual([]);
+    expect(topicsOf(awaiting.id)).not.toContain(EVENTS.PAYMENT_REFUND_REQUESTED);
+  });
+
+  it('para alinmis, kilit suresi gecmis ama inventory henuz birakmamis: Commit alir, PAID (bekleyen is 124)', async () => {
+    const awaiting = await insertExpiredAwaiting();
+    paidBy(awaiting, PAYMENT_STATUS.SUCCEEDED);
+
+    await expect(sweep()).resolves.toMatchObject({ completedPaid: 1, refunded: 0 });
+    expect((await stored(awaiting.id))?.status).toBe(ORDER_STATUS.PAID);
+    expect(stock.stateOf(awaiting.id)).toBe('committed');
+  });
+
+  it('para alinmis, stok kesinlesmis, PAID i o arada baska yol yazmis: sayilmaz (skipped)', async () => {
+    const awaiting = await insertExpiredAwaiting();
+    await stock.commit({ orderId: awaiting.id, marketId: awaiting.marketId });
+    paidBy(awaiting, PAYMENT_STATUS.SUCCEEDED);
+    const update = repository.update.bind(repository);
+    vi.spyOn(repository, 'update').mockImplementationOnce(
+      async (order, expectedVersion, events) => {
+        const current = await repository.findById(order.id);
+        if (current === null) throw new Error('siparis yok');
+        await update(transitionOrder(current, ORDER_STATUS.PAID, openedAt), current.version, []);
+        return update(order, expectedVersion, events);
+      },
+    );
+
+    const round = await sweep();
+
+    expect(round).toMatchObject({ completedPaid: 0, skipped: 1, refunded: 0 });
+    expect((await stored(awaiting.id))?.status).toBe(ORDER_STATUS.PAID);
+    expect(payments.refunds).toEqual([]);
+  });
+
+  it('para alinmis, inventory kapali: o siparis kapatilamaz (failed); hicbir sey yazilmaz', async () => {
+    const awaiting = await insertExpiredAwaiting();
+    paidBy(awaiting, PAYMENT_STATUS.SUCCEEDED);
+    stock.commitFailure = new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'inventory kapali');
+
+    await expect(sweep()).resolves.toMatchObject({ failed: 1, completedPaid: 0, refunded: 0 });
+    expect((await stored(awaiting.id))?.status).toBe(ORDER_STATUS.AWAITING_PAYMENT);
+    expect(payments.refunds).toEqual([]);
+  });
+
   it('dogrudan iade basarisiz: iptalle yazilan iade KOMUTU kalir, ikincisi yazilmaz; siparis kapanir', async () => {
     const awaiting = await expiredAwaiting();
     paidBy(awaiting, PAYMENT_STATUS.SUCCEEDED);
@@ -218,6 +282,31 @@ describe('SweepExpiredReservations - kapsam ve hatalar', () => {
     expect(round).toMatchObject({ closedDrafts: 0, closedAwaitingPayment: 0 });
     expect((await stored(live.id))?.status).toBe(ORDER_STATUS.DRAFT);
     expect((await stored(legacy.id))?.status).toBe(ORDER_STATUS.DRAFT);
+  });
+
+  it('surum cakismasi, siparisi baska yol IPTAL etmis ve para alinmis: iade yine yapilir; dogrudan olmazsa komut outbox a', async () => {
+    const awaiting = await expiredAwaiting();
+    paidBy(awaiting, PAYMENT_STATUS.SUCCEEDED);
+    payments.refundFailure = new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'payment kapali');
+    const update = repository.update.bind(repository);
+    vi.spyOn(repository, 'update').mockImplementationOnce(
+      async (order, expectedVersion, events) => {
+        const current = await repository.findById(order.id);
+        if (current === null) throw new Error('siparis yok');
+        await update(
+          transitionOrder(current, ORDER_STATUS.CANCELLED, openedAt),
+          current.version,
+          [],
+        );
+        return update(order, expectedVersion, events);
+      },
+    );
+
+    await expect(sweep()).resolves.toMatchObject({ skipped: 1, refunded: 0, failed: 0 });
+    expect(payments.refunds.map((refund) => refund.idempotencyKey)).toEqual([
+      `refund-${awaiting.id}`,
+    ]);
+    expect(topicsOf(awaiting.id)).toContain(EVENTS.PAYMENT_REFUND_REQUESTED);
   });
 
   it('surum cakismasi (siparis o arada degisti): dokunulmaz, kilit ve iade yok', async () => {
@@ -275,6 +364,7 @@ describe('startReservationSweeping (kurulum)', () => {
         repository,
         payments,
         stock,
+        outbox: repository,
         logger: silentLogger,
         clock: fixedClock(NOW_MS),
         intervalMs: 1_000,

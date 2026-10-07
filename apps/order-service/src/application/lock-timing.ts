@@ -15,7 +15,9 @@
  *     yeni beklenenle bir tur daha uzatilir.
  *
  * Kilit dusmusse kilitsiz stokla para CEKILMEZ; siparis lapsed-order.ts'in
- * tablosuyla kapatilir (cancelLapsedOrder). inventory'ye ulasilamazsa hata yukari
+ * tablosuyla kapatilir (resolveLapsedOrder): onceki deneme parayi almis ve stogu
+ * kesinlestirmisse siparis PAID doner, cagiran cekmeden biter (bekleyen is 124).
+ * inventory'ye ulasilamazsa hata yukari
  * gider, hicbir sey yazilmaz; uzatmanin ikinci turunda ise ilk turda yazilan
  * guncel bitis kalir.
  */
@@ -24,7 +26,6 @@ import { AppError, ERROR_CODES, ORDER_STATUS } from '@getir/core';
 import type { RiskBand } from '@getir/core';
 
 import { MS_PER_SECOND } from '../config/constants.js';
-import type { OrderRepository } from '../domain/order-repository.js';
 import type { Order } from '../domain/order.js';
 import { paymentInProgress } from '../domain/payment-standing.js';
 import {
@@ -34,7 +35,7 @@ import {
   withReservationExpiry,
 } from '../domain/stock-reservation.js';
 import { closeLapsedOrder } from './lapsed-order.js';
-import type { LapseDeps } from './lapsed-order.js';
+import type { LapseDeps, LapseOutcome } from './lapsed-order.js';
 import type { RequestScope } from './request-scope.js';
 
 /** Banda gore kilit ve odeme oncesi uzatma ayarlari (ortamdan, sn). */
@@ -47,8 +48,6 @@ export interface LockPolicy {
 
 /** Kilit suresi ayarlari ve kilidi dusmus siparisin kapatilmasi icin gerekenler. */
 export interface LockTimingDeps extends LapseDeps {
-  /** findById: kapatma cakisirsa siparisin son hali (cancelLapsedOrder). */
-  readonly repository: Pick<OrderRepository, 'update' | 'findById'>;
   readonly lockPolicy: LockPolicy;
 }
 
@@ -74,7 +73,7 @@ export async function lockForBand(
     scope,
   );
   if (timing.kind === 'lapsed') {
-    return cancelLapsedOrder(deps, order, scope);
+    return resolveLapsedOrder(deps, order, scope);
   }
   if (timing.changed) {
     scope.logger.info(
@@ -90,6 +89,8 @@ export async function lockForBand(
  * ve yeni bitisi YAZAR (surum artar). Uzatma hakki bitmisse kalan sureyle
  * devam edilir: kesinlestirmede kilit dusmusse para iade edilir (payment-step).
  * Kilit `moved` donerse guncel bitis yazilir ve en cok bir tur daha denenir.
+ * Kilit dusmus ama siparis PAID tamamlandiysa (resolveLapsedOrder) PAID siparis
+ * doner: cagiran cekim ya da 3DS yapmadan sonucu verir.
  */
 export async function securePaymentWindow(
   deps: LockTimingDeps,
@@ -114,7 +115,7 @@ export async function securePaymentWindow(
       scope,
     );
     if (timing.kind === 'lapsed') {
-      return cancelLapsedOrder(deps, current, scope);
+      return resolveLapsedOrder(deps, current, scope);
     }
     if (timing.kind === 'moved') {
       current = await recordExpiry(deps, current, timing.expiresAt);
@@ -166,18 +167,34 @@ async function recordExpiry(deps: LockTimingDeps, order: Order, expiresAt: Date)
 /**
  * Kilidi dusmus siparis (T11.2 karari "iptal + 410"): kilitsiz stokla odeme
  * alinmaz. Kapatma karari lapsed-order.ts'te (supurucuyle ayni tablo; T15.3,
- * bekleyen is 122): odeme alinmissa iptal ve IADE, kart cekimi suruyorsa hicbir
- * sey yazilmaz (REQUEST_IN_PROGRESS), aksi halde iptal. Istemci iptalde
- * RESERVATION_EXPIRED alir ve sepeti yeniden onaylar. Kapatma cakisirsa siparisin
- * son haline bakilir: baska yol (supurucu, es zamanli istek) iptal ettiyse yine
- * 410, siparis ilerlediyse 409.
+ * bekleyen is 122 ve 124): odeme alinmis ve stok kesinlesmisse PAID siparis
+ * DONER; aksi halde hata firlatir (throwLapse).
  */
-export async function cancelLapsedOrder(
+export async function resolveLapsedOrder(
   deps: LockTimingDeps,
   order: Order,
   scope: RequestScope,
-): Promise<never> {
+): Promise<Order> {
   const outcome = await closeLapsedOrder(deps, order, scope);
+  if (outcome.kind === 'paid') {
+    return outcome.order;
+  }
+  return throwLapse(deps, order, outcome);
+}
+
+/**
+ * Kapanan siparisin istemci cevabi: odeme alinmissa iptal ve IADE, kart cekimi
+ * suruyorsa hicbir sey yazilmaz (REQUEST_IN_PROGRESS), aksi halde iptal. Istemci
+ * iptalde RESERVATION_EXPIRED alir ve sepeti yeniden onaylar. Kapatma cakisirsa
+ * siparisin son haline bakilir: baska yol (supurucu, es zamanli istek) iptal
+ * ettiyse yine 410, siparis ilerlediyse 409. Odeme adimi da kullanir (Commit
+ * NOT_FOUND, payment-step.ts).
+ */
+export async function throwLapse(
+  deps: LockTimingDeps,
+  order: Order,
+  outcome: Exclude<LapseOutcome, { readonly kind: 'paid' }>,
+): Promise<never> {
   switch (outcome.kind) {
     case 'in-flight':
       throw paymentInProgress(order.id, outcome.paymentStatus);

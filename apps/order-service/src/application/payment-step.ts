@@ -9,16 +9,18 @@
  *
  * KILIT SURESI (T11.3): cekimden ONCE kalan sure kisaysa kilit uzatilir; kilit
  * dusmusse para CEKILMEZ, siparis lapsed-order.ts'in tablosuyla kapatilir
- * (CANCELLED + 410; onceki deneme cektiyse iade).
+ * (CANCELLED + 410; onceki deneme cektiyse iade, cekip stogu kesinlestirdiyse
+ * PAID ve cekim tekrarlanmaz).
  *
  * STOK (T11.2): odeme alininca kilit PAID'den ONCE kesinlesir (Commit) - "odendi
  * ama stok kesinlesmedi" durumu olusmaz. Commit gecici hata verirse siparis odeme
  * bekler kalir; ayni istek tekrar gelince cekim idempotent ilk sonucu doner,
- * Commit yeniden denenir. Kilit o arada dustuyse para iade edilir, siparis
- * CANCELLED, istemci RESERVATION_EXPIRED alir. Kart reddinde kilit birakilir.
+ * Commit yeniden denenir. Kilit o arada dustuyse siparis CANCELLED ve para
+ * alinmissa iade komutu AYNI yazimda (lapsed-order.ts), istemci
+ * RESERVATION_EXPIRED alir. Kart reddinde kilit birakilir.
  */
 
-import { AppError, ERROR_CODES, ORDER_STATUS } from '@getir/core';
+import { AppError, ORDER_STATUS } from '@getir/core';
 import type { ErrorCode } from '@getir/core';
 
 import {
@@ -29,15 +31,15 @@ import {
 } from '../domain/checkout-payment.js';
 import type { PaymentMethod, PaymentResult } from '../domain/checkout-payment.js';
 import { assertPaymentMethodAllowed, paymentPolicyOf } from '../domain/checkout-risk.js';
-import { queuedForCourier } from '../domain/courier-dispatch.js';
-import { statusChangedEvents } from '../domain/order-events.js';
 import type { OrderOutbox } from '../domain/order-outbox.js';
 import type { OrderRepository } from '../domain/order-repository.js';
 import type { Order } from '../domain/order.js';
 import { transitionOrder } from '../domain/order.js';
 import { RELEASE_REASON } from '../domain/stock-reservation.js';
-import { securePaymentWindow } from './lock-timing.js';
+import { closeWithoutStock } from './lapsed-order.js';
+import { securePaymentWindow, throwLapse } from './lock-timing.js';
 import type { LockTimingDeps } from './lock-timing.js';
+import { isConflict, writePaid, writeTransition } from './order-transition.js';
 import type { Payments } from './payments.js';
 import { refundCharge } from './refund-step.js';
 import type { RequestScope } from './request-scope.js';
@@ -72,6 +74,11 @@ export async function chargeOrder(
   const policy = paymentPolicyOf(order);
   assertPaymentMethodAllowed(order.id, choice.method, policy);
   const windowed = await securePaymentWindow(deps, order, scope);
+  if (windowed.status === ORDER_STATUS.PAID) {
+    // Kilit dusmus gorundu ama onceki deneme cekip stogu kesinlestirmisti
+    // (bekleyen is 124): siparis PAID yazildi, tekrar cekilmez.
+    return { order: windowed };
+  }
 
   const result = await deps.payments.charge(
     {
@@ -132,7 +139,8 @@ export async function failPayment(
 
 /**
  * Odenen siparisin kilidini kesinlestirir. Kilit dusmusse (suresi dolup
- * supurucu birakmis): para iade edilir, siparis CANCELLED, RESERVATION_EXPIRED.
+ * supurucu birakmis): kilidi dusmus siparisle ayni kapatma (lapsed-order.ts) -
+ * CANCELLED, para alinmissa iade komutu ayni yazimda; RESERVATION_EXPIRED.
  * T11.2 oncesi acilmis, kilidi olmayan siparis kesinlestirilmez (gecis donemi).
  */
 async function commitPaidStock(
@@ -153,23 +161,11 @@ async function commitPaidStock(
     return;
   }
   const charged = result.status === PAYMENT_STATUS.SUCCEEDED;
-  if (charged) {
-    await refundCharge(deps, order, REFUND_REASON.RESERVATION_EXPIRED, scope);
-  }
-  const cancelled = transitionOrder(
-    order,
-    ORDER_STATUS.CANCELLED,
-    deps.clock,
-    ERROR_CODES.RESERVATION_EXPIRED,
-  );
-  await writeTransition(deps.repository, order, cancelled);
   scope.logger.warn(
-    { orderId: order.id, refunded: charged },
-    'stok kilidi odeme sirasinda dusmustu; siparis iptal edildi',
+    { orderId: order.id, charged },
+    'stok kilidi odeme sirasinda dusmustu; siparis iptal ediliyor',
   );
-  throw new AppError(ERROR_CODES.RESERVATION_EXPIRED, 'Rezervasyon suresi doldu', {
-    details: { orderId: order.id, status: ORDER_STATUS.CANCELLED },
-  });
+  await throwLapse(deps, order, await closeWithoutStock(deps, order, charged, scope));
 }
 
 async function markPaid(
@@ -179,42 +175,12 @@ async function markPaid(
   note: string | undefined,
   scope: RequestScope,
 ): Promise<Order> {
-  // Kurye kuyruguna odeme aniyla girer (#92): once odeyen once kurye alir.
-  const paid = queuedForCourier(transitionOrder(order, ORDER_STATUS.PAID, deps.clock, note));
   try {
-    return await writeTransition(deps.repository, order, paid);
+    return await writePaid(deps, order, note);
   } catch (error) {
     if (isConflict(error) && result.status === PAYMENT_STATUS.SUCCEEDED) {
       await refundCharge(deps, order, REFUND_REASON.ORDER_CHANGED_DURING_PAYMENT, scope);
     }
     throw error;
   }
-}
-
-/**
- * Surum kontrollu yazar. Cakismada kayit tekrar okunur: zaten hedef durumdaysa
- * (ayni istegin es zamanli tekrari yazdi) o kayit doner; degilse CONFLICT.
- */
-async function writeTransition(
-  repository: PaymentStepDeps['repository'],
-  current: Order,
-  next: Order,
-): Promise<Order> {
-  try {
-    await repository.update(next, current.version, statusChangedEvents(current, next));
-    return next;
-  } catch (error) {
-    if (!isConflict(error)) {
-      throw error;
-    }
-    const latest = await repository.findById(current.id);
-    if (latest?.status === next.status) {
-      return latest;
-    }
-    throw error;
-  }
-}
-
-function isConflict(error: unknown): boolean {
-  return error instanceof AppError && error.code === ERROR_CODES.CONFLICT;
 }
