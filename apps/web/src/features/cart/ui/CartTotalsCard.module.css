@@ -1,7 +1,7 @@
 /*
  * "Sepet Toplamı" (T16.3; referans getircarsi): baslik, beyaz kartta tutar ve
- * notlar, altinda tam genislikte mor "Ödemeye Geç". Odeme sayfasi (F4) gelene
- * kadar dugme pasif gorunur.
+ * notlar, altinda tam genislikte mor "Ödemeye Geç" (odeme sayfasina; minimum
+ * sepet tutmazsa pasif).
  */
 .c-cart-totals {
   display: grid;
@@ -47,18 +47,21 @@
 }
 
 .c-cart-totals__checkout {
+  display: grid;
+  place-items: center;
   min-height: var(--size-field-min-height);
   margin-block-start: var(--space-2);
   font: inherit;
   font-weight: var(--font-weight-bold);
   color: var(--text-on-brand);
+  text-decoration: none;
   cursor: pointer;
   background: var(--color-brand-primary);
   border: none;
   border-radius: var(--radius-md);
 }
 
-/* Odeme sayfasi gelene kadar (F4) pasif: odaklanir, basilmaz. */
+/* Minimum sepet tutmazsa pasif: odaklanir, basilmaz. */
 .c-cart-totals__checkout[aria-disabled='true'] {
   cursor: not-allowed;
   opacity: var(--opacity-disabled);

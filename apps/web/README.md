@@ -397,6 +397,29 @@ sepet çubuğunun "Sepete git"i buraya gelir.
 - **Metinler içerikten:** `cartPage` ve `footer` blokları; onay penceresi, adet kutusu, boş sepet ve minimum sepet
   metinleri Sepetim paneliyle ortak (`marketList.cart`).
 
+## Ödeme sayfası (T17.1)
+
+`/odeme`; referans getirçarşı ödeme sayfası, **kampanya yok**. Sepet sayfasının "Ödemeye Geç"i buraya gelir (minimum
+sepet tutmazsa pasif). Oturum ister; sepet boşsa `/sepet`'e döner. Sade bar ve alt bilgi sepet sayfasıyla aynı.
+
+| Bölge           | Dosya                                                                       | İş                                                                                      |
+| --------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Ekran           | `pages/checkout/CheckoutPage.tsx`, `CheckoutScreen.tsx`                     | Solda bölümler, sağda adres ve özet (7:3); form hataları alan terk edilince             |
+| Hediye          | `features/checkout/ui/GiftSection.tsx`, `PresetNoteDialog.tsx`              | Evet/Hayır anahtarı, hazır notlar, not (0/250), gönderen, zorunlu alıcı adı ve telefonu |
+| Teslimat ve not | `DeliveryMethodSection.tsx`, `NoteSection.tsx`                              | Tek seçili seçenek (etiketsiz); sipariş notu (0/250) ve "Zili Çalma"                    |
+| Ödeme yöntemi   | `PaymentMethodSection.tsx`, `SavedCardPayment.tsx`, `PaymentMethodView.tsx` | Süresi geçmemiş en yeni kart; "Değiştir" ve "Kart ekle" F5'e kadar pasif                |
+| Özet            | `OrderSummaryCard.tsx`, `AgreementField.tsx`                                | Sepet Tutarı, Teslimat Ücreti, Ödenecek Tutar; sözleşme onayı; "Sipariş Ver" (pasif)    |
+| Kurallar        | `features/checkout/services/checkout-rules.ts`, `selected-card.ts`          | B2 taslağı: not ≤250, ad ≤60, alıcı adı ve cep telefonu zorunlu (hediye açıkken)        |
+
+- **Kart kasası production paketinde kapalı** (`__CARD_VAULT__`, K1 (a)): kart bölümü orada kart okumaz ("Kayıtlı
+  kartın yok"); kasa açılana kadar production'da sipariş verilemez. Kasanın ucu paket taramasıyla denetlenir.
+- **Kişisel veri** (alıcı adı ve telefonu, notlar) yalnızca form durumunda yaşar (`useCheckoutForm`); depoya,
+  önbelleğe ve adrese yazılmaz. Kartın yalnızca ilk 4 ve son 4 hanesi görünür; PAN ve CVV bu sayfada yok (M7).
+- **Sözleşme metinleri demo** yer tutucu (`checkout.preInfoParagraphs`, `distanceSalesParagraphs`); gerçek metin
+  içerikten değişir.
+- **Sipariş akışı** (rezervasyon, sipariş, 3DS, hata bildirimleri) ayrı PR'da (T12.4); backend `cardId` ve hediye
+  alanlarını (B1, B2) aldıktan sonra gerçek uca bağlanır.
+
 ## Market ekranları (T5.4) — tasarımsız kabuk
 
 Market sayfasının görsel tasarımı T16.2'de geldi (yukarıda). Bu bölüm T5.4'ün veri katmanı kararlarını tutar.

@@ -197,6 +197,14 @@
   /* Sepet sayfasi (T16.3): satirin gorseli. */
   --size-cart-row-visual: 4rem;
 
+  /* Form parcalari (T17.1; odeme sayfasi): en az dokunma yuksekligi (44 px),
+     onay kutusu, anahtarin rayi ve topu, cok satirli alanin en az yuksekligi. */
+  --size-touch-min: 2.75rem;
+  --size-checkbox: 1.25rem;
+  --size-switch-track: 2.75rem;
+  --size-switch-thumb: 1.5rem;
+  --size-text-area-min: 5.5rem;
+
   /* Favori kalbi (T11.13): kapagin sag ust kosesindeki dugme ve ikonu. */
   --size-favorite-button: 2.25rem;
   --size-favorite-icon: 1.25rem;

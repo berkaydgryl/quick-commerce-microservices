@@ -19,6 +19,7 @@ import { ClearCartDialog } from '../../features/cart/ui/ClearCartDialog';
 import { BagIcon } from '../../features/cart/ui/icons';
 import { useMarketCategories } from '../../features/catalog/hooks/useMarketCategories';
 import { CategoryIcon } from '../../features/catalog/ui/CategoryIcon';
+import { CHECKOUT_PATH } from '../../features/checkout/routes';
 import { marketPath } from '../../features/markets/routes';
 
 import styles from './CartPage.module.css';
@@ -92,7 +93,12 @@ export function CartScreen({ page, list, marketTexts, setup }: CartScreenProps) 
             setup={setup}
           />
         )}
-        <CartTotalsCard totals={totals} texts={page} cartTexts={list.cart} />
+        <CartTotalsCard
+          totals={totals}
+          texts={page}
+          cartTexts={list.cart}
+          checkoutHref={CHECKOUT_PATH}
+        />
       </div>
       {confirming && (
         <ClearCartDialog

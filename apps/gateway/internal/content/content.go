@@ -67,6 +67,8 @@ type Welcome struct {
 	// CartPage ve Footer, sepet sayfasi ve alt bilgi (T16.3).
 	CartPage CartPage `json:"cartPage"`
 	Footer   Footer   `json:"footer"`
+	// Checkout, odeme sayfasi (T17.1).
+	Checkout Checkout `json:"checkout"`
 }
 
 // Header, ust bar: logonun iki parcasi ve iki dugme.
