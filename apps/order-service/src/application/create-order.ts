@@ -23,7 +23,7 @@ import type { OrderHistoryReader } from '../domain/order-history-reader.js';
 import type { OrderOutbox } from '../domain/order-outbox.js';
 import type { OrderRepository } from '../domain/order-repository.js';
 import { hasLiveReservation } from '../domain/stock-reservation.js';
-import { cancelLapsedOrder } from './lock-timing.js';
+import { resolveLapsedOrder } from './lock-timing.js';
 import type { LockTimingDeps } from './lock-timing.js';
 import { findOwnOrder } from './own-order.js';
 import { chargeOrder } from './payment-step.js';
@@ -59,8 +59,9 @@ export function createCreateOrder(deps: CreateOrderDeps): CreateOrder {
   return async ({ orderId, userId, signals = {}, ...choice }, scope) => {
     const order = await findOwnOrder(deps.repository, orderId, userId);
     if (order.status === ORDER_STATUS.DRAFT && !hasLiveReservation(order, deps.clock.date())) {
-      // Kilidi dusmus taslak (T11.2, karar "iptal + 410"): kilitsiz stokla odeme alinmaz.
-      await cancelLapsedOrder(deps, order, scope);
+      // Kilidi dusmus taslak (T11.2, karar "iptal + 410"): kilitsiz stokla odeme
+      // alinmaz. Taslakta odeme olamadigi icin hep iptal edilir ve hata firlar.
+      return { order: await resolveLapsedOrder(deps, order, scope) };
     }
 
     const awaitingPayment =

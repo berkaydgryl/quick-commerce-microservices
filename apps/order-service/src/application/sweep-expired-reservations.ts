@@ -8,13 +8,15 @@
  * denemesinde kilidi dusmus bulan saga da ayni tabloyu kullanir, T15.3):
  *   - DRAFT: CANCELLED (RESERVATION_EXPIRED), kilit birakilir;
  *   - AWAITING_PAYMENT: once odeme kaydina bakilir (payment-standing.ts):
- *       para alinmis -> CANCELLED + iade komutu ayni yazimda, kilit birakilir,
+ *       para alinmis -> once Commit: stok kesinlesmisse PAID (bekleyen is 124);
+ *         kilit yoksa CANCELLED + iade komutu ayni yazimda, kilit birakilir,
  *         tutar IADE edilir;
  *       kart cekimi suruyor -> bu turda dokunulmaz, sonraki turda tekrar;
  *       para alinmamis -> CANCELLED, kilit birakilir.
  *
  * Sira: once siparis yazilir (surum kontrollu), sonra kilit ve iade. Siparisi o
- * arada baska bir yazim degistirdiyse (CONFLICT) dokunulmaz. Lider kilidi yok
+ * arada baska bir yazim degistirdiyse (CONFLICT) dokunulmaz; para alinmis ve
+ * siparisi baska yol iptal etmisse iade yine yapilir (lapsed-order.ts). Lider kilidi yok
  * (karar 3a): surum kontrolu ve iadenin sabit anahtari (refund-<orderId>) iki
  * ornegin ayni siparisi iki kez kapatmasini ya da iki kez iade etmesini onler.
  * Bir siparisin hatasi turu durdurmaz: sayilir, siradakine gecilir.
@@ -47,6 +49,8 @@ export interface SweepRound {
   /** Odeme bekleyen ve kapatilan (iade edilenler dahil). */
   readonly closedAwaitingPayment: number;
   readonly refunded: number;
+  /** Para alinmis, stogu kesinlesmis (ilk deneme PAID yazamamis): PAID yazildi. */
+  readonly completedPaid: number;
   /** Kart cekimi suruyor: sonraki turda. */
   readonly waiting: number;
   /** Baska bir yazim once davrandi (surum cakismasi): dokunulmadi. */
@@ -60,6 +64,7 @@ export type SweepExpiredReservations = (logger: Logger) => Promise<SweepRound>;
 const OUTCOME = {
   CLOSED: 'closed',
   REFUNDED: 'refunded',
+  COMPLETED: 'completed',
   WAITING: 'waiting',
   SKIPPED: 'skipped',
 } as const;
@@ -76,6 +81,7 @@ export function createSweepExpiredReservations(
       closedDrafts: 0,
       closedAwaitingPayment: 0,
       refunded: 0,
+      completedPaid: 0,
       waiting: 0,
       skipped: 0,
       failed: 0,
@@ -103,13 +109,17 @@ async function closeExpired(
   order: Order,
   scope: RequestScope,
 ): Promise<Outcome> {
-  switch ((await closeLapsedOrder(deps, order, scope)).kind) {
+  const outcome = await closeLapsedOrder(deps, order, scope);
+  switch (outcome.kind) {
     case 'in-flight':
       return OUTCOME.WAITING;
     case 'conflict':
       return OUTCOME.SKIPPED;
     case 'refunded':
       return OUTCOME.REFUNDED;
+    case 'paid':
+      // Yalniz bu tur PAID yazdiysa sayilir; baska yol yazdiysa dokunulmamistir.
+      return outcome.recovered ? OUTCOME.COMPLETED : OUTCOME.SKIPPED;
     case 'closed':
       return OUTCOME.CLOSED;
   }
@@ -130,6 +140,9 @@ function tally(
     case OUTCOME.REFUNDED:
       round.refunded += 1;
       round.closedAwaitingPayment += 1;
+      return;
+    case OUTCOME.COMPLETED:
+      round.completedPaid += 1;
       return;
     case OUTCOME.CLOSED:
       if (order.status === ORDER_STATUS.DRAFT) {

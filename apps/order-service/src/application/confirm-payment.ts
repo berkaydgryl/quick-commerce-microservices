@@ -11,7 +11,8 @@
  * KILIT SURESI (T11.3): her onay denemesinden ONCE kalan sure kisaysa kilit
  * uzatilir; kilit dusmusse kod payment-svc'ye gitmez, siparis lapsed-order.ts'in
  * tablosuyla kapatilir: CANCELLED + 410 (payment.cancel_requested 3DS bekleyen
- * odemeyi kapatir), onceki onay cekmisse iade, cekim suruyorsa REQUEST_IN_PROGRESS.
+ * odemeyi kapatir), onceki onay cekmisse iade, cekip stogu kesinlestirmisse PAID
+ * (bekleyen is 124), cekim suruyorsa REQUEST_IN_PROGRESS.
  */
 
 import { AppError, ERROR_CODES, ORDER_STATUS } from '@getir/core';
@@ -57,6 +58,11 @@ export function createConfirmPayment(deps: ConfirmPaymentDeps): ConfirmPayment {
     }
     assertTransition(order.id, order.status, ORDER_STATUS.PAID);
     const windowed = await securePaymentWindow(deps, order, scope);
+    if (windowed.status === ORDER_STATUS.PAID) {
+      // Kilit dusmus gorundu ama onceki onay cekip stogu kesinlestirmisti
+      // (bekleyen is 124): siparis PAID yazildi, kod payment-svc'ye gitmez.
+      return windowed;
+    }
 
     let result: PaymentResult;
     try {

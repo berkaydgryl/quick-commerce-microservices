@@ -22,6 +22,7 @@ const round = (extra: Partial<SweepRound> = {}): SweepRound => ({
   closedDrafts: 0,
   closedAwaitingPayment: 0,
   refunded: 0,
+  completedPaid: 0,
   waiting: 0,
   skipped: 0,
   failed: 0,
@@ -70,7 +71,13 @@ describe('startReservationSweeper', () => {
     const sweep = vi
       .fn<SweepExpiredReservations>()
       .mockResolvedValueOnce(
-        round({ closedDrafts: 2, closedAwaitingPayment: 1, refunded: 1, failed: 1 }),
+        round({
+          closedDrafts: 2,
+          closedAwaitingPayment: 1,
+          refunded: 1,
+          completedPaid: 1,
+          failed: 1,
+        }),
       )
       .mockResolvedValue(round());
     const worker = startReservationSweeper({
@@ -83,11 +90,15 @@ describe('startReservationSweeper', () => {
 
     expect(await metricValue(ORDER_SWEEPER_METRICS.CLOSED, { status: 'DRAFT' })).toBe(2);
     expect(await metricValue(ORDER_SWEEPER_METRICS.CLOSED, { status: 'AWAITING_PAYMENT' })).toBe(1);
+    expect(await metricValue(ORDER_SWEEPER_METRICS.COMPLETED_PAID)).toBe(1);
     expect(await metricValue(ORDER_SWEEPER_METRICS.ERRORS)).toBe(1);
     // Ozet yalnizca bir sey olan turda (bos tur gunlugu doldurmaz).
     const summaries = lines.filter((line) => line.message === 'kilidi dolan siparisler supuruldu');
     expect(summaries).toHaveLength(1);
-    expect(summaries[0]).toMatchObject({ level: 'info', fields: { closedDrafts: 2, refunded: 1 } });
+    expect(summaries[0]).toMatchObject({
+      level: 'info',
+      fields: { closedDrafts: 2, refunded: 1, completedPaid: 1 },
+    });
 
     await worker.stop();
   });

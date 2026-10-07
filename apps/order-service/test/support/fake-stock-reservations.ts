@@ -260,7 +260,9 @@ export class FakeStockReservations implements StockReservations {
       return SETTLEMENT.APPLIED;
     }
     if (held.state !== 'held') {
-      return SETTLEMENT.ALREADY_APPLIED;
+      // inventory gibi: ayni sonuc tekrar -> ALREADY_APPLIED; birakilmis kilit
+      // onaylanamaz, onaylanmis kilit birakilamaz -> NOT_FOUND (commit-reservation.ts).
+      return held.state === to ? SETTLEMENT.ALREADY_APPLIED : SETTLEMENT.NOT_FOUND;
     }
     held.state = to;
     return SETTLEMENT.APPLIED;
