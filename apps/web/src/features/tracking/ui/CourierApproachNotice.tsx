@@ -12,9 +12,9 @@ interface CourierApproachNoticeProps {
   /** "Konumu gör": kurye penceresini acar. */
   readonly onShow: () => void;
   readonly onClose: () => void;
-  /** Fare ya da odak bildirimdeyken kapanma suresi durur. */
-  readonly onPause: () => void;
-  readonly onResume: () => void;
+  /** Fare ve odak ayri bildirilir: biri surerken digerinden cikmak sureyi baslatmaz. */
+  readonly onHoverChange: (hovered: boolean) => void;
+  readonly onFocusChange: (focused: boolean) => void;
 }
 
 /**
@@ -27,19 +27,19 @@ export function CourierApproachNotice({
   texts,
   onShow,
   onClose,
-  onPause,
-  onResume,
+  onHoverChange,
+  onFocusChange,
 }: CourierApproachNoticeProps) {
   return (
     <div
       className={styles['c-approach-notice']}
       // mouseover: imlec bildirim belirdiginde zaten ustundeyse de ilk harekette durur.
-      onMouseOver={onPause}
-      onMouseLeave={onResume}
-      onFocus={onPause}
+      onMouseOver={() => onHoverChange(true)}
+      onMouseLeave={() => onHoverChange(false)}
+      onFocus={() => onFocusChange(true)}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) {
-          onResume();
+          onFocusChange(false);
         }
       }}
     >

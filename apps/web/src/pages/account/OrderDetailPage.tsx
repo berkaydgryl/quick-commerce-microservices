@@ -27,8 +27,9 @@ export function OrderDetailPage() {
 function SignedInOrderDetail() {
   const userId = useSessionStore((state) => state.user?.id);
   const { orderId } = useParams();
+  // Siparis degisince (Geri/Ileri) pencere, bildirim ve harita durumu tasinmaz (QA K9 B4).
   return userId === undefined || orderId === undefined ? null : (
-    <OrderDetailSection userId={userId} orderId={orderId} />
+    <OrderDetailSection key={orderId} userId={userId} orderId={orderId} />
   );
 }
 
@@ -52,6 +53,7 @@ function OrderDetailSection({
     market.data?.name ?? (market.error === null ? undefined : texts?.unknownMarketLabel);
   const [courierOpen, setCourierOpen] = useState(false);
   const courierButtonId = useId();
+  const trackHeadingId = useId();
 
   return (
     <AccountLayout userId={userId} variant="nested">
@@ -65,6 +67,7 @@ function OrderDetailSection({
           listHref={ORDERS_PATH}
           onWhereIsCourier={() => setCourierOpen(true)}
           courierButtonId={courierButtonId}
+          trackHeadingId={trackHeadingId}
         />
       )}
       {order.data !== undefined && (
@@ -76,6 +79,7 @@ function OrderDetailSection({
           open={courierOpen}
           onOpenChange={setCourierOpen}
           returnFocusId={courierButtonId}
+          fallbackFocusId={trackHeadingId}
         />
       )}
     </AccountLayout>

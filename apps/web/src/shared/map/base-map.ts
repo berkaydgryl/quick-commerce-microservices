@@ -3,6 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
 import styles from './BaseMap.module.css';
+import { baseMapOptions } from './map-options';
 
 export interface BaseMapOptions {
   readonly center: L.LatLngExpression;
@@ -39,19 +40,18 @@ export function createBaseMap(
   if (seamFix !== undefined) {
     element.classList.add(seamFix);
   }
-  const anchor = zoomAround === 'center' ? 'center' : true;
+  const reducedMotion = prefersReducedMotion();
   const leaflet = L.map(element, {
     center,
     zoom,
-    zoomControl: interactive,
-    dragging: interactive,
-    touchZoom: interactive ? anchor : false,
-    scrollWheelZoom: interactive ? anchor : false,
-    doubleClickZoom: interactive ? anchor : false,
-    boxZoom: false,
-    keyboard: interactive,
-    attributionControl: false,
+    ...baseMapOptions({ interactive, zoomAround, reducedMotion }),
   });
+  if (reducedMotion) {
+    // Leaflet'in klavye kaydirmasi panBy'i secenek vermeden cagirir ve hep
+    // animasyonludur; hareket azaltmada animasyonsuz (proje kurali; code-review).
+    const panBy = leaflet.panBy.bind(leaflet);
+    leaflet.panBy = (offset, options) => panBy(offset, { ...options, animate: false });
+  }
   L.tileLayer(map.tileUrl, { maxZoom: 19 }).addTo(leaflet);
   L.control
     .attribution({ prefix: false })

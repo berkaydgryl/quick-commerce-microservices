@@ -30,6 +30,12 @@ import {
   resetApproachMemory,
 } from '../../src/features/tracking/services/approach-once';
 import { courierMapState } from '../../src/features/tracking/services/map-state';
+import { trackingErrorKind } from '../../src/features/tracking/services/tracking-errors';
+import {
+  focusAfterClose,
+  noticePaused,
+  refetchOnModeChange,
+} from '../../src/features/tracking/services/notice-rules';
 import {
   courierDisplayName,
   distanceText,
@@ -99,23 +105,108 @@ describe('yoklama bicimi ve pencere icerigi (F22 code-review)', () => {
     expect(trackingPollInterval('once', TO_CUSTOMER, null)).toBe(false);
   });
 
-  it('icerik zamanlardan: yeniden istekte hata null olsa da "alinamadi" kalir (titreme yok)', () => {
-    expect(courierMapState({ data: undefined, dataUpdatedAt: 0, errorUpdatedAt: 0 })).toEqual({
-      kind: 'loading',
-    });
-    expect(courierMapState({ data: undefined, dataUpdatedAt: 0, errorUpdatedAt: 5 })).toEqual({
-      kind: 'unavailable',
-    });
+  it('hata turu: 503 ve ag gecici; 404, yetki ve gecersiz cevap (INTERNAL) son', () => {
+    expect(trackingErrorKind(null)).toBe('none');
+    expect(trackingErrorKind(new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'x'))).toBe('transient');
+    expect(trackingErrorKind(new Error('ag'))).toBe('transient');
+    for (const code of [ERROR_CODES.NOT_FOUND, ERROR_CODES.FORBIDDEN, ERROR_CODES.INTERNAL]) {
+      expect(trackingErrorKind(new AppError(code, 'x')), code).toBe('final');
+    }
+    expect(trackingPollInterval('open', TO_CUSTOMER, new AppError(ERROR_CODES.INTERNAL, 'x'))).toBe(
+      false,
+    );
   });
 
-  it('veriden yeni hata (404: rota birakildi) eski konumu dondurmaz; yeni veri gelince takip', () => {
-    expect(courierMapState({ data: TO_CUSTOMER, dataUpdatedAt: 10, errorUpdatedAt: 20 })).toEqual({
-      kind: 'unavailable',
-    });
-    expect(courierMapState({ data: TO_CUSTOMER, dataUpdatedAt: 30, errorUpdatedAt: 20 })).toEqual({
-      kind: 'ready',
-      tracking: TO_CUSTOMER,
-    });
+  it('pencere icerigi (B2): son hata "alinamadi"; gecici hata yoklama surerken cizimi korur', () => {
+    const transient = new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'x');
+    const internal = new AppError(ERROR_CODES.INTERNAL, 'x');
+    const missing = new AppError(ERROR_CODES.NOT_FOUND, 'x');
+    const state = (
+      data: OrderTracking | undefined,
+      error: unknown,
+      dataAt: number,
+      errorAt: number,
+      polling = true,
+    ) =>
+      courierMapState({ data, error, dataUpdatedAt: dataAt, errorUpdatedAt: errorAt, polling })
+        .kind;
+
+    expect(state(undefined, null, 0, 0)).toBe('loading');
+    expect(state(undefined, transient, 0, 5)).toBe('loading');
+    expect(state(undefined, missing, 0, 5)).toBe('unavailable');
+    expect(state(undefined, internal, 0, 5)).toBe('unavailable');
+    expect(state(TO_CUSTOMER, transient, 10, 20)).toBe('ready');
+    expect(state(TO_CUSTOMER, missing, 10, 20)).toBe('unavailable');
+    expect(state(TO_CUSTOMER, missing, 30, 20)).toBe('ready');
+  });
+
+  it('yoklama yokken (\'once\') gecici hata da "alinamadi" ve "Tekrar dene" (takili kalmaz)', () => {
+    const transient = new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'x');
+
+    expect(
+      courierMapState({
+        data: undefined,
+        error: transient,
+        dataUpdatedAt: 0,
+        errorUpdatedAt: 5,
+        polling: false,
+      }).kind,
+    ).toBe('unavailable');
+    expect(
+      courierMapState({
+        data: TO_CUSTOMER,
+        error: transient,
+        dataUpdatedAt: 10,
+        errorUpdatedAt: 20,
+        polling: false,
+      }).kind,
+    ).toBe('unavailable');
+  });
+
+  it('bildirim gosterildiyse kapali pencerede izleme durur (N4); pencere acikken surer', () => {
+    expect(trackingMode(false, 'ON_THE_WAY', true)).toBe('off');
+    expect(trackingMode(false, 'ON_THE_WAY', false)).toBe('watch');
+    expect(trackingMode(true, 'ON_THE_WAY', true)).toBe('open');
+  });
+});
+
+describe('bildirim ve pencere kurallari (F22 QA K9: B1, B3, N1)', () => {
+  it('fare YA DA odak bildirimdeyken sure durur; biri cikinca digeri surerken baslamaz (N1)', () => {
+    expect([
+      noticePaused(false, false),
+      noticePaused(true, false),
+      noticePaused(false, true),
+      noticePaused(true, true),
+    ]).toEqual([false, true, true, true]);
+  });
+
+  it('kapaninca odak yalniz icindeyse ve sayfaya dustuyse tasinir; etkilesmemis kullanici kipirdamaz (B1)', () => {
+    const base = { closed: true, focusWasInside: true, activeIsPage: true, targetAvailable: true };
+
+    expect(focusAfterClose(base)).toBe('target');
+    expect(focusAfterClose({ ...base, focusWasInside: false })).toBe('none');
+    expect(focusAfterClose({ ...base, activeIsPage: false })).toBe('none');
+    expect(focusAfterClose({ ...base, closed: false })).toBe('none');
+  });
+
+  it('"Kuryem nerede" yok olduysa (teslimde) odak takip kartinin basligina (B3)', () => {
+    expect(
+      focusAfterClose({
+        closed: true,
+        focusWasInside: true,
+        activeIsPage: true,
+        targetAvailable: false,
+      }),
+    ).toBe('fallback');
+  });
+
+  it('pencere acilinca suren istege katilir; son duruma gecince TAZE istek (B3; eski cevap son durum sanilmaz)', () => {
+    expect(refetchOnModeChange('watch', 'open')).toBe('join');
+    expect(refetchOnModeChange('off', 'open')).toBe('join');
+    expect(refetchOnModeChange('open', 'once')).toBe('fresh');
+    expect(refetchOnModeChange('open', 'open')).toBe('none');
+    expect(refetchOnModeChange('open', 'watch')).toBe('none');
+    expect(refetchOnModeChange('watch', 'off')).toBe('none');
   });
 });
 
@@ -216,6 +307,8 @@ describe('yaklasma bildirimi bir kez (F22, PM S3 a)', () => {
     expect(approachDecision(true, false, true)).toBe('mark');
     expect(approachDecision(true, true, false)).toBe('none');
     expect(approachDecision(false, false, false)).toBe('none');
+    // Metinler hazir degilse karar beklenir: isaretlenmez, bildirim gorulmeden kaybolmaz.
+    expect(approachDecision(true, false, false, false)).toBe('none');
     expect(APPROACH_NOTICE_MS).toBe(15_000);
   });
 

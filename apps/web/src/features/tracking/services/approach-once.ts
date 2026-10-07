@@ -35,8 +35,10 @@ export function approachDecision(
   approaching: boolean,
   alreadyNotified: boolean,
   dialogOpen: boolean,
+  /** Bildirimin metinleri hazir mi: degilse beklenir, ISARETLENMEZ (gorulmeden kaybolmasin). */
+  canShow = true,
 ): ApproachDecision {
-  if (!approaching || alreadyNotified) {
+  if (!approaching || alreadyNotified || !canShow) {
     return 'none';
   }
   return dialogOpen ? 'mark' : 'show';

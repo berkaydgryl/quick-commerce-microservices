@@ -13,9 +13,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 
 import { CourierApproachNotice } from '../../src/features/tracking/ui/CourierApproachNotice';
+import { markerHtml } from '../../src/features/tracking/ui/tracking-marker-svg';
 import { CourierMapDialog } from '../../src/features/tracking/ui/CourierMapDialog';
 import type { CourierMapState } from '../../src/features/tracking/services/map-state';
 import { OrderDetailView } from '../../src/pages/account/OrderDetailView';
+import { baseMapOptions } from '../../src/shared/map/map-options';
 
 import { css } from './css-test-support';
 import { ORDER } from './order-test-support';
@@ -87,8 +89,8 @@ describe('yaklasma bildirimi (F22)', () => {
         texts: TEXTS,
         onShow: () => undefined,
         onClose: () => undefined,
-        onPause: () => undefined,
-        onResume: () => undefined,
+        onHoverChange: () => undefined,
+        onFocusChange: () => undefined,
       }),
     );
 
@@ -109,36 +111,60 @@ describe('yaklasma bildirimi (F22)', () => {
   });
 });
 
-describe('code-review duzeltmeleri (F22)', () => {
+describe('code-review duzeltmeleri (F22; saf fonksiyon ve render)', () => {
   it('ev pimindeki ev cizgisi style ile (SVG ozniteliginde var() her tarayicida calismaz)', () => {
-    const markers = css('features/tracking/ui/tracking-markers.ts');
-
-    expect(markers).toContain('style="stroke:var(--text-on-brand)"');
-    expect(markers).not.toContain('stroke="var(');
+    expect(markerHtml('home')).toContain('style="stroke:var(--text-on-brand)"');
+    expect(markerHtml('home')).not.toContain('stroke="var(');
   });
 
   it("sure ve mesafe 2 sn'de bir okunmaz (canli bolge yok)", () => {
     expect(dialog({ kind: 'ready', tracking: TO_CUSTOMER })).not.toContain('aria-live');
   });
 
-  it('duyuru bolgesi sayfa izgarasinda bosluk acmaz (akis disi); ust barin ustunde (bildirim katmani)', () => {
-    expect(css('features/tracking/ui/CourierApproachNotice.module.css')).toMatch(
-      /\.c-approach-notice-region \{\s*position: fixed;[^}]*z-index: var\(--z-toast\);/,
-    );
+  it('kurye haritasi imlecin oldugu yere, adres haritasi ortadan yakinlasir', () => {
+    const pointer = baseMapOptions({
+      interactive: true,
+      zoomAround: 'pointer',
+      reducedMotion: false,
+    });
+    const center = baseMapOptions({
+      interactive: true,
+      zoomAround: 'center',
+      reducedMotion: false,
+    });
+
+    expect([pointer.scrollWheelZoom, pointer.touchZoom, pointer.doubleClickZoom]).toEqual([
+      true,
+      true,
+      true,
+    ]);
+    expect([center.scrollWheelZoom, center.touchZoom]).toEqual(['center', 'center']);
   });
 
-  it('harita yer tutucusu kendi blogunda (baska blogun sinifi yok)', () => {
-    const lazy = css('features/tracking/ui/LazyTrackingMap.tsx');
+  it('hareket azaltmada yakinlastirma, solma ve atalet animasyonlari kapali (iki harita; N6)', () => {
+    const reduced = baseMapOptions({
+      interactive: true,
+      zoomAround: 'pointer',
+      reducedMotion: true,
+    });
+    const normal = baseMapOptions({
+      interactive: true,
+      zoomAround: 'center',
+      reducedMotion: false,
+    });
 
-    expect(lazy).toContain("import styles from './LazyTrackingMap.module.css';");
-    expect(lazy).not.toContain('CourierMapDialog.module.css');
-  });
-
-  it('kurye haritasi imlecin oldugu yere yakinlasir; adres haritasi ortadan', () => {
-    expect(css('features/tracking/ui/TrackingMap.tsx')).toContain("zoomAround: 'pointer'");
-    expect(css('shared/map/base-map.ts')).toContain(
-      "const anchor = zoomAround === 'center' ? 'center' : true;",
-    );
+    expect([
+      reduced.zoomAnimation,
+      reduced.fadeAnimation,
+      reduced.markerZoomAnimation,
+      reduced.inertia,
+    ]).toEqual([false, false, false, false]);
+    expect([
+      normal.zoomAnimation,
+      normal.fadeAnimation,
+      normal.markerZoomAnimation,
+      normal.inertia,
+    ]).toEqual([true, true, true, true]);
   });
 });
 
@@ -149,16 +175,6 @@ describe('harita isaretleri (F22)', () => {
     for (const name of ['marker', 'marker--courier', 'marker--market', 'marker--home', 'route']) {
       expect(source, name).toContain(`.c-tracking-map__${name} {`);
     }
-  });
-});
-
-describe('ortak harita: karo dikisi (F22, PM duzeltmesi)', () => {
-  it('karolar saydam cerceveyle cizilir; kurulum haritaya sinifi ekler (iki harita da)', () => {
-    expect(css('shared/map/BaseMap.module.css')).toMatch(
-      /\.c-base-map img \{\s*outline: var\(--border-width-thin\) solid transparent;/,
-    );
-    expect(css('shared/map/base-map.ts')).toContain("const seamFix = styles['c-base-map'];");
-    expect(css('shared/map/base-map.ts')).toContain('element.classList.add(seamFix);');
   });
 });
 

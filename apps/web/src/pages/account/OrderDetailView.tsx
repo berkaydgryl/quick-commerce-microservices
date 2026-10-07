@@ -26,6 +26,8 @@ export interface OrderDetailViewProps {
   readonly onWhereIsCourier?: () => void;
   /** "Kuryem nerede" dugmesinin kimligi (pencere kapaninca odak). */
   readonly courierButtonId?: string;
+  /** Takip kartinin basliginin kimligi (dugme yoksa odagin yedegi). */
+  readonly trackHeadingId?: string;
 }
 
 /**
@@ -45,6 +47,7 @@ export function OrderDetailView({
   listHref,
   onWhereIsCourier,
   courierButtonId,
+  trackHeadingId,
 }: OrderDetailViewProps) {
   const titleId = useId();
   const itemsId = useId();
@@ -97,6 +100,7 @@ export function OrderDetailView({
             texts={texts}
             {...(onWhereIsCourier === undefined ? {} : { onWhereIsCourier })}
             {...(courierButtonId === undefined ? {} : { courierButtonId })}
+            {...(trackHeadingId === undefined ? {} : { headingId: trackHeadingId })}
           />
         </>
       )}
