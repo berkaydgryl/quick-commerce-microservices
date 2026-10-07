@@ -12,6 +12,8 @@ interface MarketProductGridProps {
   readonly renderAction?: (product: Product) => ReactNode;
   /** "Son 3 adet" rozetinin metinleri (T16.3). */
   readonly texts: { readonly lowStockPrefix: string; readonly lowStockSuffix: string };
+  /** Market kapali (07.10): kartlar gri (ProductCard). */
+  readonly closed?: boolean | undefined;
 }
 
 /**
@@ -24,6 +26,7 @@ export function MarketProductGrid({
   categories,
   renderAction,
   texts,
+  closed,
 }: MarketProductGridProps) {
   const categoryOf = (id: string) => categories?.find((category) => category.id === id);
 
@@ -36,6 +39,7 @@ export function MarketProductGrid({
           category={categoryOf(product.categoryId)}
           action={renderAction?.(product)}
           texts={texts}
+          closed={closed}
         />
       ))}
     </ul>

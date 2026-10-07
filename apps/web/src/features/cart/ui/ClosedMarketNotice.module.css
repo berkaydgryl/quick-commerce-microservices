@@ -1,0 +1,18 @@
+/*
+ * Kapali marketin sebep satiri (07.10): beyaz hap, ince cerceve; metin varsayilan
+ * renkte (karsitlik dusmez). Gri olan urunler ve "+"dir, sebep okunakli kalir.
+ * Hap metni kadar: magaza sayfasinin blok akisinda da tam genislige yayilmaz.
+ */
+.c-closed-market-notice {
+  align-self: flex-start;
+  width: fit-content;
+  max-width: 100%;
+  padding: var(--space-1) var(--space-3);
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-default);
+  background: var(--bg-surface);
+  border: var(--border-width-thin) solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+}

@@ -21,6 +21,8 @@ interface MarketCatalogSectionProps {
   readonly texts: MarketPageContent;
   /** "Kategoriler" ve "Tümü" (marketList). */
   readonly navTexts: { readonly title: string; readonly allLabel: string };
+  /** Market kapali (07.10): urun kartlari gri (MarketProductGrid). */
+  readonly closed?: boolean | undefined;
 }
 
 /**
@@ -37,6 +39,7 @@ export function MarketCatalogSection({
   renderProductAction,
   texts,
   navTexts,
+  closed,
 }: MarketCatalogSectionProps) {
   const titleId = useId();
   const categories = useMarketCategories(marketId);
@@ -84,6 +87,7 @@ export function MarketCatalogSection({
             products={items}
             categories={categories.data}
             texts={texts}
+            closed={closed}
             {...(renderProductAction === undefined ? {} : { renderAction: renderProductAction })}
           />
         )}

@@ -26,6 +26,11 @@ export interface CartPanelViewProps {
   readonly cartHref: string | undefined;
   /** "Sepetim" basligi gorunur mu (market listesinde evet; magaza sayfasinda ekran okuyucuya kalir). */
   readonly titleVisible?: boolean | undefined;
+  /**
+   * Sepetin marketi kapali (07.10): minimum sepet notunun yerinde "Market şu an
+   * kapalı"; "Sepete git" AKTIF kalir (/sepet "Ödemeye Geç"i durdurur; PM S3).
+   */
+  readonly closed?: boolean | undefined;
   /** Kalemden bir adet daha eklenebilir mi (cart-state canIncrement). */
   readonly canIncrement: (offerId: string) => boolean;
   readonly onIncrement: (offerId: string) => void;
@@ -50,6 +55,7 @@ export function CartPanelView({
   marketHref,
   cartHref,
   titleVisible = true,
+  closed = false,
   canIncrement,
   onIncrement,
   onDecrement,
@@ -115,7 +121,8 @@ export function CartPanelView({
                 />
               ))}
             </ul>
-            {totals !== undefined && !totals.canCheckout && (
+            {closed && <p className={styles['c-cart-panel__notice']}>{texts.closedNotice}</p>}
+            {!closed && totals !== undefined && !totals.canCheckout && (
               <p className={styles['c-cart-panel__notice']}>
                 {texts.minBasketRemainingLabel}:{' '}
                 <span className={styles['c-cart-panel__amount']}>

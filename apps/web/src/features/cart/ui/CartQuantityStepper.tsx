@@ -23,6 +23,11 @@ interface CartQuantityStepperProps {
   /** Bir azaltir; adet 1'de kalem kalkar (azaltmak silmek demektir). */
   readonly onDecrement: () => void;
   readonly orientation?: CartStepperOrientation | undefined;
+  /**
+   * "+" kapaliyken sebebi (07.10, kapali market): verilirse "+" odaklanir ve
+   * sebebe baglanir (aria-disabled), basinca hicbir sey olmaz; yoksa disabled.
+   */
+  readonly incrementReasonId?: string | undefined;
 }
 
 /**
@@ -42,7 +47,10 @@ export function CartQuantityStepper({
   onIncrement,
   onDecrement,
   orientation = 'horizontal',
+  incrementReasonId,
 }: CartQuantityStepperProps) {
+  // Sebebi soylenen pasif "+" odakta kalir (aria-disabled); digerleri disabled.
+  const explained = !canIncrement && incrementReasonId !== undefined;
   const last = quantity === 1;
   const vertical = orientation === 'vertical';
   const decrease = (
@@ -60,8 +68,10 @@ export function CartQuantityStepper({
       type="button"
       className={styles['c-cart-stepper__step']}
       aria-label={`${name} ${texts.increaseSuffix}`}
-      disabled={!canIncrement}
-      onClick={onIncrement}
+      disabled={!canIncrement && !explained}
+      aria-disabled={explained ? true : undefined}
+      aria-describedby={explained ? incrementReasonId : undefined}
+      onClick={canIncrement ? onIncrement : undefined}
     >
       <span aria-hidden="true">+</span>
     </button>

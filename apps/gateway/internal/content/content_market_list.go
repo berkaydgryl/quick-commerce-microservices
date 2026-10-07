@@ -47,8 +47,10 @@ type MarketListCart struct {
 	FreeDeliveryLabel       string `json:"freeDeliveryLabel"`
 	TotalLabel              string `json:"totalLabel"`
 	MinBasketRemainingLabel string `json:"minBasketRemainingLabel"`
-	GoToCartLabel           string `json:"goToCartLabel"`
-	ClearLabel              string `json:"clearLabel"`
+	// ClosedNotice, kapali marketin sebep satiri (07.10): "+" pasif, sepette not.
+	ClosedNotice  string `json:"closedNotice"`
+	GoToCartLabel string `json:"goToCartLabel"`
+	ClearLabel    string `json:"clearLabel"`
 	// ClearConfirmQuestion, Sepeti bosaltma onayi (T16.3): soru, alt not ve dugmeler; pencerenin basligi clearLabel.
 	ClearConfirmQuestion string `json:"clearConfirmQuestion"`
 	ClearConfirmHint     string `json:"clearConfirmHint"`

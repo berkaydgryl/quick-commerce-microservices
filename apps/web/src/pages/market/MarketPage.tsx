@@ -1,11 +1,14 @@
+import { useId } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 
 import { useAddToCart } from '../../features/cart/hooks/useAddToCart';
 import { cartPath } from '../../features/cart/routes';
+import { isMarketClosed } from '../../features/cart/services/cart-state';
 import { productCartTexts } from '../../features/cart/services/product-cart-texts';
 import { CartBar } from '../../features/cart/ui/CartBar';
 import { CartPanel } from '../../features/cart/ui/CartPanel';
 import { CartSwitchDialog } from '../../features/cart/ui/CartSwitchDialog';
+import { ClosedMarketNotice } from '../../features/cart/ui/ClosedMarketNotice';
 import { ProductCartAction } from '../../features/cart/ui/ProductCartAction';
 import { searchQueryFrom } from '../../features/catalog/services/search-query';
 import { MarketCatalogSection } from '../../features/catalog/ui/MarketCatalogSection';
@@ -31,6 +34,9 @@ import styles from './MarketPage.module.css';
  * doner, kategori secilince arama kalkar. Adreste ikisi birden varsa arama
  * gecerlidir. Secili kategori ve arama adreste durur (MARKET_PARAMS):
  * yenileme ve paylasma secimi korur.
+ *
+ * Market kapaliysa (07.10 kullanici istegi) urunler gri, "+" pasif ve
+ * aramanin altinda tek sebep satiri ("Market şu an kapalı"); urunler okunur.
  */
 export function MarketPage() {
   const { marketId = '' } = useParams();
@@ -47,7 +53,9 @@ export function MarketPage() {
   const market = useMarket(marketId);
   const cartMarket =
     market.data === undefined ? undefined : { id: market.data.id, name: market.data.name };
-  const cart = useAddToCart(cartMarket);
+  const closed = isMarketClosed(market.data);
+  const closedReasonId = useId();
+  const cart = useAddToCart(cartMarket, closed);
 
   const selectCategory = (next: string | undefined): void => {
     setSearchParams(next === undefined ? {} : { [MARKET_PARAMS.category]: next }, {
@@ -86,6 +94,7 @@ export function MarketPage() {
             label={pageTexts.searchLabel}
             placeholder={pageTexts.searchPlaceholder}
           />
+          {closed && <ClosedMarketNotice id={closedReasonId} text={listTexts.cart.closedNotice} />}
           {cart.pending !== undefined && cartMarket !== undefined && (
             <CartSwitchDialog
               pending={cart.pending}
@@ -103,12 +112,15 @@ export function MarketPage() {
               onCategoryChange={selectCategory}
               texts={pageTexts}
               navTexts={{ title: listTexts.categoriesTitle, allLabel: listTexts.allLabel }}
+              closed={closed}
               renderProductAction={(product) => (
                 <ProductCartAction
                   product={product}
                   onAdd={cart.add}
                   texts={productTexts}
                   orientation="vertical"
+                  closed={closed}
+                  closedReasonId={closedReasonId}
                 />
               )}
             />
