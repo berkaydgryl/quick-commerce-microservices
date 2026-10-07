@@ -32,6 +32,7 @@ import {
   DEFAULT_RESERVATION_EXTEND_SECONDS,
   DEFAULT_RESERVATION_TTL_SECONDS,
   ORDER_SERVICE_FULL_NAME,
+  ORPHAN_LOCK_MIN_AGE_SECONDS,
   DEFAULT_ORDER_SWEEPER_INTERVAL_MS,
   ORDER_SWEEPER_BATCH_SIZE,
   OUTBOX_BATCH_SIZE,
@@ -44,6 +45,7 @@ import type { OrderOutbox } from './domain/order-outbox.js';
 import type { OrderRepository } from './domain/order-repository.js';
 import { InMemoryOrderStore } from './infrastructure/memory/in-memory-order-store.js';
 import { createOrderImplementation } from './interfaces/grpc/order-handlers.js';
+import { recordOrphanLockReleased } from './interfaces/grpc/orphan-lock-metrics.js';
 import { startCourierDispatcher } from './interfaces/workers/courier-dispatcher.js';
 import type { CourierDispatcher } from './interfaces/workers/courier-dispatcher.js';
 import { startOutboxPublisher } from './interfaces/workers/outbox-publisher.js';
@@ -70,6 +72,8 @@ export interface BootstrapOptions {
   readonly stock: StockReservations;
   /** Kilidin omru (sn); verilmezse 600 (RESERVATION_TTL_SECONDS'un varsayilani). */
   readonly reservationTtlSeconds?: number;
+  /** Yetim kilidin birakilma esigi (sn); verilmezse 30 (ORPHAN_LOCK_MIN_AGE_SECONDS). Testte kisalir. */
+  readonly orphanLockMinAgeSeconds?: number;
   /**
    * Banda gore kilit ve odeme oncesi uzatma (T11.3); verilmezse 120 ve 60 sn
    * (RESERVATION_TTL_MEDIUM_RISK_SECONDS, RESERVATION_EXTEND_SECONDS).
@@ -103,6 +107,8 @@ export function buildOrderService(options: BootstrapOptions): GrpcServiceRegistr
       catalog: options.catalog,
       stock,
       reservationTtlSeconds: options.reservationTtlSeconds ?? DEFAULT_RESERVATION_TTL_SECONDS,
+      orphanLockMinAgeSeconds: options.orphanLockMinAgeSeconds ?? ORPHAN_LOCK_MIN_AGE_SECONDS,
+      onOrphanLockReleased: recordOrphanLockReleased,
       clock,
     }),
     createOrder: createCreateOrder({

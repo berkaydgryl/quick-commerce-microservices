@@ -48,6 +48,11 @@ const ORDER = {
   INSUFFICIENT: 'ord_yetersiz',
   USER_ACTIVE: 'ord_aktif',
   USER_ACTIVE_BAD_DETAILS: 'ord_aktif_bozuk',
+  /** Aktif kilidin kalan omru ayrintida (T15.3): gecerli ve bozuk bicimler. */
+  USER_ACTIVE_REMAINING: 'ord_aktif_kalan',
+  USER_ACTIVE_REMAINING_TEXT: 'ord_aktif_kalan_metin',
+  USER_ACTIVE_REMAINING_NEGATIVE: 'ord_aktif_kalan_eksi',
+  USER_ACTIVE_REMAINING_FRACTION: 'ord_aktif_kalan_kesir',
   NO_EXPIRY: 'ord_bitissiz',
   INVALID: 'ord_gecersiz',
   SLOW: 'ord_yavas',
@@ -83,6 +88,14 @@ const OUTCOME_BY_ORDER: Readonly<Record<string, inventoryV1.ReservationOutcome>>
   ord_already: inventoryV1.ReservationOutcome.RESERVATION_OUTCOME_ALREADY_APPLIED,
   ord_not_found: inventoryV1.ReservationOutcome.RESERVATION_OUTCOME_NOT_FOUND,
   ord_unspecified: inventoryV1.ReservationOutcome.RESERVATION_OUTCOME_UNSPECIFIED,
+};
+
+/** Sahte inventory'nin RESERVATION_ACTIVE ayrintisinda gonderdigi kalan omur. */
+const REMAINING_BY_ORDER: Record<string, unknown> = {
+  [ORDER.USER_ACTIVE_REMAINING]: 42_000,
+  [ORDER.USER_ACTIVE_REMAINING_TEXT]: '42000',
+  [ORDER.USER_ACTIVE_REMAINING_NEGATIVE]: -5,
+  [ORDER.USER_ACTIVE_REMAINING_FRACTION]: 1.5,
 };
 
 function appError(code: ErrorCode, details: Record<string, unknown>) {
@@ -122,6 +135,17 @@ const implementation = {
         return;
       case ORDER.USER_ACTIVE_BAD_DETAILS:
         callback(appError(ERROR_CODES.RESERVATION_ACTIVE, { activeOrderId: 'usr_1' }));
+        return;
+      case ORDER.USER_ACTIVE_REMAINING:
+      case ORDER.USER_ACTIVE_REMAINING_TEXT:
+      case ORDER.USER_ACTIVE_REMAINING_NEGATIVE:
+      case ORDER.USER_ACTIVE_REMAINING_FRACTION:
+        callback(
+          appError(ERROR_CODES.RESERVATION_ACTIVE, {
+            activeOrderId: 'ord_onceki',
+            activeExpiresInMs: REMAINING_BY_ORDER[call.request.orderId],
+          }),
+        );
         return;
       case ORDER.INVALID:
         callback(appError(ERROR_CODES.VALIDATION_FAILED, { ttlSeconds: 'aralik disi' }));
@@ -283,6 +307,24 @@ describe('GrpcStockReservations.reserve', () => {
     const outcome = await stock.reserve(reserveRequest(ORDER.USER_ACTIVE), scope);
 
     expect(outcome).toMatchObject({ kind: 'user-has-active', activeOrderId: 'ord_onceki' });
+  });
+
+  it('aktif kilidin kalan omru (T15.3) sonuca gecer', async () => {
+    const outcome = await stock.reserve(reserveRequest(ORDER.USER_ACTIVE_REMAINING), scope);
+
+    expect(outcome).toMatchObject({ kind: 'user-has-active', activeExpiresInMs: 42_000 });
+  });
+
+  it.each([
+    ['metin', ORDER.USER_ACTIVE_REMAINING_TEXT],
+    ['negatif', ORDER.USER_ACTIVE_REMAINING_NEGATIVE],
+    ['kesirli', ORDER.USER_ACTIVE_REMAINING_FRACTION],
+    ['yok (eski inventory)', ORDER.USER_ACTIVE],
+  ])('kalan omur %s: "bilinmiyor" (undefined); sonuc yine kimlikle', async (_name, orderId) => {
+    const outcome = await stock.reserve(reserveRequest(orderId), scope);
+
+    expect(outcome).toMatchObject({ kind: 'user-has-active', activeOrderId: 'ord_onceki' });
+    expect(outcome.kind === 'user-has-active' && outcome.activeExpiresInMs).toBeUndefined();
   });
 
   it('aktif kilit ayrintisi siparis kimligi degilse sonuca cevrilmez: hata AYNEN yukari', async () => {

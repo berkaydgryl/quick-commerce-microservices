@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CreateDraftOrderInput } from '../../src/application/create-draft-order.js';
 import { createCreateDraftOrder } from '../../src/application/create-draft-order.js';
+import { ORPHAN_LOCK_MIN_AGE_SECONDS } from '../../src/config/constants.js';
 import { createDraftOrder, transitionOrder } from '../../src/domain/order.js';
 import type { Order } from '../../src/domain/order.js';
 import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-order-store.js';
@@ -41,6 +42,8 @@ function useCase() {
     catalog: new FakeCatalogPricing(),
     stock,
     reservationTtlSeconds: FAKE_TTL_SECONDS,
+    orphanLockMinAgeSeconds: ORPHAN_LOCK_MIN_AGE_SECONDS,
+    onOrphanLockReleased: () => undefined,
     clock,
   });
 }
@@ -145,7 +148,7 @@ describe('CreateDraftOrder: stok kilidi (T11.2)', () => {
     const error = await rejectionOf(useCase()(input, scope));
 
     expect(error.code).toBe(ERROR_CODES.RESERVATION_ACTIVE);
-    expect(error.details).toEqual({ activeOrderId: pending.id });
+    expect(error.details).toMatchObject({ activeOrderId: pending.id });
     expect(stock.releases).toEqual([]);
     expect((await repository.findById(pending.id))?.version).toBe(pending.version);
     expect(repository.size).toBe(1);
@@ -166,8 +169,10 @@ describe('CreateDraftOrder: stok kilidi (T11.2)', () => {
     },
   );
 
-  it('kilidin sahibi kayitli degilse (yazilamamis taslak) RESERVATION_ACTIVE; kilide dokunulmaz', async () => {
-    stock.hold('ord_yazilamamis', 'usr_1', [{ sku: 'SUT-1L', quantity: 2 }], clock.date());
+  it('kilidin sahibi kayitli degilse ve kilit GENC ise (es zamanli taslak) RESERVATION_ACTIVE; kilide dokunulmaz', async () => {
+    // Kilit az once alindi (kalan omur tam): yetim kilit kurallari draft-orphan-lock.spec.ts'te.
+    const justReserved = new Date(clock.now() + FAKE_TTL_SECONDS * 1000);
+    stock.hold('ord_yazilamamis', 'usr_1', [{ sku: 'SUT-1L', quantity: 2 }], justReserved);
 
     const error = await rejectionOf(useCase()(input, scope));
 
@@ -202,13 +207,17 @@ describe('CreateDraftOrder: stok kilidi (T11.2)', () => {
     expect(stock.available.get('SUT-1L')).toBe(100);
   });
 
-  it("inventory'ye ulasilamazsa SERVICE_UNAVAILABLE ve taslak ACILMAZ", async () => {
+  it("inventory'ye ulasilamazsa SERVICE_UNAVAILABLE ve taslak ACILMAZ; olasi kilit telafi olarak birakilir (T15.3)", async () => {
     stock.reserveFailure = new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'inventory yok');
 
     const error = await rejectionOf(useCase()(input, scope));
 
     expect(error.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
     expect(repository.size).toBe(0);
+    const [reserved] = stock.reserves;
+    expect(stock.releases).toEqual([
+      { orderId: reserved?.orderId, marketId: FAKE_MARKET_ID, reason: 'draft_not_saved' },
+    ]);
   });
 
   it('fiyat tutmazsa (PRICE_CHANGED) stok HIC kilitlenmez', async () => {
