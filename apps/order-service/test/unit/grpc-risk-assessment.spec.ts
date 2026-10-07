@@ -18,8 +18,19 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type { OrderRiskContext } from '../../src/domain/checkout-risk.js';
 import { GrpcRiskAssessment } from '../../src/infrastructure/risk/grpc-risk-assessment.js';
+import { cutAfterReach, HeldReplies } from '../support/held-replies.js';
 
-const TIMEOUT_MS = 200;
+/**
+ * Islevsel testlerin suresi COMERT (D17): ilk cagri kanal kurulumunu da oder ve
+ * yuklu makinede 200 ms'yi asabiliyordu ("Deadline exceeded after 0.201s").
+ * Bu testler sureyi degil ceviriyi siner; dayaniklilik testinde de yeniden
+ * denemeyi kalan sure degil kural engellemeli.
+ */
+const FUNCTIONAL_TIMEOUT_MS = 5_000;
+/** Yalnizca sure siniri testinin kisa siniri; yavas kullanicinin cevabi HIC gelmez. */
+const DEADLINE_TIMEOUT_MS = 200;
+/** Sure testinin zaman butcesi: istek sunucuya ulasana kadar tekrar (testTimeout'un altinda). */
+const REACH_BUDGET_MS = 5_000;
 const scope = { requestId: 'req_risk_1', logger: silentLogger };
 
 /** Sunucunun gordugu istekler ve x-request-id degerleri. */
@@ -30,6 +41,8 @@ const BANDSIZ_USER = 'usr_bantsiz';
 const KESIK_USER = 'usr_kesik';
 let kesikCalls = 0;
 const YAVAS_USER = 'usr_yavas';
+/** Yavas kullanicinin bekletilen istekleri (cevap verilmez; kimlik ve kalan sure kaydedilir). */
+const held = new HeldReplies();
 
 const implementation = {
   evaluate: (
@@ -58,13 +71,14 @@ const implementation = {
       callback(null, {
         evaluation: riskV1.RiskEvaluation.fromPartial({ score: 35, band }),
       });
-    if (userId === YAVAS_USER) setTimeout(respond, TIMEOUT_MS * 3);
+    if (userId === YAVAS_USER) held.hold(call);
     else respond();
   },
 };
 
 let handle: GrpcServerHandle;
 let risk: GrpcRiskAssessment;
+let shortDeadline: GrpcRiskAssessment;
 
 beforeAll(async () => {
   handle = await startGrpcServer({
@@ -75,11 +89,13 @@ beforeAll(async () => {
       { name: 'getir.risk.v1.RiskService', definition: riskV1.RiskServiceService, implementation },
     ],
   });
-  risk = new GrpcRiskAssessment(`127.0.0.1:${handle.port}`, TIMEOUT_MS);
+  risk = new GrpcRiskAssessment(`127.0.0.1:${handle.port}`, FUNCTIONAL_TIMEOUT_MS);
+  shortDeadline = new GrpcRiskAssessment(`127.0.0.1:${handle.port}`, DEADLINE_TIMEOUT_MS);
 });
 
 afterAll(async () => {
   risk?.close();
+  shortDeadline?.close();
   await handle?.shutdown('test bitti');
 });
 
@@ -183,15 +199,27 @@ describe('GrpcRiskAssessment', () => {
   });
 
   it('sure siniri dolarsa SERVICE_UNAVAILABLE', async () => {
-    const error = await rejectionOf(risk.evaluate(context({ userId: YAVAS_USER }), scope));
+    const { error, reply } = await cutAfterReach(
+      (requestId) =>
+        shortDeadline.evaluate(context({ userId: YAVAS_USER }), {
+          requestId,
+          logger: silentLogger,
+        }),
+      held,
+      REACH_BUDGET_MS,
+    );
 
-    expect(error.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+    // Istemci KENDI kisa sinirini gonderdi: sinirini yok sayan istemci burada duser.
+    expect(reply.remainingMs).toBeLessThanOrEqual(DEADLINE_TIMEOUT_MS);
   });
 });
 
 describe('GrpcRiskAssessment - dayaniklilik (D17)', () => {
   it('Evaluate yeniden DENENMEZ: her cagri risk-svc te yeni bir degerlendirme kaydi yazar', async () => {
-    const resilient = new GrpcRiskAssessment(`127.0.0.1:${handle.port}`, TIMEOUT_MS, {
+    kesikCalls = 0;
+    const resilient = new GrpcRiskAssessment(`127.0.0.1:${handle.port}`, FUNCTIONAL_TIMEOUT_MS, {
       breaker: new CircuitBreaker({ target: 'risk', failureThreshold: 5, openMs: 60_000 }),
       retry: { target: 'risk', maxRetries: 2, baseDelayMs: 1 },
     });

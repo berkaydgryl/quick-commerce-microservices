@@ -31,7 +31,11 @@ export function MarketListingScreen({ headingLevel }: MarketListingScreenProps) 
         location={location}
         content={content}
         headingLevel={headingLevel}
-        aside={content && <CartPanel texts={content.cart} cartHref={marketPath} />}
+        aside={
+          content && (
+            <CartPanel texts={content.cart} marketHref={marketPath} cartHref={marketPath} />
+          )
+        }
         {...(favoriteTexts === undefined
           ? {}
           : {

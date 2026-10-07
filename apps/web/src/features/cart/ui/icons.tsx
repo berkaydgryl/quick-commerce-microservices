@@ -12,6 +12,18 @@ export function BagIcon() {
   );
 }
 
+/** Magaza (sepet panelinin ust satiri; referans getircarsi): tente ve vitrin. */
+export function StoreIcon() {
+  return (
+    <svg {...STROKE_PROPS}>
+      <path d="M4 9h16l-1-4H5z" />
+      <path d="M4 9v1a2.7 2.7 0 0 0 5.3 0 2.7 2.7 0 0 0 5.4 0 2.7 2.7 0 0 0 5.3 0V9" />
+      <path d="M5 12.5V20h14v-7.5" />
+      <path d="M9.5 20v-4.5h5V20" />
+    </svg>
+  );
+}
+
 export function ChevronRightIcon() {
   return (
     <svg {...STROKE_PROPS}>
