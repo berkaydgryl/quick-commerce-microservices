@@ -43,6 +43,10 @@ set gecikmesi ekler ve saniyedeki istek tavanini dusurur.
 - Kabul edilen borc: script'ler dosyada versiyonlanir ve EVALSHA ile cagrilir; eski
   script ile yeni istemcinin ayni anda calisabilecegi gecis penceresi tek ortamli demo
   oldugu icin gozardi edilir.
+- Kapsam notu (T13.3, 07.10): kurye tick'i (rotalari ilerleten arka plan isi) ayni turden
+  seyrek ve tek calisani yeterli bir istir; liderligi ayni kilit desenini kullanir
+  (`lock:courier-tick`, courier-service `lua/leader.lua`). Karar degismez: Redlock sicak
+  yolda kullanilmaz.
 
 ## Ilgili
 

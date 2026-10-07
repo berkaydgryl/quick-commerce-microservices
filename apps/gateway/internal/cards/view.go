@@ -2,11 +2,11 @@ package cards
 
 import (
 	"fmt"
-	"time"
 
 	cardvaultv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/cardvault/v1"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rest"
 )
 
 // SavedCard, kayitli kartin REST gorunumu (@getir/contracts savedCardSchema):
@@ -49,10 +49,7 @@ func toSavedCard(card *cardvaultv1.SavedCard) (SavedCard, error) {
 	if !known {
 		return SavedCard{}, &apperror.Error{Code: apperror.CodeInternal, Cause: fmt.Errorf("%s: bilinmeyen kart markasi %v", service, card.GetBrand())}
 	}
-	createdAt := ""
-	if card.GetCreatedAt() != nil {
-		createdAt = card.GetCreatedAt().AsTime().UTC().Format(time.RFC3339Nano)
-	}
+	createdAt := rest.TimeText(card.GetCreatedAt())
 	return SavedCard{
 		ID:          card.GetId(),
 		Brand:       brand,

@@ -68,6 +68,7 @@ func TestLoadDefaults(t *testing.T) {
 		{Name: CatalogService, Address: defaultCatalogAddress},
 		{Name: InventoryService, Address: "localhost:50052"},
 		{Name: OrderService, Address: defaultOrderAddress},
+		{Name: CourierService, Address: defaultCourierAddress},
 		{Name: PaymentService, Address: defaultPaymentAddress},
 	}
 	if !slices.Equal(cfg.Services, wantServices) {
@@ -87,6 +88,7 @@ func TestLoadReadsValues(t *testing.T) {
 		"CATALOG_GRPC_ADDR":          "catalog:50051",
 		"INVENTORY_GRPC_ADDR":        "inventory:50052",
 		"ORDER_GRPC_ADDR":            "order:50053",
+		"COURIER_GRPC_ADDR":          "courier:50056",
 		"GRPC_SHUTDOWN_TIMEOUT_MS":   "2500",
 		"GATEWAY_REQUEST_TIMEOUT_MS": "750",
 		"GATEWAY_STOCK_TIMEOUT_MS":   "120",
@@ -111,7 +113,7 @@ func TestLoadReadsValues(t *testing.T) {
 		t.Errorf("stok suresi: %v geldi", cfg.StockTimeout)
 	}
 	if cfg.Services[0].Address != "catalog:50051" || cfg.Services[1].Address != "inventory:50052" ||
-		cfg.Services[2].Address != "order:50053" {
+		cfg.Services[2].Address != "order:50053" || cfg.Services[3].Address != "courier:50056" {
 		t.Errorf("konteyner adresleri okunamadi: %+v", cfg.Services)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	orderv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/order/v1"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rest"
 )
 
 // GiftView, cevaptaki hediye (giftDetailsViewSchema). `enabled` yok: alanin
@@ -49,7 +50,7 @@ func toDetailsView(details *orderv1.OrderDetails) (*DetailsView, error) {
 		Note:                 details.GetNote(),
 		DoNotRingBell:        details.GetDoNotRingBell(),
 		AgreementsAccepted:   details.GetAgreementsAccepted(),
-		AgreementsAcceptedAt: timeText(details.GetAgreementsAcceptedAt()),
+		AgreementsAcceptedAt: rest.TimeText(details.GetAgreementsAcceptedAt()),
 	}
 	if gift := details.GetGift(); gift != nil {
 		view.Gift = &GiftView{

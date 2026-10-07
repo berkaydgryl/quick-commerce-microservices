@@ -127,15 +127,6 @@ func statusName(status orderv1.OrderStatus) (string, error) {
 	return "", &apperror.Error{Code: apperror.CodeInternal, Cause: fmt.Errorf("order: bilinmeyen siparis durumu %v", status)}
 }
 
-// timeText, zamani sozlesmedeki metne cevirir (isoDateTimeSchema, UTC).
-// Gonderilmeyen zaman bos metindir; alan "omitempty" ile hic yazilmaz.
-func timeText(ts *timestamppb.Timestamp) string {
-	if ts == nil {
-		return ""
-	}
-	return ts.AsTime().UTC().Format(time.RFC3339Nano)
-}
-
 // remainingSeconds, kilidin `now`'a gore kalan saniyesi (yukari yuvarlanir:
 // 0,4 sn kalmis kilit "0" degil "1" der, istemci dolmadan sifir gostermez);
 // dolmussa 0. Bitis yoksa nil: alan yazilmaz.
@@ -159,7 +150,7 @@ func toReservation(response *orderv1.CreateDraftOrderResponse, now time.Time) (R
 	return Reservation{
 		OrderID:    response.GetOrderId(),
 		Status:     status,
-		ExpiresAt:  timeText(response.GetReservationExpiresAt()),
+		ExpiresAt:  rest.TimeText(response.GetReservationExpiresAt()),
 		TTLSeconds: remainingSeconds(response.GetReservationExpiresAt(), now),
 	}, nil
 }
@@ -214,9 +205,9 @@ func toOrder(order *orderv1.Order, now time.Time) (Order, error) {
 			Location: rest.GeoPointFromProto(order.GetDeliveryLocation()),
 		},
 		Timeline:              timeline,
-		CreatedAt:             timeText(order.GetCreatedAt()),
-		UpdatedAt:             timeText(order.GetUpdatedAt()),
-		ReservationExpiresAt:  timeText(order.GetReservationExpiresAt()),
+		CreatedAt:             rest.TimeText(order.GetCreatedAt()),
+		UpdatedAt:             rest.TimeText(order.GetUpdatedAt()),
+		ReservationExpiresAt:  rest.TimeText(order.GetReservationExpiresAt()),
 		ReservationTTLSeconds: remainingSeconds(order.GetReservationExpiresAt(), now),
 		Payment:               toPaymentView(order.GetPayment()),
 	}, nil
@@ -244,7 +235,7 @@ func toTimeline(entries []*orderv1.OrderTimelineEntry) ([]TimelineEntry, error) 
 		if err != nil {
 			return nil, err
 		}
-		timeline = append(timeline, TimelineEntry{Status: status, At: timeText(entry.GetAt()), Note: entry.GetNote()})
+		timeline = append(timeline, TimelineEntry{Status: status, At: rest.TimeText(entry.GetAt()), Note: entry.GetNote()})
 	}
 	return timeline, nil
 }

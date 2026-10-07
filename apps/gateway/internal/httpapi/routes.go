@@ -79,4 +79,5 @@ func registerOrderRoutes(v1 fiber.Router, deps Deps, mw routeMiddleware) {
 	v1.Get("/orders", mw.user, mw.generalByUser, listOrdersHandler(deps.OrderLister))
 	v1.Get("/orders/:"+orderIDParam, mw.user, mw.generalByUser, getOrderHandler(deps.OrderGetter))
 	v1.Get("/orders/:"+orderIDParam+"/token", mw.user, mw.generalByUser, orderRoomTokenHandler(deps.OrderRoomTokens))
+	v1.Get("/orders/:"+orderIDParam+"/tracking", mw.user, mw.generalByUser, orderTrackingHandler(deps.OrderTracking))
 }
