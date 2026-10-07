@@ -75,4 +75,12 @@ type Checkout struct {
 	BackLabel          string `json:"backLabel"`
 	// Secili kart artik yok (siparis 404, resource "card"; T12.4).
 	CardMissingNotice string `json:"cardMissingNotice"`
+	// Erken rezervasyon (T12.4; PM K4): kalan sure, durum ve kosul cumlesi.
+	ReservationHeldPrefix       string `json:"reservationHeldPrefix"`
+	ReservationHeldSuffix       string `json:"reservationHeldSuffix"`
+	ReservationPendingLabel     string `json:"reservationPendingLabel"`
+	ReservationLastMinuteNotice string `json:"reservationLastMinuteNotice"`
+	ReservationRenewedToast     string `json:"reservationRenewedToast"`
+	ReservationRetryLabel       string `json:"reservationRetryLabel"`
+	BlockerReservationNotice    string `json:"blockerReservationNotice"`
 }

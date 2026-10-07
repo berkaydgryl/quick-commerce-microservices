@@ -27,6 +27,7 @@ import { NoteSection } from '../../features/checkout/ui/NoteSection';
 import { OrderSummaryCard } from '../../features/checkout/ui/OrderSummaryCard';
 import { PaymentMethodDialog } from '../../features/checkout/ui/PaymentMethodDialog';
 import { PaymentMethodView } from '../../features/checkout/ui/PaymentMethodView';
+import { ReservationStatus } from '../../features/checkout/ui/ReservationStatus';
 import { ThreeDsStep } from '../../features/checkout/ui/ThreeDsStep';
 import { useSessionStore } from '../../shared/session/session-store';
 import { QueryError } from '../../shared/ui/query-status/QueryStatus';
@@ -143,6 +144,13 @@ export function CheckoutScreen({
           texts={texts}
           blocker={order.blockerText}
           busy={state.kind !== 'idle'}
+          status={
+            <ReservationStatus
+              phase={order.flow.reservation.phase}
+              texts={texts}
+              onRetry={order.flow.reservation.retry}
+            />
+          }
           onPlace={order.place}
         />
       </div>

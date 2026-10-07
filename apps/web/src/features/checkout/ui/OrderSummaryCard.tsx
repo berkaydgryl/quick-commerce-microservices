@@ -2,6 +2,7 @@ import type { CheckoutContent } from '@getir/contracts';
 import { CURRENCY } from '@getir/core';
 import type { CartTotals } from '@getir/pricing';
 import { useId } from 'react';
+import type { ReactNode } from 'react';
 
 import { formatMoney } from '../../../shared/services/format';
 
@@ -19,6 +20,8 @@ interface OrderSummaryCardProps {
   readonly blocker: string | undefined;
   /** Istek suruyor: dugme "Sipariş veriliyor…" ve pasif. */
   readonly busy: boolean;
+  /** Ozet kartinin altindaki durum satiri (erken rezervasyon: kalan sure ya da hata). */
+  readonly status?: ReactNode;
   readonly onPlace: () => void;
 }
 
@@ -36,6 +39,7 @@ export function OrderSummaryCard({
   texts,
   blocker,
   busy,
+  status,
   onPlace,
 }: OrderSummaryCardProps) {
   const titleId = useId();
@@ -69,6 +73,7 @@ export function OrderSummaryCard({
             <dd>{totals === undefined ? null : money(totals.totalMinor)}</dd>
           </div>
         </dl>
+        {status}
       </div>
       <div className={styles['c-order-summary__card']}>
         <AgreementField checked={agreementsAccepted} onChange={onAgreementsChange} texts={texts} />

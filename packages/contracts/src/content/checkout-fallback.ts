@@ -82,4 +82,11 @@ export const CHECKOUT_FALLBACK: CheckoutContent = {
   chooseLabel: 'Seç',
   backLabel: 'Geri',
   cardMissingNotice: 'Bu kart artık kayıtlı değil, başka kart seç.',
+  reservationHeldPrefix: 'Ürünlerin',
+  reservationHeldSuffix: 'boyunca senin için ayrıldı.',
+  reservationPendingLabel: 'Ürünlerin ayrılıyor…',
+  reservationLastMinuteNotice: 'Son 1 dakika',
+  reservationRenewedToast: 'Ürünlerin yeniden senin için ayrıldı.',
+  reservationRetryLabel: 'Tekrar dene',
+  blockerReservationNotice: 'Ürünlerin ayrılamadı; sepetini kontrol et.',
 };

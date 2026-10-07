@@ -6,6 +6,7 @@ import type { CheckoutForm } from '../services/checkout-rules';
 import { orderBlocker } from '../services/order-readiness';
 import type { OrderBlocker } from '../services/order-readiness';
 import { prepareOrder } from '../services/prepare-order';
+import { reservationRequestFor } from '../services/reserve-request';
 
 import { useOrderFlow } from './useOrderFlow';
 
@@ -26,6 +27,7 @@ const BLOCKER_TEXT: Record<OrderBlocker, keyof CheckoutContent> = {
   gift: 'blockerGiftNotice',
   card: 'blockerCardNotice',
   address: 'blockerAddressNotice',
+  reservation: 'blockerReservationNotice',
   agreement: 'blockerAgreementNotice',
 };
 
@@ -44,13 +46,18 @@ export function useCheckoutOrder({
   totals,
   texts,
 }: CheckoutOrderInput) {
-  const flow = useOrderFlow(market?.id, texts);
+  const flow = useOrderFlow(
+    market?.id,
+    texts,
+    reservationRequestFor({ address, market, items, totals }),
+  );
   const blocker = orderBlocker({
     form,
     cardId: card?.id,
     hasAddress: address !== undefined,
     canCheckout: totals?.canCheckout === true,
     marketOpen: market?.isOpen === true,
+    reservationFailed: flow.reservation.phase.kind === 'failed',
   });
 
   const place = () => {

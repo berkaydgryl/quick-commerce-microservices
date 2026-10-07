@@ -4286,6 +4286,13 @@ components:
           chooseLabel,
           backLabel,
           cardMissingNotice,
+          reservationHeldPrefix,
+          reservationHeldSuffix,
+          reservationPendingLabel,
+          reservationLastMinuteNotice,
+          reservationRenewedToast,
+          reservationRetryLabel,
+          blockerReservationNotice,
         ]
       properties:
         title: { $ref: "#/components/schemas/ContentText" }
@@ -4363,6 +4370,13 @@ components:
         chooseLabel: { $ref: "#/components/schemas/ContentText" }
         backLabel: { $ref: "#/components/schemas/ContentText" }
         cardMissingNotice: { $ref: "#/components/schemas/ContentText" }
+        reservationHeldPrefix: { $ref: "#/components/schemas/ContentText" }
+        reservationHeldSuffix: { $ref: "#/components/schemas/ContentText" }
+        reservationPendingLabel: { $ref: "#/components/schemas/ContentText" }
+        reservationLastMinuteNotice: { $ref: "#/components/schemas/ContentText" }
+        reservationRenewedToast: { $ref: "#/components/schemas/ContentText" }
+        reservationRetryLabel: { $ref: "#/components/schemas/ContentText" }
+        blockerReservationNotice: { $ref: "#/components/schemas/ContentText" }
 
     PaymentMethodsContent:
       type: object

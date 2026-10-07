@@ -2,7 +2,8 @@ import { giftFieldErrors } from './checkout-rules';
 import type { CheckoutForm } from './checkout-rules';
 
 /** "Sipariş Ver"i durduran ilk eksik (N1); sayfa sirasiyla. */
-export type OrderBlocker = 'closed' | 'minBasket' | 'gift' | 'card' | 'address' | 'agreement';
+export type OrderBlocker =
+  'closed' | 'minBasket' | 'gift' | 'card' | 'address' | 'reservation' | 'agreement';
 
 export interface ReadinessInput {
   readonly form: CheckoutForm;
@@ -11,6 +12,8 @@ export interface ReadinessInput {
   /** @getir/pricing: minimum sepet tuttu mu (kurallar gelmediyse false). */
   readonly canCheckout: boolean;
   readonly marketOpen: boolean;
+  /** Erken rezervasyon hatayla bitti (stok, satista degil...): "Tekrar dene" ya da sepet degisikligi bekler. */
+  readonly reservationFailed?: boolean | undefined;
 }
 
 /**
@@ -25,12 +28,14 @@ export function orderBlocker({
   hasAddress,
   canCheckout,
   marketOpen,
+  reservationFailed = false,
 }: ReadinessInput): OrderBlocker | undefined {
   if (!marketOpen) return 'closed';
   if (!canCheckout) return 'minBasket';
   if (Object.keys(giftFieldErrors(form.gift)).length > 0) return 'gift';
   if (cardId === undefined) return 'card';
   if (!hasAddress) return 'address';
+  if (reservationFailed) return 'reservation';
   if (!form.agreementsAccepted) return 'agreement';
   return undefined;
 }

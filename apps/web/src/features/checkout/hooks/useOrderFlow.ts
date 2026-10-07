@@ -2,7 +2,7 @@ import type { CheckoutContent, CreateOrderRequest, ReserveCartRequest } from '@g
 import { errorMessage } from '@getir/contracts';
 import { AppError, ERROR_CODES } from '@getir/core';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 
@@ -14,11 +14,15 @@ import { cardKeys } from '../../cards/api/query-keys';
 import { createAttemptKeys } from '../../cards/services/attempt-key';
 import { marketKeys } from '../../markets/api/query-keys';
 import { orderPath } from '../../orders/routes';
-import { canReuseHeldOrder } from '../services/held-order';
+import { isUnknownOutcome } from '../../cards/services/attempt-key';
+import { orderBodyFingerprint } from '../services/held-order';
 import type { HeldOrder } from '../services/held-order';
-import { placeReserved, releaseSafely, startOrder, submitCode } from '../services/place-order';
+import { monotonicNow } from '../services/monotonic-clock';
+import { placeReserved, releaseSafely, reserveOrder, submitCode } from '../services/place-order';
 import type { OrderFlowDeps } from '../services/place-order';
 import { createReserveIntent } from '../services/reserve-intent';
+
+import { useEarlyReservation } from './useEarlyReservation';
 
 export type OrderFlowState =
   | { readonly kind: 'idle' | 'busy' | 'done' }
@@ -39,6 +43,7 @@ type FlowTexts = Pick<
   | 'threeDsExpiredToast'
   | 'threeDsCancelledToast'
   | 'cardMissingNotice'
+  | 'reservationRenewedToast'
 >;
 
 /** Kullaniciya gosterilecek cumle: gateway'in cumlesi (ERROR_MESSAGES) ya da genel hata. */
@@ -52,13 +57,21 @@ const userMessage = (error: unknown) =>
  * saklardi. Istek surerken ikinci basis yok (busy). PRICE_CHANGED'de marketin
  * kurallari yeniden cekilir: toplam tazelenir.
  *
+ * Erken rezervasyon (PM K4; useEarlyReservation): odeme sayfasi acikken sepet
+ * ayrilir, "Sipariş Ver" yalnizca siparisi verir; rezervasyon yoksa ya da bu
+ * istege uymuyorsa eski yol (rezervasyon + siparis). Siparis verilen
+ * rezervasyon ASLA birakilmaz.
+ *
  * Kart 404'unde (secili kart artik yok) siparis TUTULUR (PM K2): bildirim,
- * kart listesi yeniden okunur; sonraki "Sipariş Ver" sepet, adres ve tutar
- * ayniysa ve sure dolmadiysa ayni siparisi yeni kartla verir, degilse tutulan
- * rezervasyonu birakip bastan baslar. Sayfadan ayrilinca tutulan rezervasyon
- * en iyi cabayla birakilir.
+ * kart listesi yeniden okunur; sonraki "Sipariş Ver" sepet, adres, tutar,
+ * odeme yontemi ve ayrintilar ayniysa ve sure dolmadiysa ayni siparisi yeni
+ * kartla verir; degilse tutulan rezervasyonu birakip yeniden alir (QA #176 N2).
  */
-export function useOrderFlow(marketId: string | undefined, texts: FlowTexts) {
+export function useOrderFlow(
+  marketId: string | undefined,
+  texts: FlowTexts,
+  reservationRequest: ReserveCartRequest | undefined,
+) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const clear = useCartStore((cart) => cart.clear);
@@ -66,23 +79,17 @@ export function useOrderFlow(marketId: string | undefined, texts: FlowTexts) {
   const [state, setState] = useState<OrderFlowState>({ kind: 'idle' });
   const [deps] = useState<OrderFlowDeps>(() => ({
     client: authorizedClient,
-    now: () => performance.now(),
+    now: monotonicNow,
     reserveIntent: createReserveIntent(),
     orderAttempts: createAttemptKeys(),
     newKey: createIdempotencyKey,
   }));
-  /** Kart 404'unden sonra tutulan siparis (yeniden cizim gerekmez: yalnizca sonraki basista okunur). */
-  const held = useRef<HeldOrder | undefined>(undefined);
-
-  useEffect(
-    () => () => {
-      const leftOver = held.current;
-      if (leftOver !== undefined) {
-        void releaseSafely(deps, leftOver.orderId);
-      }
-    },
-    [deps],
-  );
+  const reservation = useEarlyReservation({
+    deps,
+    request: reservationRequest,
+    active: state.kind === 'idle',
+    onRenewed: () => show(texts.reservationRenewedToast),
+  });
 
   const finish = (orderId: string, message: string) => {
     // 'done' sepet bosalmadan ISLENMELI: sepet deposu (useSyncExternalStore) senkron
@@ -94,7 +101,12 @@ export function useOrderFlow(marketId: string | undefined, texts: FlowTexts) {
     show(message);
   };
 
-  const fail = (error: unknown) => {
+  const fail = (error: unknown, used: HeldOrder | undefined) => {
+    if (used !== undefined && isUnknownOutcome(error)) {
+      reservation.uncertain(used);
+    } else {
+      reservation.forget();
+    }
     setState({ kind: 'idle' });
     show(userMessage(error));
     if (
@@ -114,41 +126,41 @@ export function useOrderFlow(marketId: string | undefined, texts: FlowTexts) {
       finish(orderId, texts.orderPlacedToast);
       return;
     }
+    reservation.forget();
     setState({ kind: 'idle' });
     show(message);
   };
 
-  /** Tutulan siparis gecerliyse onu yeni kartla verir; degilse birakir ve bastan baslar. */
-  const placeOrHeld = async (
-    request: ReserveCartRequest,
-    orderBody: (orderId: string) => CreateOrderRequest,
-  ) => {
-    const current = held.current;
-    held.current = undefined;
-    if (current !== undefined && canReuseHeldOrder(current, request, deps.now())) {
-      return placeReserved(deps, current, orderBody);
-    }
-    if (current !== undefined) {
-      await releaseSafely(deps, current.orderId);
-    }
-    return startOrder(deps, request, orderBody);
-  };
-
+  /**
+   * Erken (ya da kart 404'unden tutulan) rezervasyon bu istege uyuyorsa yalnizca
+   * siparis; siparis bir kez verildiyse yontem ve ayrintilar da ayni olmali
+   * (QA #176 N2). Uymuyorsa birakilir ve rezervasyon + siparis bastan.
+   */
   const place = async (
     request: ReserveCartRequest,
     orderBody: (orderId: string) => CreateOrderRequest,
   ) => {
     if (state.kind !== 'idle') return;
     setState({ kind: 'busy' });
+    let used: HeldOrder | undefined;
     try {
-      const outcome = await placeOrHeld(request, orderBody);
+      // Rezervasyon siparis isteginden ONCE belli olur ve 'placing'e alinir:
+      // istek ucustayken ya da sonucu belirsizken sayfadan ayrilmak onu birakmaz
+      // (QA K9 #178 F1). Erken rezervasyon uymuyorsa ya da yoksa burada alinir.
+      used = (await reservation.take(request, orderBody)) ?? (await reserveOrder(deps, request));
+      reservation.uncertain(used);
+      const outcome = await placeReserved(deps, used, orderBody);
       if (outcome.kind === 'card-missing') {
-        held.current = outcome.held;
+        reservation.keep({
+          ...outcome.held,
+          placedWith: orderBodyFingerprint(orderBody(outcome.held.orderId)),
+        });
         setState({ kind: 'idle' });
         show(texts.cardMissingNotice);
         void queryClient.invalidateQueries({ queryKey: cardKeys.all });
         return;
       }
+      reservation.ordered(outcome.orderId);
       if (outcome.kind === 'challenge') {
         setState({ ...outcome, verifying: false });
         return;
@@ -158,7 +170,7 @@ export function useOrderFlow(marketId: string | undefined, texts: FlowTexts) {
         outcome.kind === 'paid' ? texts.orderPlacedToast : texts.orderInReviewToast,
       );
     } catch (error) {
-      fail(error);
+      fail(error, used);
     }
   };
 
@@ -194,5 +206,12 @@ export function useOrderFlow(marketId: string | undefined, texts: FlowTexts) {
     if (state.kind === 'challenge') void abandon(state.orderId, texts.threeDsExpiredToast);
   };
 
-  return { state, place, submit, cancel, expire };
+  return {
+    state,
+    place,
+    submit,
+    cancel,
+    expire,
+    reservation: { phase: reservation.phase, retry: reservation.retry },
+  };
 }

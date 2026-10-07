@@ -102,6 +102,19 @@ export const checkoutContentSchema = z.object({
    * "card"; T12.4): siparis odeme bekler kalir, baska kartla yeniden verilir.
    */
   cardMissingNotice: contentTextSchema,
+  /**
+   * Erken rezervasyon (T12.4; PM K4): odeme ozetinde kalan sure ("Ürünlerin
+   * 9:41 boyunca senin için ayrıldı."), istek surerken durum, son dakika notu,
+   * sure dolunca sessiz yeniden ayirma bildirimi, hata satirinin dugmesi ve
+   * "Sipariş Ver"in altindaki kosul cumlesi.
+   */
+  reservationHeldPrefix: contentTextSchema,
+  reservationHeldSuffix: contentTextSchema,
+  reservationPendingLabel: contentTextSchema,
+  reservationLastMinuteNotice: contentTextSchema,
+  reservationRenewedToast: contentTextSchema,
+  reservationRetryLabel: contentTextSchema,
+  blockerReservationNotice: contentTextSchema,
 });
 
 export type CheckoutContent = z.infer<typeof checkoutContentSchema>;

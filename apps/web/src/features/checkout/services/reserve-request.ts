@@ -1,4 +1,6 @@
-import type { Money, ReserveCartRequest, SavedAddress } from '@getir/contracts';
+import type { Market, Money, ReserveCartRequest, SavedAddress } from '@getir/contracts';
+import { CURRENCY } from '@getir/core';
+import type { CartTotals } from '@getir/pricing';
 
 import type { CartItem } from '../../cart/services/cart-state';
 
@@ -20,4 +22,37 @@ export function buildReserveRequest(
     address: { line: address.line, location: address.location },
     expectedTotal,
   };
+}
+
+export interface ReservationInputs {
+  readonly address: SavedAddress | undefined;
+  readonly market: Market | undefined;
+  readonly items: readonly CartItem[];
+  readonly totals: CartTotals | undefined;
+}
+
+/**
+ * Rezervasyon alinabilir mi; aliniyorsa istegi (erken rezervasyon, T12.4; PM
+ * K4): hesap adresi secili, sepet dolu, market acik, minimum tutuyor ve toplam
+ * belli. Kart, hediye ve sozlesme rezervasyonu ETKILEMEZ (yalniz siparise girer).
+ */
+export function reservationRequestFor({
+  address,
+  market,
+  items,
+  totals,
+}: ReservationInputs): ReserveCartRequest | undefined {
+  if (
+    address === undefined ||
+    market === undefined ||
+    !market.isOpen ||
+    totals?.canCheckout !== true ||
+    items.length === 0
+  ) {
+    return undefined;
+  }
+  return buildReserveRequest(market.id, items, address, {
+    amountMinor: totals.totalMinor,
+    currency: CURRENCY,
+  });
 }
