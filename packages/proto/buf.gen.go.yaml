@@ -9,6 +9,10 @@
 # boylece herkes ayni eklenti surumuyle uretir.
 version: v2
 
+# Uretimden once gen/go silinir: silinen ya da tasinan .proto'nun eski .pb.go'su
+# kalmaz (#135, D18; gerekce buf.gen.ts.yaml'da).
+clean: true
+
 # --- Managed mode ------------------------------------------------------------
 # Kapali. Gerekce: go_package secenegi proje sozlesmesi geregi her .proto dosyasinin
 # ICINE elle yaziliyor. Managed mode acik olsaydi buf bu secenegi uretim aninda ezerdi
