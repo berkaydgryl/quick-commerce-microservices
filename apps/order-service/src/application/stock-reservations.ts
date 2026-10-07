@@ -37,8 +37,18 @@ export type ReserveStockOutcome =
   | { readonly kind: 'reserved'; readonly expiresAt: Date }
   /** inventory'nin kendi hatasi (sku, requested, available): istemciye AYNEN gider. */
   | { readonly kind: 'insufficient'; readonly error: AppError }
-  /** Kullanicinin baska bir siparisi stok tutuyor (B22); kimligiyle. */
-  | { readonly kind: 'user-has-active'; readonly activeOrderId: string; readonly error: AppError };
+  /**
+   * Kullanicinin baska bir siparisi stok tutuyor (B22); kimligiyle. Kimlik
+   * inventory'nin kullanici kilidinden gelir, istekten DEGIL. `activeExpiresInMs`:
+   * o kilidin kalan omru (T15.3, bekleyen is 126); eski inventory gondermez ya da
+   * gecersizse undefined (bilinmiyor).
+   */
+  | {
+      readonly kind: 'user-has-active';
+      readonly activeOrderId: string;
+      readonly activeExpiresInMs?: number | undefined;
+      readonly error: AppError;
+    };
 
 export const SETTLEMENT = {
   /** Bu cagri stoku hareket ettirdi. */

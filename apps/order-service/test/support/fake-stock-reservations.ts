@@ -65,6 +65,8 @@ export class FakeStockReservations implements StockReservations {
   shortenFailure: AppError | undefined;
   /** true: beklenen bitis denetimini bilmeyen eski inventory gibi davranir (T15.3). */
   ignoresExpectedExpiry = false;
+  /** true: RESERVATION_ACTIVE'te kalan omru gondermeyen eski inventory (T15.3, is 126). */
+  omitsActiveExpiry = false;
 
   constructor(private readonly now: () => number = () => Date.now()) {}
 
@@ -81,14 +83,26 @@ export class FakeStockReservations implements StockReservations {
       ([, held]) => held.userId === request.userId && held.state === 'held',
     );
     if (active !== undefined) {
+      // Kalan omur (T15.3): inventory'deki gibi kullanici kilidinin kalan suresi.
+      const activeExpiresInMs = this.omitsActiveExpiry
+        ? undefined
+        : active[1].expiresAt.getTime() - this.now();
       const error = new AppError(
         ERROR_CODES.RESERVATION_ACTIVE,
         'Kullanicinin aktif rezervasyonu var',
         {
-          details: { activeOrderId: active[0] },
+          details: {
+            activeOrderId: active[0],
+            ...(activeExpiresInMs === undefined ? {} : { activeExpiresInMs }),
+          },
         },
       );
-      return Promise.resolve({ kind: 'user-has-active', activeOrderId: active[0], error });
+      return Promise.resolve({
+        kind: 'user-has-active',
+        activeOrderId: active[0],
+        activeExpiresInMs,
+        error,
+      });
     }
     for (const line of request.lines) {
       const have = this.stockOf(line.sku);

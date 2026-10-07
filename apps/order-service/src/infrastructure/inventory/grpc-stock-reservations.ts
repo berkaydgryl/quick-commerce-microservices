@@ -47,8 +47,14 @@ const SETTLEMENT_FROM_PROTO: Readonly<
   [inventoryV1.ReservationOutcome.UNRECOGNIZED]: undefined,
 };
 
-/** RESERVATION_ACTIVE ayrintisi DIS VERIDIR: kimlik dogrulanmadan kullanilmaz. */
-const activeReservationDetails = z.object({ activeOrderId: z.string().startsWith('ord_') });
+/**
+ * RESERVATION_ACTIVE ayrintisi DIS VERIDIR: kimlik dogrulanmadan kullanilmaz.
+ * Kalan omur (T15.3) yoksa, tam sayi degilse ya da negatifse "bilinmiyor".
+ */
+const activeReservationDetails = z.object({
+  activeOrderId: z.string().startsWith('ord_'),
+  activeExpiresInMs: z.number().int().nonnegative().optional().catch(undefined),
+});
 
 export class GrpcStockReservations implements StockReservations {
   private readonly client: inventoryV1.InventoryServiceClient;
@@ -191,7 +197,12 @@ function expectedReserveOutcome(error: unknown): ReserveStockOutcome {
   if (isAppError(error) && error.code === ERROR_CODES.RESERVATION_ACTIVE) {
     const details = activeReservationDetails.safeParse(error.details);
     if (details.success) {
-      return { kind: 'user-has-active', activeOrderId: details.data.activeOrderId, error };
+      return {
+        kind: 'user-has-active',
+        activeOrderId: details.data.activeOrderId,
+        activeExpiresInMs: details.data.activeExpiresInMs,
+        error,
+      };
     }
   }
   throw error;

@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CreateDraftOrderInput } from '../../src/application/create-draft-order.js';
 import { createCreateDraftOrder } from '../../src/application/create-draft-order.js';
+import { ORPHAN_LOCK_MIN_AGE_SECONDS } from '../../src/config/constants.js';
 import { createDraftOrder, transitionOrder } from '../../src/domain/order.js';
 import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-order-store.js';
 import { FAKE_MARKET_ID, FakeCatalogPricing } from '../support/fake-catalog-pricing.js';
@@ -38,6 +39,8 @@ function useCase(history = repository) {
     catalog,
     stock,
     reservationTtlSeconds: FAKE_TTL_SECONDS,
+    orphanLockMinAgeSeconds: ORPHAN_LOCK_MIN_AGE_SECONDS,
+    onOrphanLockReleased: () => undefined,
     clock,
   });
 }

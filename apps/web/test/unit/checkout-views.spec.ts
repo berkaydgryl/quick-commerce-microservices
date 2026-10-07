@@ -2,7 +2,8 @@
  * Odeme sayfasinin gorunumleri (T17.1; referans getircarsi; KAMPANYA YOK):
  * anahtar ve sayacli alan, Hediye Bilgileri (kapali/acik, zorunlu alanlar,
  * hata), Teslimat Yöntemi (etiketsiz, K4), Ödeme Yöntemi (secili kart yalnizca
- * ilk 4 ve son 4 hane; "Değiştir" ve "Kart ekle" F5'e kadar pasif, M4), Ödeme
+ * ilk 4 ve son 4 hane; "Değiştir" ve "Kart ekle" pencereyi acar, kasa kapaliyken
+ * pasif; F5), Ödeme
  * Özeti (teslimat satiri M5; "Sipariş Ver" eksik kosulda pasif, N1) ve sozlesme
  * onayi. Metinler icerik yedeginden.
  */
@@ -180,12 +181,33 @@ describe('PaymentMethodView (T17.1, M4, M7)', () => {
     expect(markup).not.toContain('<input');
   });
 
-  it('"Değiştir" (kart varken) ve "Kart ekle" (kart yokken) F5e kadar pasif', () => {
+  it('"Değiştir" (kart varken) ve "Kart ekle" (kart yokken) pencere yokken pasif (kasa kapali, siparis suruyor)', () => {
     expect(view(VISA)).toMatch(
       /c-payment-method__row[^"]*">[\s\S]*1881[\s\S]*aria-disabled="true">Değiştir<\/button>/,
     );
     expect(view(undefined)).toMatch(/aria-disabled="true">Kart ekle<\/button>/);
     expect(view(undefined)).toContain(TEXTS.noCardNotice);
+  });
+
+  it('F5: pencere verilince "Değiştir" ve "Kart ekle" etkin (aria-disabled yok)', () => {
+    const active = (card: SavedCard | undefined) =>
+      render(
+        createElement(PaymentMethodView, {
+          loading: false,
+          card,
+          texts: TEXTS,
+          cardTexts: CARD_TEXTS,
+          onChange: () => undefined,
+          onAdd: () => undefined,
+        }),
+      );
+
+    expect(active(VISA)).toMatch(
+      /<button type="button" class="[^"]*c-payment-method__change[^"]*">Değiştir<\/button>/,
+    );
+    expect(active(undefined)).toMatch(
+      /<button type="button" class="[^"]*c-payment-method__add[^"]*">Kart ekle<\/button>/,
+    );
   });
 
   it('kartlar okunamadi: durum gosterilir, "Kayıtlı kartın yok" ve "Kart ekle" DEGIL', () => {

@@ -100,6 +100,30 @@
   }
 }
 
+/*
+ * Odeme penceresinin adimi (T17.1; F5): pencere zaten beyaz kutu; kart her
+ * genislikte alanlarin USTUNDE (sayfadaki gibi yana yapismaz).
+ */
+.c-add-card--checkout {
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+
+@media (--bp-xl) {
+  .c-add-card--checkout .c-add-card__stage {
+    position: static;
+    display: grid;
+    inline-size: auto;
+    padding: var(--space-5) var(--space-4);
+    background: var(--bg-page);
+  }
+
+  .c-add-card--checkout .c-add-card__card {
+    position: static;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .c-add-card__submit {
     transition: none;
