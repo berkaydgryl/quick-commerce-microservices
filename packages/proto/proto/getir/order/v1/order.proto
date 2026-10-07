@@ -193,6 +193,27 @@ message Order {
   // zaten sahiplik denetler); agreements_accepted_at sunucu saatidir.
   // Verilmeden olusturulmus sipariste bos.
   OrderDetails details = 17;
+
+  // Odeme secimi (T12.4): yontem ve kapida odemenin turu. Kisisel veri degil;
+  // liste de tasir. Bu alandan once olusturulmus sipariste bos.
+  OrderPayment payment = 18;
+}
+
+// Siparisin odeme secimi: kurye kapida neyle tahsil edecegini bilir.
+message OrderPayment {
+  getir.payment.v1.PaymentMethod method = 1;
+  // Yalnizca kapida odemede dolu; kartla odemede UNSPECIFIED.
+  DeliveryPaymentKind on_delivery = 2;
+}
+
+// Kapida odemenin turu (T12.4). Tahsilat kaydi teslimde tutulmaz (T13.3).
+enum DeliveryPaymentKind {
+  DELIVERY_PAYMENT_KIND_UNSPECIFIED = 0;
+  // Nakit.
+  DELIVERY_PAYMENT_KIND_CASH = 1;
+  // Kapida kredi ya da banka karti, kuryenin POS cihazi. Adi POS: odeme
+  // yonteminin CARD'i (cevrimici cekim) ile karismasin.
+  DELIVERY_PAYMENT_KIND_POS = 2;
 }
 
 message CreateDraftOrderRequest {
@@ -291,6 +312,13 @@ message CreateOrderRequest {
   // Kurallar @getir/contracts checkout-rules.ts'te; kisisel veri gunluge,
   // ize ve olaylara yazilmaz.
   OrderDetails details = 8;
+
+  // Kapida odemenin turu (T12.4): payment_method CASH_ON_DELIVERY ise ZORUNLU,
+  // kartla odemede UNSPECIFIED olmali; disi VALIDATION_FAILED. Siparise yazilir.
+  // ODEME BEKLEYEN siparisin tekrar denemesinde yontem ya da tur degisirse
+  // CONFLICT (cekimi degistirir; ayrinti farki ise sessizce yok sayilir). Taslakta
+  // kalan siparis (orta bantta kapida odeme reddi) baska yontemle verilebilir.
+  DeliveryPaymentKind on_delivery = 9;
 }
 
 // Siparis ayrintilari (T12.4). Kurallar (@getir/contracts checkout-rules.ts;

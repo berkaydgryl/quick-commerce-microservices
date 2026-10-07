@@ -27,37 +27,90 @@ import { ORDER_HISTORY_PAGE_SIZE_MAX, OTP_PATTERN } from './constants.js';
 import { orderStatusSchema } from './order-status.js';
 
 /**
- * Odeme yontemi.
- *
- * Bu fazda yalnizca KART acilmistir. Kapida odeme risk bandi kurallarinda
- * geciyor olsa da REST yuzeyinde henuz bir secenek olarak sunulmuyor; yeni bir
- * deger eklemek once openapi.yaml'in guncellenmesini gerektirir.
+ * Odeme yontemi: kart ya da kapida odeme (T12.4). Kapida odeme yalnizca dusuk
+ * risk bandinda aciktir: orta bantta 422 PAYMENT_METHOD_NOT_ALLOWED (order-svc).
  */
-export const paymentMethodSchema = z.enum(['CARD']);
+export const paymentMethodSchema = z.enum(['CARD', 'CASH_ON_DELIVERY']);
+
+/**
+ * Kapida odemenin turu (T12.4): nakit (CASH) ya da kuryenin POS cihazindan
+ * kredi/banka karti (POS). Odeme yonteminin CARD'iyla karismasin diye POS.
+ * Sipariste saklanir; teslimde tahsilat kaydi henuz yok (T13.3).
+ */
+export const deliveryPaymentKindSchema = z.enum(['CASH', 'POS']);
 
 /** Kart secilmedi ya da iki kaynak birden geldi: tam biri gerekir. */
 export const PAYMENT_CARD_MESSAGE = 'Ödeme için bir kart seç';
 
+/** Kapida odemede tur (nakit ya da POS) secilmedi ya da bilinmiyor. */
+export const PAYMENT_ON_DELIVERY_MESSAGE = 'Kapıda nasıl ödeyeceğini seç';
+
+/** Secilen yonteme ait olmayan alan (kapida odemede kart, kartta kapida tur). */
+export const PAYMENT_FIELD_NOT_ALLOWED_MESSAGE = 'Bu ödeme yönteminde gönderilmez';
+
+/** Yonteme ait olmayan alan: gonderilirse, GONDERILEN alanda sabit cumle. */
+const notAllowed = z.undefined({
+  errorMap: () => ({ message: PAYMENT_FIELD_NOT_ALLOWED_MESSAGE }),
+});
+
+/**
+ * Kartla odeme: kasadaki kart (cardId) ya da (eski) cardToken, TAM biri
+ * (asagidaki superRefine).
+ */
+const cardPaymentInputSchema = z.object({
+  method: z.literal('CARD'),
+  /**
+   * Kayitli kart (T12.4): kart kasasindaki kartin kimligi. Kart verisi ve
+   * saglayici jetonu TASINMAZ. Kart yoksa, silinmisse ya da baskasininsa 404
+   * NOT_FOUND, ayrintida resource "card" (ikisi ayni cevap): siparis odeme
+   * bekler kalir, ayni siparis baska kartla yeniden verilebilir.
+   */
+  cardId: cardIdSchema.optional(),
+  /**
+   * DEPRECATED (T12.4): cardId kullanin. Demo saglayicisinin test jetonu;
+   * personalar ve eski istemciler icin kabul edilir (kaldirma bekleyen is 118).
+   */
+  cardToken: z.string().trim().min(1).optional(),
+  onDelivery: notAllowed,
+});
+
+/** Kapida odeme (T12.4): tur zorunlu; kart alani yok. Cumle degeri yankilamaz. */
+const cashOnDeliveryInputSchema = z.object({
+  method: z.literal('CASH_ON_DELIVERY'),
+  onDelivery: z.enum(deliveryPaymentKindSchema.options, {
+    errorMap: () => ({ message: PAYMENT_ON_DELIVERY_MESSAGE }),
+  }),
+  cardId: notAllowed,
+  cardToken: notAllowed,
+});
+
+/**
+ * Odeme secimi, yonteme gore ayrilir (TS tipi de daralir). Hata ilgili alanda:
+ * yonteme ait olmayan alan gonderildigi yerde, kart secimi cardId'de.
+ */
 export const orderPaymentInputSchema = z
-  .object({
-    method: paymentMethodSchema,
-    /**
-     * Kayitli kart (T12.4): kart kasasindaki kartin kimligi. Kart verisi ve
-     * saglayici jetonu TASINMAZ. Kart yoksa, silinmisse ya da baskasininsa 404
-     * NOT_FOUND, ayrintida resource "card" (ikisi ayni cevap): siparis odeme
-     * bekler kalir, ayni siparis baska kartla yeniden verilebilir.
-     */
-    cardId: cardIdSchema.optional(),
-    /**
-     * DEPRECATED (T12.4): cardId kullanin. Demo saglayicisinin test jetonu;
-     * personalar ve eski istemciler icin kabul edilir (kaldirma bekleyen is 118).
-     */
-    cardToken: z.string().trim().min(1).optional(),
-  })
-  .refine((payment) => (payment.cardId === undefined) !== (payment.cardToken === undefined), {
-    message: PAYMENT_CARD_MESSAGE,
-    path: ['cardId'],
+  .discriminatedUnion('method', [cardPaymentInputSchema, cashOnDeliveryInputSchema])
+  .superRefine((payment, ctx) => {
+    if (
+      payment.method === 'CARD' &&
+      (payment.cardId === undefined) === (payment.cardToken === undefined)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['cardId'],
+        message: PAYMENT_CARD_MESSAGE,
+      });
+    }
   });
+
+/**
+ * Cevaptaki odeme secimi (GET /v1/orders/{id}): yontem ve kapida odemenin
+ * turu. Kisisel veri degildir. Bu alandan once verilmis sipariste yoktur.
+ */
+export const orderPaymentViewSchema = z.object({
+  method: paymentMethodSchema,
+  onDelivery: deliveryPaymentKindSchema.optional(),
+});
 
 /**
  * Siparis olusturma istegi.
@@ -154,6 +207,8 @@ export const orderSchema = z.object({
    * SAHIBINE doner; ayrintisiz verilmis sipariste yoktur.
    */
   details: orderDetailsViewSchema.optional(),
+  /** Odeme yontemi ve kapida odemenin turu (T12.4). */
+  payment: orderPaymentViewSchema.optional(),
 });
 
 /**
@@ -186,6 +241,8 @@ export const orderSummaryListSchema = z.object({
 });
 
 export type PaymentMethod = z.infer<typeof paymentMethodSchema>;
+export type DeliveryPaymentKind = z.infer<typeof deliveryPaymentKindSchema>;
+export type OrderPaymentView = z.infer<typeof orderPaymentViewSchema>;
 export type OrderPaymentInput = z.infer<typeof orderPaymentInputSchema>;
 export type CreateOrderRequest = z.infer<typeof createOrderRequestSchema>;
 export type ThreeDsRequest = z.infer<typeof threeDsRequestSchema>;
