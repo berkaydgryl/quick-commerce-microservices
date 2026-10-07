@@ -86,6 +86,7 @@ export function createOrderImplementation(deps: OrderHandlerDeps): UntypedServic
             method: input.paymentMethod,
             ...(input.cardId === undefined ? {} : { cardId: input.cardId }),
             ...(input.cardToken === undefined ? {} : { cardToken: input.cardToken }),
+            ...(input.onDelivery === undefined ? {} : { onDelivery: input.onDelivery }),
             signals: input.signals,
             details: input.details,
           },

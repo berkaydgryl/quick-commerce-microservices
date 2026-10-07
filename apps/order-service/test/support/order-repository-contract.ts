@@ -80,6 +80,27 @@ export function describeOrderRepositoryContract(
       expect(plainRead?.details).not.toHaveProperty('gift');
     });
 
+    it('odeme secimi (T12.4) update ile yazilir, sonraki gecislerde KAYBOLMAZ', async () => {
+      const store = getStore();
+      const draft = draftAt(newUserId(), START_MS);
+      await store.insert(draft, []);
+      const checked: Order = {
+        ...transitionOrder(draft, ORDER_STATUS.RISK_CHECK, fixedClock(START_MS + 1_000)),
+        payment: { method: 'CASH_ON_DELIVERY', onDelivery: 'CASH' },
+      };
+      await store.update(checked, draft.version, []);
+      const reserved = transitionOrder(
+        checked,
+        ORDER_STATUS.RESERVED,
+        fixedClock(START_MS + 2_000),
+      );
+      await store.update(reserved, checked.version, []);
+
+      await expect(store.findById(draft.id)).resolves.toMatchObject({
+        payment: { method: 'CASH_ON_DELIVERY', onDelivery: 'CASH' },
+      });
+    });
+
     it('olmayan kimlik: null', async () => {
       await expect(getStore().findById('ord_00000000000000000000000000000000')).resolves.toBeNull();
     });

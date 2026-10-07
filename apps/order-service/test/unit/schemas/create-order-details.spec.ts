@@ -6,8 +6,7 @@
  */
 
 import { CHECKOUT_TEXT_MAX, GIFT_NAME_MAX } from '@getir/contracts';
-import type { orderV1 } from '@getir/proto';
-import { paymentV1 } from '@getir/proto';
+import { orderV1, paymentV1 } from '@getir/proto';
 import { describe, expect, it } from 'vitest';
 
 import { createOrderRequestSchema } from '../../../src/interfaces/grpc/create-order-schema.js';
@@ -15,6 +14,7 @@ import { createOrderRequest, ORDER_DETAILS } from '../../support/order-fixtures.
 
 const CARD_ID = `crd_${'a1'.repeat(16)}`;
 const COD = paymentV1.PaymentMethod.PAYMENT_METHOD_CASH_ON_DELIVERY;
+const CASH = orderV1.DeliveryPaymentKind.DELIVERY_PAYMENT_KIND_CASH;
 const GIFT: orderV1.GiftDetails = {
   message: 'İyi ki doğdun',
   senderName: 'Ayşe',
@@ -45,7 +45,10 @@ describe('CreateOrder kart kaynagi (T12.4)', () => {
   it.each([
     [{ cardId: CARD_ID }, 'card_id ile card_token birlikte gonderilemez'],
     [{ cardToken: '', cardId: 'crd_kisa' }, 'kart kimligi bekleniyor'],
-    [{ cardToken: '', cardId: CARD_ID, paymentMethod: COD }, 'kapida odemede kart bos olmali'],
+    [
+      { cardToken: '', cardId: CARD_ID, paymentMethod: COD, onDelivery: CASH },
+      'kapida odemede kart bos olmali',
+    ],
   ])('%o: VALIDATION, tek hata, kimlik yankilanmaz', (overrides, message) => {
     const issues = issuesOf(overrides);
 
@@ -72,7 +75,7 @@ describe('CreateOrder siparis ayrintilari (T12.4, ZORUNLU)', () => {
 
   it.each([
     ['kartli', {}],
-    ['kapida odemede de', { paymentMethod: COD, cardToken: '' }],
+    ['kapida odemede de', { paymentMethod: COD, cardToken: '', onDelivery: CASH }],
   ])('%s ayrinti yoksa VALIDATION', (_name, overrides) => {
     expect(issuesOf({ ...overrides, details: undefined })).toEqual([
       ['details', 'siparis ayrintilari zorunlu'],
@@ -108,5 +111,54 @@ describe('CreateOrder siparis ayrintilari (T12.4, ZORUNLU)', () => {
         gift: { ...GIFT, senderName: 's'.repeat(GIFT_NAME_MAX) },
       }),
     ).toEqual([]);
+  });
+});
+
+describe('CreateOrder kapida odemenin turu (T12.4)', () => {
+  const POS = orderV1.DeliveryPaymentKind.DELIVERY_PAYMENT_KIND_POS;
+  const NONE = orderV1.DeliveryPaymentKind.DELIVERY_PAYMENT_KIND_UNSPECIFIED;
+
+  it.each([
+    [CASH, 'CASH'],
+    [POS, 'POS'],
+  ])('kapida odemede tur %s domain sozlugune (%s)', (onDelivery, kind) => {
+    const parsed = createOrderRequestSchema.parse({
+      ...request,
+      paymentMethod: COD,
+      cardToken: '',
+      onDelivery,
+    });
+
+    expect(parsed.onDelivery).toBe(kind);
+  });
+
+  it.each([
+    [
+      'kapida odemede tur yok',
+      { paymentMethod: COD, cardToken: '', onDelivery: NONE },
+      'kapida odemede tur zorunlu (nakit ya da POS)',
+    ],
+    [
+      'kartla odemede tur dolu',
+      { onDelivery: CASH },
+      'kartli odemede kapida odeme turu bos olmali',
+    ],
+  ])('%s: VALIDATION, onDelivery alaninda tek hata', (_name, overrides, message) => {
+    expect(issuesOf(overrides)).toEqual([['onDelivery', message]]);
+  });
+
+  it('kartla odemede tur alani HIC yazilmaz', () => {
+    expect(createOrderRequestSchema.parse(request)).not.toHaveProperty('onDelivery');
+  });
+
+  it('taninmayan tur sayisi (yeni istemci) "tur yok" sayilir: kural cumlesi, zod enum hatasi degil', () => {
+    const unknown = 3 as orderV1.DeliveryPaymentKind;
+
+    expect(issuesOf({ paymentMethod: COD, cardToken: '', onDelivery: unknown })).toEqual([
+      ['onDelivery', 'kapida odemede tur zorunlu (nakit ya da POS)'],
+    ]);
+    expect(createOrderRequestSchema.parse({ ...request, onDelivery: unknown })).not.toHaveProperty(
+      'onDelivery',
+    );
   });
 });

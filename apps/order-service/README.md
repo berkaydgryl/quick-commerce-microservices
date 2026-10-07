@@ -217,6 +217,16 @@ bekleyen sipariş tekrar denemede ayrıntı almaz; kilit ömrü kadar geçici). 
 (sahibine) döndürür; `ListMyOrders` ve geçmiş döndürmez. Kişisel veri günlüğe, hata ayrıntısına ve
 olaylara (outbox) girmez; Mongo'da `details` alt belgesindedir (saklama süresi bekleyen iş 133).
 
+**Kapıda ödeme (T12.4):** `payment_method = CASH_ON_DELIVERY` ile `on_delivery` zorunludur: nakit
+(`CASH`) ya da kuryenin POS cihazından kart (`POS`); kartla ödemede boş olmalıdır, kart alanı da
+kapıda ödemede boş. Seçim (yöntem ve tür) risk adımının yazımında `Order.payment` olarak siparişe
+girer, Mongo'da `payment` alt belgesidir; `GetOrder` ve liste döndürür (kişisel veri değil). LOW
+bantta çekim yok, sipariş `PAID` (not `CASH_ON_DELIVERY`); MEDIUM bantta `PAYMENT_METHOD_NOT_ALLOWED`
+ve sipariş taslakta kalır, aynı sipariş kartla verilir. Ödeme bekleyen siparişin tekrarında yöntem ya
+da tür değişirse `CONFLICT` (ayrıntıda `field`: `paymentMethod` ya da `onDelivery`): çekimi değiştirir;
+ayrıntı farkı ise sessizce yok sayılır. Bilinen sınırlar: teslimde tahsilat kaydı yok (T13.3), tür
+kurye servisine taşınmıyor (bekleyen iş 146), kapıda ödemeli kilit kurtarma (bekleyen iş 128).
+
 **3. Telafi (P3):** çekim başarılı ama sipariş `PAID` yazılamadı (sürüm çakışması — örneğin
 kullanıcı tam o anda iptal etti) → tutar **iade edilir** (`Refund`, anahtar `refund-<orderId>`),
 istemci `CONFLICT` alır. Çakışmayı aynı ödemenin eş zamanlı tekrarı yazdıysa (sipariş zaten
