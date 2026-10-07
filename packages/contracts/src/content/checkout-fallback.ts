@@ -76,4 +76,9 @@ export const CHECKOUT_FALLBACK: CheckoutContent = {
   threeDsAttemptsLeftSuffix: 'deneme hakkın kaldı',
   threeDsExpiredToast: 'Doğrulama süresi doldu; siparişini yeniden verebilirsin.',
   threeDsCancelledToast: 'Ödeme yapılmadı; siparişini yeniden verebilirsin.',
+  methodDialogTitle: 'Ödeme Yöntemi Seç',
+  onlinePaymentTitle: 'Online Ödeme',
+  deleteCardLabel: 'Kartı Sil',
+  chooseLabel: 'Seç',
+  backLabel: 'Geri',
 };

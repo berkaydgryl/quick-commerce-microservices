@@ -502,6 +502,11 @@
     "threeDsLastSecondsNotice": "Son 30 saniye",
     "threeDsAttemptsLeftSuffix": "deneme hakkın kaldı",
     "threeDsExpiredToast": "Doğrulama süresi doldu; siparişini yeniden verebilirsin.",
-    "threeDsCancelledToast": "Ödeme yapılmadı; siparişini yeniden verebilirsin."
+    "threeDsCancelledToast": "Ödeme yapılmadı; siparişini yeniden verebilirsin.",
+    "methodDialogTitle": "Ödeme Yöntemi Seç",
+    "onlinePaymentTitle": "Online Ödeme",
+    "deleteCardLabel": "Kartı Sil",
+    "chooseLabel": "Seç",
+    "backLabel": "Geri"
   }
 }

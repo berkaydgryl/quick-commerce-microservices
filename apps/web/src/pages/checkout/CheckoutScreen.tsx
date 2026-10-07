@@ -17,6 +17,7 @@ import { CART_PATH } from '../../features/cart/routes';
 import { useCartStore } from '../../features/cart/stores/useCartStore';
 import { useCheckoutForm } from '../../features/checkout/hooks/useCheckoutForm';
 import { useCheckoutOrder } from '../../features/checkout/hooks/useCheckoutOrder';
+import { useMethodDialog } from '../../features/checkout/hooks/useMethodDialog';
 import { useSelectedCard } from '../../features/checkout/hooks/useSelectedCard';
 import { giftFieldErrors } from '../../features/checkout/services/checkout-rules';
 import type { GiftFieldErrors } from '../../features/checkout/services/checkout-rules';
@@ -24,6 +25,7 @@ import { DeliveryMethodSection } from '../../features/checkout/ui/DeliveryMethod
 import { GiftSection } from '../../features/checkout/ui/GiftSection';
 import { NoteSection } from '../../features/checkout/ui/NoteSection';
 import { OrderSummaryCard } from '../../features/checkout/ui/OrderSummaryCard';
+import { PaymentMethodDialog } from '../../features/checkout/ui/PaymentMethodDialog';
 import { PaymentMethodView } from '../../features/checkout/ui/PaymentMethodView';
 import { ThreeDsStep } from '../../features/checkout/ui/ThreeDsStep';
 import { useSessionStore } from '../../shared/session/session-store';
@@ -45,7 +47,9 @@ interface CheckoutScreenProps {
 /**
  * Odeme sayfasinin govdesi (T17.1; T12.4 siparis akisi): solda Hediye
  * Bilgileri, Teslimat Yöntemi, Not Ekle ve Ödeme Yöntemi; sagda adres ve Ödeme
- * Özeti; 3DS gerekirse pencere. Formun hatalari alan terk edilince gorunur.
+ * Özeti; 3DS gerekirse pencere. "Değiştir" ve "Kart ekle" odeme yontemi
+ * penceresini acar (F5; yalnizca kasa acik pakette: production'da pencere
+ * pakete girmez). Formun hatalari alan terk edilince gorunur.
  * Sepet bossa sepet sayfasina doner (siparis tamamlanip sepet bosaldiysa
  * donmez: sipariş detayina gidiliyor).
  */
@@ -73,7 +77,9 @@ export function CheckoutScreen({
     texts,
   });
   const [touched, setTouched] = useState<ReadonlySet<keyof GiftFieldErrors>>(new Set());
+  const methods = useMethodDialog();
   const { state } = order.flow;
+  const canPickCard = __CARD_VAULT__ && state.kind === 'idle';
 
   if (items.length === 0 && state.kind !== 'done') {
     return <Navigate to={CART_PATH} replace />;
@@ -114,6 +120,9 @@ export function CheckoutScreen({
           card={selected.card}
           texts={texts}
           cardTexts={cardTexts}
+          onChange={canPickCard ? () => methods.open('list') : undefined}
+          onAdd={canPickCard ? () => methods.open('add') : undefined}
+          actionRef={methods.actionRef}
         />
       </div>
       <div className={styles['c-checkout__side']}>
@@ -137,6 +146,20 @@ export function CheckoutScreen({
           onPlace={order.place}
         />
       </div>
+      {__CARD_VAULT__ && methods.start !== null && (
+        <PaymentMethodDialog
+          userId={userId}
+          appliedId={selected.card?.id}
+          start={methods.start}
+          texts={texts}
+          cardTexts={cardTexts}
+          onChoose={(cardId) => {
+            selected.choose(cardId);
+            methods.close();
+          }}
+          onClose={methods.close}
+        />
+      )}
       {state.kind === 'challenge' && (
         <ThreeDsStep
           deadline={state.deadline}

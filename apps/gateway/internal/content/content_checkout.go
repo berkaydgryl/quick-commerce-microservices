@@ -67,4 +67,10 @@ type Checkout struct {
 	ThreeDsAttemptsLeftSuffix string `json:"threeDsAttemptsLeftSuffix"`
 	ThreeDsExpiredToast       string `json:"threeDsExpiredToast"`
 	ThreeDsCancelledToast     string `json:"threeDsCancelledToast"`
+	// Odeme Yontemi Sec penceresi (T17.1; F5).
+	MethodDialogTitle  string `json:"methodDialogTitle"`
+	OnlinePaymentTitle string `json:"onlinePaymentTitle"`
+	DeleteCardLabel    string `json:"deleteCardLabel"`
+	ChooseLabel        string `json:"chooseLabel"`
+	BackLabel          string `json:"backLabel"`
 }

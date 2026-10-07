@@ -1,0 +1,8 @@
+/*
+ * "Ödeme Yöntemi Seç" penceresinin adim kabi (T17.1; F5): ekleme ve onay
+ * adimlari pencerenin govdesini doldurur (odak icin kok oge).
+ */
+.c-method-dialog__step {
+  display: grid;
+  min-width: 0;
+}

@@ -86,6 +86,17 @@ export const checkoutContentSchema = z.object({
   threeDsAttemptsLeftSuffix: contentTextSchema,
   threeDsExpiredToast: contentTextSchema,
   threeDsCancelledToast: contentTextSchema,
+  /**
+   * "Ödeme Yöntemi Seç" penceresi (T17.1; F5): baslik, kart listesinin
+   * basligi ("Online Ödeme"), secili kartin yanindaki "Kartı Sil", "Seç" ve
+   * adimlarin geri oku. Kart adlari, silme onayi ve "Kart Ekle" metinleri
+   * Odeme Yontemlerim'le ortak (paymentMethods).
+   */
+  methodDialogTitle: contentTextSchema,
+  onlinePaymentTitle: contentTextSchema,
+  deleteCardLabel: contentTextSchema,
+  chooseLabel: contentTextSchema,
+  backLabel: contentTextSchema,
 });
 
 export type CheckoutContent = z.infer<typeof checkoutContentSchema>;
