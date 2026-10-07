@@ -31,22 +31,14 @@ import {
   buildPaymentService,
   subscribePaymentEvents,
 } from '../../src/bootstrap.js';
-import type {
-  CardVerification,
-  CardVerifier,
-  VerifyCardInput,
-} from '../../src/domain/card-verifier.js';
-import type {
-  AuthorizeInput,
-  PaymentProvider,
-  ProviderDecision,
-  VerifyChallengeInput,
-} from '../../src/domain/payment-provider.js';
 import type { PaymentRepository } from '../../src/domain/payment-repository.js';
-import { MockPaymentProvider } from '../../src/infrastructure/mock-provider/mock-payment-provider.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
-import type { PaymentDocument } from '../../src/infrastructure/mongo/documents.js';
+import type { CardDocument, PaymentDocument } from '../../src/infrastructure/mongo/documents.js';
 import { openPaymentStore } from '../../src/infrastructure/payment-store.js';
+import { ProviderSpy } from './qa-provider-spy.js';
+
+export { gate, ProviderSpy } from './qa-provider-spy.js';
+export type { Gate, Hold } from './qa-provider-spy.js';
 
 /** infra/docker/docker-compose.dev.yml ile ayni surum. */
 const MONGO_IMAGE = 'mongo:7';
@@ -57,98 +49,6 @@ const SERVER_SELECTION_TIMEOUT_MS = 5_000;
 /** Saat ortak ve sabit: 3DS penceresi (60 sn) yalnizca advance ile gecer. */
 const CLUSTER_START = Date.parse('2026-10-07T09:00:00Z');
 
-/** Elle acilan kapi. */
-export interface Gate {
-  open(): void;
-  readonly opened: Promise<void>;
-}
-
-export function gate(): Gate {
-  let open: () => void = () => undefined;
-  const opened = new Promise<void>((resolve) => {
-    open = resolve;
-  });
-  return { open, opened };
-}
-
-/**
- * Ilk `count` cagri `release`'e kadar bekler; `count` gelince `arrived` acilir. Fazlasi BEKLEMEZ:
- * yaris gerilerse (ikinci cagri saglayiciya ulasirsa) test asili kalmaz, sayac denetimi duser.
- */
-export interface Hold {
-  readonly arrived: Promise<void>;
-  release(): void;
-}
-
-class Barrier implements Hold {
-  private seen = 0;
-  private readonly full = gate();
-  private readonly released = gate();
-
-  constructor(private readonly count: number) {}
-
-  get arrived(): Promise<void> {
-    return this.full.opened;
-  }
-
-  release(): void {
-    this.released.open();
-  }
-
-  async pass(): Promise<void> {
-    this.seen += 1;
-    if (this.seen > this.count) return;
-    if (this.seen === this.count) this.full.open();
-    await this.released.opened;
-  }
-}
-
-/** Mock saglayici + sayac + kapi. Kopyalar ayni casusu paylasir: sayac kumenin toplamidir. */
-export class ProviderSpy implements PaymentProvider, CardVerifier {
-  authorized = 0;
-  /** Authorize kararindan SONRA, kayda yazmadan once (PQ3). */
-  afterAuthorize: ((decision: ProviderDecision) => Promise<void> | void) | undefined;
-  private readonly mock = new MockPaymentProvider();
-  private authorizeHold: Barrier | undefined;
-  private verifyHold: Barrier | undefined;
-
-  /** Siradaki authorize cagrilari `release`'e kadar bekler; `count` gelince `arrived`. */
-  holdAuthorize(count = 1): Hold {
-    const barrier = new Barrier(count);
-    this.authorizeHold = barrier;
-    return barrier;
-  }
-
-  holdVerify(count = 1): Hold {
-    const barrier = new Barrier(count);
-    this.verifyHold = barrier;
-    return barrier;
-  }
-
-  async authorize(input: AuthorizeInput): Promise<ProviderDecision> {
-    this.authorized += 1;
-    await this.authorizeHold?.pass();
-    const decision = await this.mock.authorize(input);
-    await this.afterAuthorize?.(decision);
-    return decision;
-  }
-
-  /** Kapanista: test erken duserse bekleyen cagrilar sunucuyu kilitlemesin. */
-  releaseAll(): void {
-    this.authorizeHold?.release();
-    this.verifyHold?.release();
-  }
-
-  async verifyChallenge(input: VerifyChallengeInput): Promise<boolean> {
-    await this.verifyHold?.pass();
-    return this.mock.verifyChallenge(input);
-  }
-
-  verifyCard(input: VerifyCardInput): Promise<CardVerification> {
-    return this.mock.verifyCard(input);
-  }
-}
-
 export interface MongoTarget {
   readonly uri: string;
   /** Konteynerin disa acilan adresi: PQ3'te dondurulabilen vekil buraya baglanir. */
@@ -156,11 +56,30 @@ export interface MongoTarget {
   readonly port: number;
 }
 
+/**
+ * Testcontainers konteynerini acar; acilmazsa NEDENINI acik yazar (Docker bellegi, imaj, bekleme):
+ * dosyanin kancasi duser ve testleri atlanir, sebep cikti da gorunmeli. Cagiranlar konteynerleri
+ * SIRAYLA acar (Docker bellek siniri; ayni anda iki konteyner tepe bellegi artirir).
+ */
+export async function startContainer<T>(name: string, start: () => Promise<T>): Promise<T> {
+  try {
+    return await start();
+  } catch (error: unknown) {
+    const reason = error instanceof Error ? error.message : 'bilinmeyen hata';
+    throw new Error(
+      `QA: ${name} test konteyneri acilmadi (Docker bellegi ya da imaj?): ${reason}`,
+      {
+        cause: error,
+      },
+    );
+  }
+}
+
 /** Testcontainers Mongo (dosya basina bir kez). YALNIZCA bu konteyner; compose yigini disarida. */
 export function useMongo(): () => MongoTarget {
   let container: StartedMongoDBContainer | undefined;
   beforeAll(async () => {
-    container = await new MongoDBContainer(MONGO_IMAGE).start();
+    container = await startContainer('Mongo', () => new MongoDBContainer(MONGO_IMAGE).start());
   }, CONTAINER_START_TIMEOUT_MS);
   afterAll(async () => {
     await container?.stop();
@@ -222,6 +141,8 @@ export interface PaymentCluster {
   document(orderId: string): Promise<PaymentDocument | null>;
   /** Belge olmali (onkosul); yoksa test burada durur. */
   documentOf(orderId: string): Promise<PaymentDocument>;
+  /** Kart kasasinin belgesi (saglayici jetonu burada, yalnizca burada). */
+  card(cardId: string): Promise<CardDocument | null>;
   stop(): Promise<void>;
 }
 
@@ -240,6 +161,7 @@ export async function startCluster(options: ClusterOptions): Promise<PaymentClus
     throw error;
   }
   const payments = inspector.db.collection<PaymentDocument>(COLLECTIONS.PAYMENTS);
+  const cards = inspector.db.collection<CardDocument>(COLLECTIONS.CARDS);
   return {
     copies,
     provider,
@@ -257,6 +179,7 @@ export async function startCluster(options: ClusterOptions): Promise<PaymentClus
       if (document === null) throw new Error(`odeme belgesi yok: ${orderId}`);
       return document;
     },
+    card: (cardId) => cards.findOne({ _id: cardId }),
     stop: async () => {
       provider.releaseAll();
       const results = await Promise.allSettled([

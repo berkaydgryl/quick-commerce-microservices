@@ -23,7 +23,10 @@ const USER = 'usr_gunluk';
 const HOLDER = 'Zeynep Kılıçarslan';
 const NICKNAME = 'Gizli Maaş';
 const CVV = '9183';
-/** Mock'un tanimadigi (reddettigi) Luhn'u gecerli Amex: CVV'si de 4 hanedir. */
+/**
+ * Mock'un ACIKCA reddettigi Amex test karti (tok_test_8431, test-cards.ts); CVV'si 4 hanedir.
+ * #172'den beri mock tanimadigi Luhn'u gecerli karti onaylar: ret yalniz test kartindan gelir.
+ */
 const DECLINED_NUMBER = '3714 496353 98431';
 /** Saglayicinin acikca reddettigi Visa test karti ve 3 haneli CVV'si (QA M5). */
 const DECLINED_VISA = '4000 0000 0000 0002';
@@ -83,8 +86,8 @@ describe('kart kasasi gunlugu (QA P1)', () => {
     const cardId = added.response?.card?.id ?? '';
     const paths = [
       request({ number: '3782 822463 10006' }), // Luhn
-      // Saglayici reddi iki yoldan (QA M5): acik ret karti 3 haneli CVV'yle ve
-      // taninmayan kart (Amex) 4 haneli CVV'yle. Eskiden retteki CVV hic aranmiyordu.
+      // Saglayici reddi iki yoldan (QA M5): Visa ret test karti 3 haneli CVV'yle ve
+      // Amex ret test karti (tok_test_8431) 4 haneli CVV'yle. Eskiden retteki CVV hic aranmiyordu.
       request({ number: DECLINED_VISA, cvv: SHORT_CVV }),
       request({ number: DECLINED_NUMBER }),
       request({}), // ayni kart (CONFLICT)

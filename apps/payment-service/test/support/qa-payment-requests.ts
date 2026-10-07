@@ -5,6 +5,7 @@
  */
 
 import { ID_PREFIX, MOCK_THREEDS_CODE, newId } from '@getir/core';
+import type { LogLine } from '@getir/core/testing';
 import { cardvaultV1, paymentV1 } from '@getir/proto';
 
 import { ATTEMPT_KIND, ATTEMPT_OUTCOME } from '../../src/domain/payment.js';
@@ -99,6 +100,54 @@ export function addCardRequest(userId: string): cardvaultV1.AddCardRequest {
     holderName: 'QA Persona',
     nickname: '',
   };
+}
+
+/**
+ * Kart ureticisinin numarasi gibi (#172): Luhn'u gecerli 16 haneli Visa, test kartlarindan farkli.
+ * `seed` ayni numarayi yeniden uretir (iki kullanici ayni kart).
+ */
+export function generatedVisa(seed: number): string {
+  if (!Number.isSafeInteger(seed) || seed < 0 || seed >= 10 ** 14) {
+    throw new Error(`generatedVisa: tohum 0 ile 10^14 arasi tam sayi olmali: ${seed}`);
+  }
+  const body = `4${String(seed).padStart(14, '0')}`;
+  const digits = [...body].map(Number);
+  let sum = 0;
+  for (let index = 0; index < digits.length; index += 1) {
+    // Kontrol hanesi eklenince sagdan ikinci, dorduncu... haneler iki katina cikar.
+    let digit = digits[digits.length - 1 - index] ?? 0;
+    if (index % 2 === 0) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+  }
+  const number = `${body}${(10 - (sum % 10)) % 10}`;
+  // Test karti cikarsa mock onun SABIT kararini verir (red, 3DS): uretilmis kart olmaz.
+  if (TEST_NUMBERS.has(number)) throw new Error(`generatedVisa: test karti cikti (${seed})`);
+  return number;
+}
+
+const TEST_NUMBERS: ReadonlySet<string> = new Set(
+  Object.values(TEST_CARDS).map((card) => card.number.replace(/\D/g, '')),
+);
+
+/**
+ * Gunluk satirlari jeton ve kisisel veri taramasi icin metne. Error'in mesaji, yigini, nedeni VE
+ * kendi alanlari (AppError code, details) dahil: JSON varsayilaninda hicbiri gorunmez.
+ */
+export function logText(lines: readonly LogLine[]): string {
+  return JSON.stringify(lines, (_key, value: unknown) =>
+    value instanceof Error
+      ? {
+          ...value,
+          name: value.name,
+          message: value.message,
+          stack: value.stack,
+          cause: value.cause,
+        }
+      : value,
+  );
 }
 
 /** Belgedeki para: cekildi mi (onay ya da kabul edilen 3DS), kac iade, kac yanlis kod. */

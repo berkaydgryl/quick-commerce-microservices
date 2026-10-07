@@ -261,26 +261,50 @@ export function runCli(
   stores: StoresAddress,
   extra: Readonly<Record<string, string>> = {},
 ): Promise<CliRun> {
+  return runEntry(entry, args, { ...inventoryEnv(stores), ...extra });
+}
+
+/**
+ * Bir girisi (komut ya da servis) verilen ortamla sonuna kadar kosar; kabuktan yalnizca PATH,
+ * HOME ve TMPDIR gelir. Baska servislerin QA testleri de kullanir (payment PQ6; ortaklasma #106).
+ */
+export function runEntry(
+  entry: string,
+  args: readonly string[],
+  env: Readonly<Record<string, string>>,
+): Promise<CliRun> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [entry, ...args], {
-      env: { ...inheritedEnv(), ...inventoryEnv(stores), ...extra },
+      env: { ...inheritedEnv(), ...env },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    // Test erken biterse stopAllProcesses bunu da oldurur (bir sonraki testle cakismasin).
+    running.push(child);
     let output = '';
     const collect = (chunk: Buffer): void => {
       output += chunk.toString('utf8');
     };
+    const timer = setTimeout(() => child.kill('SIGKILL'), CLI_TIMEOUT_MS);
+    // Eklenen her dinleyici kapanista kaldirilir (proje kurali).
+    const detach = (): void => {
+      clearTimeout(timer);
+      child.stdout.off('data', collect);
+      child.stderr.off('data', collect);
+      child.off('error', onError);
+      child.off('close', onClose);
+    };
+    const onError = (error: Error): void => {
+      detach();
+      reject(error);
+    };
+    const onClose = (code: number | null): void => {
+      detach();
+      resolve({ code, output });
+    };
     child.stdout.on('data', collect);
     child.stderr.on('data', collect);
-    const timer = setTimeout(() => child.kill('SIGKILL'), CLI_TIMEOUT_MS);
-    child.once('error', (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-    child.once('close', (code) => {
-      clearTimeout(timer);
-      resolve({ code, output });
-    });
+    child.once('error', onError);
+    child.once('close', onClose);
   });
 }
 

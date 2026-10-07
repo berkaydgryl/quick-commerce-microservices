@@ -18,7 +18,6 @@
  * Basarisiz kosu TOHUMU yazar; QA_PAYMENT_SEED (ondalik ya da 0x...) ayni islem planini verir.
  */
 
-import type { LogLine } from '@getir/core/testing';
 import { describe, expect, it } from 'vitest';
 
 import { mongoEnv, startCluster, useMongo } from '../support/qa-payment-cluster.js';
@@ -33,7 +32,7 @@ import {
   SAVED_TOKENS,
   seedOf,
 } from '../support/qa-payment-model.js';
-import { Payments, STATUS } from '../support/qa-payment-requests.js';
+import { logText, Payments, STATUS } from '../support/qa-payment-requests.js';
 
 const mongo = useMongo();
 const SEED = seedOf(process.env.QA_PAYMENT_SEED);
@@ -42,15 +41,6 @@ const SEED_NOTE = `tohum 0x${SEED.toString(16)} (QA_PAYMENT_SEED)`;
 const OPERATIONS = 1_200;
 const MAX_BATCH = 8;
 const TEST_TIMEOUT_MS = 180_000;
-
-/** Hata nesnesinin mesaji ve yigini da (JSON varsayilaninda gorunmezler) jeton icin taranir. */
-function serialize(lines: readonly LogLine[]): string {
-  return JSON.stringify(lines, (_key, value: unknown) =>
-    value instanceof Error
-      ? { name: value.name, message: value.message, stack: value.stack, cause: value.cause }
-      : value,
-  );
-}
 
 /** Denetimci: her turda yalniz YENI gunluk satirlarini tarar. */
 class Checker {
@@ -67,7 +57,7 @@ class Checker {
         cancelled: this.run.cancelled,
       }),
     ];
-    const fresh = serialize(cluster.lines.slice(this.scanned));
+    const fresh = logText(cluster.lines.slice(this.scanned));
     this.scanned = cluster.lines.length;
     for (const token of SAVED_TOKENS) {
       if (fresh.includes(token)) violations.push(`I7 gunlukte jeton ${token}`);
