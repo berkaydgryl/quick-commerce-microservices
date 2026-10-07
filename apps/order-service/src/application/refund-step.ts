@@ -4,6 +4,11 @@
  * yoldan gitmez: iade komutu iptalle ayni yazimda (lapsed-order.ts, T15.3).
  * Siparisi baska yol iptal ettiyse ve para alinmissa lapsed-order.ts de burayi
  * kullanir (bekleyen is 124).
+ *
+ * Iade dogrudan yapildiysa ya da komutu yazildiysa iptal edilmis siparise kalici
+ * iade isareti yazilir (#166, refund-record.ts): siparis gecmiste kalir. Ikisi de
+ * olmadiysa (son care ERROR) isaret yazilmaz: iade edilmemis para "iade edildi"
+ * gorunmesin.
  */
 
 import type { Clock } from '@getir/core';
@@ -14,9 +19,11 @@ import { refundRequestedEvent } from '../domain/order-events.js';
 import type { OrderOutbox } from '../domain/order-outbox.js';
 import type { Order } from '../domain/order.js';
 import type { Payments } from './payments.js';
+import { recordRefund } from './refund-record.js';
+import type { RefundRecordDeps } from './refund-record.js';
 import type { RequestScope } from './request-scope.js';
 
-export interface RefundStepDeps {
+export interface RefundStepDeps extends RefundRecordDeps {
   readonly payments: Pick<Payments, 'refund'>;
   /** Telafi komutu (T7.3): dogrudan iade basarisizsa kalici olarak yazilir. */
   readonly outbox: Pick<OrderOutbox, 'append'>;
@@ -37,35 +44,45 @@ export async function refundCharge(
   scope: RequestScope,
 ): Promise<void> {
   const request = { reason, idempotencyKey: refundIdempotencyKey(order.id) };
+  let initiated: boolean;
   try {
     await deps.payments.refund({ orderId: order.id, ...request }, scope);
     scope.logger.warn(
       { orderId: order.id, reason },
       'odeme alindi ama siparis tamamlanamadi; tutar iade edildi',
     );
+    initiated = true;
   } catch (refundError: unknown) {
-    await requestRefundLater(deps, order, request, refundError, scope);
+    initiated = await requestRefundLater(deps, order, request, refundError, scope);
+  }
+  if (initiated) {
+    await recordRefund(deps, order.id, reason, scope);
   }
 }
 
-/** Dogrudan iade olmadi: komut outbox'a. O da yazilamazsa son care ERROR gunlugu. */
+/**
+ * Dogrudan iade olmadi: komut outbox'a. O da yazilamazsa son care ERROR gunlugu.
+ * @returns komut yazildi mi?
+ */
 async function requestRefundLater(
   deps: RefundStepDeps,
   order: Order,
   request: { readonly reason: string; readonly idempotencyKey: string },
   refundError: unknown,
   scope: RequestScope,
-): Promise<void> {
+): Promise<boolean> {
   try {
     await deps.outbox.append([refundRequestedEvent(order, request, deps.clock.date())]);
     scope.logger.warn(
       { err: refundError, orderId: order.id },
       'dogrudan iade basarisiz; iade komutu outbox a yazildi (payment.refund_requested)',
     );
+    return true;
   } catch (outboxError: unknown) {
     scope.logger.error(
       { err: outboxError, refundError, orderId: order.id },
       'TELAFI BASARISIZ: odeme alindi, siparis yazilamadi, iade ve iade komutu yazilamadi',
     );
+    return false;
   }
 }

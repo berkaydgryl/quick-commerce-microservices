@@ -6,7 +6,8 @@
   "description": "Kurye servisi: couriers koleksiyonu, atomik kurye atamasi ve birakma (gRPC), demo kurye seed'i",
   "main": "./dist/main.js",
   "files": [
-    "dist"
+    "dist",
+    "lua"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -21,14 +22,17 @@
   "dependencies": {
     "@getir/contracts": "workspace:*",
     "@getir/core": "workspace:*",
+    "@getir/event-bus": "workspace:*",
     "@getir/mongo-kit": "workspace:*",
     "@getir/proto": "workspace:*",
+    "@getir/redis-kit": "workspace:*",
     "@getir/service-kit": "workspace:*",
     "@grpc/grpc-js": "^1.14.5",
     "mongodb": "^7.6.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@testcontainers/mongodb": "^12.1.0"
+    "@testcontainers/mongodb": "^12.1.0",
+    "@testcontainers/redis": "^12.1.0"
   }
 }

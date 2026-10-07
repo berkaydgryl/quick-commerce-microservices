@@ -30,6 +30,8 @@ type Deps struct {
 	OrderLister         OrderLister
 	// OrderRoomTokens, siparis odasi jetonu (T12.2); bugun roomtoken.Service.
 	OrderRoomTokens OrderRoomTokenIssuer
+	// OrderTracking, kurye takibi (T14.2); bugun tracking.Service.
+	OrderTracking OrderTracker
 	// Kimlik uclari (T8.1); bugun hepsini auth.Service karsilar.
 	UserRegistrar     UserRegistrar
 	UserAuthenticator UserAuthenticator

@@ -11,8 +11,10 @@ const (
 	defaultCatalogAddress   = "localhost:50051"
 	defaultInventoryAddress = "localhost:50052"
 	defaultOrderAddress     = "localhost:50053"
-	defaultShutdownTimeout  = 10 * time.Second
-	defaultRequestTimeout   = 5 * time.Second
+	// defaultCourierAddress, kurye takibi (T14.2): courier-service 50056.
+	defaultCourierAddress  = "localhost:50056"
+	defaultShutdownTimeout = 10 * time.Second
+	defaultRequestTimeout  = 5 * time.Second
 	// GATEWAY_STOCK_TIMEOUT_MS=300 (T8.4): stok sorgusu tek Redis okumasidir;
 	// asilirsa urun listesi stoksuz doner, genel sinir (5 sn) kadar beklenmez.
 	defaultStockTimeout = 300 * time.Millisecond
@@ -98,6 +100,8 @@ const (
 	CatalogService   = "catalog"
 	InventoryService = "inventory"
 	OrderService     = "order"
+	// CourierService, kurye takibi (T14.2; GET /v1/orders/{id}/tracking).
+	CourierService = "courier"
 )
 
 const (

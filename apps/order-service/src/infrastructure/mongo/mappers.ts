@@ -7,7 +7,7 @@ import { isListedInHistory } from '../../domain/order-history-listing.js';
 import type { OrderItem, OrderPricing } from '../../domain/order-item.js';
 import { paymentChoiceOf } from '../../domain/order-payment.js';
 import type { OrderPayment } from '../../domain/order-payment.js';
-import type { Order, TimelineEntry } from '../../domain/order.js';
+import type { Order, OrderRefund, TimelineEntry } from '../../domain/order.js';
 import type {
   OrderDetailsDocument,
   OrderDocument,
@@ -103,6 +103,11 @@ function copyPayment(payment: OrderPayment): NonNullable<OrderDocument['payment'
   return onDelivery === undefined ? { method } : { method, onDelivery };
 }
 
+/** Iade isareti: alanlar tek tek (bilinmeyen alan belgeye girmez). */
+function copyRefund(refund: OrderRefund): NonNullable<OrderDocument['refund']> {
+  return { reason: refund.reason, requestedAt: refund.requestedAt };
+}
+
 export function toOrderDocument(order: Order): OrderDocument {
   return {
     _id: order.id,
@@ -133,6 +138,7 @@ export function toOrderDocument(order: Order): OrderDocument {
         }),
     ...(order.details === undefined ? {} : { details: toDetailsDocument(order.details) }),
     ...(order.payment === undefined ? {} : { payment: copyPayment(order.payment) }),
+    ...(order.refund === undefined ? {} : { refund: copyRefund(order.refund) }),
     ...(order.courierRetryAt === undefined ? {} : { courierRetryAt: order.courierRetryAt }),
     ...(order.courierQueuedAt === undefined ? {} : { courierQueuedAt: order.courierQueuedAt }),
     createdAt: order.createdAt,
@@ -171,6 +177,7 @@ export function fromOrderDocument(document: OrderDocument): Order {
         }),
     ...(document.details === undefined ? {} : { details: fromDetailsDocument(document.details) }),
     ...(document.payment === undefined ? {} : { payment: copyPayment(document.payment) }),
+    ...(document.refund === undefined ? {} : { refund: copyRefund(document.refund) }),
     ...(document.courierRetryAt === undefined ? {} : { courierRetryAt: document.courierRetryAt }),
     ...(document.courierQueuedAt === undefined
       ? {}

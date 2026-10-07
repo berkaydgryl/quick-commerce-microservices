@@ -1,5 +1,7 @@
 /** Kurye servisinin is sabitleri (ADR-11). */
 
+import { COURIER_ROUTE_MAX_POINTS } from '@getir/contracts';
+
 export const SERVICE_NAME = 'courier';
 
 /** Proto'daki tam servis adi; saglik kaydi ve gunluk bunu kullanir. */
@@ -27,7 +29,8 @@ export const ETA_NOT_COMPUTED_SECONDS = 0;
  */
 export const ROUTE_POINT_SPACING_METERS = 100;
 export const ROUTE_MIN_POINTS = 20;
-export const ROUTE_MAX_POINTS = 40;
+/** Takip sozlesmesi rotayi bu sinirla dogrular: tek kaynak @getir/contracts. */
+export const ROUTE_MAX_POINTS = COURIER_ROUTE_MAX_POINTS;
 
 /**
  * Kurye hizi (km/sa): ETA = toplam yol / hiz. Ortamdan (COURIER_SPEED_KMH,
@@ -60,3 +63,37 @@ export const COURIER_CLAIM_CANDIDATES = 5;
 
 /** Demo seed'inde her marketin yakinina konan kurye sayisi (33 x 3 = 99). */
 export const DEMO_COURIERS_PER_MARKET_AREA = 3;
+
+/**
+ * Siparisin markette hazirlanma suresi (sn; T13.3): kurye markete erken
+ * varirsa paketi bu sure dolunca alir. Gercekci varsayilan 5 dk; demo icin
+ * .env ORDER_PREP_SECONDS=30.
+ */
+export const DEFAULT_ORDER_PREP_SECONDS = 300;
+export const ORDER_PREP_SECONDS_MIN = 0;
+export const ORDER_PREP_SECONDS_MAX = 3_600;
+
+/** Tick araligi (ms; T13.3): rotalar bu aralikla ilerletilir, kilometre taslari yayinlanir. */
+export const DEFAULT_COURIER_TICK_MS = 2_000;
+export const COURIER_TICK_MS_MIN = 200;
+export const COURIER_TICK_MS_MAX = 60_000;
+
+/**
+ * Tick liderlik kilidinin omru (ms): max(tick x 5, 10 sn). Lider duserse baska
+ * ornek en gec bu kadar sonra devralir. Alt sinir: kisa tick'te (200 ms) omur
+ * tek bir Mongo zaman asimindan (2 sn) kisa kalmasin. Turun sure butcesi
+ * omrun yarisi (route-ticker.ts): tur kilit dusmeden biter.
+ */
+export const COURIER_TICK_LOCK_TTL_MULTIPLIER = 5;
+export const COURIER_TICK_LOCK_MIN_TTL_MS = 10_000;
+export const COURIER_TICK_BUDGET_DIVISOR = 2;
+
+/** Bir turda ilerletilen en fazla rota; fazlasi sonraki turda (eskiden yeniye). */
+export const TICK_BATCH_SIZE = 200;
+
+/**
+ * Canli konum kaydinin omru (ms; courier:{id}:last): max(30 sn, tick x 3).
+ * Kurye durunca konum kendiliginden duser; tick araligindan hep uzun.
+ */
+export const COURIER_LIVE_LOCATION_TTL_MS = 30_000;
+export const COURIER_LIVE_LOCATION_TTL_TICKS = 3;
