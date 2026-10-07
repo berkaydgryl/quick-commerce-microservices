@@ -46,11 +46,12 @@ const list = (cards: readonly SavedCard[], selectedId: string | undefined) =>
   renderToStaticMarkup(
     createElement(PaymentMethodList, {
       cards,
-      selectedId,
+      selected: selectedId === undefined ? undefined : { kind: 'card', cardId: selectedId },
       focus: { kind: 'selected' },
       texts: TEXTS,
       cardTexts: CARD_TEXTS,
       onPick: noop,
+      onPickOnDelivery: noop,
       onDelete: noop,
       onAdd: noop,
       onChoose: noop,
@@ -65,7 +66,7 @@ function dialog(start: 'list' | 'add', client = new QueryClient()) {
       { client },
       createElement(PaymentMethodDialog, {
         userId: USER,
-        appliedId: VISA_CARD.id,
+        applied: { kind: 'card', cardId: VISA_CARD.id },
         start,
         texts: TEXTS,
         cardTexts: CARD_TEXTS,
@@ -81,13 +82,23 @@ const rows = (html: string) => html.split('<li').slice(1);
 const escape = (text: string) => text.replace(/'/g, '&#x27;');
 
 describe('PaymentMethodList (F5)', () => {
-  it('radyo grubu: fieldset ve legend "Online Ödeme"; tum radyolar ayni adla (ok tuslari)', () => {
+  it('radyo grubu: fieldset ve legend "Online Ödeme"; kartlar ve kapida odeme AYNI grup (tek secim)', () => {
     const html = list(CARDS, VISA_CARD.id);
     const names = [...html.matchAll(/type="radio"[^>]*name="([^"]+)"/g)].map((match) => match[1]);
 
     expect(html).toMatch(/<fieldset[^>]*><legend[^>]*>Online Ödeme<\/legend>/);
-    expect(names).toHaveLength(CARDS.length);
+    expect(names).toHaveLength(CARDS.length + 2);
     expect(new Set(names).size).toBe(1);
+  });
+
+  it('F12: "Online Ödeme"nin altinda "Kapıda Ödeme": "Nakit" ve "Kapıda Kredi/Banka Kartı"', () => {
+    const html = list(CARDS, VISA_CARD.id);
+
+    expect(html.indexOf('>Kapıda Ödeme</legend>')).toBeGreaterThan(
+      html.indexOf('>Online Ödeme</legend>'),
+    );
+    expect(html).toMatch(/value="CASH"[^>]*\/>Nakit<\/label>/);
+    expect(html).toMatch(/value="POS"[^>]*\/>Kapıda Kredi\/Banka Kartı<\/label>/);
   });
 
   it('satir: logo, kart adi, maskeli numara; radyonun adi okunan kart adi', () => {
@@ -146,7 +157,7 @@ describe('PaymentMethodList (F5)', () => {
       id: `crd_${String(index).padStart(32, '0')}`,
     }));
 
-    expect(list(full, full[0]?.id)).not.toContain('Kredi/Banka Kartı');
+    expect(list(full, full[0]?.id)).not.toContain('data-method-add');
   });
 
   it('M7: gorunen ve okunan metinde kartin yalnizca ilk 4 ve son 4 hanesi; alan yok', () => {

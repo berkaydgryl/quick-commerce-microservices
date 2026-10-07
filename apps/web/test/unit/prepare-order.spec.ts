@@ -54,7 +54,7 @@ const TOTALS: CartTotals = {
 };
 const READY: PrepareOrderInput = {
   form: { ...EMPTY_CHECKOUT_FORM, agreementsAccepted: true },
-  card: CARD,
+  payment: { kind: 'card', cardId: CARD.id },
   address: ADDRESS,
   market: nearbyMarket({ id: 'mkt_a101', name: 'A101', brand: 'A101', meters: 100 }).market,
   items: [ITEM],
@@ -76,12 +76,25 @@ describe('prepareOrder (T12.4, QA N3)', () => {
     expect(prepared?.orderBody(ORDER_ID).payment).toEqual({ method: 'CARD', cardId: CARD.id });
   });
 
-  it('kart kasasi kapali (production paketi): istek kurulmaz', () => {
+  it('kart kasasi kapali (production paketi): kartla istek kurulmaz', () => {
     expect(prepareOrder({ ...READY, vaultOpen: false })).toBeUndefined();
   });
 
+  it('kapida odeme (F12): kasa kapali pakette de kurulur; govdede kart alani yok', () => {
+    const prepared = prepareOrder({
+      ...READY,
+      payment: { kind: 'onDelivery', onDelivery: 'POS' },
+      vaultOpen: false,
+    });
+
+    expect(prepared?.orderBody(ORDER_ID).payment).toEqual({
+      method: 'CASH_ON_DELIVERY',
+      onDelivery: 'POS',
+    });
+  });
+
   it('kart, adres, market ya da kurallar yok: istek kurulmaz', () => {
-    expect(prepareOrder({ ...READY, card: undefined })).toBeUndefined();
+    expect(prepareOrder({ ...READY, payment: undefined })).toBeUndefined();
     expect(prepareOrder({ ...READY, address: undefined })).toBeUndefined();
     expect(prepareOrder({ ...READY, market: undefined })).toBeUndefined();
     expect(prepareOrder({ ...READY, totals: undefined })).toBeUndefined();

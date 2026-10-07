@@ -4243,9 +4243,13 @@ components:
           doNotRingLabel,
           paymentTitle,
           changeLabel,
-          addCardLabel,
           cardsLoadingLabel,
           noCardNotice,
+          onDeliveryTitle,
+          onDeliveryCashLabel,
+          onDeliveryPosLabel,
+          onDeliveryCashSummary,
+          onDeliveryPosSummary,
           securityNote,
           summaryTitle,
           subtotalLabel,
@@ -4321,9 +4325,15 @@ components:
         doNotRingLabel: { $ref: "#/components/schemas/ContentText" }
         paymentTitle: { $ref: "#/components/schemas/ContentText" }
         changeLabel: { $ref: "#/components/schemas/ContentText" }
-        addCardLabel: { $ref: "#/components/schemas/ContentText" }
         cardsLoadingLabel: { $ref: "#/components/schemas/ContentText" }
         noCardNotice: { $ref: "#/components/schemas/ContentText" }
+        onDeliveryTitle:
+          $ref: "#/components/schemas/ContentText"
+          description: Ödeme yöntemi penceresinde "Online Ödeme"nin altındaki kapıda ödeme başlığı (F12).
+        onDeliveryCashLabel: { $ref: "#/components/schemas/ContentText" }
+        onDeliveryPosLabel: { $ref: "#/components/schemas/ContentText" }
+        onDeliveryCashSummary: { $ref: "#/components/schemas/ContentText" }
+        onDeliveryPosSummary: { $ref: "#/components/schemas/ContentText" }
         securityNote: { $ref: "#/components/schemas/ContentText" }
         summaryTitle: { $ref: "#/components/schemas/ContentText" }
         subtotalLabel: { $ref: "#/components/schemas/ContentText" }
@@ -4522,6 +4532,10 @@ components:
           loadingMoreLabel,
           dateLabel,
           addressLabel,
+          paymentLabel,
+          paymentCardLabel,
+          paymentCashLabel,
+          paymentPosLabel,
           itemsTitle,
           subtotalLabel,
           deliveryFeeLabel,
@@ -4545,6 +4559,12 @@ components:
         loadingMoreLabel: { $ref: "#/components/schemas/ContentText" }
         dateLabel: { $ref: "#/components/schemas/ContentText" }
         addressLabel: { $ref: "#/components/schemas/ContentText" }
+        paymentLabel:
+          $ref: "#/components/schemas/ContentText"
+          description: Sipariş detayında ödeme satırı (F12); `payment` olmayan eski siparişte satır yok.
+        paymentCardLabel: { $ref: "#/components/schemas/ContentText" }
+        paymentCashLabel: { $ref: "#/components/schemas/ContentText" }
+        paymentPosLabel: { $ref: "#/components/schemas/ContentText" }
         itemsTitle: { $ref: "#/components/schemas/ContentText" }
         subtotalLabel: { $ref: "#/components/schemas/ContentText" }
         deliveryFeeLabel: { $ref: "#/components/schemas/ContentText" }

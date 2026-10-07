@@ -51,7 +51,12 @@ export type PlaceOutcome =
       readonly deadline: number | undefined;
     }
   /** Secili kart artik yok: siparis odeme bekler, baska kartla yeniden verilir. */
-  | { readonly kind: 'card-missing'; readonly held: HeldOrder };
+  | { readonly kind: 'card-missing'; readonly held: HeldOrder }
+  /**
+   * Kapida odeme bu risk bandinda acik degil (422 PAYMENT_METHOD_NOT_ALLOWED; F12):
+   * siparis TASLAKTA kalir, ayni siparis kartla verilir; cumle sunucunun.
+   */
+  | { readonly kind: 'method-refused'; readonly held: HeldOrder; readonly message: string };
 
 export type CodeOutcome =
   | { readonly kind: 'paid' | 'review' }
@@ -116,6 +121,7 @@ export async function startOrder(
  * kodun sunucu sureleri); niyet 3DS bitene kadar surer. RISK_REVIEW (202)
  * siparis olustu ama incelemede demektir (N3): hata degil. Hatalar:
  *   - kart 404 (resource "card"): siparis TUTULUR; rezervasyon ve niyet korunur;
+ *   - kapida odeme reddi (422; F12): siparis taslakta TUTULUR, kartla verilir;
  *   - belirsiz (503, REQUEST_IN_PROGRESS): hicbir sey birakilmaz, ayni anahtarlar;
  *   - kesin (diger): rezervasyon en iyi cabayla birakilir, niyet yenilenir
  *     (her denemede yeni stok kilidi acilmasin).
@@ -145,6 +151,12 @@ export async function placeReserved(
     }
     if (isCardMissing(error)) {
       return { kind: 'card-missing', held };
+    }
+    if (
+      isCode(error, ERROR_CODES.PAYMENT_METHOD_NOT_ALLOWED) &&
+      body.payment.method === 'CASH_ON_DELIVERY'
+    ) {
+      return { kind: 'method-refused', held, message: error.message };
     }
     if (!isUnknownOutcome(error)) {
       await releaseSafely(deps, held.orderId);

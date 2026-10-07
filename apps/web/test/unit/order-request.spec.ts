@@ -25,10 +25,12 @@ import {
 import { buildOrderRequest } from '../../src/features/checkout/services/order-request';
 import { orderBlocker } from '../../src/features/checkout/services/order-readiness';
 import type { ReadinessInput } from '../../src/features/checkout/services/order-readiness';
+import type { PaymentChoice } from '../../src/features/checkout/services/payment-choice';
 import { buildReserveRequest } from '../../src/features/checkout/services/reserve-request';
 
 const ORDER_ID = `ord_${'b'.repeat(32)}`;
 const CARD_ID = `crd_${'a'.repeat(32)}`;
+const CARD: PaymentChoice = { kind: 'card', cardId: CARD_ID };
 const READY_FORM: CheckoutForm = { ...EMPTY_CHECKOUT_FORM, agreementsAccepted: true };
 const GIFT_FORM: CheckoutForm = {
   ...READY_FORM,
@@ -45,7 +47,7 @@ const GIFT_FORM: CheckoutForm = {
 
 describe('buildOrderRequest (T12.4, B1/B2; sozlesmenin semasi)', () => {
   it('hediye KAPALI: govdede gift alani YOK (QA N3); odeme yalnizca cardId', () => {
-    const draft = buildOrderRequest(ORDER_ID, CARD_ID, {
+    const draft = buildOrderRequest(ORDER_ID, CARD, {
       ...READY_FORM,
       gift: { ...GIFT_FORM.gift, enabled: false },
     });
@@ -59,7 +61,7 @@ describe('buildOrderRequest (T12.4, B1/B2; sozlesmenin semasi)', () => {
   });
 
   it('hediye ACIK: alanlar kirpilir, telefon E.164; not ve "Zili Çalma" gider', () => {
-    expect(buildOrderRequest(ORDER_ID, CARD_ID, GIFT_FORM).details).toEqual({
+    expect(buildOrderRequest(ORDER_ID, CARD, GIFT_FORM).details).toEqual({
       gift: {
         enabled: true,
         message: 'İyi ki doğdun!',
@@ -74,7 +76,7 @@ describe('buildOrderRequest (T12.4, B1/B2; sozlesmenin semasi)', () => {
   });
 
   it('M7: govdede kart numarasi ya da CVV yok; yalnizca kasanin kimligi', () => {
-    const json = JSON.stringify(buildOrderRequest(ORDER_ID, CARD_ID, GIFT_FORM));
+    const json = JSON.stringify(buildOrderRequest(ORDER_ID, CARD, GIFT_FORM));
 
     // Alan adlari ve kart numarasi boyunda (15-16 hane) rakam dizisi yok; telefon 12 hane.
     expect(json).not.toMatch(/"(?:cvv|cardNumber|pan|number)"/i);
@@ -83,16 +85,29 @@ describe('buildOrderRequest (T12.4, B1/B2; sozlesmenin semasi)', () => {
   });
 
   it('sozlesme onaysiz ya da gecersiz kart kimligiyle govde KURULMAZ', () => {
-    expect(() => buildOrderRequest(ORDER_ID, CARD_ID, EMPTY_CHECKOUT_FORM)).toThrow();
-    expect(() => buildOrderRequest(ORDER_ID, '4242424242424242', READY_FORM)).toThrow();
+    expect(() => buildOrderRequest(ORDER_ID, CARD, EMPTY_CHECKOUT_FORM)).toThrow();
+    expect(() =>
+      buildOrderRequest(ORDER_ID, { kind: 'card', cardId: '4242424242424242' }, READY_FORM),
+    ).toThrow();
+  });
+
+  it('kapida odeme (F12): yontem ve tur; kart alani YOK', () => {
+    for (const onDelivery of ['CASH', 'POS'] as const) {
+      expect(
+        buildOrderRequest(ORDER_ID, { kind: 'onDelivery', onDelivery }, READY_FORM).payment,
+      ).toEqual({
+        method: 'CASH_ON_DELIVERY',
+        onDelivery,
+      });
+    }
   });
 
   it('not sinirini (UTF-16 birimi, QA N2) asan govde kurulmaz', () => {
     expect(() =>
-      buildOrderRequest(ORDER_ID, CARD_ID, { ...READY_FORM, note: '😀'.repeat(126) }),
+      buildOrderRequest(ORDER_ID, CARD, { ...READY_FORM, note: '😀'.repeat(126) }),
     ).toThrow();
     expect(() =>
-      buildOrderRequest(ORDER_ID, CARD_ID, { ...READY_FORM, note: '😀'.repeat(125) }),
+      buildOrderRequest(ORDER_ID, CARD, { ...READY_FORM, note: '😀'.repeat(125) }),
     ).not.toThrow();
   });
 });
@@ -100,7 +115,7 @@ describe('buildOrderRequest (T12.4, B1/B2; sozlesmenin semasi)', () => {
 describe('orderBlocker (T12.4, N1)', () => {
   const ready: ReadinessInput = {
     form: READY_FORM,
-    cardId: CARD_ID,
+    hasPayment: true,
     hasAddress: true,
     canCheckout: true,
     marketOpen: true,
@@ -110,16 +125,16 @@ describe('orderBlocker (T12.4, N1)', () => {
     expect(orderBlocker(ready)).toBeUndefined();
   });
 
-  it('ilk eksik doner: kapali > minimum > hediye > kart > adres > sozlesme', () => {
+  it('ilk eksik doner: kapali > minimum > hediye > odeme > adres > sozlesme', () => {
     expect(orderBlocker({ ...ready, marketOpen: false, canCheckout: false })).toBe('closed');
-    expect(orderBlocker({ ...ready, canCheckout: false, cardId: undefined })).toBe('minBasket');
+    expect(orderBlocker({ ...ready, canCheckout: false, hasPayment: false })).toBe('minBasket');
     expect(
       orderBlocker({
         ...ready,
         form: { ...READY_FORM, gift: { ...READY_FORM.gift, enabled: true } },
       }),
     ).toBe('gift');
-    expect(orderBlocker({ ...ready, cardId: undefined, hasAddress: false })).toBe('card');
+    expect(orderBlocker({ ...ready, hasPayment: false, hasAddress: false })).toBe('payment');
     expect(orderBlocker({ ...ready, hasAddress: false })).toBe('address');
     expect(orderBlocker({ ...ready, form: EMPTY_CHECKOUT_FORM })).toBe('agreement');
   });

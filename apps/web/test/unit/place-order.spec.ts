@@ -428,3 +428,64 @@ describe('kart 404: siparis tutulur, baska kartla verilir (PM K2)', () => {
     expect(second).toMatchObject({ kind: 'challenge', deadline: 1_000 + 600_000 });
   });
 });
+
+describe('kapida odeme reddi (F12; 422 PAYMENT_METHOD_NOT_ALLOWED)', () => {
+  const CASH_BODY = (orderId: string): CreateOrderRequest => ({
+    orderId,
+    payment: { method: 'CASH_ON_DELIVERY', onDelivery: 'CASH' },
+    details: { note: '', doNotRingBell: false, agreementsAccepted: true },
+  });
+
+  it('siparis TASLAKTA tutulur: birakma istegi YOK, sunucunun cumlesi doner', async () => {
+    const { client, calls } = fakeClient([
+      { data: RESERVATION },
+      { error: error(ERROR_CODES.PAYMENT_METHOD_NOT_ALLOWED) },
+    ]);
+
+    await expect(startOrder(deps(client), REQUEST, CASH_BODY)).resolves.toEqual({
+      kind: 'method-refused',
+      held: {
+        orderId: ORDER_ID,
+        fingerprint: JSON.stringify(REQUEST),
+        reservationReceivedAt: 1_000,
+        reservationTtlSeconds: 600,
+      },
+      message: `mesaj ${ERROR_CODES.PAYMENT_METHOD_NOT_ALLOWED}`,
+    });
+    expect(calls.map((call) => call.method)).toEqual(['POST', 'POST']);
+  });
+
+  it('kartli govdede ayni kod kapida odeme reddi DEGIL: kesin hata, taslak birakilir', async () => {
+    const { client, calls } = fakeClient([
+      { data: RESERVATION },
+      { error: error(ERROR_CODES.PAYMENT_METHOD_NOT_ALLOWED) },
+      { data: { orderId: ORDER_ID, released: true, releasedAt: '2026-10-07T10:00:00.000Z' } },
+    ]);
+
+    await expect(startOrder(deps(client), REQUEST, BODY)).rejects.toMatchObject({
+      code: ERROR_CODES.PAYMENT_METHOD_NOT_ALLOWED,
+    });
+    expect(calls.map((call) => call.method)).toEqual(['POST', 'POST', 'DELETE']);
+  });
+
+  it('ayni siparis kartla YENI deneme anahtariyla verilir (rezervasyon tekrarlanmaz)', async () => {
+    const { client, calls } = fakeClient([
+      { data: RESERVATION },
+      { error: error(ERROR_CODES.PAYMENT_METHOD_NOT_ALLOWED) },
+      { data: { orderId: ORDER_ID, status: 'AWAITING_PAYMENT', threeDs: { challengeId: 'ch_1' } } },
+    ]);
+    const flow = deps(client);
+
+    const first = await startOrder(flow, REQUEST, CASH_BODY);
+    if (first.kind !== 'method-refused') throw new Error('422 beklenirdi');
+    const second = await placeReserved(flow, first.held, BODY);
+
+    expect(second).toMatchObject({ kind: 'challenge', orderId: ORDER_ID });
+    expect(calls.map((call) => [call.method, call.path, call.key])).toEqual([
+      ['POST', '/v1/cart/reserve', 'niyet-1'],
+      ['POST', '/v1/orders', 'deneme-1'],
+      ['POST', '/v1/orders', 'deneme-2'],
+    ]);
+    expect(calls[2]?.body).toEqual(BODY(ORDER_ID));
+  });
+});
