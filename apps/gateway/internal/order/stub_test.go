@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	orderv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/order/v1"
+	paymentv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/payment/v1"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/rest"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/testkit"
@@ -31,6 +32,8 @@ type stubServer struct {
 	draftResponse *orderv1.CreateDraftOrderResponse
 	placeResponse *orderv1.CreateOrderResponse
 	order         *orderv1.Order
+	// threeDS, GetOrder cevabindaki 3DS durumu (#163 B1); nil = alan yok.
+	threeDS *paymentv1.ThreeDsStatus
 
 	err     error
 	trailer metadata.MD
@@ -92,7 +95,7 @@ func (s *stubServer) GetOrder(ctx context.Context, in *orderv1.GetOrderRequest) 
 	if s.err != nil {
 		return nil, s.fail(ctx)
 	}
-	return &orderv1.GetOrderResponse{Order: s.order}, nil
+	return &orderv1.GetOrderResponse{Order: s.order, ThreeDs: s.threeDS}, nil
 }
 
 func (s *stubServer) ListMyOrders(ctx context.Context, in *orderv1.ListMyOrdersRequest) (*orderv1.ListMyOrdersResponse, error) {

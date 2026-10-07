@@ -29,11 +29,13 @@ type DetailsView struct {
 	AgreementsAcceptedAt string    `json:"agreementsAcceptedAt"`
 }
 
-// OrderDetail, GET /v1/orders/{id} cevabi (orderSchema): siparis ve ayrintisi.
-// Ayri tip: liste ve sahiplik denetimi (Order) kisisel veriyi TASIYAMAZ.
+// OrderDetail, GET /v1/orders/{id} cevabi (orderSchema): siparis, ayrintisi
+// ve odeme bekleyen sipariste 3DS durumu (#163 B1). Ayri tip: liste ve
+// sahiplik denetimi (Order) kisisel veriyi ve 3DS jetonunu TASIYAMAZ.
 type OrderDetail struct {
 	Order
-	Details *DetailsView `json:"details,omitempty"`
+	Details *DetailsView  `json:"details,omitempty"`
+	ThreeDS *OrderThreeDS `json:"threeDs,omitempty"`
 }
 
 // toDetailsView, siparisin ayrintisini cevaba cevirir; ayrintisiz sipariste
