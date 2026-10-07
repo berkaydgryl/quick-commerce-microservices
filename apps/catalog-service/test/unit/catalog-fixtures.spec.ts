@@ -16,6 +16,25 @@ import { EXPECTED_NEARBY } from '../support/demo-addresses.js';
 
 const { categories, products, markets, offers } = CATALOG_SNAPSHOT;
 
+/** Logo dosyasinin adi: marka, Turkce harfler ASCII'ye, bosluk tireye ("Kardeşler Manavı" -> kardesler-manavi). */
+const TURKISH_ASCII: Readonly<Record<string, string>> = {
+  ç: 'c',
+  ğ: 'g',
+  ı: 'i',
+  i̇: 'i',
+  ö: 'o',
+  ş: 's',
+  ü: 'u',
+};
+
+function brandSlug(brand: string): string {
+  return brand
+    .toLocaleLowerCase('tr')
+    .replace(/i̇|[çğıöşü]/g, (letter) => TURKISH_ASCII[letter] ?? letter)
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
 function duplicates(values: readonly string[]): string[] {
   return values.filter((value, index) => values.indexOf(value) !== index);
 }
@@ -157,6 +176,7 @@ describe('pazaryeri demo verisi', () => {
       ...categories.map((category) => category.imageUrl),
       ...products.map((product) => product.imageUrl),
       ...markets.map((market) => market.coverUrl),
+      ...markets.map((market) => market.logoUrl),
     ];
     for (const imageUrl of imageUrls) {
       expect(imageUrl.startsWith('/')).toBe(true);
@@ -164,18 +184,28 @@ describe('pazaryeri demo verisi', () => {
     }
   });
 
-  it('logo yok (istemci bas harf rozeti); kapak dukkan turunun gorseli (T11.11)', () => {
+  it('kapak dukkan turunun gorseli; logo markanin gecici yazi logosu (T11.11, 07.10)', () => {
     for (const market of markets) {
-      expect(market.logoUrl, market.id).toBe('');
       expect(market.coverUrl, market.id).toBe(`/img/market/${market.storeType.toLowerCase()}.jpg`);
+      expect(market.logoUrl, market.id).toBe(`/img/market-logo/${brandSlug(market.brand)}.svg`);
     }
   });
 
-  it('kapak dosyalari web in public klasorunde var (apps/web/README.md lisans tablosu)', () => {
-    for (const coverUrl of new Set(markets.map((market) => market.coverUrl))) {
-      const file = fileURLToPath(new URL(`../../../web/public${coverUrl}`, import.meta.url));
+  it('ayni markanin subeleri ayni logoyu kullanir; her markanin bir logosu var', () => {
+    const logos = new Map<string, string>();
+    for (const market of markets) {
+      expect(logos.get(market.brand) ?? market.logoUrl, market.id).toBe(market.logoUrl);
+      logos.set(market.brand, market.logoUrl);
+    }
+    expect(new Set(logos.values()).size).toBe(logos.size);
+  });
 
-      expect(existsSync(file), coverUrl).toBe(true);
+  it('kapak ve logo dosyalari web in public klasorunde var (apps/web/README.md)', () => {
+    const urls = new Set(markets.flatMap((market) => [market.coverUrl, market.logoUrl]));
+    for (const url of urls) {
+      const file = fileURLToPath(new URL(`../../../web/public${url}`, import.meta.url));
+
+      expect(existsSync(file), url).toBe(true);
     }
   });
 });
