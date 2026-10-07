@@ -36,8 +36,9 @@ import type { Cleanups } from '../support/qa-mongo-world.js';
 const MONGO_IMAGE = 'mongo:7';
 const QUEUE_INDEX = 'status_courierQueuedAt_id';
 const MIGRATION = '1 kurye-sirasi';
-/** Sonraki goc (#101): `down` en son gocu geri aldigi icin once o geri alinir. */
+/** Sonraki gocler (#101, #166): `down` en son gocu geri aldigi icin once onlar geri alinir. */
 const LATER_MIGRATION = '2 gecmis-gorunurlugu';
+const LATEST_MIGRATION = '3 iade-isareti';
 const SECOND = 1_000;
 
 let container: StartedMongoDBContainer;
@@ -100,19 +101,22 @@ describe('QA goc 0001 kurye-sirasi: acilista ve komutla, gercek isci + courier',
 
     // Alan oncesine don (komutla) ve T13.1 iscisinin izini birak: eski bekleyen
     // sonradan yeniden denenmis, deneme ani yenisinden gec. `down` en son gocu
-    // geri alir: once 0002 (#101), sonra 0001.
+    // geri alir: once 0003 (#166), sonra 0002 (#101), sonra 0001.
+    const downLatest = await runOrderMigrate('down', mongo);
     const downLater = await runOrderMigrate('down', mongo);
     const down = await runOrderMigrate('down', mongo);
     await orders.updateOne({ _id: older.id } as Document, { $set: { courierRetryAt: at(100) } });
     const pending = await runOrderMigrate('status', mongo);
 
+    expect(downLatest.code).toBe(0);
+    expect(logLine(downLatest.output, 'goc down bitti')?.['reverted']).toBe(LATEST_MIGRATION);
     expect(downLater.code).toBe(0);
     expect(logLine(downLater.output, 'goc down bitti')?.['reverted']).toBe(LATER_MIGRATION);
     expect(down.code).toBe(0);
     expect(logLine(down.output, 'goc down bitti')?.['reverted']).toBe(MIGRATION);
     expect(logLine(pending.output, 'goc durumu')).toMatchObject({
       applied: [],
-      pending: [MIGRATION, LATER_MIGRATION],
+      pending: [MIGRATION, LATER_MIGRATION, LATEST_MIGRATION],
     });
     expect(await orders.countDocuments({ courierQueuedAt: { $exists: true } })).toBe(0);
     expect((await orders.indexes()).map((index) => index.name)).not.toContain(QUEUE_INDEX);
@@ -133,7 +137,7 @@ describe('QA goc 0001 kurye-sirasi: acilista ve komutla, gercek isci + courier',
     const status = await runOrderMigrate('status', mongo);
     const up = await runOrderMigrate('up', mongo);
 
-    expect(startupLines.filter((line) => line.message === 'goc uygulandi')).toHaveLength(2);
+    expect(startupLines.filter((line) => line.message === 'goc uygulandi')).toHaveLength(3);
     expect(
       startupLines.find((line) => line.message === 'kurye kuyrugu goc edildi')?.fields['queued'],
     ).toBe(3);
@@ -149,6 +153,7 @@ describe('QA goc 0001 kurye-sirasi: acilista ve komutla, gercek isci + courier',
     expect(logLine(status.output, 'goc durumu')?.['applied']).toEqual([
       expect.stringMatching(/^1 kurye-sirasi /),
       expect.stringMatching(/^2 gecmis-gorunurlugu /),
+      expect.stringMatching(/^3 iade-isareti /),
     ]);
     expect(up.code).toBe(0);
     expect(logLine(up.output, 'goc up bitti')?.['applied']).toEqual([]);
