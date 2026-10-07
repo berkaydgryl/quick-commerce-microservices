@@ -52,6 +52,25 @@ describe('FavoriteButtonView', () => {
     expect(markup).toContain('aria-label="Favorilerden çıkar"');
     expect(markup).toContain('is-active');
   });
+
+  it('beyaz kartta (magaza sayfasi, T16.2) yuzey cesidi; varsayilan fotograf ustu', () => {
+    const view = (tone: 'photo' | 'surface' | undefined) =>
+      render(
+        createElement(FavoriteButtonView, {
+          favorite: true,
+          label: TEXTS.removeLabel,
+          disabled: false,
+          tone,
+          onToggle: () => undefined,
+        }),
+      );
+
+    expect(view('surface')).toMatch(
+      /c-favorite--surface[^"]*is-active|is-active[^"]*c-favorite--surface/,
+    );
+    expect(view(undefined)).not.toContain('c-favorite--surface');
+    expect(view('photo')).not.toContain('c-favorite--surface');
+  });
 });
 
 describe('FavoriteMarketsView', () => {

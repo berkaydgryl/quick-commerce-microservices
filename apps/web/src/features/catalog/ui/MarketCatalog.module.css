@@ -1,61 +1,49 @@
-/* Tasarimsiz kabuk (T5.4): yalnizca okunur yerlesim. Urun karti tasarimi T16.2'de. */
+/*
+ * Magaza sayfasinin katalogu (T16.2; referans getircarsi). Mobil oncelikli:
+ * kategori seridi ustte, izgara altta (iki sutun). Genis ekranda (64rem)
+ * solda kategoriler, sagda baslik ve izgara (1:2). Kartlar beyaz, aralarinda
+ * ince cizgi: izgaranin zemini cizgi rengidir, aralik cizgi kalinligi kadar.
+ */
 .c-market-catalog {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  background: var(--bg-surface);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-surface);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
 }
 
-.c-market-catalog__title {
-  font-size: var(--font-size-lg);
-}
-
-.c-market-catalog__filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.c-market-catalog__filter {
-  padding: var(--space-1) var(--space-3);
-  cursor: pointer;
-  background: var(--bg-surface);
-  border: var(--border-width-thin) solid var(--border-subtle);
-  border-radius: var(--radius-pill);
-}
-
-.c-market-catalog__filter[aria-pressed='true'] {
-  font-weight: var(--font-weight-bold);
-  color: var(--text-on-brand);
-  background: var(--color-brand-primary);
-  border-color: var(--color-brand-primary);
+.c-market-catalog__nav {
+  min-width: 0;
 }
 
 .c-market-catalog__products {
-  display: flex;
-  flex-direction: column;
-}
-
-.c-market-catalog__product {
-  display: flex;
+  display: grid;
   gap: var(--space-3);
-  align-items: center;
-  justify-content: space-between;
-  padding-block: var(--space-2);
-  border-block-end: var(--border-width-thin) solid var(--border-subtle);
+  align-content: start;
+  min-width: 0;
 }
 
-.c-market-catalog__price {
-  margin-inline-start: auto;
-  font-weight: var(--font-weight-bold);
-  white-space: nowrap;
+.c-market-catalog__title {
+  font-size: var(--font-size-md);
+}
+
+.c-market-catalog__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--border-width-thin);
+  overflow: hidden;
+  background: var(--border-faint);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-market-catalog__empty {
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-surface);
 }
 
 .c-market-catalog__more {
-  align-self: center;
+  justify-self: center;
   padding: var(--space-2) var(--space-4);
   font-weight: var(--font-weight-bold);
   color: var(--color-brand-primary);
@@ -67,5 +55,18 @@
 
 .c-market-catalog__more:disabled {
   cursor: progress;
-  opacity: 0.6;
+  opacity: var(--opacity-disabled);
+}
+
+@media (--bp-md) {
+  .c-market-catalog__grid {
+    grid-template-columns: repeat(auto-fill, minmax(var(--size-product-card-min), 1fr));
+  }
+}
+
+@media (--bp-lg) {
+  .c-market-catalog {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    align-items: start;
+  }
 }

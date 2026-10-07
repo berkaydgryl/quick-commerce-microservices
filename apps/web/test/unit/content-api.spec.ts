@@ -141,6 +141,10 @@ const welcome = {
   addresses: CONTENT_FALLBACK.addresses,
   orders: CONTENT_FALLBACK.orders,
   paymentMethods: CONTENT_FALLBACK.paymentMethods,
+  marketPage: CONTENT_FALLBACK.marketPage,
+  cartPage: CONTENT_FALLBACK.cartPage,
+  footer: CONTENT_FALLBACK.footer,
+  checkout: CONTENT_FALLBACK.checkout,
 };
 
 function clientReturning(body: unknown) {

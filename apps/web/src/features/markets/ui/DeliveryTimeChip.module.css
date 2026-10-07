@@ -1,0 +1,27 @@
+/* Teslim suresi cipi (T16.3; referans getircarsi): sari kutuda mor yazi, ust barin yuksekliginde. */
+.c-delivery-time {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  min-height: var(--size-header-search);
+  padding-inline: var(--space-3);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-on-accent);
+  white-space: nowrap;
+  background: var(--color-brand-accent);
+  border-radius: var(--radius-md);
+}
+
+.c-delivery-time__short {
+  font-weight: var(--font-weight-extrabold);
+}
+
+/* Ekranda gorunmez, ekran okuyucu okur ("Tahmini varış süresi: 20-30 dk"). */
+.c-delivery-time__sr {
+  position: absolute;
+  width: var(--size-visually-hidden);
+  height: var(--size-visually-hidden);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

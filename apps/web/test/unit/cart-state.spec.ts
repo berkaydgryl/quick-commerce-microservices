@@ -10,8 +10,10 @@ import { describe, expect, it } from 'vitest';
 import {
   addItem,
   canAdd,
+  canIncrement,
   decrementItem,
   EMPTY_CART,
+  incrementItem,
   isSoldOut,
   itemCount,
   lineTotalMinor,
@@ -255,5 +257,67 @@ describe('canAdd: arayuzun tek sorusu (D11)', () => {
 
   it('baska marketin urunu bos sepete gore sorulur: onayla yeni sepette eklenecek', () => {
     expect(canAdd(dolu(), product('sut-1l', 3210, A101.id))).toBe(true);
+  });
+});
+
+describe('panelin "+"si: kalemdeki adet siniri (T16.3)', () => {
+  it('kalem eklenirken urunun siniri kaleme yazilir: stok ya da platform siniri', () => {
+    const azStok = { ...SUT, availableQuantity: 3 };
+
+    expect(addItem(EMPTY_CART, azStok, MIGROS).state.items[0]?.maxQuantity).toBe(3);
+    expect(addItem(EMPTY_CART, SUT, MIGROS).state.items[0]?.maxQuantity).toBe(
+      CART_ITEM_MAX_QUANTITY,
+    );
+  });
+
+  it('incrementItem sinira kadar artirir, sinirda durum aynen kalir; canIncrement ayni cevabi verir', () => {
+    const azStok = { ...SUT, availableQuantity: 3 };
+    const ikiAdet = addMany(EMPTY_CART, azStok, 2);
+
+    const ucAdet = incrementItem(ikiAdet, azStok.offerId);
+    expect(quantityOf(ucAdet, azStok.offerId)).toBe(3);
+    expect(canIncrement(ikiAdet, azStok.offerId)).toBe(true);
+    expect(canIncrement(ucAdet, azStok.offerId)).toBe(false);
+    expect(incrementItem(ucAdet, azStok.offerId)).toBe(ucAdet);
+  });
+
+  it('urunden yeniden eklenince sinir guncel stokla tazelenir', () => {
+    const ikiAdet = addMany(EMPTY_CART, { ...SUT, availableQuantity: 2 }, 2);
+
+    const tazelenmis = addItem(
+      decrementItem(ikiAdet, SUT.offerId),
+      { ...SUT, availableQuantity: 5 },
+      MIGROS,
+    ).state;
+
+    expect(tazelenmis.items[0]?.maxQuantity).toBe(5);
+    expect(canIncrement(tazelenmis, SUT.offerId)).toBe(true);
+  });
+
+  it('sepette olmayan kalem artmaz', () => {
+    const sepet = addMany(EMPTY_CART, SUT, 1);
+
+    expect(incrementItem(sepet, EKMEK.offerId)).toBe(sepet);
+    expect(canIncrement(sepet, EKMEK.offerId)).toBe(false);
+  });
+});
+
+describe('satirin kategorisi: sepet sayfasinin gorseli (T16.3, L2)', () => {
+  it('kalem eklenirken urunun kategorisi kaleme yazilir', () => {
+    expect(addItem(EMPTY_CART, SUT, MIGROS).state.items[0]?.categoryId).toBe(SUT.categoryId);
+  });
+
+  it('kategorisi olmayan eski kalem urunden yeniden eklenince kategorisini alir', () => {
+    const eski = addMany(EMPTY_CART, SUT, 1);
+    const kategorisiz: CartState = {
+      ...eski,
+      items: eski.items.map(({ categoryId: _kategori, ...kalem }) => kalem),
+    };
+
+    const tazelenmis = addItem(kategorisiz, SUT, MIGROS).state;
+
+    expect(kategorisiz.items[0]?.categoryId).toBeUndefined();
+    expect(tazelenmis.items[0]?.categoryId).toBe(SUT.categoryId);
+    expect(quantityOf(tazelenmis, SUT.offerId)).toBe(2);
   });
 });

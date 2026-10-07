@@ -6,8 +6,9 @@
  *
  * Idempotent (yeniden denenebilir) cagrilar istemcide `IDEMPOTENT` ile isaretlenir:
  *   catalog GetMarket, BatchGetOffers (okuma); payment Charge, Refund (anahtarli),
- *   GetPayment (okuma); inventory Reserve, Commit, Release (siparise gore tekrar
- *   guvenli); courier AssignCourier, ReleaseCourier (siparise gore tekrar guvenli,
+ *   GetPayment (okuma); inventory Reserve, Commit, Release, ShortenReservation
+ *   (siparise gore tekrar guvenli) ve ExtendReservation (beklenen bitisle tekrar
+ *   guvenli, T15.3); courier AssignCourier, ReleaseCourier (siparise gore tekrar guvenli,
  *   T13.1). Denenmeyenler: risk Evaluate (her cagri yeni bir degerlendirme
  *   kaydi yazar) ve payment Confirm3Ds (tekrar, 3DS hakkini bosa yakabilir).
  */

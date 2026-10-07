@@ -40,7 +40,6 @@ function sweep(batchSize = BATCH) {
     repository,
     payments,
     stock,
-    outbox: repository,
     clock: fixedClock(NOW_MS),
     batchSize,
     newRequestId: () => `req_supurucu_${(requestIds += 1)}`,
@@ -66,6 +65,12 @@ function paidBy(
 
 async function stored(orderId: string): Promise<Order | null> {
   return repository.findById(orderId);
+}
+
+function topicsOf(orderId: string): string[] {
+  return repository.recordedEvents
+    .filter((event) => event.orderId === orderId)
+    .map((event) => event.topic);
 }
 
 beforeEach(() => {
@@ -122,6 +127,12 @@ describe('SweepExpiredReservations - odeme bekleyen', () => {
       },
     ]);
     expect(stock.releases.map((release) => release.orderId)).toEqual([awaiting.id]);
+    // Iade komutu iptalle AYNI yazimda (T15.3): servis iptalden sonra cokse de kaybolmaz.
+    expect(topicsOf(awaiting.id).slice(-3)).toEqual([
+      EVENTS.ORDER_STATUS_CHANGED,
+      EVENTS.PAYMENT_CANCEL_REQUESTED,
+      EVENTS.PAYMENT_REFUND_REQUESTED,
+    ]);
   });
 
   it('kart cekimi suruyor (PENDING): dokunulmaz, sonraki turda tekrar bakilir', async () => {
@@ -176,15 +187,23 @@ describe('SweepExpiredReservations - odeme bekleyen', () => {
     ).toEqual([EVENTS.ORDER_STATUS_CHANGED, EVENTS.PAYMENT_CANCEL_REQUESTED]);
   });
 
-  it('dogrudan iade basarisiz: iade KOMUTU outbox a yazilir, siparis yine kapanir', async () => {
+  it('dogrudan iade basarisiz: iptalle yazilan iade KOMUTU kalir, ikincisi yazilmaz; siparis kapanir', async () => {
     const awaiting = await expiredAwaiting();
     paidBy(awaiting, PAYMENT_STATUS.SUCCEEDED);
     payments.refundFailure = new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'payment kapali');
 
     await expect(sweep()).resolves.toMatchObject({ refunded: 1, failed: 0 });
-    expect(repository.recordedEvents.at(-1)).toMatchObject({
-      topic: EVENTS.PAYMENT_REFUND_REQUESTED,
-      payload: { orderId: awaiting.id, reason: 'reservation_expired' },
+    expect((await stored(awaiting.id))?.status).toBe(ORDER_STATUS.CANCELLED);
+    const commands = repository.recordedEvents.filter(
+      (event) => event.topic === EVENTS.PAYMENT_REFUND_REQUESTED,
+    );
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toMatchObject({
+      payload: {
+        orderId: awaiting.id,
+        reason: 'reservation_expired',
+        idempotencyKey: `refund-${awaiting.id}`,
+      },
     });
   });
 });
@@ -256,7 +275,6 @@ describe('startReservationSweeping (kurulum)', () => {
         repository,
         payments,
         stock,
-        outbox: repository,
         logger: silentLogger,
         clock: fixedClock(NOW_MS),
         intervalMs: 1_000,

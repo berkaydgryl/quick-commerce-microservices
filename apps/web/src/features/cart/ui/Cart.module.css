@@ -1,41 +1,4 @@
-/* Tasarimsiz kabuk (T6.4): yalnizca okunur yerlesim ve mevcut token'lar. */
-.c-cart-action {
-  display: inline-flex;
-  gap: var(--space-2);
-  align-items: center;
-}
-
-.c-cart-action__add,
-.c-cart-action__step {
-  min-width: var(--size-cart-button-min);
-  padding: var(--space-1) var(--space-3);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-brand-primary);
-  cursor: pointer;
-  background: var(--bg-surface);
-  border: var(--border-width-thin) solid var(--color-brand-primary);
-  border-radius: var(--radius-pill);
-}
-
-.c-cart-action__add:disabled,
-.c-cart-action__step:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-/* Satista olmayan (T7.6) ya da stogu biten (T8.4) teklif: basilamayan metin, dugme degil. */
-.c-cart-action__unavailable {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-muted);
-}
-
-.c-cart-action__quantity {
-  min-width: var(--size-cart-quantity-min);
-  font-weight: var(--font-weight-bold);
-  text-align: center;
-}
-
+/* Baska marketten ekleme onayi (T6.4 kabugu): mor zeminde soru, "Evet" ve "Vazgeç". */
 .c-cart-switch {
   display: flex;
   flex-direction: column;
@@ -51,8 +14,7 @@
 }
 
 .c-cart-switch__confirm,
-.c-cart-switch__cancel,
-.c-cart-summary__clear {
+.c-cart-switch__cancel {
   padding: var(--space-1) var(--space-4);
   font-weight: var(--font-weight-bold);
   cursor: pointer;
@@ -65,51 +27,8 @@
   border: none;
 }
 
-.c-cart-switch__cancel,
-.c-cart-summary__clear {
+.c-cart-switch__cancel {
   color: var(--color-brand-primary);
   background: var(--bg-surface);
   border: var(--border-width-thin) solid var(--color-brand-primary);
-}
-
-.c-cart-summary {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  background: var(--bg-surface);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-surface);
-}
-
-.c-cart-summary__title {
-  font-size: var(--font-size-lg);
-}
-
-.c-cart-summary__lines {
-  display: grid;
-  grid-template-columns: 1fr max-content;
-  gap: var(--space-1) var(--space-4);
-}
-
-.c-cart-summary__lines dd {
-  margin: 0;
-  text-align: end;
-}
-
-.c-cart-summary__total {
-  font-weight: var(--font-weight-bold);
-}
-
-.c-cart-summary__notice {
-  color: var(--text-danger);
-}
-
-.c-cart-summary__hint {
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
-}
-
-.c-cart-summary__clear {
-  align-self: flex-start;
 }

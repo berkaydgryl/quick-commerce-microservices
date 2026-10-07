@@ -8,7 +8,8 @@
  * (siparis zaten PAID) iade YAPILMAZ: kazanan istek siparisi odenmis yazmistir.
  *
  * KILIT SURESI (T11.3): cekimden ONCE kalan sure kisaysa kilit uzatilir; kilit
- * dusmusse para CEKILMEZ, siparis CANCELLED + 410 (lock-timing.ts).
+ * dusmusse para CEKILMEZ, siparis lapsed-order.ts'in tablosuyla kapatilir
+ * (CANCELLED + 410; onceki deneme cektiyse iade).
  *
  * STOK (T11.2): odeme alininca kilit PAID'den ONCE kesinlesir (Commit) - "odendi
  * ama stok kesinlesmedi" durumu olusmaz. Commit gecici hata verirse siparis odeme

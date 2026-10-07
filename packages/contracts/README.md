@@ -25,7 +25,10 @@ packages/contracts/
 │   ├── errors.ts      # ErrorCode -> Türkçe kullanıcı mesajı
 │   ├── auth.ts        # register, login, oturum, profil
 │   ├── catalog.ts     # kategori, ürün, karanlık mağaza
-│   ├── content.ts     # ekran metinleri ve görselleri (karşılama, adres penceresi T11.8)
+│   ├── content.ts     # ekran metinleri ve görselleri: yalnızca content/ bloklarını dışa aktarır (D18)
+│   ├── content/       # ekran başına bir blok: banner, giriş kartı, uygulama indirme, adres penceresi,
+│   │                  #   üst bar, market listesi, favoriler, profil, Adreslerim, siparişler, hesap menüsü,
+│   │                  #   Ödeme Yöntemlerim, karşılama kökü (welcome); ortak metin ve görsel adresi
 │   ├── geo.ts         # harita adres çözümleme ve arama (T11.8)
 │   ├── cart.ts        # sepet girdisi, rezervasyon, serbest bırakma, adres defteri ve ekleme
 │   ├── order.ts       # sipariş, adres, 3DS, kurye özeti

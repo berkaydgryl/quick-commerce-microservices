@@ -1,0 +1,25 @@
+/*
+ * Not Ekle (T17.1; referans #33): mobilde not alani ustte, "Zili Çalma" altta.
+ * Genis ekranda yan yana: solda not, ince dikey ayiricidan sonra sagda kutu.
+ */
+.c-note {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3) var(--space-5);
+}
+
+.c-note__options {
+  display: flex;
+  align-items: center;
+}
+
+@media (--bp-md) {
+  .c-note {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .c-note__options {
+    padding-inline-start: var(--space-5);
+    border-inline-start: var(--border-width-thin) solid var(--border-subtle);
+  }
+}

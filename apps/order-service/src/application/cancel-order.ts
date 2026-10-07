@@ -27,7 +27,11 @@ import type { OrderRepository } from '../domain/order-repository.js';
 import type { Order } from '../domain/order.js';
 import { TIMELINE_NOTE, transitionOrder } from '../domain/order.js';
 import { USER_CANCELLABLE } from '../domain/order-state-machine.js';
-import { PAYMENT_STANDING, paymentStandingOf } from '../domain/payment-standing.js';
+import {
+  PAYMENT_STANDING,
+  paymentInProgress,
+  paymentStandingOf,
+} from '../domain/payment-standing.js';
 import { RELEASE_REASON } from '../domain/stock-reservation.js';
 import { findOwnOrder } from './own-order.js';
 import type { Payments } from './payments.js';
@@ -102,9 +106,5 @@ async function assertNoPaymentTaken(
   if (payment === null || paymentStandingOf(payment) === PAYMENT_STANDING.NONE) {
     return;
   }
-  throw new AppError(
-    ERROR_CODES.REQUEST_IN_PROGRESS,
-    'Odeme isleniyor; siparis tamamlaninca ya da suresi dolunca iade edilir',
-    { details: { orderId: order.id, paymentStatus: payment.status } },
-  );
+  throw paymentInProgress(order.id, payment.status);
 }

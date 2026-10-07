@@ -1,4 +1,8 @@
-/* Sepetim paneli (T11.12; referans getircarsi): baslik ustte, beyaz kart altta. */
+/*
+ * Sepetim paneli (T16.3; referans getircarsi): baslik ustte, sari cerceveli
+ * beyaz kart altta. Ust satir magaza (ikon, ad, cop kutusu); satirlar ad ve
+ * mor tutar, adet kutusu ve (adet 2+) cop kutusu; altta "Sepete git" ve tutar.
+ */
 .c-cart-panel {
   display: grid;
   gap: var(--space-3);
@@ -8,11 +12,22 @@
   font-size: var(--font-size-md);
 }
 
+/* Magaza sayfasinda baslik gorunmez (referans); ekran okuyucu bolumu yine adiyla bulur. */
+.c-cart-panel__title--hidden {
+  position: absolute;
+  width: var(--size-visually-hidden);
+  height: var(--size-visually-hidden);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .c-cart-panel__card {
   display: grid;
   gap: var(--space-3);
   padding: var(--space-4);
   background: var(--bg-surface);
+  border: var(--border-width-cart-panel) solid var(--color-brand-accent);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-surface);
 }
@@ -44,38 +59,104 @@
   font-size: var(--font-size-sm);
 }
 
-.c-cart-panel__market {
-  font-weight: var(--font-weight-bold);
+/* Ust satir: magaza ikonu, adi (magazaya gider) ve sepeti bosaltan cop kutusu. */
+.c-cart-panel__store {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding-block-end: var(--space-3);
+  border-block-end: var(--border-width-thin) solid var(--border-faint);
+}
+
+.c-cart-panel__store-icon {
+  display: grid;
+  width: var(--size-cart-store-icon);
+  color: var(--color-brand-primary);
+}
+
+.c-cart-panel__store-name {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-default);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.c-cart-panel__store-name:hover {
+  color: var(--color-brand-primary);
+  text-decoration: underline;
+}
+
+.c-cart-panel__clear,
+.c-cart-panel__item-remove {
+  display: grid;
+  place-items: center;
+  width: var(--size-cart-stepper);
+  height: var(--size-cart-stepper);
+  padding: var(--space-2);
+  color: var(--color-brand-primary);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+}
+
+.c-cart-panel__clear:hover,
+.c-cart-panel__item-remove:hover {
+  background: var(--color-brand-primary-subtle);
 }
 
 .c-cart-panel__items {
   display: grid;
-  gap: var(--space-2);
-  font-size: var(--font-size-sm);
 }
 
+/*
+ * Satir: solda ad ve tutar, sagda dugmeler. Panel dar oldugunda (kap en az
+ * --size-cart-item-text kadar yer birakmiyorsa) dugmeler alta iner ve saga
+ * yaslanir: ad kelime ortasindan, tutar "125,00 / TL" diye kirilmaz.
+ */
 .c-cart-panel__item {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
-  justify-content: space-between;
+  align-items: center;
+  padding-block: var(--space-3);
 }
 
-.c-cart-panel__lines {
+.c-cart-panel__item + .c-cart-panel__item {
+  border-block-start: var(--border-width-thin) solid var(--border-faint);
+}
+
+.c-cart-panel__item-text {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--space-1) var(--space-3);
-  padding-block-start: var(--space-3);
+  flex: 1 1 var(--size-cart-item-text);
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* Adet kutusu ve cop kutusu; cop kutusunun yeri hep ayrilir ki kutular satirdan satira hizali kalsin. */
+.c-cart-panel__item-controls {
+  display: grid;
+  grid-template-columns: auto var(--size-cart-stepper);
+  gap: var(--space-1);
+  align-items: center;
+  margin-inline-start: auto;
+}
+
+.c-cart-panel__item-name {
   font-size: var(--font-size-sm);
-  border-block-start: var(--border-width-thin) solid var(--border-subtle);
+  overflow-wrap: anywhere;
 }
 
-.c-cart-panel__lines dd {
-  text-align: end;
-}
-
-.c-cart-panel__total {
-  font-size: var(--font-size-md);
+.c-cart-panel__item-price {
   font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+  white-space: nowrap;
+}
+
+/* Tutar ("49,50 TL") kirilmaz. */
+.c-cart-panel__amount {
+  white-space: nowrap;
 }
 
 .c-cart-panel__notice {
@@ -86,34 +167,43 @@
   border-radius: var(--radius-sm);
 }
 
-.c-cart-panel__actions {
-  display: grid;
-  gap: var(--space-2);
+/* Alt dugme: solda mor "Sepete git", sagda beyaz kutuda tutar; tek baglanti. Sigmazsa tutar alta iner. */
+.c-cart-panel__go {
+  display: flex;
+  flex-wrap: wrap;
+  overflow: hidden;
+  font-weight: var(--font-weight-bold);
+  text-decoration: none;
+  border: var(--border-width-cart-panel) solid var(--color-brand-primary);
+  border-radius: var(--radius-md);
 }
 
-/* Ana eylem: sari zemin, mor yazi (giris kartindaki ana dugme gibi). */
-.c-cart-panel__go {
+.c-cart-panel__go-label {
+  flex: 1 1 auto;
   padding: var(--space-3) var(--space-4);
-  font-weight: var(--font-weight-bold);
-  color: var(--text-on-accent);
+  white-space: nowrap;
+  color: var(--text-on-brand);
   text-align: center;
-  text-decoration: none;
-  background: var(--color-brand-accent);
-  border-radius: var(--radius-pill);
+  background: var(--color-brand-primary);
   transition: background var(--duration-fast) var(--easing-standard);
 }
 
-.c-cart-panel__go:hover {
-  background: var(--color-brand-accent-strong);
+.c-cart-panel__go:hover .c-cart-panel__go-label {
+  background: var(--color-brand-primary-strong);
 }
 
-.c-cart-panel__clear {
-  padding: var(--space-2) var(--space-4);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-muted);
-  cursor: pointer;
-  background: none;
-  border: var(--border-width-thin) solid var(--border-subtle);
-  border-radius: var(--radius-pill);
+.c-cart-panel__go-amount {
+  flex: 1 0 auto;
+  padding: var(--space-3) var(--space-4);
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-brand-primary);
+  background: var(--bg-surface);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-cart-panel__go-label {
+    transition: none;
+  }
 }

@@ -1,5 +1,36 @@
+/*
+ * Magaza sayfasi duzeni (T16.2; referans getircarsi). Mobil oncelikli: tek
+ * sutun, sepet alttaki cubukta. Genis ekranda (64rem) solda sayfa, sagda
+ * Sepetim (3:1); panel sayfa kayarken yapisik ust barin altinda kalir.
+ */
 .c-market-page {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+}
+
+.c-market-page__main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
+  align-content: start;
+  min-width: 0;
+}
+
+.c-market-page__aside {
+  display: none;
+}
+
+@media (--bp-lg) {
+  .c-market-page {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  /* Ust barin yuksekligi (arama kutusu + barin dikey boslugu, PageLayout) kadar asagida yapisir. */
+  .c-market-page__aside {
+    position: sticky;
+    top: calc(var(--size-header-search) + var(--space-3) * 2 + var(--space-4));
+    display: grid;
+  }
 }

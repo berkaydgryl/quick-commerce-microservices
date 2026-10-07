@@ -1,0 +1,106 @@
+/*
+ * Magaza sayfasinin kategorileri (T16.2; referans getircarsi). Mobil oncelikli:
+ * yatay kayan serit (cipler). Genis ekranda (64rem) beyaz kutuda dikey liste;
+ * secili satir acik mor zeminde mor yazi.
+ */
+.c-category-nav {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.c-category-nav__title {
+  font-size: var(--font-size-md);
+}
+
+.c-category-nav__list {
+  display: flex;
+  gap: var(--space-2);
+  padding-block-end: var(--space-1);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+/* Liste kayar (serit) ya da kirpilir (kutu): odak halkasi iceride cizilir. */
+.c-category-nav__item {
+  --focus-ring-offset: calc(var(--focus-ring-width) * -1);
+
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-1) var(--space-3) var(--space-1) var(--space-1);
+  font: inherit;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-default);
+  white-space: nowrap;
+  cursor: pointer;
+  background: var(--bg-surface);
+  border: var(--border-width-thin) solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+}
+
+.c-category-nav__item:hover {
+  color: var(--color-brand-primary);
+}
+
+.c-category-nav__item[aria-pressed='true'] {
+  color: var(--color-brand-primary);
+  background: var(--color-brand-primary-subtle);
+  border-color: var(--color-brand-primary);
+}
+
+/* "Tümü"nun ikonu: kategori gorseliyle ayni kutu, icinde dort kare. */
+.c-category-nav__all-icon {
+  display: grid;
+  place-items: center;
+  width: var(--size-category-nav-icon);
+  aspect-ratio: 1;
+  padding: var(--space-2);
+  color: var(--color-brand-primary);
+  background: var(--color-brand-primary-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.c-category-nav__name {
+  min-width: 0;
+}
+
+/* Serit halinde ok yok: cipin kendisi secimdir. */
+.c-category-nav__chevron {
+  display: none;
+  width: var(--size-link-icon);
+  color: var(--text-muted);
+}
+
+@media (--bp-lg) {
+  .c-category-nav__list {
+    display: grid;
+    gap: 0;
+    padding-block-end: 0;
+    overflow: hidden;
+    background: var(--bg-surface);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-surface);
+  }
+
+  .c-category-nav__item {
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    white-space: normal;
+    text-align: start;
+    border: none;
+    border-radius: 0;
+  }
+
+  .c-category-nav__item[aria-pressed='true'] {
+    background: var(--color-brand-primary-subtle);
+  }
+
+  .c-category-nav__name {
+    flex: 1;
+  }
+
+  .c-category-nav__chevron {
+    display: grid;
+  }
+}

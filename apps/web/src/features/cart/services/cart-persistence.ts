@@ -18,6 +18,7 @@ import {
   CART_ITEM_MAX_QUANTITY,
   CART_ITEM_MIN_QUANTITY,
   CART_MAX_ITEMS,
+  categoryIdSchema,
   marketIdSchema,
   offerIdSchema,
   productIdSchema,
@@ -44,6 +45,18 @@ const persistedItemSchema = z.object({
   name: z.string().min(1),
   unitPriceMinor: z.number().int().min(0),
   quantity: z.number().int().min(CART_ITEM_MIN_QUANTITY).max(CART_ITEM_MAX_QUANTITY),
+  /**
+   * T16.3'te eklendi; ISTEGE BAGLI ki eski kayitlar atilmasin (surum ayni):
+   * yoksa platform siniri.
+   */
+  maxQuantity: z
+    .number()
+    .int()
+    .min(CART_ITEM_MIN_QUANTITY)
+    .max(CART_ITEM_MAX_QUANTITY)
+    .default(CART_ITEM_MAX_QUANTITY),
+  /** T16.3'te eklendi; ISTEGE BAGLI (surum ayni): yoksa satirda bas harf. */
+  categoryId: categoryIdSchema.optional(),
 });
 
 const persistedCartSchema = z

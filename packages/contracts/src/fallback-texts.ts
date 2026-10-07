@@ -6,6 +6,9 @@ import type {
   OrdersContent,
   ProfileContent,
 } from './content.js';
+import { CART_PAGE_FALLBACK, FOOTER_FALLBACK } from './content/cart-page-fallback.js';
+import { CHECKOUT_FALLBACK } from './content/checkout-fallback.js';
+import { MARKET_PAGE_FALLBACK } from './content/market-page-fallback.js';
 import { PAYMENT_METHODS_FALLBACK } from './content/payment-methods-fallback.js';
 
 /**
@@ -57,6 +60,15 @@ const MARKET_LIST_FALLBACK: MarketListContent = {
     minBasketRemainingLabel: 'Minimum sepet tutarına kalan',
     goToCartLabel: 'Sepete git',
     clearLabel: 'Sepeti boşalt',
+    clearConfirmQuestion: 'Sepeti boşaltmak istediğine emin misin?',
+    clearConfirmHint: 'Sepetteki bütün ürünler kaldırılır.',
+    clearConfirmLabel: 'Boşalt',
+    cancelLabel: 'Vazgeç',
+    closeLabel: 'Kapat',
+    decreaseSuffix: 'adedini azalt',
+    increaseSuffix: 'adedini artır',
+    removeSuffix: 'sepetten çıkar',
+    quantitySuffix: 'adedi',
   },
 };
 
@@ -240,6 +252,13 @@ export const CONTENT_FALLBACK = {
   orders: ORDERS_FALLBACK,
   /** paymentMethods: bloğun tamami (T11.17). */
   paymentMethods: PAYMENT_METHODS_FALLBACK,
+  /** marketPage: bloğun tamami (T16.2). */
+  marketPage: MARKET_PAGE_FALLBACK,
+  /** cartPage ve footer: bloklarin tamami (T16.3). */
+  cartPage: CART_PAGE_FALLBACK,
+  footer: FOOTER_FALLBACK,
+  /** checkout: bloğun tamami (T17.1). */
+  checkout: CHECKOUT_FALLBACK,
 } as const;
 
 export type ContentFallback = typeof CONTENT_FALLBACK;

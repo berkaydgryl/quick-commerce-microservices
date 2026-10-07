@@ -5,11 +5,12 @@ import { useId } from 'react';
 import { Link } from 'react-router-dom';
 
 import { formatMoney } from '../../../shared/services/format';
+import { TrashIcon } from '../../address/ui/icons';
 import type { CartItem, CartMarket } from '../services/cart-state';
-import { lineTotalMinor } from '../services/cart-state';
 
 import styles from './CartPanel.module.css';
-import { BagIcon } from './icons';
+import { CartPanelItem } from './CartPanelItem';
+import { BagIcon, StoreIcon } from './icons';
 
 const money = (amountMinor: number) => formatMoney({ amountMinor, currency: CURRENCY });
 
@@ -19,31 +20,53 @@ export interface CartPanelViewProps {
   readonly items: readonly CartItem[];
   /** Sepetin marketinin kurallariyla toplam; kurallar gelene kadar undefined. */
   readonly totals: CartTotals | undefined;
-  /** "Sepete git": sepetin marketinin sayfasi. */
+  /** Magaza adinin baglantisi: sepetin marketinin sayfasi. */
+  readonly marketHref: string | undefined;
+  /** "Sepete git"in hedefi. */
   readonly cartHref: string | undefined;
-  readonly onClear: () => void;
+  /** "Sepetim" basligi gorunur mu (market listesinde evet; magaza sayfasinda ekran okuyucuya kalir). */
+  readonly titleVisible?: boolean | undefined;
+  /** Kalemden bir adet daha eklenebilir mi (cart-state canIncrement). */
+  readonly canIncrement: (offerId: string) => boolean;
+  readonly onIncrement: (offerId: string) => void;
+  readonly onDecrement: (offerId: string) => void;
+  readonly onRemove: (offerId: string) => void;
+  /** Cop kutusu: bosaltma onayini acar (bosaltmaz). */
+  readonly onAskClear: () => void;
 }
 
 /**
- * Sepetim paneli (T11.12; referans getircarsi): baslik kartin ustunde. Bossa
- * canta ikonu ve "Sepetin şu an boş"; doluysa sepetin marketi, kalemler,
- * toplamlar, minimum sepete kalan ve "Sepete git". Hesap @getir/pricing'tedir
- * (useCartTotals); bilesen yalnizca sonucu yazar.
+ * Sepetim paneli (T16.3; referans getircarsi): sari cerceveli kart. Bossa
+ * canta ikonu ve "Sepetin şu an boş". Doluysa ustte magaza ikonu ve adi
+ * (magazaya gider) ile cop kutusu (onayla bosaltir); satirlarda ad, mor tutar
+ * ve adet kutusu; minimum sepete kalan varsa notu; altta "Sepete git" ve
+ * sepet tutari. Hesap @getir/pricing ve cart-state'tedir; bilesen durumsuzdur.
  */
 export function CartPanelView({
   texts,
   market,
   items,
   totals,
+  marketHref,
   cartHref,
-  onClear,
+  titleVisible = true,
+  canIncrement,
+  onIncrement,
+  onDecrement,
+  onRemove,
+  onAskClear,
 }: CartPanelViewProps) {
   const titleId = useId();
   const empty = market === null || items.length === 0;
 
   return (
     <section className={styles['c-cart-panel']} aria-labelledby={titleId}>
-      <h2 id={titleId} className={styles['c-cart-panel__title']}>
+      <h2
+        id={titleId}
+        className={
+          titleVisible ? styles['c-cart-panel__title'] : styles['c-cart-panel__title--hidden']
+        }
+      >
         {texts.title}
       </h2>
       <div className={styles['c-cart-panel__card']}>
@@ -59,46 +82,57 @@ export function CartPanelView({
           </div>
         ) : (
           <>
-            <p className={styles['c-cart-panel__market']}>{market.name}</p>
-            <ul className={styles['c-cart-panel__items']} role="list">
-              {items.map((item) => (
-                <li key={item.productId} className={styles['c-cart-panel__item']}>
-                  <span>
-                    {item.name} × {item.quantity}
-                  </span>
-                  <span>{money(lineTotalMinor(item))}</span>
-                </li>
-              ))}
-            </ul>
-            {totals !== undefined && (
-              <dl className={styles['c-cart-panel__lines']}>
-                <dt>{texts.subtotalLabel}</dt>
-                <dd>{money(totals.subtotalMinor)}</dd>
-                <dt>{texts.deliveryLabel}</dt>
-                <dd>
-                  {totals.deliveryFeeMinor === 0
-                    ? texts.freeDeliveryLabel
-                    : money(totals.deliveryFeeMinor)}
-                </dd>
-                <dt className={styles['c-cart-panel__total']}>{texts.totalLabel}</dt>
-                <dd className={styles['c-cart-panel__total']}>{money(totals.totalMinor)}</dd>
-              </dl>
-            )}
-            {totals !== undefined && !totals.canCheckout && (
-              <p className={styles['c-cart-panel__notice']}>
-                {texts.minBasketRemainingLabel}: {money(totals.amountToMinBasketMinor)}
-              </p>
-            )}
-            <div className={styles['c-cart-panel__actions']}>
-              {cartHref !== undefined && (
-                <Link to={cartHref} className={styles['c-cart-panel__go']}>
-                  {texts.goToCartLabel}
+            <div className={styles['c-cart-panel__store']}>
+              <span className={styles['c-cart-panel__store-icon']} aria-hidden="true">
+                <StoreIcon />
+              </span>
+              {marketHref === undefined ? (
+                <span className={styles['c-cart-panel__store-name']}>{market.name}</span>
+              ) : (
+                <Link to={marketHref} className={styles['c-cart-panel__store-name']}>
+                  {market.name}
                 </Link>
               )}
-              <button type="button" className={styles['c-cart-panel__clear']} onClick={onClear}>
-                {texts.clearLabel}
+              <button
+                type="button"
+                className={styles['c-cart-panel__clear']}
+                aria-label={texts.clearLabel}
+                onClick={onAskClear}
+              >
+                <TrashIcon />
               </button>
             </div>
+            <ul className={styles['c-cart-panel__items']} role="list">
+              {items.map((item) => (
+                <CartPanelItem
+                  key={item.offerId}
+                  item={item}
+                  texts={texts}
+                  canIncrement={canIncrement(item.offerId)}
+                  onIncrement={() => onIncrement(item.offerId)}
+                  onDecrement={() => onDecrement(item.offerId)}
+                  onRemove={() => onRemove(item.offerId)}
+                />
+              ))}
+            </ul>
+            {totals !== undefined && !totals.canCheckout && (
+              <p className={styles['c-cart-panel__notice']}>
+                {texts.minBasketRemainingLabel}:{' '}
+                <span className={styles['c-cart-panel__amount']}>
+                  {money(totals.amountToMinBasketMinor)}
+                </span>
+              </p>
+            )}
+            {cartHref !== undefined && (
+              <Link to={cartHref} className={styles['c-cart-panel__go']}>
+                <span className={styles['c-cart-panel__go-label']}>{texts.goToCartLabel}</span>
+                {totals !== undefined && (
+                  <span className={styles['c-cart-panel__go-amount']}>
+                    {money(totals.subtotalMinor)}
+                  </span>
+                )}
+              </Link>
+            )}
           </>
         )}
       </div>

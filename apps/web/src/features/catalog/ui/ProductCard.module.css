@@ -1,0 +1,49 @@
+/*
+ * Urun karti (T16.2; referans getircarsi): beyaz kutu, ortada gorsel, sag ust
+ * kosede sepet dugmesi (dikey adet kutusu); altta ortalanmis fiyat, ad ve
+ * aciklama.
+ */
+.c-product-card {
+  display: grid;
+  gap: var(--space-1);
+  align-content: start;
+  padding: var(--space-3);
+  text-align: center;
+  background: var(--bg-surface);
+}
+
+.c-product-card__media {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding-inline: var(--space-6);
+  margin-block-end: var(--space-2);
+}
+
+.c-product-card__action {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+}
+
+.c-product-card__badge {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+}
+
+.c-product-card__price {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+}
+
+.c-product-card__name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.c-product-card__description {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}

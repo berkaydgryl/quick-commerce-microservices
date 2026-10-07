@@ -1,0 +1,80 @@
+/*
+ * Odeme yontemi (T17.1; referans #33): kartin icinde satir (logo, ad, maskeli
+ * numara) ve sagda cerceveli mor "Değiştir" (kart yoksa "Kart ekle"); ince
+ * ayiricidan sonra guvenlik cumlesi. Pasif dugmeler (F5'e kadar) soluk.
+ */
+.c-payment-method__card {
+  display: flex;
+  min-width: 0;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.c-payment-method__logo {
+  display: grid;
+  flex-shrink: 0;
+}
+
+.c-payment-method__text {
+  display: grid;
+  min-width: 0;
+}
+
+.c-payment-method__name {
+  font-weight: var(--font-weight-bold);
+  overflow-wrap: anywhere;
+}
+
+.c-payment-method__number {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.c-payment-method__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.c-payment-method__muted,
+.c-payment-method__security {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.c-payment-method__security {
+  padding-block-start: var(--space-3);
+  border-block-start: var(--border-width-thin) solid var(--border-faint);
+}
+
+.c-payment-method__change,
+.c-payment-method__add {
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-4);
+  font: inherit;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+  cursor: pointer;
+  background: var(--bg-surface);
+  border: var(--border-width-thin) solid var(--color-brand-primary);
+  border-radius: var(--radius-md);
+}
+
+/* Odeme yontemi penceresi (F5) gelene kadar pasif: odaklanir, basilmaz. */
+.c-payment-method__change[aria-disabled='true'],
+.c-payment-method__add[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
+}
+
+/* Ekranda gorunmez, ekran okuyucu okur ("Visa, son dört hane 4242"). */
+.c-payment-method__sr {
+  position: absolute;
+  width: var(--size-visually-hidden);
+  height: var(--size-visually-hidden);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

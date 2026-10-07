@@ -172,8 +172,6 @@ export interface ReservationSweepingOptions {
   readonly repository: OrderRepository;
   readonly payments: Payments;
   readonly stock: StockReservations;
-  /** Iade komutu: dogrudan iade basarisizsa kalici olarak yazilir (T7.3). */
-  readonly outbox: OrderOutbox;
   readonly logger: Logger;
   readonly clock?: Clock;
   readonly intervalMs?: number;
@@ -189,7 +187,6 @@ export function startReservationSweeping(options: ReservationSweepingOptions): R
     repository: options.repository,
     payments: options.payments,
     stock: options.stock,
-    outbox: options.outbox,
     clock: options.clock ?? systemClock,
     batchSize: ORDER_SWEEPER_BATCH_SIZE,
   });

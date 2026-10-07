@@ -6,6 +6,8 @@
  * mi, alinmak uzere mi?" Para alinmissa siparis sessizce kapatilamaz.
  */
 
+import { AppError, ERROR_CODES } from '@getir/core';
+
 import { PAYMENT_METHOD, PAYMENT_STATUS } from './checkout-payment.js';
 import type { PaymentMethod, PaymentStatus } from './checkout-payment.js';
 
@@ -41,4 +43,18 @@ export function paymentStandingOf(snapshot: PaymentSnapshot | null): PaymentStan
     return PAYMENT_STANDING.IN_FLIGHT;
   }
   return PAYMENT_STANDING.NONE;
+}
+
+/**
+ * Odeme surerken siparis kapatilamaz cevabi (REQUEST_IN_PROGRESS). Kullanici
+ * iptali para alinmissa ya da kart cekimi suruyorsa, kilidi dusmus siparisin
+ * kapatilmasi (lapsed-order.ts) yalniz cekim suruyorsa verir: saga siparisi
+ * tamamlar ya da tutar iade edilir.
+ */
+export function paymentInProgress(orderId: string, paymentStatus: PaymentStatus): AppError {
+  return new AppError(
+    ERROR_CODES.REQUEST_IN_PROGRESS,
+    'Odeme isleniyor; sonuc kesinlesince siparis tamamlanir ya da tutar iade edilir',
+    { details: { orderId, paymentStatus } },
+  );
 }
