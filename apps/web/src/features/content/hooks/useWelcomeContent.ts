@@ -19,3 +19,13 @@ export function useWelcomeContent() {
     staleTime: WELCOME_CONTENT_STALE_TIME_MS,
   });
 }
+
+/**
+ * Icerik bir kez hata verdiyse yedek KALICI (F21 code-review): veri yokken
+ * yeniden istek (sekme odagi, yeni sayfa) hatayi null yapip sorguyu
+ * "yukleniyor"a dondurur; error'a bakan bilesen yer tutucuya duser, acik
+ * pencere ve yazilan metin kaybolur. errorUpdatedAt yeniden istekte silinmez.
+ */
+export function contentFailed(query: { readonly errorUpdatedAt: number }): boolean {
+  return query.errorUpdatedAt > 0;
+}

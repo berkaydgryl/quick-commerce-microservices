@@ -1,0 +1,167 @@
+/*
+ * Siparis takip cizgisi (F21; gorsel #61 ve 07.10 kullanici duzeltmesi):
+ * siparis detayi kartlarinin dili (beyaz kart, golge, ic bosluk, "Ürünler"
+ * gibi baslik). Adimlar esit genislikte. Tek ray katmani: ilk yuvarlagin
+ * ortasindan sonuncunun ortasina kesintisiz gri, gecilen bolum mor. Yuvarlaklar
+ * rayin USTUNDE ve opak: gelecek beyaz + mor cerceve, gecilen dolu mor + beyaz
+ * tik, aktif dolu mor + yumusak hare (hareket azaltmada sabit). Adlar
+ * yuvarlagin altinda ortali. "Kuryem nerede" listenin altinda ortali: orta
+ * kolonun ortasi kartin ortasidir, her genislikte "Kurye yolda"nin altinda.
+ */
+.c-order-track {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-surface);
+}
+
+.c-order-track__title {
+  font-size: var(--font-size-md);
+}
+
+.c-order-track__steps {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 0;
+  padding-block-start: var(--space-2);
+  list-style: none;
+}
+
+/* Ray ve mor bolumu: adimlar esit, yuvarlak ortalari 1/6, 3/6, 5/6'da. */
+.c-order-track__steps::before,
+.c-order-track__steps::after {
+  position: absolute;
+  inset-block-start: calc(
+    var(--space-2) + (var(--size-track-dot) - var(--border-width-cart-panel)) / 2
+  );
+  inset-inline-start: calc(100% / 6);
+  height: var(--border-width-cart-panel);
+  content: '';
+}
+
+.c-order-track__steps::before {
+  inset-inline-end: calc(100% / 6);
+  background: var(--border-subtle);
+}
+
+.c-order-track__steps::after {
+  background: var(--color-brand-primary);
+}
+
+.c-order-track__steps--preparing::after {
+  width: 0;
+}
+
+.c-order-track__steps--on-the-way::after {
+  width: calc(100% / 3);
+}
+
+.c-order-track__steps--delivered::after {
+  width: calc(100% * 2 / 3);
+}
+
+.c-order-track__step {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  justify-items: center;
+  padding-inline: var(--space-1);
+  text-align: center;
+}
+
+/* Rayin ustunde (z-index) ve opak: arkadaki cizgi gorunmez. */
+.c-order-track__dot {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: var(--size-track-dot);
+  aspect-ratio: 1;
+
+  /* Tik yuvarlagin icini doldurur (cerceve ve ince bosluk disinda). */
+  padding: calc(var(--space-1) / 2);
+  color: var(--text-on-brand);
+  background: var(--bg-surface);
+  border: var(--border-width-cart-panel) solid var(--color-brand-primary);
+  border-radius: var(--radius-pill);
+}
+
+.c-order-track__step.is-done .c-order-track__dot,
+.c-order-track__step.is-current .c-order-track__dot {
+  background: var(--color-brand-primary);
+}
+
+/* Aktif adim: ici hep dolu; disinda yumusak hare. */
+.c-order-track__step.is-current .c-order-track__dot {
+  box-shadow: 0 0 0 var(--space-1) var(--color-brand-primary-subtle);
+  animation: c-order-track-pulse var(--duration-pulse) var(--easing-standard) infinite;
+}
+
+@keyframes c-order-track-pulse {
+  from {
+    box-shadow: 0 0 0 0 var(--color-brand-primary-soft);
+  }
+
+  to {
+    box-shadow: 0 0 0 var(--space-2) transparent;
+  }
+}
+
+.c-order-track__label {
+  font-size: var(--font-size-sm);
+  color: var(--text-default);
+  overflow-wrap: break-word;
+}
+
+.c-order-track__step.is-current .c-order-track__label {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+}
+
+.c-order-track__step.is-upcoming .c-order-track__label {
+  color: var(--text-muted);
+}
+
+.c-order-track__actions {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: center;
+}
+
+/* Dugme pasifken bilgi satiri: Kart Ekle'nin guvenlik satiri gibi kucuk, soluk, ortali. */
+.c-order-track__hint {
+  max-width: 100%;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Magaza sayfasinin "Daha fazla göster"i gibi: beyaz, mor cerceve, kapsul. */
+.c-order-track__courier {
+  padding: var(--space-2) var(--space-4);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+  white-space: nowrap;
+  cursor: pointer;
+  background: var(--bg-surface);
+  border: var(--border-width-thin) solid var(--color-brand-primary);
+  border-radius: var(--radius-pill);
+}
+
+/* "Kurye yolda" aktif degilken ya da pencere yokken (F22 oncesi) pasif. */
+.c-order-track__courier:disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-order-track__step.is-current .c-order-track__dot {
+    animation: none;
+  }
+}
