@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { cardvaultV1, catalogV1, commonV1, inventoryV1, orderV1 } from '../../gen/ts/index.js';
+import {
+  cardvaultV1,
+  catalogV1,
+  commonV1,
+  courierV1,
+  inventoryV1,
+  orderV1,
+} from '../../gen/ts/index.js';
 
 /**
  * Bu dosya ELLE YAZILMIS KOD test etmez; T2.3'un kapisidir: ".proto dosyalarindan
@@ -272,5 +279,39 @@ describe('uretilen TypeScript - cok dosyali paket (#135, D18)', () => {
     );
 
     expect(decoded).toEqual(request);
+  });
+});
+
+describe('kurye takibi sozlesmesi (T13.3)', () => {
+  it('GetTracking yolu ve asamalar; cevap telden bozulmadan gelir', () => {
+    expect(courierV1.CourierServiceService.getTracking.path).toBe(
+      '/getir.courier.v1.CourierService/GetTracking',
+    );
+    expect(courierV1.TrackingPhase.TRACKING_PHASE_TO_MARKET).toBe(1);
+    expect(courierV1.TrackingPhase.TRACKING_PHASE_TO_CUSTOMER).toBe(2);
+    expect(courierV1.TrackingPhase.TRACKING_PHASE_DELIVERED).toBe(3);
+    const tracking = courierV1.GetTrackingResponse.fromPartial({
+      courierId: 'crr_0123456789abcdef0123456789abcdef',
+      courierName: 'Mehmet K.',
+      phase: courierV1.TrackingPhase.TRACKING_PHASE_TO_CUSTOMER,
+      location: { lat: 40.985, lng: 29.0275 },
+      at: new Date('2026-10-07T13:00:02.000Z'),
+      remainingMeters: 840,
+      etaSeconds: 68,
+      route: [
+        { lat: 40.985, lng: 29.0275 },
+        { lat: 40.9885, lng: 29.0262 },
+      ],
+      marketLocation: { lat: 40.985, lng: 29.0275 },
+      deliveryLocation: { lat: 40.9885, lng: 29.0262 },
+      pickedUpAt: new Date('2026-10-07T12:59:30.000Z'),
+    });
+
+    const decoded = courierV1.GetTrackingResponse.decode(
+      courierV1.GetTrackingResponse.encode(tracking).finish(),
+    );
+
+    expect(decoded).toEqual(tracking);
+    expect(decoded.deliveredAt).toBeUndefined();
   });
 });

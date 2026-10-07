@@ -171,12 +171,16 @@ export const reservationReleasedEventSchema = z.object({
   seq: seqSchema,
 });
 
+/**
+ * GIZLILIK (T13.3 guvenlik incelemesi): atamada kurye ONCEKI musterinin
+ * adresindedir (teslimattan sonra oldugu yerde bosa cikar); bu yuzden olay
+ * kuryenin konumunu TASIMAZ. Konum ancak paket alindiktan sonra (tracking.ts).
+ */
 export const courierAssignedEventSchema = z.object({
   orderId: idSchema,
   courier: z.object({
     id: idSchema,
     name: z.string(),
-    location: geoPointSchema.optional(),
     etaMinutes: z.number().int().min(0).optional(),
   }),
   at: isoDateTimeSchema,

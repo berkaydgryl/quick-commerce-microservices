@@ -9,12 +9,19 @@
  *
  * Yalnizca DINLENEN olaylarin govdesi burada durur. order.status_changed'i
  * T12.3'ten beri realtime dinliyor; order.created'i bugun kimse dinlemiyor,
- * tuketicisi gelince semasi buraya eklenir.
+ * tuketicisi gelince semasi buraya eklenir. Kurye olaylari (T13.3) courier'dan
+ * order'a ve (asama 2) realtime'a gider.
  */
 
 import { z } from 'zod';
 
-import { idempotencyKeySchema, idSchema, marketIdSchema, orderIdSchema } from './common.js';
+import {
+  courierIdSchema,
+  idempotencyKeySchema,
+  idSchema,
+  marketIdSchema,
+  orderIdSchema,
+} from './common.js';
 import { REFUND_REASON_MAX_LENGTH, REFUND_REASON_PATTERN } from './constants.js';
 import { orderStatusSchema } from './order-status.js';
 
@@ -80,3 +87,44 @@ export const orderStatusChangedPayloadSchema = z.object({
 });
 
 export type OrderStatusChangedPayload = z.infer<typeof orderStatusChangedPayloadSchema>;
+
+/**
+ * courier.picked_up (T13.3 courier uretir, T14.3 order dinler): kurye markette
+ * ve hazirlik suresi doldu, paket alindi. Zarfin occurredAt'i alinma anidir.
+ *
+ * Teslim EN AZ BIR KEZ: courier yayinlandi isaretini koyana kadar her tick
+ * yeniden yayinlar; ayni olay tekrar gelebilir. Siralama garantisi YOK:
+ * courier.delivered bundan once islenebilir.
+ *
+ * TUKETICI KURALI (order):
+ *   - `courierId` siparisin SU ANKI kuryesi degilse olay eskidir (kurye
+ *     birakilip yeniden atandi): yok sayilir.
+ *   - Siparis PREPARING ise -> ON_THE_WAY. Zaten ON_THE_WAY ya da DELIVERED
+ *     ise tekrar: yok sayilir.
+ *   - Siparis henuz PAID ise (atamanin PREPARING yazimi gecikti) olay
+ *     ONAYLANMAZ, yeniden teslim icin hata doner: yok sayilsaydi bir daha
+ *     gelmezdi ve siparis PREPARING'de kalirdi.
+ *   - Son durumlar (CANCELLED, REJECTED...) yok sayilir.
+ */
+export const courierPickedUpPayloadSchema = z.object({
+  orderId: orderIdSchema,
+  courierId: courierIdSchema,
+  marketId: marketIdSchema,
+});
+
+/**
+ * courier.delivered (T13.3 courier uretir, T14.3 order dinler): rota bitti,
+ * paket teslim edildi; kurye o anda bosa cikar (IDLE). Zarfin occurredAt'i
+ * teslim anidir. Teslim ve sira kurali courier.picked_up ile ayni.
+ *
+ * TUKETICI KURALI (order): kurye eslesmesi ve PAID/son durum kurali
+ * courier.picked_up ile ayni. ON_THE_WAY -> DELIVERED; siparis hala PREPARING
+ * ise (picked_up gecikti) iki gecis ardisik yapilir.
+ */
+export const courierDeliveredPayloadSchema = z.object({
+  orderId: orderIdSchema,
+  courierId: courierIdSchema,
+});
+
+export type CourierPickedUpPayload = z.infer<typeof courierPickedUpPayloadSchema>;
+export type CourierDeliveredPayload = z.infer<typeof courierDeliveredPayloadSchema>;

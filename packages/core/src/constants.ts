@@ -77,6 +77,10 @@ export const EVENTS = {
    */
   PAYMENT_CANCEL_REQUESTED: 'payment.cancel_requested',
   COURIER_ASSIGNED: 'courier.assigned',
+  /** Kurye paketi markette aldi (T13.3): order PREPARING -> ON_THE_WAY (T14.3). */
+  COURIER_PICKED_UP: 'courier.picked_up',
+  /** Kurye teslim etti (T13.3): order -> DELIVERED (T14.3); kurye bosa cikar. */
+  COURIER_DELIVERED: 'courier.delivered',
   COURIER_LOCATION: 'courier.location',
   ORDER_DELIVERED: 'order.delivered',
 } as const;

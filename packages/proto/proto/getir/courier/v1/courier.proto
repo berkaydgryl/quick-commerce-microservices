@@ -14,8 +14,10 @@ syntax = "proto3";
 // KONUM AKISI BU SOZLESMEDEN GECMEZ. Canli konum bir RPC ile degil,
 // courier.location olayi ve socket odasi uzerinden tasinir; saniyede bir
 // unary cagri ile konum cekmek hem gereksiz yuk hem de gecikmeli sonuc
-// uretirdi. Buradaki RPC'ler yalnizca atama ve rota baslatma gibi
-// DURUM DEGISTIREN adimlar icindir.
+// uretirdi. Buradaki RPC'ler atama ve rota baslatma gibi DURUM DEGISTIREN
+// adimlar ve tek seferlik okumalar icindir. Istisna (T13.3, asama 1): canli
+// akis gelene kadar web takibi GetTracking'i gateway uzerinden 2 sn'de bir
+// yoklar; asama 2'de konum courier.location olayi ve soketle akar.
 
 package getir.courier.v1;
 
@@ -39,6 +41,11 @@ service CourierService {
 
   // Siparisi tasiyan kuryeyi bosa cikarir (BUSY -> IDLE).
   rpc ReleaseCourier(ReleaseCourierRequest) returns (ReleaseCourierResponse);
+
+  // Siparisin takibi (T13.3, asama 1): kuryenin o anki konumu, asama ve
+  // teslimata kalan; gateway GET /v1/orders/{id}/tracking'i bununla doldurur.
+  // Okumadir, durum degistirmez.
+  rpc GetTracking(GetTrackingRequest) returns (GetTrackingResponse);
 }
 
 // Kuryenin musaitlik durumu.
@@ -180,4 +187,63 @@ message ReleaseCourierResponse {
 
   // Birakilan kurye; released = false ise bostur.
   string courier_id = 2;
+}
+
+// Takibin asamasi (T13.3).
+enum TrackingPhase {
+  TRACKING_PHASE_UNSPECIFIED = 0;
+  // Kurye markete gidiyor ya da markette hazirligin bitmesini bekliyor
+  // (siparis PREPARING).
+  TRACKING_PHASE_TO_MARKET = 1;
+  // Paket alindi, kurye teslimat adresine gidiyor (siparis ON_THE_WAY).
+  TRACKING_PHASE_TO_CUSTOMER = 2;
+  // Rota bitti, paket teslim edildi (siparis DELIVERED).
+  TRACKING_PHASE_DELIVERED = 3;
+}
+
+message GetTrackingRequest {
+  string order_id = 1;
+}
+
+// Takip cevabi. Degerler cagri ANINDA, rotanin baslangicindan gecen sureden
+// hesaplanir (kurye hizi COURIER_SPEED_KMH, marketteki hazirlik
+// ORDER_PREP_SECONDS; ikisi courier yapilandirmasi); tick ile ayni saf
+// fonksiyon. Siparisin rotasi yoksa ya da rota birakildiysa (siparis iptal,
+// kurye yeniden atandi) NOT_FOUND: birakilan rota ilerlemez.
+//
+// Courier kullaniciyi BILMEZ: sahiplik denetimi cagirandadir (gateway once
+// siparisin kullanicinin oldugunu order'dan dogrular).
+//
+// GIZLILIK: kurye bir teslimattan sonra oldugu yerde (ONCEKI musterinin
+// adresinde) bosa cikar ve oradan atanir. Bu yuzden paket alinmadan
+// (TO_MARKET) konum BOS doner, rotanin ilk bacagi (kurye -> market) hic
+// donmez, kalan yol yalnizca market -> adres bacagidir ve varis tahmini
+// dakikaya yukari yuvarlanir (kalanin azalisi kurye -> market uzakligini ele
+// vermesin). Degerler yalnizca BU siparisin saklanan rotasindan hesaplanir;
+// kuryenin baska siparisteki canli konumu kullanilmaz. Kurallar contracts
+// tracking.ts enforceTrackingPhase ile ayni.
+message GetTrackingResponse {
+  string courier_id = 1;
+  // Gosterim adi ("Mehmet K."); gercek kisi degil.
+  string courier_name = 2;
+  TrackingPhase phase = 3;
+  // Kuryenin o anki konumu: TO_CUSTOMER ve DELIVERED'da var, TO_MARKET'ta BOS.
+  getir.common.v1.GeoPoint location = 4;
+  // Degerlerin hesaplandigi an.
+  google.protobuf.Timestamp at = 5;
+  // Teslimat adresine kalan yol, METRE; TO_MARKET'ta 2. bacagin tamami,
+  // DELIVERED'da 0.
+  int32 remaining_meters = 6;
+  // Teslimata kalan, SANIYE (marketteki bekleme dahil, yukari yuvarlanir);
+  // TO_MARKET'ta dakikaya yuvarlanir, DELIVERED'da 0.
+  int32 eta_seconds = 7;
+  // Rotanin market -> adres parcasi: ilk nokta market, son nokta adres (1-40;
+  // adres marketin kendisiyse tek nokta).
+  repeated getir.common.v1.GeoPoint route = 8;
+  getir.common.v1.GeoPoint market_location = 9;
+  getir.common.v1.GeoPoint delivery_location = 10;
+  // Paket alindiysa an; yoksa bos.
+  google.protobuf.Timestamp picked_up_at = 11;
+  // Teslim edildiyse an; yoksa bos.
+  google.protobuf.Timestamp delivered_at = 12;
 }

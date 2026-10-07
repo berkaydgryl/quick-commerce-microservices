@@ -46,6 +46,8 @@ describe('EVENTS', () => {
     expect(EVENTS.PAYMENT_FAILED).toBe('payment.failed');
     expect(EVENTS.PAYMENT_REFUND_REQUESTED).toBe('payment.refund_requested');
     expect(EVENTS.COURIER_ASSIGNED).toBe('courier.assigned');
+    expect(EVENTS.COURIER_PICKED_UP).toBe('courier.picked_up');
+    expect(EVENTS.COURIER_DELIVERED).toBe('courier.delivered');
     expect(EVENTS.COURIER_LOCATION).toBe('courier.location');
     expect(EVENTS.ORDER_DELIVERED).toBe('order.delivered');
   });
