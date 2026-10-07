@@ -40,7 +40,14 @@ import {
   searchActiveOffersPipeline,
 } from '../../src/infrastructure/mongo/offer-repository.js';
 import { describeCategoryReaderContract } from '../support/category-reader-contract.js';
-import { DEMO_ADDRESSES, demoLocation, EXPECTED_NEARBY } from '../support/demo-addresses.js';
+import { CLASSIC_SNAPSHOT } from '../support/classic-catalog.js';
+import {
+  DEMO_ADDRESSES,
+  demoLocation,
+  EXPECTED_NEARBY,
+  expectedNearbyCurrent,
+  expectNearbyList,
+} from '../support/demo-addresses.js';
 import { describeMarketReaderContract } from '../support/market-reader-contract.js';
 import { describeOfferReaderContract } from '../support/offer-reader-contract.js';
 
@@ -53,9 +60,28 @@ let connection: MongoConnection;
 let repositories: MongoCatalogRepositories;
 let seeder: MongoCatalogSeeder;
 
-async function seed(snapshot: CatalogSnapshot = CATALOG_SNAPSHOT): Promise<void> {
+/**
+ * Davranis testleri KLASIK kumeyle kosar (classic-catalog.ts; bellek testleriyle
+ * ayni senaryolar). Guncel demo verisinin Mongo'ya yuklendigini "seed" bolumu
+ * ayrica dener.
+ */
+async function seed(snapshot: CatalogSnapshot = CLASSIC_SNAPSHOT): Promise<void> {
   await createSeedCatalog({ writer: seeder, snapshot, isProduction: false })();
 }
+
+/** Arama sonucunun karsilastirilan ozeti (Mongo ve bellek ayni olmali). */
+function summary(result: NearbySearchResult) {
+  return {
+    marketId: result.market.market.id,
+    meters: Math.round(result.market.distanceMeters),
+    nameMatched: result.marketNameMatched,
+    offerIds: result.offers.map((offer) => offer.id),
+    total: result.totalOfferMatches,
+  };
+}
+
+/** Mongo $geoNear mesafesi haversine'den en fazla 1 m sapar. */
+const GEO_NEAR_TOLERANCE_METERS = 1;
 
 async function countOf(name: string): Promise<number> {
   return connection.db.collection(name).countDocuments();
@@ -65,7 +91,7 @@ async function expectDemoCounts(): Promise<void> {
   expect(await countOf(COLLECTIONS.CATEGORIES)).toBe(13);
   expect(await countOf(COLLECTIONS.PRODUCTS)).toBe(49);
   expect(await countOf(COLLECTIONS.MARKETS)).toBe(21);
-  expect(await countOf(COLLECTIONS.OFFERS)).toBe(CATALOG_SNAPSHOT.offers.length);
+  expect(await countOf(COLLECTIONS.OFFERS)).toBe(CLASSIC_SNAPSHOT.offers.length);
 }
 
 beforeAll(async () => {
@@ -188,17 +214,11 @@ describe('ListNearbyMarkets - gercek Mongo', () => {
   it.each(['Ev', 'İş', 'Yazlık'] as const)(
     '%s -> beklenen marketler, yakindan uzaga',
     async (title) => {
-      const nearby = await listNearby()(demoLocation(title));
-      const expected = EXPECTED_NEARBY[title];
-
-      expect(nearby.map((entry) => entry.market.id)).toEqual(
-        expected.map((entry) => entry.marketId),
+      expectNearbyList(
+        await listNearby()(demoLocation(title)),
+        EXPECTED_NEARBY[title],
+        GEO_NEAR_TOLERANCE_METERS,
       );
-      nearby.forEach((entry, index) => {
-        expect(
-          Math.abs(entry.distanceMeters - (expected[index]?.meters ?? Number.NaN)),
-        ).toBeLessThanOrEqual(1);
-      });
     },
   );
 
@@ -315,17 +335,10 @@ describe('genel arama - gercek Mongo (T9.6)', () => {
     ['İş', 'a101'],
     ['Yazlık', 'süt'],
   ] as const)('%s "%s": bellek uygulamasiyla AYNI sonuc', async (title, query) => {
-    const summary = (result: NearbySearchResult) => ({
-      marketId: result.market.market.id,
-      meters: Math.round(result.market.distanceMeters),
-      nameMatched: result.marketNameMatched,
-      offerIds: result.offers.map((offer) => offer.id),
-      total: result.totalOfferMatches,
-    });
     const input = { location: demoLocation(title), query };
 
     const fromMongo = await createSearchNearby(repositories)(input);
-    const fromMemory = await createSearchNearby(createInMemoryReaders())(input);
+    const fromMemory = await createSearchNearby(createInMemoryReaders(CLASSIC_SNAPSHOT))(input);
 
     expect(fromMongo.map(summary)).toEqual(fromMemory.map(summary));
   });
@@ -368,4 +381,53 @@ describe('BatchGetOffers - gercek Mongo (T9.3)', () => {
     expect(result.offers).toHaveLength(14);
     expect(result.missing).toEqual(['prd_camasir-suyu']);
   });
+});
+
+describe('GUNCEL demo verisi - gercek Mongo (07.10 cesitliligi)', () => {
+  beforeAll(async () => {
+    await seed(CATALOG_SNAPSHOT);
+  });
+
+  afterAll(async () => {
+    // Bu dosyanin diger bolumleri klasik kumeyi bekler.
+    await seed();
+  });
+
+  it('yuklenir: butun urun, market ve teklifler; benzersiz indeks ihlali yok', async () => {
+    expect(await countOf(COLLECTIONS.CATEGORIES)).toBe(CATALOG_SNAPSHOT.categories.length);
+    expect(await countOf(COLLECTIONS.PRODUCTS)).toBe(CATALOG_SNAPSHOT.products.length);
+    expect(await countOf(COLLECTIONS.MARKETS)).toBe(CATALOG_SNAPSHOT.markets.length);
+    expect(await countOf(COLLECTIONS.OFFERS)).toBe(CATALOG_SNAPSHOT.offers.length);
+  });
+
+  it.each(['Ev', 'İş', 'Yazlık'] as const)(
+    '%s: $geoNear klasik listeyi aynen basta, yeni subeleri sonda verir',
+    async (title) => {
+      expectNearbyList(
+        await createListNearbyMarkets({ markets: repositories.markets })(demoLocation(title)),
+        expectedNearbyCurrent(title),
+        GEO_NEAR_TOLERANCE_METERS,
+      );
+    },
+  );
+
+  it.each([
+    ['Ev', 'şeker'],
+    ['Ev', 'çay'],
+    ['Ev', 'yoğurt'],
+    ['Ev', 'bim'],
+    ['İş', 'su'],
+    ['İş', 'kedi'],
+  ] as const)(
+    '%s "%s": bellek uygulamasiyla AYNI sonuc (yeni Turkce adlar)',
+    async (title, query) => {
+      const input = { location: demoLocation(title), query };
+
+      const fromMongo = await createSearchNearby(repositories)(input);
+      const fromMemory = await createSearchNearby(createInMemoryReaders())(input);
+
+      expect(fromMongo.map(summary)).toEqual(fromMemory.map(summary));
+      expect(fromMongo.length).toBeGreaterThan(0);
+    },
+  );
 });

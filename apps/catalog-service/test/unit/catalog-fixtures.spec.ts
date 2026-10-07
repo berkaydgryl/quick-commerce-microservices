@@ -4,6 +4,7 @@
  * (bos market sayfasi, yanlis fiyat) bozar.
  */
 
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -11,8 +12,18 @@ import { describe, expect, it } from 'vitest';
 
 import type { StoreType } from '../../src/domain/catalog.js';
 import { offerIdFor, STORE_TYPE } from '../../src/domain/catalog.js';
+import { ASSORTMENT_GROUPS } from '../../src/infrastructure/fixtures/assortment-groups.js';
+import { ASSORTMENTS } from '../../src/infrastructure/fixtures/assortments.js';
+import {
+  BASE_PRICES,
+  BRAND_PRICE_INDEX,
+} from '../../src/infrastructure/fixtures/offers/base-prices.js';
+import { MARKET_CANDIDATE_LIMIT } from '../../src/config/constants.js';
+import { distanceMeters } from '../../src/domain/geo.js';
+import { coveringMarkets } from '../../src/domain/market-coverage.js';
 import { CATALOG_SNAPSHOT } from '../../src/infrastructure/fixtures.js';
-import { EXPECTED_NEARBY } from '../support/demo-addresses.js';
+import { CLASSIC_SNAPSHOT } from '../support/classic-catalog.js';
+import { DEMO_ADDRESSES, EXPECTED_NEARBY } from '../support/demo-addresses.js';
 
 const { categories, products, markets, offers } = CATALOG_SNAPSHOT;
 
@@ -36,7 +47,8 @@ function brandSlug(brand: string): string {
 }
 
 function duplicates(values: readonly string[]): string[] {
-  return values.filter((value, index) => values.indexOf(value) !== index);
+  const seen = new Set<string>();
+  return values.filter((value) => seen.has(value) || !seen.add(value));
 }
 
 /**
@@ -58,10 +70,67 @@ const STORE_CATEGORIES: Readonly<Record<StoreType, 'ALL' | readonly string[]>> =
 const CATALOG_ID = (prefix: string) => new RegExp(`^${prefix}_[a-z0-9]+(?:-[a-z0-9]+)*$`);
 
 describe('pazaryeri demo verisi', () => {
-  it('13 kategori, 49 ortak urun, 21 market (roadmap tablosu)', () => {
+  it('13 kategori, 122 ortak urun, 33 market, 1505 teklif (roadmap paragrafi)', () => {
     expect(categories).toHaveLength(13);
-    expect(products).toHaveLength(49);
-    expect(markets).toHaveLength(21);
+    expect(products).toHaveLength(122);
+    expect(markets).toHaveLength(33);
+    expect(offers).toHaveLength(1505);
+  });
+
+  it('eski veri DEGISMEDI: guncel veri KLASIK kumeyle baslar, kume 07.10 oncesiyle bayt bayt ayni', () => {
+    expect(products.slice(0, CLASSIC_SNAPSHOT.products.length)).toEqual(CLASSIC_SNAPSHOT.products);
+    expect(markets.slice(0, CLASSIC_SNAPSHOT.markets.length)).toEqual(CLASSIC_SNAPSHOT.markets);
+    expect(offers.slice(0, CLASSIC_SNAPSHOT.offers.length)).toEqual(CLASSIC_SNAPSHOT.offers);
+    // 07.10 oncesi CATALOG_SNAPSHOT'in (main 29c62cd) JSON ozeti: kimlik, fiyat
+    // ve stok senaryolari (sepetler, favoriler, QA betikleri) bu veriye dayanir.
+    expect(createHash('sha256').update(JSON.stringify(CLASSIC_SNAPSHOT)).digest('hex')).toBe(
+      '5ff7e3a3413b14c35d1b8dceb04bbd6534fa79e37818dd3c82350840b0805ffb',
+    );
+  });
+
+  it('cesitlilik (07.10): her kategoride en az 8 urun; zincir 60-100, dukkan en az 6 urun', () => {
+    for (const category of categories) {
+      const count = products.filter((product) => product.categoryId === category.id).length;
+      expect(count, category.id).toBeGreaterThanOrEqual(8);
+    }
+    for (const market of markets) {
+      const count = offers.filter((offer) => offer.marketId === market.id).length;
+      if (market.storeType === STORE_TYPE.MARKET) {
+        expect(count, market.id).toBeGreaterThanOrEqual(60);
+        expect(count, market.id).toBeLessThanOrEqual(100);
+      } else {
+        expect(count, market.id).toBeGreaterThanOrEqual(6);
+      }
+    }
+  });
+
+  it('uretilen teklif: taban fiyat x marka endeksi, ,90 ile biter; her SKU nin tabani ve urunu var', () => {
+    const generated = offers.slice(CLASSIC_SNAPSHOT.offers.length);
+    expect(generated.every((offer) => offer.priceMinor % 100 === 90 && offer.isActive)).toBe(true);
+
+    const skus = new Set(products.map((product) => product.sku));
+    expect(Object.keys(BASE_PRICES).sort()).toEqual([...skus].sort());
+    const grouped = Object.values(ASSORTMENT_GROUPS).flat();
+    expect(grouped.filter((sku) => !skus.has(sku))).toEqual([]);
+    expect(Object.keys(ASSORTMENTS).sort()).toEqual(markets.map((market) => market.id).sort());
+  });
+
+  it('her markanin fiyat endeksi ACIKCA var (sessiz 100 yok); fazlasi da yok', () => {
+    const brands = [...new Set(markets.map((market) => market.brand))].sort();
+
+    expect(Object.keys(BRAND_PRICE_INDEX).sort()).toEqual(brands);
+  });
+
+  it('her demo adresinde kapsayan market sayisi aday sinirinin (MARKET_CANDIDATE_LIMIT) en az 3 altinda', () => {
+    for (const address of DEMO_ADDRESSES) {
+      const covering = coveringMarkets(
+        markets.map((market) => ({
+          market,
+          distanceMeters: distanceMeters(address.location, market),
+        })),
+      );
+      expect(covering.length, address.title).toBeLessThanOrEqual(MARKET_CANDIDATE_LIMIT - 3);
+    }
   });
 
   it('kimlikler sozlesmedeki onekli bicimde (ADR-15)', () => {
@@ -157,10 +226,14 @@ describe('pazaryeri demo verisi', () => {
     }
   });
 
-  it('tam olarak bir market kapali (STORE_CLOSED senaryosu)', () => {
-    expect(markets.filter((market) => !market.isOpen).map((market) => market.id)).toEqual([
+  it('her semtte TAM BIR market kapali (STORE_CLOSED senaryosu; Kadikoy 41. enlemin guneyi)', () => {
+    const closed = markets.filter((market) => !market.isOpen);
+
+    expect(closed.map((market) => market.id)).toEqual([
       'mkt_a101-abbasaga',
+      'mkt_carrefour-express-kadikoy',
     ]);
+    expect(closed.filter((market) => market.lat < 41)).toHaveLength(1);
   });
 
   it('puan onda bir hassasiyetle 0-50; sure araligi ters degil', () => {

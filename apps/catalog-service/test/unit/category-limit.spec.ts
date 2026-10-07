@@ -13,6 +13,7 @@ import { MAX_CATEGORY_COUNT } from '../../src/config/constants.js';
 import type { Category } from '../../src/domain/catalog.js';
 import type { CategoryReader } from '../../src/domain/category-reader.js';
 import { createInMemoryReaders } from '../../src/infrastructure/memory/in-memory-catalog.js';
+import { CLASSIC_SNAPSHOT } from '../support/classic-catalog.js';
 
 class LimitRecordingReader implements CategoryReader {
   readonly limits: number[] = [];
@@ -34,7 +35,7 @@ describe('kategori use-case leri okumayi sinirlar', () => {
 
   it('listMarketCategories', async () => {
     const categories = new LimitRecordingReader();
-    const readers = createInMemoryReaders();
+    const readers = createInMemoryReaders(CLASSIC_SNAPSHOT);
 
     await createListMarketCategories({ ...readers, categories })('mkt_migros-jet-moda');
 
