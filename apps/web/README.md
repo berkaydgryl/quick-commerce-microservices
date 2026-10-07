@@ -402,14 +402,16 @@ sepet çubuğunun "Sepete git"i buraya gelir.
 `/odeme`; referans getirçarşı ödeme sayfası, **kampanya yok**. Sepet sayfasının "Ödemeye Geç"i buraya gelir (minimum
 sepet tutmazsa pasif). Oturum ister; sepet boşsa `/sepet`'e döner. Sade bar ve alt bilgi sepet sayfasıyla aynı.
 
-| Bölge           | Dosya                                                                       | İş                                                                                      |
-| --------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Ekran           | `pages/checkout/CheckoutPage.tsx`, `CheckoutScreen.tsx`                     | Solda bölümler, sağda adres ve özet (7:3); form hataları alan terk edilince             |
-| Hediye          | `features/checkout/ui/GiftSection.tsx`, `PresetNoteDialog.tsx`              | Evet/Hayır anahtarı, hazır notlar, not (0/250), gönderen, zorunlu alıcı adı ve telefonu |
-| Teslimat ve not | `DeliveryMethodSection.tsx`, `NoteSection.tsx`                              | Tek seçili seçenek (etiketsiz); sipariş notu (0/250) ve "Zili Çalma"                    |
-| Ödeme yöntemi   | `PaymentMethodSection.tsx`, `SavedCardPayment.tsx`, `PaymentMethodView.tsx` | Süresi geçmemiş en yeni kart; "Değiştir" ve "Kart ekle" F5'e kadar pasif                |
-| Özet            | `OrderSummaryCard.tsx`, `AgreementField.tsx`                                | Sepet Tutarı, Teslimat Ücreti, Ödenecek Tutar; sözleşme onayı; "Sipariş Ver" (pasif)    |
-| Kurallar        | `features/checkout/services/checkout-rules.ts`, `selected-card.ts`          | B2 taslağı: not ≤250, ad ≤60, alıcı adı ve cep telefonu zorunlu (hediye açıkken)        |
+| Bölge                 | Dosya                                                                                       | İş                                                                                               |
+| --------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Ekran                 | `pages/checkout/CheckoutPage.tsx`, `CheckoutScreen.tsx`                                     | Solda bölümler, sağda adres ve özet (7:3); form hataları alan terk edilince                      |
+| Hediye                | `features/checkout/ui/GiftSection.tsx`, `PresetNoteDialog.tsx`                              | Evet/Hayır anahtarı, hazır notlar, not (0/250), gönderen, zorunlu alıcı adı ve telefonu          |
+| Teslimat ve not       | `DeliveryMethodSection.tsx`, `NoteSection.tsx`                                              | Tek seçili seçenek (etiketsiz); sipariş notu (0/250) ve "Zili Çalma"                             |
+| Ödeme yöntemi         | `hooks/useSelectedCard.ts`, `ui/PaymentMethodView.tsx`                                      | Süresi geçmemiş en yeni kart; "Değiştir" ve "Kart ekle" F5'e kadar pasif                         |
+| Sipariş akışı (T12.4) | `hooks/useCheckoutOrder.ts`, `useOrderFlow.ts`, `services/place-order.ts`, `order-draft.ts` | Rezervasyon → sipariş (taslak gövde) → 3DS; başarıda sepet boşalır, sipariş detayına gidilir     |
+| 3DS (T12.4)           | `ui/ThreeDsStep.tsx`, `ThreeDsDialog.tsx`, `services/countdown.ts`                          | 6 haneli kod, geri sayım (son 30 sn uyarı), kalan hak; Vazgeç/süre dolunca rezervasyon bırakılır |
+| Özet                  | `OrderSummaryCard.tsx`, `AgreementField.tsx`                                                | Sepet Tutarı, Teslimat Ücreti, Ödenecek Tutar; sözleşme onayı; "Sipariş Ver" (pasif)             |
+| Kurallar              | `features/checkout/services/checkout-rules.ts`, `selected-card.ts`                          | B2 taslağı: not ≤250, ad ≤60, alıcı adı ve cep telefonu zorunlu (hediye açıkken)                 |
 
 - **Kart kasası production paketinde kapalı** (`__CARD_VAULT__`, K1 (a)): kart bölümü orada kart okumaz ("Kayıtlı
   kartın yok"); kasa açılana kadar production'da sipariş verilemez. Kasanın ucu paket taramasıyla denetlenir.
@@ -417,8 +419,14 @@ sepet tutmazsa pasif). Oturum ister; sepet boşsa `/sepet`'e döner. Sade bar ve
   önbelleğe ve adrese yazılmaz. Kartın yalnızca ilk 4 ve son 4 hanesi görünür; PAN ve CVV bu sayfada yok (M7).
 - **Sözleşme metinleri demo** yer tutucu (`checkout.preInfoParagraphs`, `distanceSalesParagraphs`); gerçek metin
   içerikten değişir.
-- **Sipariş akışı** (rezervasyon, sipariş, 3DS, hata bildirimleri) ayrı PR'da (T12.4); backend `cardId` ve hediye
-  alanlarını (B1, B2) aldıktan sonra gerçek uca bağlanır.
+- **Sipariş akışı (T12.4):** "Sipariş Ver" ilk eksik koşul varken pasif ve altında o koşul yazar. İstekten hemen önce
+  koşullar yeniden denetlenir. Akış: `POST /v1/cart/reserve` (niyet anahtarı), `POST /v1/orders` (deneme anahtarı;
+  **taslak gövde** `payment.cardId` + `details`, B1/B2 backend'e gelince `order-draft.ts` sözleşmeye taşınır),
+  3DS gerekirse `POST /v1/orders/:id/3ds` (her kod yeni anahtar). Vazgeç, süre ya da hak bitince
+  `DELETE /v1/cart/reserve/:id` (yeni anahtar; 404 sessiz; 409'da sipariş okunur, ödendiyse başarı).
+- **Geri sayım** sunucunun `ttlSeconds`'ından ve kodun 60 sn'sinden (payment-service) kısa olanla, monotonik saatle;
+  son 30 saniyede uyarı rengi ve ekran okuyucuya tek duyuru. **3DS kodu sırdır**: yalnız pencerenin alanında, her
+  denemeden sonra silinir; günlüğe, depoya ve adrese girmez. Hatalar gateway'in cümlesiyle bildirim olur.
 
 ## Market ekranları (T5.4) — tasarımsız kabuk
 
