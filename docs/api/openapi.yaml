@@ -4755,6 +4755,10 @@ components:
           threeDsAttemptsLeftSuffix,
           threeDsExpiredToast,
           threeDsCancelledToast,
+          threeDsExhaustedToast,
+          threeDsRateLimitedNotice,
+          retryWaitLabel,
+          paymentStatusUnavailableNotice,
           methodDialogTitle,
           onlinePaymentTitle,
           deleteCardLabel,
@@ -4845,6 +4849,12 @@ components:
         threeDsAttemptsLeftSuffix: { $ref: "#/components/schemas/ContentText" }
         threeDsExpiredToast: { $ref: "#/components/schemas/ContentText" }
         threeDsCancelledToast: { $ref: "#/components/schemas/ContentText" }
+        threeDsExhaustedToast: { $ref: "#/components/schemas/ContentText" }
+        threeDsRateLimitedNotice: { $ref: "#/components/schemas/ContentText" }
+        retryWaitLabel: { $ref: "#/components/schemas/ContentText" }
+        paymentStatusUnavailableNotice:
+          $ref: "#/components/schemas/ContentText"
+          description: Yenilemede bekleyen 3DS'in durumu okunamadı (F15b); sipariş bırakılmaz, "Tekrar dene".
         methodDialogTitle: { $ref: "#/components/schemas/ContentText" }
         onlinePaymentTitle: { $ref: "#/components/schemas/ContentText" }
         deleteCardLabel: { $ref: "#/components/schemas/ContentText" }

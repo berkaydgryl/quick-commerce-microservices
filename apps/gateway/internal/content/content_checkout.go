@@ -71,6 +71,11 @@ type Checkout struct {
 	ThreeDsAttemptsLeftSuffix string `json:"threeDsAttemptsLeftSuffix"`
 	ThreeDsExpiredToast       string `json:"threeDsExpiredToast"`
 	ThreeDsCancelledToast     string `json:"threeDsCancelledToast"`
+	ThreeDsExhaustedToast     string `json:"threeDsExhaustedToast"`
+	ThreeDsRateLimitedNotice  string `json:"threeDsRateLimitedNotice"`
+	RetryWaitLabel            string `json:"retryWaitLabel"`
+	// PaymentStatusUnavailableNotice, yenilemede bekleyen 3DS okunamadi (F15b).
+	PaymentStatusUnavailableNotice string `json:"paymentStatusUnavailableNotice"`
 	// Odeme Yontemi Sec penceresi (T17.1; F5).
 	MethodDialogTitle  string `json:"methodDialogTitle"`
 	OnlinePaymentTitle string `json:"onlinePaymentTitle"`

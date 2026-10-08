@@ -10,6 +10,10 @@ interface ThreeDsStepProps {
   readonly deadline: number | undefined;
   readonly verifying: boolean;
   readonly failure: { readonly message: string; readonly attemptsLeft: number } | undefined;
+  /** Yenilemede surdurulen 3DS'te sunucunun kalan hakki (F15b). */
+  readonly attemptsLeft?: number | undefined;
+  /** Cok fazla hatali kod (429; F15b): tekrar denemeye kalan saniye. */
+  readonly waitSeconds?: number | undefined;
   readonly texts: ThreeDsTexts;
   readonly onSubmit: (otp: string) => void;
   readonly onCancel: () => void;

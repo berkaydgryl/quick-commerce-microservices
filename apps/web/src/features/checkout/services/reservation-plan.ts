@@ -68,3 +68,7 @@ export function reservationStep(
 export function releasableOnLeave(phase: ReservationPhase): HeldOrder | undefined {
   return phase.kind === 'held' ? phase.held : undefined;
 }
+
+/** Tutulan ya da ucustaki siparisin kimligi (rezervasyon fazindan). */
+export const heldOrderId = (phase: ReservationPhase): string | undefined =>
+  phase.kind === 'held' || phase.kind === 'placing' ? phase.held.orderId : undefined;
