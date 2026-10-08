@@ -92,6 +92,16 @@ idleSince silinir)`. Aday o arada başka siparişe gittiyse koşul tutmaz, sıra
   `ENDED` yazıp bırakmada düştüyse tekrar çağrı kuryeyi bitiş anındaki konumda bırakır. Konum
   kuralları: rota bu atamanın değilse konum değişmez; hesap teslimi geçtiyse adres; alma kayıtlı ama
   saat kaydın gerisindeyse market noktası (`courierLocation`, tick'in canlı konumuyla aynı).
+  `ENDED` yaması tutmayıp rota yeniden okununca hâlâ aynı, ilerleyen ve teslimsizse de çağrı hata döner
+  (karar verilemedi; kör bırakma yok).
+- **BUSY kalan kurye uzlaştırması (#205):** rota `ENDED` yazılıp kurye bırakması düştüyse ve tekrarlar
+  da tutmadıysa tick, en fazla `CARRIER_RECONCILE_INTERVAL_MS`'de (30 sn) bir, siparişi taşıyan
+  kuryeleri (sipariş kimliğine göre sayfa sayfa, en çok 200; her koşuda sonraki sayfa, sonda başa)
+  ve rotalarını iki toplu okumayla bulur (`application/reconcile-carriers.ts`). Kurye hâlâ taşıyor, rota bu atamanın ve en az
+  `CARRIER_RECONCILE_GRACE_MS` (30 sn) önce bitmişse bırakılır: `ENDED`'de bitiş anındaki konumda,
+  teslimli `DONE`'da adreste; `{_id, currentOrderId}` koşullu, tekrar güvenli. İlerleyen rota ve rotasız
+  atama normal yoldur, dokunulmaz. Mongo transaction'ı (rota `ENDED` + kurye bırakma tek işlem) yerine
+  bu sade yol seçildi; transaction ileride düşünülebilir.
 
 ## Hareket ve takip (T13.3, aşama 1)
 
@@ -154,8 +164,9 @@ idleSince silinir)`. Aday o arada başka siparişe gittiyse koşul tutmaz, sıra
 `lastAssignedAt?`, `idleSince?` (yalnızca `IDLE`), `lastLocation` (GeoJSON `Point`, `[boylam, enlem]`),
 `lastLocationAt`. Canlı konum her tick'te Redis'e gider ve Mongo'ya yazılmaz (T13.3, T14.1).
 
-İndeksler: `lastLocation_2dsphere_status` (havuz sorgusu, `$geoNear`) ve `currentOrderId_unique`
-(kısmi: yalnızca alanı olan belgeler).
+İndeksler: `lastLocation_2dsphere_status` (havuz sorgusu, `$geoNear`), `currentOrderId_unique`
+(kısmi: yalnızca alanı olan belgeler; #205 uzlaştırmanın sayfalı okuması da bundan). İndeksler
+açılışta kurulur, göç gerekmez.
 
 `markets`: `_id (mkt_…)`, `location` (GeoJSON). Market kaydının sahibi catalog'dur; burası havuzun
 merkezi için **kopyadır**. Seed ve göç 0001 yazar; katalogun demo verisiyle eşitliği testli

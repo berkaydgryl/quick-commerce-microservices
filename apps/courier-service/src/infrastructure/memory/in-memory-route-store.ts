@@ -5,13 +5,28 @@
 
 import { ROUTE_STATE, routeState } from '../../domain/route.js';
 import type { Route, RoutePatch } from '../../domain/route.js';
-import type { MovingRouteRepository, RouteRepository } from '../../domain/route-repository.js';
+import type {
+  MovingRouteRepository,
+  RouteBatchReader,
+  RouteRepository,
+} from '../../domain/route-repository.js';
 
-export class InMemoryRouteStore implements RouteRepository, MovingRouteRepository {
+export class InMemoryRouteStore
+  implements RouteRepository, MovingRouteRepository, RouteBatchReader
+{
   private readonly routes = new Map<string, Route>();
 
   findByOrder(orderId: string): Promise<Route | null> {
     return Promise.resolve(this.routes.get(orderId) ?? null);
+  }
+
+  findByOrders(orderIds: readonly string[]): Promise<readonly Route[]> {
+    return Promise.resolve(
+      orderIds.flatMap((orderId) => {
+        const route = this.routes.get(orderId);
+        return route === undefined ? [] : [route];
+      }),
+    );
   }
 
   insertOnce(route: Route): Promise<Route> {

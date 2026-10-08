@@ -44,6 +44,13 @@ export class RoutesCollection extends MongoRepository<RouteDocument> {
     );
   }
 
+  /** Siparislerin rotalari, toplu (#205; _id = siparis, birincil anahtardan). */
+  async findByOrders(orderIds: readonly string[]): Promise<RouteDocument[]> {
+    return this.run('findByOrders', () =>
+      this.collection.find({ _id: { $in: [...orderIds] } }).toArray(),
+    );
+  }
+
   /**
    * Yamayi yazar: yalnizca belge hala ayni rota (kurye ve uretilme ani) ve
    * bitmemisse; `requireUndelivered` ise ayrica teslim ani KAYITLI degilse

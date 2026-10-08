@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { Route } from '../../src/domain/route.js';
 import { planRoute } from '../../src/domain/route-planner.js';
-import type { RouteRepository } from '../../src/domain/route-repository.js';
+import type { RouteBatchReader, RouteRepository } from '../../src/domain/route-repository.js';
 import {
   courierId,
   DELIVERY,
@@ -32,8 +32,26 @@ function routeFor(order: string, courier: number, meters: number, atMs = NOW_MS)
   };
 }
 
-export function describeRouteStoreContract(name: string, getStore: () => RouteRepository): void {
+export function describeRouteStoreContract(
+  name: string,
+  getStore: () => RouteRepository & RouteBatchReader,
+): void {
   describe(`RouteRepository sozlesmesi: ${name}`, () => {
+    it('findByOrders (#205): bulunan siparislerin rotalari tek okumada; olmayan atlanir, bos liste bos', async () => {
+      const store = getStore();
+      const first = routeFor(orderId(), 1, 640);
+      const second = routeFor(orderId(), 2, 300);
+      await store.insertOnce(first);
+      await store.insertOnce(second);
+
+      const found = await store.findByOrders([second.orderId, orderId(), first.orderId]);
+
+      expect([...found].sort((left, right) => (left.orderId < right.orderId ? -1 : 1))).toEqual(
+        [first, second].sort((left, right) => (left.orderId < right.orderId ? -1 : 1)),
+      );
+      expect(await store.findByOrders([])).toEqual([]);
+    });
+
     it('rota ALAN KAYBI olmadan yazilir ve okunur (noktalar ondalik kaybetmez); olmayan siparis null', async () => {
       const store = getStore();
       const route = routeFor(orderId(), 1, 640);

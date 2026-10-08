@@ -38,12 +38,18 @@ const ASSIGNED_AT = northOf(MARKET_LOCATION, 600);
 /** Sonraki ENDED yamasindan ONCE bir kez calisan kanca: iki islemin arasi. */
 class RacingRouteStore extends InMemoryRouteStore {
   private between: (() => Promise<void>) | undefined;
+  /** Sonraki ENDED yamasi hicbir sey yazmadan null doner (bilinmeyen sebep). */
+  refuseNextEnd = false;
 
   beforeNextEnd(hook: () => Promise<void>): void {
     this.between = hook;
   }
 
   override async update(route: Route, patch: RoutePatch): Promise<Route | null> {
+    if (patch.state === ROUTE_STATE.ENDED && this.refuseNextEnd) {
+      this.refuseNextEnd = false;
+      return null;
+    }
     const hook = this.between;
     if (patch.state === ROUTE_STATE.ENDED && hook !== undefined) {
       this.between = undefined;
@@ -215,6 +221,18 @@ describe('iptal ile teslim yarisi: tek sonuc (#177)', () => {
     expect((await stored()).deliveredAt).toBeUndefined();
     expect(await carrier()).toMatchObject({ status: COURIER_STATUS.IDLE, lastLocation: expected });
     expect((await carrier())?.lastLocation).not.toEqual(DELIVERY);
+  });
+
+  it('ENDED yamasi tutmadi ama rota ayni, ilerliyor ve teslimsiz: HATA, kurye kor birakilmaz (QA K9 N2)', async () => {
+    clock.set(NOW_MS + 30_000);
+    routes.refuseNextEnd = true;
+
+    await expect(release()).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+
+    expect(await carrier()).toMatchObject({ status: COURIER_STATUS.BUSY, currentOrderId: order });
+    expect((await stored()).state).toBe(ROUTE_STATE.MOVING);
+    // Tekrar deneme (order) bu kez kuryeyi hesaplanan konumda birakir.
+    expect((await release()).released).toBe(true);
   });
 
   it('teslimi kaydedilmis rotaya iptal ENDED YAZAMAZ: depo kosulu (bellek; Mongo sozlesmede)', async () => {
