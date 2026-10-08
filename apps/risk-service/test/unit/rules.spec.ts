@@ -83,7 +83,11 @@ describe('basket-anomaly', () => {
       }),
     );
 
-  it('ortalamanin tam 3 kati tetiklemez, 1 kurus fazlasi tetikler', async () => {
+  it('carpan 4 (kullanici karari 08.10); degisirse BILEREK degissin', () => {
+    expect(BASKET_ANOMALY_MULTIPLIER).toBe(4);
+  });
+
+  it('ortalamanin tam 4 kati tetiklemez, 1 kurus fazlasi tetikler', async () => {
     expect((await basket(AVERAGE * BASKET_ANOMALY_MULTIPLIER)).hit).toBe(false);
     expect((await basket(AVERAGE * BASKET_ANOMALY_MULTIPLIER + 1)).hit).toBe(true);
   });
