@@ -7,13 +7,13 @@
  */
 
 import { AppError, CURRENCY } from '@getir/core';
-import type { PricingRules } from '@getir/pricing';
 import { catalogV1, commonV1 } from '@getir/proto';
 import { callUnary } from '@getir/service-kit';
 import { credentials } from '@grpc/grpc-js';
 
 import type { CatalogPricing } from '../../application/catalog-pricing.js';
 import type { RequestScope } from '../../application/request-scope.js';
+import type { MarketTerms } from '../../domain/market-terms.js';
 import { ITEM_UNIT } from '../../domain/order-item.js';
 import type { ItemUnit } from '../../domain/order-item.js';
 import type { CatalogOffer } from '../../domain/price-draft.js';
@@ -41,7 +41,7 @@ export class GrpcCatalogPricing implements CatalogPricing {
     this.client = new catalogV1.CatalogServiceClient(address, credentials.createInsecure());
   }
 
-  async marketRules(marketId: string, scope: RequestScope): Promise<PricingRules> {
+  async marketRules(marketId: string, scope: RequestScope): Promise<MarketTerms> {
     const response = await callUnary<catalogV1.GetMarketRequest, catalogV1.GetMarketResponse>(
       (request, metadata, options, callback) =>
         this.client.getMarket(request, metadata, options, callback),
@@ -50,14 +50,27 @@ export class GrpcCatalogPricing implements CatalogPricing {
       outgoingOptions(scope, this.timeoutMs, this.resilience, IDEMPOTENT),
     );
 
-    const rules = response.market?.pricingRules;
+    const market = response.market;
+    if (market === undefined) {
+      throw AppError.internal('Catalog marketi dondurmedi', { details: { marketId } });
+    }
+    // Kapali marketin kurallari okunmaz (#154): kural verisi bozuk olsa da cevap
+    // NO_STORE olur, 500 degil. proto3: alan yoksa false (kapali); catalog her
+    // markette yazar.
+    if (!market.isOpen) {
+      return { isOpen: false };
+    }
+    const rules = market.pricingRules;
     if (rules === undefined) {
       throw AppError.internal('Catalog market kurallarini dondurmedi', { details: { marketId } });
     }
     return {
-      minBasketMinor: minorOf(rules.minBasket, 'minBasket'),
-      deliveryFeeMinor: minorOf(rules.deliveryFee, 'deliveryFee'),
-      freeDeliveryThresholdMinor: minorOf(rules.freeDeliveryThreshold, 'freeDeliveryThreshold'),
+      isOpen: true,
+      rules: {
+        minBasketMinor: minorOf(rules.minBasket, 'minBasket'),
+        deliveryFeeMinor: minorOf(rules.deliveryFee, 'deliveryFee'),
+        freeDeliveryThresholdMinor: minorOf(rules.freeDeliveryThreshold, 'freeDeliveryThreshold'),
+      },
     };
   }
 

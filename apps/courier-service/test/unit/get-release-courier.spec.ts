@@ -1,6 +1,8 @@
 /**
  * GetCourier (NOT_FOUND) ve ReleaseCourier (tekrar guvenli; T13.3: birakilan
- * kuryenin ilerleyen rotasi ENDED, kurye konumu degismez) use-case'leri.
+ * kuryenin ilerleyen rotasi ENDED; #174: kurye rotadaki hesaplanan konumda
+ * bosa cikar) use-case'leri. Iptal ile teslim yarisi:
+ * release-courier-races.spec.ts.
  */
 
 import { ERROR_CODES, fixedClock } from '@getir/core';
@@ -15,7 +17,14 @@ import { ROUTE_STATE } from '../../src/domain/route.js';
 import type { Route } from '../../src/domain/route.js';
 import { InMemoryCourierStore } from '../../src/infrastructure/memory/in-memory-courier-store.js';
 import { InMemoryRouteStore } from '../../src/infrastructure/memory/in-memory-route-store.js';
-import { courier, courierId, DELIVERY, NOW_MS, orderId } from '../support/couriers.js';
+import {
+  courier,
+  courierId,
+  DELIVERY,
+  MOVEMENT_RULE,
+  NOW_MS,
+  orderId,
+} from '../support/couriers.js';
 
 describe('createGetCourier', () => {
   it('kuryeyi doner; yoksa NOT_FOUND', async () => {
@@ -35,7 +44,11 @@ describe('createReleaseCourier', () => {
     const repository = new InMemoryCourierStore([
       courier(1, { status: COURIER_STATUS.BUSY, currentOrderId: order }),
     ]);
-    const release = createReleaseCourier({ couriers: repository, clock: fixedClock(NOW_MS) });
+    const release = createReleaseCourier({
+      couriers: repository,
+      rule: MOVEMENT_RULE,
+      clock: fixedClock(NOW_MS),
+    });
     const lines: LogLine[] = [];
 
     const first = await release(order, recordingLogger(lines));
@@ -75,11 +88,16 @@ describe('createReleaseCourier: rota (T13.3, M6 a)', () => {
       ...fields,
     });
     const lines: LogLine[] = [];
-    const release = createReleaseCourier({ couriers, routes, clock: fixedClock(RELEASE_MS) });
+    const release = createReleaseCourier({
+      couriers,
+      routes,
+      rule: MOVEMENT_RULE,
+      clock: fixedClock(RELEASE_MS),
+    });
     return { order, couriers, routes, lines, release };
   }
 
-  it('birakilan kuryenin ilerleyen rotasi ENDED (tick beklenmez); kurye konumu DEGISMEZ', async () => {
+  it('birakilan kuryenin ilerleyen rotasi ENDED (tick beklenmez); kurye rotadaki hesaplanan konumda (#174)', async () => {
     const { order, couriers, routes, lines, release } = await setup();
 
     expect(await release(order, recordingLogger(lines))).toEqual({
@@ -90,7 +108,11 @@ describe('createReleaseCourier: rota (T13.3, M6 a)', () => {
       state: ROUTE_STATE.ENDED,
       endedAt: new Date(RELEASE_MS),
     });
-    expect((await couriers.findById(courierId(1)))?.lastLocation).toEqual(courier(1).lastLocation);
+    // Tek noktali rota (kurye adreste): hesaplanan konum adres, ani birakma ani.
+    expect(await couriers.findById(courierId(1))).toMatchObject({
+      lastLocation: DELIVERY,
+      lastLocationAt: new Date(RELEASE_MS),
+    });
     expect(await routes.listMoving(10)).toEqual([]);
   });
 
@@ -107,14 +129,19 @@ describe('createReleaseCourier: rota (T13.3, M6 a)', () => {
     expect(await routes.findByOrder(order)).toEqual(before);
   });
 
-  it('rota yazilamazsa kurye yine birakilmis: WARN, tick bitirecek', async () => {
-    const { order, routes, lines, release } = await setup();
+  it('rota yazilamazsa HATA: kurye kor birakilmaz (teslimle iki sonuc olmasin, #177); cagri tekrar guvenli', async () => {
+    const { order, couriers, routes, lines, release } = await setup();
+    const update = routes.update.bind(routes);
     routes.update = () => Promise.reject(new Error('mongo zaman asimi'));
 
-    expect((await release(order, recordingLogger(lines))).released).toBe(true);
-    expect(lines.at(-1)).toMatchObject({
-      level: 'warn',
-      message: 'rota bitirilemedi; tick bitirecek',
+    await expect(release(order, recordingLogger(lines))).rejects.toThrow('mongo zaman asimi');
+    expect(await couriers.findById(courierId(1))).toMatchObject({
+      status: COURIER_STATUS.BUSY,
+      currentOrderId: order,
     });
+    expect((await routes.findByOrder(order))?.state).toBe(ROUTE_STATE.MOVING);
+
+    routes.update = update;
+    expect((await release(order, recordingLogger(lines))).released).toBe(true);
   });
 });

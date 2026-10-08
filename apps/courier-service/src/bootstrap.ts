@@ -108,6 +108,7 @@ export function buildCourierService(options: BootstrapOptions = {}): GrpcService
       releaseCourier: createReleaseCourier({
         couriers: repository,
         ...(movingRoutes === undefined ? {} : { routes: movingRoutes }),
+        rule: movement,
         clock,
       }),
       startRoute: createStartRoute(routes, repository),

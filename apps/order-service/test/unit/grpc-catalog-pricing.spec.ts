@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { ITEM_UNIT } from '../../src/domain/order-item.js';
 import { GrpcCatalogPricing } from '../../src/infrastructure/catalog/grpc-catalog-pricing.js';
+import { CLOSED_MARKET_ID } from '../support/fake-catalog-pricing.js';
 import {
   cutAfterReach,
   DEADLINE_TIMEOUT_MS,
@@ -69,15 +70,23 @@ const implementation = {
       callback(toServiceError(AppError.notFound('Market bulunamadi')));
       return;
     }
+    // Kapali market (#154): kural verisi YOK; istemci yine de NO_STORE'a gider, 500'e degil.
+    const closed = call.request.marketId === CLOSED_MARKET_ID;
     const respond = () =>
       callback(null, {
         market: {
-          ...catalogV1.Market.fromPartial({ id: call.request.marketId, name: 'Migros Jet' }),
-          pricingRules: {
-            minBasket: tryMoney(5_000),
-            deliveryFee: tryMoney(1_490),
-            freeDeliveryThreshold: tryMoney(25_000),
-          },
+          ...catalogV1.Market.fromPartial({
+            id: call.request.marketId,
+            name: 'Migros Jet',
+            isOpen: !closed,
+          }),
+          pricingRules: closed
+            ? undefined
+            : {
+                minBasket: tryMoney(5_000),
+                deliveryFee: tryMoney(1_490),
+                freeDeliveryThreshold: tryMoney(25_000),
+              },
         },
       });
     // Yavas market: cevap bekletilir (istemcinin sure siniri keser).
@@ -146,14 +155,19 @@ async function rejectionOf(promise: Promise<unknown>): Promise<AppError> {
 
 describe('GrpcCatalogPricing', () => {
   it('market kurallarini kurusa cevirir; requestId AYNEN iletilir', async () => {
-    const rules = await catalog.marketRules('mkt_migros-jet-moda', scope);
+    const terms = await catalog.marketRules('mkt_migros-jet-moda', scope);
 
-    expect(rules).toEqual({
-      minBasketMinor: 5_000,
-      deliveryFeeMinor: 1_490,
-      freeDeliveryThresholdMinor: 25_000,
+    expect(terms).toEqual({
+      rules: { minBasketMinor: 5_000, deliveryFeeMinor: 1_490, freeDeliveryThresholdMinor: 25_000 },
+      isOpen: true,
     });
     expect(seenRequestIds.at(-1)).toBe(scope.requestId);
+  });
+
+  it('kapali market (#154): okuma basarili, isOpen false; kurallar okunmaz (eksik kural 500 yapmaz)', async () => {
+    const terms = await catalog.marketRules(CLOSED_MARKET_ID, scope);
+
+    expect(terms).toEqual({ isOpen: false });
   });
 
   it('yalnizca aktif teklifleri doner; birim ve bos para birimi cevrilir', async () => {

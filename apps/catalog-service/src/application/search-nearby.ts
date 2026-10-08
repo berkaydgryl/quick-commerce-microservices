@@ -16,7 +16,7 @@ import type { NearbySearchResult } from '../domain/nearby-search.js';
 import type { OfferReader } from '../domain/offer-reader.js';
 
 export interface SearchNearbyDeps {
-  readonly markets: Pick<MarketReader, 'listMarketsByDistance'>;
+  readonly markets: Pick<MarketReader, 'listCoveringMarkets'>;
   readonly offers: Pick<OfferReader, 'searchActiveOffers'>;
 }
 
@@ -29,8 +29,9 @@ export type SearchNearby = (input: SearchNearbyInput) => Promise<readonly Nearby
 
 export function createSearchNearby(deps: SearchNearbyDeps): SearchNearby {
   return async ({ location, query }) => {
+    // ListNearbyMarkets ile AYNI kaynak, sinir ve domain kurali (#175).
     const markets = coveringMarkets(
-      await deps.markets.listMarketsByDistance(location, MARKET_CANDIDATE_LIMIT),
+      await deps.markets.listCoveringMarkets(location, MARKET_CANDIDATE_LIMIT),
     );
     if (markets.length === 0) {
       return [];

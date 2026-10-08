@@ -6,8 +6,9 @@
  * (istemci "Kapali" rozeti gosterir); siparis kapisi rezervasyondadir.
  *
  * T4.2'nin "yaricap icinde ama kapali -> STORE_CLOSED / yaricap disi ->
- * OUT_OF_RANGE" ayrimi TEK market icin burada yasar (evaluateCoverage);
- * rezervasyon (T11.4) secilen marketin hala hizmet verip vermedigini buna sorar.
+ * OUT_OF_RANGE" ayrimi TEK market icin burada yasar (evaluateCoverage). Kapali
+ * market kapisi order-service'tedir (#154, GetMarket.is_open); teslimat yaricapi
+ * rezervasyonda HENUZ sorulmuyor (bekleyen is): sorulacagi kural budur.
  */
 
 import type { Market } from './catalog.js';

@@ -2408,6 +2408,13 @@ paths:
         `409 PRICE_CHANGED` güncel toplamla döner. Kalem `sku` taşımaz; sunucu
         onu catalog teklifinden alır.
 
+        Kapalı market (`Market.isOpen` false, #154) taslak açmaz: `404 NO_STORE`,
+        ayrıntı yalnızca `reason: STORE_CLOSED`; stoğa dokunulmaz ve fiyat ya da
+        minimum sepet hatalarından önce gelir. `POST /v1/orders` marketi yeniden
+        okumaz: kilit süresi içinde kapanan markette sipariş kabul edilir. Bu 404
+        `Idempotency-Key` ile saklanır: market yeniden açılınca aynı anahtar eski
+        cevabı tekrar eder; yeniden denemede yeni anahtar üretilir.
+
         Stok taslak açılırken kilitlenir (T11.2; inventory, Redis + Lua). Cevapta
         kilidin bitiş anı (`expiresAt`) ve sunucunun saatiyle kalan saniye
         (`ttlSeconds`, T11.4) döner: istemci geri sayımı bundan başlatır. Sepet tek
@@ -2485,11 +2492,24 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
-          description: Market bulunamadı
+          description: |
+            Market bulunamadı (`NOT_FOUND`) ya da market kapalı (`NO_STORE`, ayrıntı
+            yalnızca `reason: STORE_CLOSED`; #154).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                marketClosed:
+                  summary: NO_STORE (market kapalı)
+                  value:
+                    success: false
+                    error:
+                      code: NO_STORE
+                      message: "Bu adrese şu anda teslimat yapamıyoruz."
+                      details:
+                        reason: STORE_CLOSED
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "409":
           description: |
             Fiyat değişti (`PRICE_CHANGED`, ayrıntıda güncel toplam). Aynı
