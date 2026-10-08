@@ -1,9 +1,13 @@
 /*
  * Kurye haritasi (F22): adres haritasinin olcusu ve kosesi. Isaretler token
  * renginde: kurye mor daire icinde beyaz motor (en ustte), market beyaz daire
- * mor cerceve, ev adres haritasinin mor pimi. Rota mor yumusak, kesik degil.
+ * mor cerceve, ev adres haritasinin mor pimi. Rota cizgisi yok. Ekran disi
+ * kurye gostergesi bu kabin icinde konumlanir; kap kendi yiginini kurar
+ * (isolation): Leaflet katmanlari ve gosterge pencerenin katmanlariyla yarismaz.
  */
 .c-tracking-map {
+  position: relative;
+  isolation: isolate;
   overflow: hidden;
   border-radius: var(--radius-md);
 }
@@ -13,13 +17,9 @@
   background: var(--bg-page);
 }
 
-/* Leaflet'in SVG yolu: renk ve kalinlik token'dan. */
-.c-tracking-map__route {
-  fill: none;
-  stroke: var(--color-brand-primary-soft);
-  stroke-width: var(--size-tracking-route);
-  stroke-linecap: round;
-  stroke-linejoin: round;
+/* Gostergeden sonra odak haritada: kap tasani kirptigi icin odak halkasi iceride. */
+.c-tracking-map__canvas:focus-visible {
+  outline-offset: calc(var(--focus-ring-width) * -1);
 }
 
 /* Isaretler ortalanir: Leaflet konum icin transform kullanir, burada kenar boslugu. */

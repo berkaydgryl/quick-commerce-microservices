@@ -1,9 +1,14 @@
-import type { GeoPoint, MapContent, OrderTracking } from '@getir/contracts';
+import type { CourierTrackingContent, GeoPoint, MapContent, OrderTracking } from '@getir/contracts';
 import L from 'leaflet';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { createBaseMap, prefersReducedMotion } from '../../../shared/map/base-map';
+import type { EdgeGeometry } from '../services/edge-watch';
+import { distanceText } from '../services/tracking-format';
 
+import { controlRects, tokenPx } from './map-geometry';
+
+import { OffscreenCourierLayer } from './OffscreenCourier';
 import styles from './TrackingMap.module.css';
 import { markerIcon } from './tracking-markers';
 
@@ -12,6 +17,11 @@ interface TrackingMapProps {
   /** Haritanin erisilebilir adi. */
   readonly label: string;
   readonly tracking: OrderTracking;
+  /** Ekran disi kurye gostergesinin metinleri (icerikten). */
+  readonly texts: Pick<
+    CourierTrackingContent,
+    'offscreenCourierLabel' | 'distanceLabel' | 'meterSuffix' | 'kilometerSuffix'
+  >;
 }
 
 /** Harita uc noktaya sigdirilirken kenardan birakilan bosluk (Leaflet piksel ister). */
@@ -21,17 +31,20 @@ const latLng = (point: GeoPoint): L.LatLngTuple => [point.lat, point.lng];
 
 /**
  * Kurye haritasi (F22): ortak kurulum (karo, atif; adres haritasiyla ayni).
- * Market -> adres rotasi mor yumusak cizgi; market ve ev isaretleri sabit.
- * Kurye isareti yalniz konum varken (paket alindiktan sonra; sozlesme
- * geregi TO_MARKET'ta konum yok) ve her yoklamada yerine kayar. Acilista uc
- * noktaya sigdirilir; sonra kullanicinin yakinlastirmasina dokunulmaz.
+ * Market ve ev isaretleri sabit; rota cizgisi YOK (duz cizgi binalarin
+ * ustunden gecerdi; kullanici istegi). Kurye isareti yalniz konum varken
+ * (paket alindiktan sonra; sozlesme geregi TO_MARKET'ta konum yok) ve her
+ * yoklamada yerine kayar. Acilista uc noktaya sigdirilir; sonra harita
+ * kendiliginden kaymaz (kullanicinin kaydirmasina ve yakinlastirmasina
+ * dokunulmaz): kurye gorunen alanin disindaysa kenarda gosterge (yon ve
+ * adrese kalan mesafe), basinca harita kuryeye kayar ve odak haritaya gecer.
  * Hareket azaltmada gecisler animasyonsuz.
  */
-export function TrackingMap({ map, label, tracking }: TrackingMapProps) {
+export function TrackingMap({ map, label, tracking, texts }: TrackingMapProps) {
   const container = useRef<HTMLDivElement>(null);
-  const instance = useRef<L.Map | null>(null);
+  const [leaflet, setLeaflet] = useState<L.Map | null>(null);
   const courier = useRef<L.Marker | null>(null);
-  // Rota, market ve adres bir siparis icin degismez: ilk cevaptan kurulur.
+  // Market ve adres bir siparis icin degismez: ilk cevaptan kurulur.
   const initial = useRef(tracking);
   // Harita yeniden kurulursa (icerik degisti) kurye son konumuyla geri gelir.
   const latest = useRef(tracking.location);
@@ -43,17 +56,13 @@ export function TrackingMap({ map, label, tracking }: TrackingMapProps) {
     if (element === null) {
       return undefined;
     }
-    const { route, marketLocation, deliveryLocation } = initial.current;
+    const { marketLocation, deliveryLocation } = initial.current;
     const location = latest.current;
-    const { leaflet, dispose } = createBaseMap(
+    const { leaflet: created, dispose } = createBaseMap(
       element,
       { tileUrl, attribution },
       { center: latLng(deliveryLocation), zoom, interactive: true, zoomAround: 'pointer' },
     );
-    L.polyline(route.map(latLng), {
-      className: styles['c-tracking-map__route'],
-      interactive: false,
-    }).addTo(leaflet);
     for (const [kind, point] of [
       ['market', marketLocation],
       ['home', deliveryLocation],
@@ -62,22 +71,22 @@ export function TrackingMap({ map, label, tracking }: TrackingMapProps) {
         icon: markerIcon(kind, markerClass(kind)),
         interactive: false,
         keyboard: false,
-      }).addTo(leaflet);
+      }).addTo(created);
     }
     const points = [
       marketLocation,
       deliveryLocation,
       ...(location === undefined ? [] : [location]),
     ];
-    leaflet.fitBounds(L.latLngBounds(points.map(latLng)), {
+    created.fitBounds(L.latLngBounds(points.map(latLng)), {
       padding: [FIT_PADDING_PX, FIT_PADDING_PX],
       animate: false,
     });
-    courier.current = location === undefined ? null : courierMarker(location).addTo(leaflet);
-    instance.current = leaflet;
+    courier.current = location === undefined ? null : courierMarker(location).addTo(created);
+    setLeaflet(created);
     return () => {
       dispose();
-      instance.current = null;
+      setLeaflet(null);
       courier.current = null;
     };
   }, [tileUrl, attribution, zoom]);
@@ -86,7 +95,6 @@ export function TrackingMap({ map, label, tracking }: TrackingMapProps) {
   const lat = tracking.location?.lat;
   const lng = tracking.location?.lng;
   useEffect(() => {
-    const leaflet = instance.current;
     if (leaflet === null) {
       return;
     }
@@ -100,11 +108,32 @@ export function TrackingMap({ map, label, tracking }: TrackingMapProps) {
       return;
     }
     courier.current.setLatLng([lat, lng]);
-    // Kurye gorunen alanin disina cikarsa harita onu izler.
-    if (!leaflet.getBounds().contains([lat, lng])) {
-      leaflet.panTo([lat, lng], { animate: !prefersReducedMotion() });
+  }, [leaflet, lat, lng]);
+
+  // Gosterge kaybolur: odak bosa dusmesin, haritaya (klavyeyle kaydirilir) gecer.
+  const focusMap = () => container.current?.focus({ preventScroll: true });
+  const showCourier = () => {
+    if (leaflet === null || lat === undefined || lng === undefined) {
+      return;
     }
-  }, [lat, lng]);
+    leaflet.panTo([lat, lng], { animate: !prefersReducedMotion() });
+    focusMap();
+  };
+  // Gostergenin olculeri: kenar payi bir kez olculur (token), kontroller her hesapta.
+  const insetPx = useRef<number | null>(null);
+  const geometry: EdgeGeometry = {
+    radius: () => (courier.current?.getElement()?.offsetWidth ?? 0) / 2,
+    inset: () => {
+      const element = container.current;
+      if (element === null) return 0;
+      insetPx.current ??= tokenPx(element, '--size-tracking-edge-inset');
+      return insetPx.current;
+    },
+    obstacles: () => (container.current === null ? [] : controlRects(container.current)),
+  };
+  // Teslimde mesafe yok (pencere de yazmaz).
+  const distance =
+    tracking.phase === 'DELIVERED' ? undefined : distanceText(tracking.remainingMeters, texts);
 
   return (
     <div className={styles['c-tracking-map']}>
@@ -113,6 +142,15 @@ export function TrackingMap({ map, label, tracking }: TrackingMapProps) {
         className={styles['c-tracking-map__canvas']}
         role="region"
         aria-label={label}
+      />
+      <OffscreenCourierLayer
+        leaflet={leaflet}
+        location={tracking.location}
+        geometry={geometry}
+        distance={distance}
+        texts={texts}
+        onShow={showCourier}
+        onLeave={focusMap}
       />
     </div>
   );

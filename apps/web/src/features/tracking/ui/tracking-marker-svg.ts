@@ -3,9 +3,21 @@
  * renk CSS'ten (currentColor, token). Leaflet'siz modul: birim testi dogrudan.
  */
 
-/** Motorlu kurye (yan gorunus): iki teker, govde, gidon. */
-const COURIER_SVG =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M8.5 17h7l2-6h-3"/><path d="M14 6h2.5l1 5"/><path d="M4 13h6l1.5 4"/></svg>';
+/**
+ * Motorlu kurye (yan gorunus): iki teker, govde, gidon. Tek kaynak: haritadaki
+ * isaret (metin) ve ekran disi gosterge (CourierGlyph, React) ayni cizimi kullanir.
+ */
+export const COURIER_GLYPH = {
+  wheels: [
+    { cx: 6, cy: 17, r: 2.5 },
+    { cx: 18, cy: 17, r: 2.5 },
+  ],
+  strokes: ['M8.5 17h7l2-6h-3', 'M14 6h2.5l1 5', 'M4 13h6l1.5 4'],
+} as const;
+
+const COURIER_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${COURIER_GLYPH.wheels
+  .map(({ cx, cy, r }) => `<circle cx="${cx}" cy="${cy}" r="${r}"/>`)
+  .join('')}${COURIER_GLYPH.strokes.map((d) => `<path d="${d}"/>`).join('')}</svg>`;
 
 /** Magaza (sepet panelinin StoreIcon cizimi): tente ve vitrin. */
 const MARKET_SVG =

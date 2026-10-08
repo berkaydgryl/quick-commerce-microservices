@@ -19,7 +19,7 @@ import type { CourierMapState } from '../../src/features/tracking/services/map-s
 import { OrderDetailView } from '../../src/pages/account/OrderDetailView';
 import { baseMapOptions } from '../../src/shared/map/map-options';
 
-import { css } from './css-test-support';
+import { css, tokens } from './css-test-support';
 import { ORDER } from './order-test-support';
 import { DELIVERED, TO_CUSTOMER, TO_MARKET } from './tracking-test-support';
 
@@ -169,12 +169,14 @@ describe('code-review duzeltmeleri (F22; saf fonksiyon ve render)', () => {
 });
 
 describe('harita isaretleri (F22)', () => {
-  it('kurye, market, ev ve rota siniflari tanimli (tanimsiz sinif yazilmaz)', () => {
+  it('kurye, market ve ev siniflari tanimli (tanimsiz sinif yazilmaz); rota cizgisi yok', () => {
     const source = css('features/tracking/ui/TrackingMap.module.css');
 
-    for (const name of ['marker', 'marker--courier', 'marker--market', 'marker--home', 'route']) {
+    for (const name of ['marker', 'marker--courier', 'marker--market', 'marker--home']) {
       expect(source, name).toContain(`.c-tracking-map__${name} {`);
     }
+    expect(source).not.toContain('__route');
+    expect(tokens()).not.toContain('--size-tracking-route');
   });
 });
 

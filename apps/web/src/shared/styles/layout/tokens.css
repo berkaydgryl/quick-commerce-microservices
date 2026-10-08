@@ -90,10 +90,13 @@
   --size-map-pin: 2.75rem;
   --size-map-pin-icon: 1.25rem;
 
-  /* Kurye haritasi (F22): kurye ve market isareti, rota kalinligi. Harita
-     adres haritasinin olcusunde (--size-address-map), ev pimi --size-map-pin. */
+  /* Kurye haritasi (F22): kurye ve market isareti. Harita adres haritasinin
+     olcusunde (--size-address-map), ev pimi --size-map-pin. Ekran disi kurye
+     gostergesi: haritanin kenarina en yakin merkezi (yarim yukseklik + bosluk)
+     ve yonu gosteren uc. */
   --size-tracking-marker: 2.25rem;
-  --size-tracking-route: 0.25rem;
+  --size-tracking-edge-inset: 2.75rem;
+  --size-tracking-pointer: 0.375rem;
 
   /* Market listesi (T11.12; referans getircarsi): sol menunun kucuk gorseli
      ve oku, kart kapaginin orani, kapaktaki rozet ya da 2:1 logo (sol ortada,

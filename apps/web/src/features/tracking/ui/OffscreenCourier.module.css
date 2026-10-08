@@ -1,0 +1,90 @@
+/*
+ * Ekran disi kurye gostergesi: haritadaki kurye isaretinin kendisi (gorunusu
+ * TrackingMap.module.css'teki c-tracking-map__marker--courier sinifindan)
+ * haritanin kenarina yaslanir. Kenardaki uc kuryenin yonunu gosterir; altinda
+ * adrese kalan mesafe. Kenar noktasi ve aci Leaflet'in FIZIKSEL pikseli
+ * (soldan, ustten): mantiksal ozellik (inline-start) degil left/top. Gosterge
+ * kenardan token kadar iceride; Leaflet kontrollerinin (yakinlastirma, atif)
+ * ALTINDA kalir. Kendiliginden hareket yok: yalniz basinca harita kayar.
+ */
+.c-offscreen-courier {
+  position: absolute;
+  top: clamp(
+    var(--size-tracking-edge-inset),
+    var(--c-offscreen-courier-y),
+    calc(100% - var(--size-tracking-edge-inset))
+  );
+  left: clamp(
+    var(--size-tracking-edge-inset),
+    var(--c-offscreen-courier-x),
+    calc(100% - var(--size-tracking-edge-inset))
+  );
+  z-index: var(--z-map-indicator);
+  display: grid;
+  justify-items: center;
+  gap: calc(var(--size-tracking-pointer) + var(--space-1));
+  min-width: var(--size-touch-min);
+  min-height: var(--size-touch-min);
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-md);
+  transform: translate(-50%, -50%);
+}
+
+/* Olcu ve bicim; renk, zemin, cerceve ve golge haritadaki kurye isaretinin sinifindan. */
+.c-offscreen-courier__disc {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--size-tracking-marker);
+  height: var(--size-tracking-marker);
+  border-radius: var(--radius-pill);
+}
+
+.c-offscreen-courier__disc svg {
+  width: 60%;
+  height: 60%;
+}
+
+/* Yon ucu: dairenin merkezinde doner; 0 derecede sagi gosterir (fiziksel). */
+.c-offscreen-courier__pointer {
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--c-offscreen-courier-angle));
+}
+
+.c-offscreen-courier__pointer::after {
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  content: '';
+  border: var(--size-tracking-pointer) solid transparent;
+  border-left-color: var(--color-brand-primary);
+  transform: translateY(-50%);
+}
+
+.c-offscreen-courier__distance {
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-brand-primary);
+  white-space: nowrap;
+  background: var(--bg-surface);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-surface);
+}
+
+/* "Kalan mesafe": yalniz ekran okuyucu (dugmenin aciklamasi). */
+.c-offscreen-courier__sr {
+  position: absolute;
+  width: var(--size-visually-hidden);
+  height: var(--size-visually-hidden);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
