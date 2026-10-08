@@ -49,6 +49,31 @@ kimliği yazılmaz; gerekçeler kişisel veri içermez. İndeksler: `userId+crea
 Eşikler yalnızca `domain/bands.ts`'te; proto bandın **adını** taşır. Eski eşiklerde (86+) ağırlık
 toplamı tam 100 olduğundan kritik banda altı kuralın hepsi gerekiyordu; şimdi beşi ya da **veto**.
 
+## Yapışkan bant (#164)
+
+Bant, kullanıcının son **15 dk**'daki (`RECENT_BAND_WINDOW_MS`, tek yer) değerlendirmelerinin en yüksek
+bandının **altına inmez**; skor değişmez. "MEDIUM'dan sonra iptal et, hemen tekrar dene, LOW gel, 3DS'siz
+öde" yolu kapanır (bütün bantlar: HIGH/REVIEW ve CRITICAL de 15 dk yapışır).
+
+- Geçmiş kaydın bandı kaydedilen (yükseltilmiş olabilir) banttan değil **skorundan** (ve vetosundan)
+  türetilir: yapışkanlık kendini uzatmaz. 10 dk arayla üç sipariş (MEDIUM, LOW, LOW skorla) → ikinci
+  MEDIUM, üçüncü LOW.
+- Yükselirse `rules[]`'a puansız `recent-band` isabeti girer; günlüğe kaynak değerlendirmenin kimliği
+  ve zamanı yazılır (IP/cihaz yok).
+- Okuma penceredeki bandı en yüksek **tek** kaydı alır (veto önce, sonra skor; eşitlikte en yeni):
+  "en yeni N kayıt" değil, düşük skorlu kayıtlarla (örneğin reddedilen kapıda ödeme denemeleri) yüksek
+  kayıt tahliye edilemez. Kurallarla **paralel** koşar ve **150 ms** ile sınırlıdır
+  (`RECENT_BAND_READ_TIMEOUT_MS`; `userId_createdAt` indeksi; alttaki sorguyu veritabanı düzeyindeki işlem
+  sınırı da keser). Aşılır ya da düşerse yapışkanlık o değerlendirmede uygulanmaz, WARN yazılır; karar yine döner
+  (fail-open, kayıt yolunun süre sınırıyla aynı ilke, #167).
+- Bedel (KABUL): 3DS'i başarıyla geçen kullanıcı 15 dk içinde yeni siparişte yine 3DS görür (risk
+  ödeme sonucunu bilmez). Yapışkan MEDIUM 15 dk boyunca kapıda ödemeyi kapatır ve rezervasyon kilidini
+  kısaltır (T11.3); yapışkan HIGH her yeni siparişi REVIEW'a gönderir; yapışkan CRITICAL reddeder.
+- KABUL: geçmiş kaydın bandı okuma anındaki eşiklerle (`bands.ts`) skordan türetilir; eşikler bir
+  dağıtımda değişirse son 15 dk'nın kayıtları yeni eşiklerle okunur (pencere kısa, eşik değişimi seyrek).
+- Donuk Mongo'da okuma 150 ms'de bırakılır ama sürücüde işlem sınırına (2 sn) kadar uçuşta kalır ve bir
+  bağlantı tutar: kayıt (insert) başka bağlantıya gider (#181'e yazıldı).
+
 ## Kesin kural (veto)
 
 Bir kural `veto: true` isteyebilir, ama yalnızca config'te `"severity": "block"` olan kuralın isteği

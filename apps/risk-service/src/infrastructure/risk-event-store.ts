@@ -8,14 +8,15 @@ import { applyMigrations, connectMongo } from '@getir/mongo-kit';
 import type { MongoEnv } from '@getir/mongo-kit';
 
 import { SERVICE_NAME } from '../config/constants.js';
-import type { RiskEventRepository } from '../domain/risk-event-repository.js';
+import type { RecentRiskEvents, RiskEventRepository } from '../domain/risk-event-repository.js';
 import { MIGRATIONS } from '../migrations/index.js';
 import { InMemoryRiskEventStore } from './memory/in-memory-risk-event-store.js';
 import { RiskEventMongoStore } from './mongo/risk-event-mongo-store.js';
 import { RiskEventsCollection } from './mongo/risk-events-collection.js';
 
 export interface RiskEventStore {
-  readonly repository: RiskEventRepository;
+  /** Kayit + yakin okuma (#164); iki depo da ikisini uygular. */
+  readonly repository: RiskEventRepository & RecentRiskEvents;
   readonly name: 'bellek (MOCK)' | 'mongo';
   /** Kapanista EN SON cagrilir (once cagrilar, sonra veritabani). */
   close(): Promise<void>;

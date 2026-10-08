@@ -21,7 +21,10 @@ import { buildRiskService } from '../../src/bootstrap.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
 import type { RiskEventDocument } from '../../src/infrastructure/mongo/documents.js';
 import { RiskEventMongoStore } from '../../src/infrastructure/mongo/risk-event-mongo-store.js';
-import { RiskEventsCollection } from '../../src/infrastructure/mongo/risk-events-collection.js';
+import {
+  highestRecentQuery,
+  RiskEventsCollection,
+} from '../../src/infrastructure/mongo/risk-events-collection.js';
 import { PERSONA_NOW, PERSONAS } from '../support/personas.js';
 import { toProtoContext } from '../support/proto-context.js';
 import { describeRiskEventStoreContract } from '../support/risk-event-store-contract.js';
@@ -63,6 +66,22 @@ describe('indeksler', () => {
     expect(byName('orderId_createdAt')?.partialFilterExpression).toEqual({
       orderId: { $exists: true },
     });
+  });
+
+  it('yakin bant sorgusu (#164) userId_createdAt indeksiyle suzer; COLLSCAN yok', async () => {
+    const { filter, sort } = highestRecentQuery('usr_explain', new Date(PERSONA_NOW));
+
+    const plan = await connection.db
+      .collection(COLLECTIONS.RISK_EVENTS)
+      .find(filter)
+      .sort(sort)
+      .limit(1)
+      .explain('queryPlanner');
+
+    const winning = JSON.stringify((plan['queryPlanner'] as { winningPlan?: unknown }).winningPlan);
+    expect(winning).toContain('IXSCAN');
+    expect(winning).toContain('userId_createdAt');
+    expect(winning).not.toContain('COLLSCAN');
   });
 });
 
