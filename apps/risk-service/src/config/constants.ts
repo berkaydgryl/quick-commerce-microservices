@@ -22,6 +22,26 @@ export const DEFAULT_MONGO_DB = 'getir_risk';
 export const RULE_TIMEOUT_MS = 200;
 
 /**
+ * risk_events kaydinin en fazla beklenecegi sure (#167). Kurallar paralel
+ * kosar (en fazla RULE_TIMEOUT_MS), ardindan kayit: karar en kotu ~400 ms'de
+ * doner, order'in risk butcesinin (RISK_CALL_TIMEOUT_MS, 1 sn) altinda. Sinir
+ * asilinca kayit beklenmez (WARN + metrik), karar yine doner.
+ */
+export const RISK_EVENT_RECORD_TIMEOUT_MS = 200;
+
+/**
+ * Kapanista ucustaki kayitlarin en fazla beklenecegi sure (#167): gRPC
+ * durduktan sonra, Mongo kapanmadan once. Mongo'nun islem siniri
+ * (MONGO_OPERATION_TIMEOUT_MS) kadar: o surede kayit ya biter ya surucu keser.
+ * Ust sinir kapanis kancasinin butcesinden turetilir (kanca - Mongo kapanis
+ * payi; infrastructure/record-shutdown.ts). Mongo yoksa (MOCK) varsayilan.
+ * Bitmeyen kayit `failed` sayilir.
+ */
+export const RISK_EVENT_DRAIN_DEFAULT_MS = 2_000;
+/** Kapanis kancasinda Mongo'nun kapanmasina ayrilan pay (ms). */
+export const RISK_STORE_CLOSE_RESERVE_MS = 2_000;
+
+/**
  * Yapiskan bant (#164): yeni degerlendirmenin bandi, kullanicinin son bu kadar
  * suredeki degerlendirmelerinin SKORDAN gelen en yuksek bandinin altina inmez.
  * Pencereyi degistirmek icin TEK YER burasidir.

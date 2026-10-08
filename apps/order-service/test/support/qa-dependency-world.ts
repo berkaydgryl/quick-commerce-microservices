@@ -32,6 +32,7 @@ import {
 } from '../../../inventory-service/test/support/qa-inventory-process.js';
 import type { RunningProcess } from '../../../inventory-service/test/support/qa-inventory-process.js';
 import { buildPaymentService } from '../../../payment-service/src/bootstrap.js';
+import { PendingRecords } from '../../../risk-service/src/application/pending-records.js';
 import { buildRiskService } from '../../../risk-service/src/bootstrap.js';
 import type { Dependency } from '../../src/infrastructure/grpc-resilience.js';
 import { startFaultyServer } from './qa-grpc-faults.js';
@@ -58,7 +59,9 @@ export function useDependencies(): () => Dependencies {
     }
     const results = await Promise.allSettled([
       startFaultyServer(buildCatalogService({ logger: silentLogger })),
-      startFaultyServer(buildRiskService({ logger: silentLogger })),
+      startFaultyServer(
+        buildRiskService({ logger: silentLogger, pendingRecords: new PendingRecords() }),
+      ),
       startFaultyServer(buildPaymentService({ logger: silentLogger })),
       startFaultyServer(buildInventoryService({ logger: silentLogger })),
       startFaultyServer(buildCourierService({ logger: silentLogger })),

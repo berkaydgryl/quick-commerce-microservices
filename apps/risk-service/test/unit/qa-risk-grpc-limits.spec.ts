@@ -27,6 +27,7 @@ import type { CallResult, TestGrpcServer, UnaryCall } from '@getir/service-kit/t
 import type { MethodDefinition } from '@grpc/grpc-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { PendingRecords } from '../../src/application/pending-records.js';
 import { buildRiskService } from '../../src/bootstrap.js';
 import type { GeoPoint, RiskContext } from '../../src/domain/risk-context.js';
 import { InMemoryRiskEventStore } from '../../src/infrastructure/memory/in-memory-risk-event-store.js';
@@ -45,7 +46,7 @@ let users = 0;
 beforeAll(async () => {
   server = await startTestGrpcServer({
     serviceName: 'qa-risk-sinirlar',
-    services: [buildRiskService({ events: store, clock })],
+    services: [buildRiskService({ events: store, clock, pendingRecords: new PendingRecords() })],
   });
 });
 

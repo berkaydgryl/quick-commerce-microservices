@@ -23,6 +23,7 @@ import { startTestGrpcServer } from '@getir/service-kit/testing';
 import type { TestGrpcServer } from '@getir/service-kit/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { PendingRecords } from '../../src/application/pending-records.js';
 import { buildRiskService } from '../../src/bootstrap.js';
 import { riskRulesConfig } from '../../src/config/risk-rules.js';
 import type { RiskContext } from '../../src/domain/risk-context.js';
@@ -63,7 +64,9 @@ let orders = 0;
 beforeAll(async () => {
   server = await startTestGrpcServer({
     serviceName: 'qa-risk-kurallar',
-    services: [buildRiskService({ events, clock: fixedClock(NOW) })],
+    services: [
+      buildRiskService({ events, clock: fixedClock(NOW), pendingRecords: new PendingRecords() }),
+    ],
   });
 });
 
