@@ -272,6 +272,14 @@ describe('CreateOrder - telafi (P3: PAID yazilamazsa iade)', () => {
     const error = vi.fn();
     const logger: Logger = { ...silentLogger, error, child: () => logger };
     const brokenOutbox = { append: () => Promise.reject(new Error('mongo kapali')) };
+    // #185 N5: iptal edilmis siparise komut isaretle ayni yazimda gider; son
+    // careye dusmek icin o yazim da duser (Mongo'da ikisi ayni transaction).
+    const update = repository.update.bind(repository);
+    vi.spyOn(repository, 'update').mockImplementation((order, version, events) =>
+      order.refund === undefined
+        ? update(order, version, events)
+        : Promise.reject(new Error('mongo kapali')),
+    );
     const withBrokenOutbox = createCreateOrder({
       repository,
       history: repository,

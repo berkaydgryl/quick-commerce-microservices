@@ -13,10 +13,25 @@
  *
  * KAPSAM: outbox satirlari silinmez (TTL indeksi yok, yayinci yalnizca
  * publishedAt isaretler; budama ADR-04'te kabul edilen borc). Komutu outbox'a
- * HIC yazilmamis iadeler kurtarilamaz: siparisi baska yolun iptal ettigi ve
- * dogrudan iadesi basarili olan eski kayitlar (refund-step.ts, komut yalnizca
- * dogrudan iade basarisizsa yazilir). Onlarin izi payment'tadir; order'in
- * gocu baska servisin verisini okumaz (ADR-05).
+ * HIC yazilmamis iadeler kurtarilamaz: #166 (3a854ab) oncesi siparisi baska
+ * yolun iptal ettigi ve dogrudan iadesi basarili olan kayitlar (komut yalnizca
+ * dogrudan iade basarisizsa yazilirdi) ve iptal komutuyla (payment.cancel_requested,
+ * #134) payment-svc'de yapilan iadeler. Calisan kodun yazdigi komutsuz
+ * isaretler (payment_refunded) de down'dan sonra geri gelmez. Onlarin izi
+ * payment'tadir; order'in gocu baska servisin verisini okumaz (ADR-05).
+ *
+ * Toplama (#185 N7): tarihi bicimsiz satir ($type date disi) okunmaz; BSON
+ * sirasinda tarihten once gelir ve en eski sayilip siparisi atlatirdi. En eski
+ * komut grup icinde secilir ($top; global $sort yok). Gecerli veride cikti
+ * onceki toplamayla aynidir (migration-0003.spec.ts esitlik testi). ADR-19
+ * istisnasi: uygulanmis goc degisti; 0003'u zaten kosmus veritabani bunu almaz,
+ * fark yalniz tarihi bicimsiz satirda (kod occurredAt'i hep Date yazar).
+ *
+ * Kilit omru: kosucu goc kilidini (DEFAULT_MIGRATION_LOCK_TTL_MS, 10 dk) goclerin
+ * ARASINDA yeniler, goc icinde degil. Outbox'ta topic indeksi yok: toplama tum
+ * outbox'u bir kez tarar; 10 dk'yi asacak buyuklukte outbox'ta kilit baska
+ * ornege gecebilir: ikinci ornek 0003'u yeniden kosar (yazimlar zararsiz), sonra
+ * biten ornek goc kaydini ({_id: 3}) eklerken hata alir.
  *
  * Mantik o gunun DONMUS kopyasidir (ADR-19). Transaction'siz: outbox buyuk
  * olabilir (transaction sinirlari); her adim yeniden calistirilabilir.
@@ -53,17 +68,27 @@ const refundRowSchema = z.object({
   requestedAt: z.date(),
 });
 
-/** Siparis basina en eski iade komutu: gerekce ve an. */
-const EARLIEST_REFUND_PER_ORDER: Document[] = [
-  { $match: { topic: REFUND_REQUESTED, 'payload.reason': { $type: 'string' } } },
-  { $sort: { occurredAt: 1, _id: 1 } },
+/** Siparis basina en eski iade komutu: gerekce ve an (esitlikte _id; belirlenimci). */
+export const EARLIEST_REFUND_PER_ORDER: Document[] = [
+  {
+    $match: {
+      topic: REFUND_REQUESTED,
+      'payload.reason': { $type: 'string' },
+      occurredAt: { $type: 'date' },
+    },
+  },
   {
     $group: {
       _id: '$aggregateId',
-      reason: { $first: '$payload.reason' },
-      requestedAt: { $first: '$occurredAt' },
+      earliest: {
+        $top: {
+          sortBy: { occurredAt: 1, _id: 1 },
+          output: { reason: '$payload.reason', requestedAt: '$occurredAt' },
+        },
+      },
     },
   },
+  { $project: { reason: '$earliest.reason', requestedAt: '$earliest.requestedAt' } },
 ];
 
 async function up(context: MigrationContext): Promise<void> {

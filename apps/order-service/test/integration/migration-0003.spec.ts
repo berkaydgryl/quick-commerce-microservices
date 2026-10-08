@@ -23,7 +23,7 @@ import { toOrderDocument } from '../../src/infrastructure/mongo/mappers.js';
 import { OrderMongoStore } from '../../src/infrastructure/mongo/order-mongo-store.js';
 import { OrdersCollection } from '../../src/infrastructure/mongo/orders-collection.js';
 import { OutboxCollection } from '../../src/infrastructure/mongo/outbox-collection.js';
-import { refundMark } from '../../src/migrations/0003-iade-isareti.js';
+import { EARLIEST_REFUND_PER_ORDER, refundMark } from '../../src/migrations/0003-iade-isareti.js';
 import { MIGRATIONS } from '../../src/migrations/index.js';
 import { sampleDraftInput } from '../support/order-builders.js';
 import { TO_PAID } from '../support/order-store-fixtures.js';
@@ -201,5 +201,67 @@ describe('goc 0003 iade-isareti', () => {
       refund: { reason: 'elle', requestedAt: at(50) },
       inHistory: true,
     });
+  });
+});
+
+/** #185 N7 oncesi toplama (donmus kopya): global $sort + $first, tarih denetimi yok. */
+const EARLIEST_REFUND_PER_ORDER_BEFORE_N7: Document[] = [
+  { $match: { topic: 'payment.refund_requested', 'payload.reason': { $type: 'string' } } },
+  { $sort: { occurredAt: 1, _id: 1 } },
+  {
+    $group: {
+      _id: '$aggregateId',
+      reason: { $first: '$payload.reason' },
+      requestedAt: { $first: '$occurredAt' },
+    },
+  },
+];
+
+async function aggregateSorted(collection: string, pipeline: Document[]): Promise<Document[]> {
+  const rows = await connection.db.collection<Document>(collection).aggregate(pipeline).toArray();
+  return rows.sort((left, right) => String(left['_id']).localeCompare(String(right['_id'])));
+}
+
+describe('goc 0003 toplamasi: N7 oncesi ve sonrasi (#185)', () => {
+  it('gecerli veride ayni cikti (en eski komut, esitlikte _id)', async () => {
+    const before = await aggregateSorted(COLLECTIONS.OUTBOX, EARLIEST_REFUND_PER_ORDER_BEFORE_N7);
+    const after = await aggregateSorted(COLLECTIONS.OUTBOX, EARLIEST_REFUND_PER_ORDER);
+
+    expect(after).toEqual(before);
+    expect(after.length).toBeGreaterThan(0);
+  });
+
+  it('esit anli iki komut: ikisi de _id sirasiyla ayni komutu secer', async () => {
+    const orderId = newId(ID_PREFIX.ORDER);
+    const rows: Document[] = [
+      { ...refundRow(orderId, 30, { reason: CROSS_REASON }), _id: 'evt_b' },
+      { ...refundRow(orderId, 30, { reason: LAPSED_REASON }), _id: 'evt_a' },
+    ];
+    await connection.db.collection<Document>('outbox_n7_esit').insertMany(rows);
+
+    const before = await aggregateSorted('outbox_n7_esit', EARLIEST_REFUND_PER_ORDER_BEFORE_N7);
+    const after = await aggregateSorted('outbox_n7_esit', EARLIEST_REFUND_PER_ORDER);
+
+    expect(after).toEqual(before);
+    expect(after).toEqual([{ _id: orderId, reason: LAPSED_REASON, requestedAt: at(30) }]);
+  });
+
+  it('tarihi bicimsiz satir artik en eski sayilmaz (oncesinde siparis atlanirdi)', async () => {
+    const orderId = newId(ID_PREFIX.ORDER);
+    await connection.db
+      .collection<Document>('outbox_n7_tarih')
+      .insertMany([
+        { ...refundRow(orderId, 5, { reason: CROSS_REASON }), occurredAt: '2026-10-08T08:05:00Z' },
+        refundRow(orderId, 20, { reason: LAPSED_REASON }),
+      ]);
+
+    const before = await aggregateSorted('outbox_n7_tarih', EARLIEST_REFUND_PER_ORDER_BEFORE_N7);
+    const after = await aggregateSorted('outbox_n7_tarih', EARLIEST_REFUND_PER_ORDER);
+
+    // BSON sirasinda metin tarihten once gelir: eski toplama metni secer, zod onu atlar.
+    expect(before).toEqual([
+      { _id: orderId, reason: CROSS_REASON, requestedAt: '2026-10-08T08:05:00Z' },
+    ]);
+    expect(after).toEqual([{ _id: orderId, reason: LAPSED_REASON, requestedAt: at(20) }]);
   });
 });

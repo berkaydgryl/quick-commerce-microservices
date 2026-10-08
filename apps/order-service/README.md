@@ -94,28 +94,37 @@ derlemede karar ister):
   taranmaz.
 - **Kenar (kabul):** `REVIEW`'dan onaylanıp ödeme bekleyen sipariş (`RESERVED`,
   `AWAITING_PAYMENT`) listeden çıkar, ödenince geri gelir.
-- **İade işareti (#166):** parası alınıp `PAID` olmadan iptal edilen sipariş (kilidi düşmüş ödeme)
-  zaman çizelgesinde `PAID` taşımaz; kalıcı `refund` işareti (gerekçe, an; tutar yok) onu geçmişte
-  tutar (`domain/order-refund.ts`). Siparişi kendisi iptal eden kapatma (`lapsed-order.ts`)
-  işareti iptal ve iade komutuyla aynı yazımda yazar. Siparişi başka yol iptal etmiş, para sonra
-  iade edilmişse (`refund-step.ts`: `refundIfCancelledElsewhere`, `markPaid` çakışması) iadeden ya
-  da komuttan sonra sürüm kontrollü ayrı yazım (`refund-record.ts`, en çok 3 deneme; durum dışı
-  güncelleme, sürüm +1, olay yok). İade de komut da olmadıysa işaret yazılmaz. Ayrı yazım
-  başarısızsa iade geri alınmaz, sipariş gizli kalır, WARN (yalnızca kimlik ve gerekçe). İade
-  sipariş açıkken yapıldıysa (ödeme sırasında sürüm çakışması) işareti, kilidi dolunca süpürücünün
-  kapatması yazar: ödeme kaydı `REFUNDED` bulunur (gerekçe `payment_refunded`, komut ve iade yok).
+- **İade işareti (#166, #185):** parası alınıp `PAID` olmadan iptal edilen sipariş (kilidi düşmüş
+  ödeme) zaman çizelgesinde `PAID` taşımaz; kalıcı `refund` işareti (gerekçe, an; tutar yok) onu
+  geçmişte tutar (`domain/order-refund.ts`). Aynı yazımda: siparişi kendisi iptal eden kapatma
+  (`stockless-close.ts`) işareti iptal ve iade komutuyla; kullanıcı iptali ödeme kaydı `REFUNDED`
+  ise işareti iptalle (`cancel-order.ts`; gerekçe `payment_refunded`, komut yok). Siparişi başka yol
+  iptal etmiş, para sonra iade edilmişse (`refund-step.ts`: `refundIfCancelledElsewhere`, `markPaid`
+  çakışması; `refund-record.ts`, en çok 3 deneme): doğrudan iade olduysa ayrı, sürüm kontrollü
+  yazım (durum dışı güncelleme, sürüm +1, olay yok); olmadıysa işaret ve iade komutu TEK yazımda
+  (aynı transaction); o da olmazsa komut tek başına (önce para), işaretsiz. İade de komut da
+  olmadıysa işaret yazılmaz. İşaret yazılamazsa iade geri alınmaz, sipariş gizli kalır, WARN
+  (yalnızca kimlik ve gerekçe). İade sipariş açıkken yapıldıysa (ödeme sırasında sürüm çakışması)
+  işareti, kilidi dolunca süpürücünün kapatması yazar: ödeme kaydı `REFUNDED` bulunur (gerekçe
+  `payment_refunded`, komut ve iade yok); kapatma çakışır ve sipariş başka yolda iptal edildiyse
+  işaret yine yazılır.
 - **Göç 0002 (`gecmis-gorunurlugu`):** alan öncesi kayıtlara `inHistory`'yi durum ve zaman
   çizelgesinden yazar (o günün kuralının donmuş kopyası, ADR-19); alanı olana dokunmaz. `down` alanı
   ve kısmi indeksi kaldırır. Transaction'sız ve yeniden çalıştırılabilir (indeks düşürmek
   transaction'da yapılamaz).
 - **Göç 0003 (`iade-isareti`):** #166 öncesi kayıtlara işareti outbox'taki iade komutundan
-  (`payment.refund_requested`, sipariş başına EN ESKİSİ) yazar; yalnızca `CANCELLED` ve işaretsiz
-  siparişe, tek `$set` (`refund` + `inHistory: true`). `down` işareti siler ve `inHistory`'yi 0002
-  kuralına döndürür. Transaction'sız, yeniden çalıştırılabilir. Outbox satırları silinmez (TTL
+  (`payment.refund_requested`, sipariş başına EN ESKİSİ; tarihi biçimsiz satır okunmaz, en eski komut
+  grup içinde seçilir, #185 N7) yazar; yalnızca `CANCELLED` ve işaretsiz siparişe, tek `$set`
+  (`refund` + `inHistory: true`). Transaction'sız, yeniden çalıştırılabilir. Göç kilidi göçler
+  arasında yenilenir; outbox tek geçişte taranır (topic indeksi yok). Outbox satırları silinmez (TTL
   indeksi yok, yayıncı yalnızca `publishedAt` işaretler; budama ADR-04 borcu): kilidi düşmüş ödemenin
-  komutu her zaman vardır. **Kurtarılamayan:** siparişi başka yolun iptal ettiği ve doğrudan iadesi
-  başarılı olan eski kayıtlar (komut yalnızca doğrudan iade başarısızsa yazılırdı); izleri payment'ta,
-  order'ın göçü başka servisin verisini okumaz (ADR-05).
+  komutu her zaman vardır. **`down` kayıplıdır:** işareti siler ve `inHistory`'yi 0002 kuralına
+  döndürür; çalışan kodun yazdığı işaretler de silinir ve komutu olmayanlar (`payment_refunded`,
+  doğrudan iadesi başarılı çapraz yol) `up` ile geri gelmez. **Kurtarılamayan:** #166 (3a854ab) öncesi
+  siparişi başka yolun iptal ettiği ve doğrudan iadesi başarılı olan kayıtlar (komut yalnızca doğrudan
+  iade başarısızsa yazılırdı) ve iptal komutuyla (`payment.cancel_requested`, #134) payment-svc'de
+  yapılan iadeler (outbox'ta iade komutu yok); izleri payment'ta, order'ın göçü başka servisin
+  verisini okumaz (ADR-05).
 - **Sözleşme:** tel biçimi (`order.proto`) değişmedi; değişen, listenin kapsamı. İşaret bugün
   istemciye taşınmaz: gateway'in `refunded` bayrağı yalnızca `PAID` kaydına bakar, bu siparişler
   "İptal edildi" görünür (proto + gateway ayrı zincir). Gateway'in kendi
@@ -123,9 +132,9 @@ derlemede karar ister):
 - **Bilinen sınır (dağıtım):** göç, eski kopyalar kapandıktan sonraki açılışı varsayar. Eski sürümlü
   bir kopya göçten sonra siparişi bütün belge olarak yeniden yazarsa (`replaceOne`) `inHistory`
   silinir ve sipariş geçmişte görünmez; son durumdaki (`DELIVERED`, iptal) sipariş bir daha
-  yazılmadığı için bu KALICIDIR. Onarım: yeni kodla `migrate down` + `migrate up` (alanı olmayanları
-  doldurur), sonra servis yeniden başlatılır (kısmi indeks açılışta kurulur). Bugün tek order
-  kopyası çalışır; çok kopyalı dağıtımda önce eski kopyalar kapanır.
+  yazılmadığı için bu KALICIDIR. Onarım için `migrate down` + `migrate up` KULLANILMAZ: 0003'ün
+  `down`'ı çalışan kodun yazdığı iade işaretlerini de siler ve `up` hepsini geri getirmez (yukarıda).
+  Bugün tek order kopyası çalışır; çok kopyalı dağıtımda önce eski kopyalar kapanır.
 
 | Koleksiyon | İndeks                                                                                              | Sorgu                               |
 | ---------- | --------------------------------------------------------------------------------------------------- | ----------------------------------- |
@@ -431,8 +440,9 @@ ayarlanır (`application/lock-timing.ts`; inventory `ShortenReservation`, `Exten
 | inventory'ye ulaşılamadı                         | hiçbir şey yazılmaz; risk adımında sipariş `DRAFT`, ödemede `AWAITING_PAYMENT` kalır                      | `SERVICE_UNAVAILABLE`          |
 
 - **Kilidi düşmüş siparişin kapatılması (T15.3, iş 122):** karar `application/lapsed-order.ts`'te,
-  süpürücüyle aynı tablo. Para alınmışsa iade komutu (`payment.refund_requested`) `CANCELLED` ile
-  **aynı yazımda** kaydedilir (servis hemen çökse de kaybolmaz), ardından doğrudan iade denenir.
+  süpürücüyle aynı tablo; kilitsiz kapatmanın yazımı `application/stockless-close.ts`'te (paranın
+  durumu tek değer: `CHARGE` yok / alındı / iade edilmiş). Para alınmışsa iade komutu
+  (`payment.refund_requested`) `CANCELLED` ile **aynı yazımda** kaydedilir (servis hemen çökse de kaybolmaz), ardından doğrudan iade denenir.
   Komut iadeden sonra da gelse payment "zaten iade edilmiş" der; para iki kez geri verilmez.
 - **Para alınmışsa önce `Commit` (T15.3, iş 124):** inventory kesinleşmiş kilidin uzatma ve
   kısaltmasına da `RESERVATION_EXPIRED` döner. `Commit` ise kesinleşmiş kilidi tanır
@@ -700,8 +710,9 @@ src/
 │   ├── stock-step.ts            # saga'nın kesinleştirme ve en iyi gayretle bırakma adımı (T11.2)
 │   ├── lock-timing.ts           # kilidin süresi: orta bantta kısaltma, ödeme öncesi uzatma, düşmüş kilit (T11.3)
 │   ├── lapsed-order.ts          # kilidi düşmüş siparişi kapatma tablosu: saga ve süpürücü (T15.3)
+│   ├── stockless-close.ts       # kilitsiz kapatma: CANCELLED, iade komutu ve işaret aynı yazımda (T15.3, #166)
 │   ├── order-transition.ts      # sürüm kontrollü geçiş yazımı ve PAID (payment-step, lapsed-order)
-│   ├── refund-step.ts           # telafi iadesi: doğrudan, olmazsa outbox komutu (T7.1, T7.3)
+│   ├── refund-step.ts           # telafi iadesi: doğrudan, olmazsa outbox komutu (T7.1, T7.3); çapraz yol iadesi
 │   ├── refund-record.ts         # iadeden sonra iptal edilmiş siparişe iade işareti (#166)
 │   ├── sweep-expired-reservations.ts  # süpürücünün tek turu (T11.2 PR 2)
 │   ├── dispatch-couriers.ts     # kurye işçisinin tek turu (T13.1 PR 2; kuyruk, kaynak, geri çekilme T13.2)

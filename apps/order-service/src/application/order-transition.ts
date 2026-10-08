@@ -9,6 +9,7 @@ import type { Clock } from '@getir/core';
 
 import { queuedForCourier } from '../domain/courier-dispatch.js';
 import { statusChangedEvents } from '../domain/order-events.js';
+import type { OrderEvent } from '../domain/order-events.js';
 import type { OrderRepository } from '../domain/order-repository.js';
 import type { Order } from '../domain/order.js';
 import { transitionOrder } from '../domain/order.js';
@@ -20,14 +21,21 @@ export type TransitionWrite =
   | { readonly written: true; readonly order: Order }
   | { readonly written: false; readonly latest: Order | null; readonly error: unknown };
 
-/** Surum kontrollu yazar; cakismada kaydin son halini okur (karar cagiranin). */
+/**
+ * Surum kontrollu yazar; cakismada kaydin son halini okur (karar cagiranin).
+ * `extraEvents` durum olaylarindan SONRA ayni yazima girer (ornegin iade komutu).
+ */
 export async function tryWriteTransition(
   repository: TransitionRepository,
   current: Order,
   next: Order,
+  extraEvents: readonly OrderEvent[] = [],
 ): Promise<TransitionWrite> {
   try {
-    await repository.update(next, current.version, statusChangedEvents(current, next));
+    await repository.update(next, current.version, [
+      ...statusChangedEvents(current, next),
+      ...extraEvents,
+    ]);
     return { written: true, order: next };
   } catch (error) {
     if (!isConflict(error)) {

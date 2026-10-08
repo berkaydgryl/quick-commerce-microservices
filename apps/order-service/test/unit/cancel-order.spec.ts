@@ -2,11 +2,13 @@
  * Use-case: kullanici iptali (B29). Bellek deposu, sabit saat.
  */
 
-import { AppError, ERROR_CODES, fixedClock, ORDER_STATUS, silentLogger } from '@getir/core';
+import { AppError, ERROR_CODES, EVENTS, fixedClock, ORDER_STATUS, silentLogger } from '@getir/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createCancelOrder } from '../../src/application/cancel-order.js';
 import { PAYMENT_METHOD, PAYMENT_STATUS } from '../../src/domain/checkout-payment.js';
+import { isListedInHistory } from '../../src/domain/order-history-listing.js';
+import { REFUND_MARK_REASON } from '../../src/domain/order-refund.js';
 import { transitionOrder } from '../../src/domain/order.js';
 import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-order-store.js';
 import { FakePayments } from '../support/fake-payments.js';
@@ -191,6 +193,51 @@ describe('cancelOrder use-case', () => {
 
     expect(order.status).toBe(ORDER_STATUS.CANCELLED);
   });
+
+  it('odeme kaydi IADE EDILMIS: iptal kalici iade isaretini ayni yazimda tasir, komut yok (#185 N2)', async () => {
+    const awaiting = await insertAwaitingPayment(repository, clock);
+    payments.payments.set(awaiting.id, {
+      status: PAYMENT_STATUS.REFUNDED,
+      method: PAYMENT_METHOD.CARD,
+    });
+
+    const order = await cancel({ orderId: awaiting.id, userId: 'usr_1' }, scope);
+
+    const mark = { reason: REFUND_MARK_REASON.PAYMENT_ALREADY_REFUNDED, requestedAt: clock.date() };
+    expect(order.refund).toEqual(mark);
+    const stored = await repository.findById(awaiting.id);
+    expect(stored).toMatchObject({ status: ORDER_STATUS.CANCELLED, version: awaiting.version + 1 });
+    expect(stored?.refund).toEqual(mark);
+    expect(stored === null ? false : isListedInHistory(stored)).toBe(true);
+    expect(
+      repository.recordedEvents.filter((event) => event.topic === EVENTS.PAYMENT_REFUND_REQUESTED),
+    ).toEqual([]);
+  });
+
+  it.each([
+    ['odeme kaydi yok', null],
+    ['3DS bekliyor', { status: PAYMENT_STATUS.REQUIRES_3DS, method: PAYMENT_METHOD.CARD }],
+    ['kart reddedildi', { status: PAYMENT_STATUS.FAILED, method: PAYMENT_METHOD.CARD }],
+    [
+      'kapida odeme PENDING (tutar teslimatta, iade degil)',
+      { status: PAYMENT_STATUS.PENDING, method: PAYMENT_METHOD.CASH_ON_DELIVERY },
+    ],
+  ])(
+    'para alinmamis (%s): iptal isaretsiz, siparis gecmiste gorunmez (#185 N2)',
+    async (_name, snapshot) => {
+      const awaiting = await insertAwaitingPayment(repository, clock);
+      if (snapshot !== null) {
+        payments.payments.set(awaiting.id, snapshot);
+      }
+
+      const order = await cancel({ orderId: awaiting.id, userId: 'usr_1' }, scope);
+
+      const stored = await repository.findById(awaiting.id);
+      expect(order.refund).toBeUndefined();
+      expect(stored?.refund).toBeUndefined();
+      expect(stored === null ? true : isListedInHistory(stored)).toBe(false);
+    },
+  );
 
   it('payment-svc kapali: odeme bekleyen siparis iptal EDILMEZ (SERVICE_UNAVAILABLE)', async () => {
     const awaiting = await insertAwaitingPayment(repository, clock);
