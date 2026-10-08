@@ -297,4 +297,54 @@ describe('EvaluateAndRecord kayit sure siniri (#167, sahte saat)', () => {
     expect(lateRun.reported).toEqual([RECORD_EVENT.TIMED_OUT, RECORD_EVENT.FAILED]);
     expect(unhandled).toEqual([]);
   });
+
+  it('kayit YAZIM BASLARKEN izlenir: sinir dolmadan gelen kapanis onu gorur, bekler; zamaninda yazilirsa recorded', async () => {
+    const store = pendingStore();
+    const { evaluate, reported, pending, logger, warn } = setup(store.events);
+
+    const decision = evaluate(ali.context, logger);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pending.size).toBe(1);
+    const drained = pending.drain(1_000);
+    setTimeout(() => store.settle().resolve(), 100);
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(await drained).toBe(0);
+    expect((await decision).band).toBe(RISK_BANDS.CRITICAL);
+    expect(reported).toEqual([RECORD_EVENT.RECORDED]);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('sinir dolmadan kapanis kaydi birakirsa: failed BIR KEZ; sonra sinir dolsa da timed_out ve WARN yok', async () => {
+    const store = pendingStore();
+    const { evaluate, reported, pending, logger, warn, error } = setup(store.events);
+
+    const decision = evaluate(ali.context, logger);
+    await vi.advanceTimersByTimeAsync(0);
+    const drained = pending.drain(50);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(await drained).toBe(1);
+    await vi.advanceTimersByTimeAsync(RECORD_TIMEOUT_MS);
+
+    expect((await decision).band).toBe(RISK_BANDS.CRITICAL);
+    expect(reported).toEqual([RECORD_EVENT.FAILED]);
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('zaman asiminda WARN firlatsa da kayit izlenir (N3): karar doner, kayit sonradan duserse failed', async () => {
+    const store = pendingStore();
+    const { evaluate, reported, logger, warn, error } = setup(store.events);
+    warn.mockImplementation(() => {
+      throw new Error('gunluk bozuk');
+    });
+
+    expect((await decideAtLimit(evaluate, logger)).band).toBe(RISK_BANDS.CRITICAL);
+    store.settle().reject(new Error('islem siniri asildi'));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(reported).toEqual([RECORD_EVENT.TIMED_OUT, RECORD_EVENT.FAILED]);
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(unhandled).toEqual([]);
+  });
 });

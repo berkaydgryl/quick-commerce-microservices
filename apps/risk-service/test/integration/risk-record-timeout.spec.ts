@@ -26,6 +26,7 @@ import {
 import { GrpcRiskAssessment } from '../../../order-service/src/infrastructure/risk/grpc-risk-assessment.js';
 import { startFreezingProxy } from '../../../../packages/mongo-kit/test/support/freezing-proxy.js';
 import type { FreezingProxy } from '../../../../packages/mongo-kit/test/support/freezing-proxy.js';
+import { PendingRecords } from '../../src/application/pending-records.js';
 import { buildRiskService } from '../../src/bootstrap.js';
 import { DEFAULT_MONGO_DB, RISK_EVENT_RECORD_TIMEOUT_MS } from '../../src/config/constants.js';
 import { RISK_EVENT_METRICS } from '../../src/infrastructure/metrics/risk-event-metrics.js';
@@ -93,7 +94,13 @@ describe('risk kaydi sure siniri, gercek Mongo (#167)', () => {
     const server = await startTestGrpcServer({
       serviceName: 'risk-kayit-siniri',
       logger: silentLogger,
-      services: [buildRiskService({ events: store.repository, logger: silentLogger })],
+      services: [
+        buildRiskService({
+          events: store.repository,
+          logger: silentLogger,
+          pendingRecords: new PendingRecords(),
+        }),
+      ],
     });
     closers.push(() => server.stop());
     const order = new GrpcRiskAssessment(
@@ -143,7 +150,14 @@ describe('risk kaydi sure siniri, gercek Mongo (#167)', () => {
     }
 
     await waitRecorded([2, 3, 4], 'donukken baslayan kayitlar cozulunce yazilmadi');
-    expect(await metricValue(RISK_EVENT_METRICS.RECORDS, { outcome: 'late' })).toBe(3);
+    // Metrik, kayit yazildiktan sonraki mikro adimda artar: sinirli bekleme.
+    await expect
+      .poll(() => metricValue(RISK_EVENT_METRICS.RECORDS, { outcome: 'late' }), {
+        timeout: RECORD_WAIT_MS,
+        interval: POLL_INTERVAL_MS,
+        message: 'donukken baslayan kayitlar late sayilmadi',
+      })
+      .toBe(3);
     await expect(order.evaluate(request(5), scope)).resolves.toMatchObject({ band: 'LOW' });
     await waitRecorded([1, 2, 3, 4, 5], 'cozuldukten sonra kayit yazilmadi');
   });

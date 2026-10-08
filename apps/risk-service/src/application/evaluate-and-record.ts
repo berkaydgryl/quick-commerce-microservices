@@ -10,10 +10,11 @@
  * KAYIT SURE SINIRLIDIR (#167): kayit en fazla `recordTimeoutMs` beklenir.
  * Mongo yavaslar ya da donarsa karar yine order'in risk butcesi (1 sn) icinde
  * doner; yoksa order SERVICE_UNAVAILABLE alir ve devre kesicisi (D17) acilabilir.
- * Sinir asilinca kayit BEKLENMEZ: WARN + `timed_out`; kayit arka planda surer
- * (PendingRecords) ve sonucu bir kez bildirilir: yazildiysa `late`, dustu ya da
- * kapanista yarim kaldiysa error + `failed`. Sonuc olaylari kayit basina TEK:
- * recorded | late | failed.
+ * Sinir asilinca kayit BEKLENMEZ: WARN + `timed_out`; kayit arka planda surer.
+ * Her kayit yazim BASLARKEN izlenir (PendingRecords; kapanis ucustaki her kaydi
+ * gorur) ve sonucu bir kez bildirilir: sinir icinde yazildiysa `recorded`,
+ * sonra yazildiysa `late`, dustu ya da kapanista yarim kaldiysa error +
+ * `failed`. Sonuc olaylari kayit basina TEK: recorded | late | failed.
  *
  * Bu yuzden Evaluate dondugunde kayit yazilmis OLMAYABILIR (sinir asildiysa):
  * hemen ardindan GetLastEvaluation onceki degerlendirmeyi gorebilir.
@@ -46,7 +47,7 @@ export interface EvaluateAndRecordDeps {
   readonly events: RiskEventRepository;
   /** Kaydin en fazla beklenecegi sure (ms; RISK_EVENT_RECORD_TIMEOUT_MS). */
   readonly recordTimeoutMs: number;
-  /** Sinirdan sonra arka planda suren kayitlar (kapanista sinirli beklenir). */
+  /** Ucustaki kayitlar: her kayit yazim baslarken izlenir (kapanista sinirli beklenir). */
   readonly pending: PendingRecords;
   /** Kayit olayini bildirir (metrik); firlatsa da karar etkilenmez. */
   readonly onRecord?: (event: RecordEvent) => void;
@@ -102,30 +103,42 @@ function startRecord(
   }
 }
 
+/**
+ * Kaydin sonucunu BIR KEZ bildirir ve karari en fazla `recordTimeoutMs`
+ * bekletir. Izleme yazim BASLARKEN kurulur (kapanis siniri dolmamis kaydi da
+ * gorur); sinir asilinca once izleme kurulmus oldugu icin gunluk firlatsa da
+ * kayit izlenir.
+ */
 async function settleRecord(
   record: Promise<void>,
   deps: Pick<EvaluateAndRecordDeps, 'recordTimeoutMs' | 'pending'>,
   scope: RecordScope,
 ): Promise<void> {
+  let timedOut = false;
+  let finished = false;
+  const finish = (report: () => void): void => {
+    if (!finished) {
+      finished = true;
+      report();
+    }
+  };
+  deps.pending.watch(record, {
+    onDone: () => finish(() => scope.report(timedOut ? RECORD_EVENT.LATE : RECORD_EVENT.RECORDED)),
+    onLost: (reason) => finish(() => reportLost(scope, reason)),
+  });
   try {
     await withTimeout(record, deps.recordTimeoutMs, 'risk degerlendirmesi kaydi');
   } catch (error) {
-    if (error instanceof TimeoutError) {
+    // Kaydin kendi hatasi izlemede bildirilir; burada yalnizca sinir asimi.
+    if (error instanceof TimeoutError && !finished) {
+      timedOut = true;
       scope.report(RECORD_EVENT.TIMED_OUT);
       scope.logger.warn(
         { ...scope.fields, timeoutMs: deps.recordTimeoutMs },
         'risk kaydi sure sinirini asti; karar beklenmeden donuldu, kayit arka planda suruyor',
       );
-      deps.pending.watch(record, {
-        onLate: () => scope.report(RECORD_EVENT.LATE),
-        onLost: (reason) => reportLost(scope, reason),
-      });
-    } else {
-      reportLost(scope, error);
     }
-    return;
   }
-  scope.report(RECORD_EVENT.RECORDED);
 }
 
 function reportLost(scope: RecordScope, error: unknown): void {

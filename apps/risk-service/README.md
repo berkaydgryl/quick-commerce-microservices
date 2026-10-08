@@ -42,8 +42,10 @@ alıyor, devre kesicisi açılabiliyordu). Sınır aşılınca kayıt **beklenme
   zamanında yazılırsa `outcome="recorded"`. Sonuç kayıt başına **tek**: toplamı değerlendirme sayısıdır.
 - Bu yüzden `Evaluate` döndüğünde kayıt yazılmış **olmayabilir**: hemen ardından `GetLastEvaluation`
   önceki değerlendirmeyi görebilir.
-- Kapanışta gRPC durduktan sonra arka plandaki kayıtlar Mongo'nun işlem sınırı kadar (en çok 8 sn)
-  beklenir, Mongo en son kapanır; bitmeyen kayıt `error` + `failed`, sessiz kaybolmaz.
+- Her kayıt yazım **başlarken** izlenir: kapanışta gRPC durduktan sonra uçuştaki kayıtlar (sınırı
+  dolmamış olanlar dahil, boşaltma sürerken gelenler de) Mongo'nun işlem sınırı kadar beklenir;
+  üst sınır kapanış kancası bütçesi eksi Mongo kapanış payı (bugün 10 − 2 = 8 sn). Mongo en son kapanır;
+  bitmeyen kayıt `error` + `failed`, sessiz kaybolmaz.
   **KABUL:** kapanışta bırakılan kayıt sunucuda yine de uygulanmış olabilir (yanıt gelmeden bağlantı
   kapandı); kayıp sayılır. Kapanıştaki `failed` artışı `/metrics` kancadan önce kapandığı için okunmaz
   (bekleyen iş #180); kalıcı sinyal `error` günlüğüdür. Arka plandaki kayıtlara üst sınır: #181.

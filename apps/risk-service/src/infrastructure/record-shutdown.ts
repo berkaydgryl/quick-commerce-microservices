@@ -9,17 +9,20 @@ import type { Logger } from '@getir/core';
 import type { MongoEnv } from '@getir/mongo-kit';
 
 import type { PendingRecords } from '../application/pending-records.js';
-import { RISK_EVENT_DRAIN_DEFAULT_MS, RISK_EVENT_DRAIN_MAX_MS } from '../config/constants.js';
+import { RISK_EVENT_DRAIN_DEFAULT_MS, RISK_STORE_CLOSE_RESERVE_MS } from '../config/constants.js';
 
 /**
  * Bosaltma suresi: Mongo'nun islem siniri (o surede kayit ya biter ya surucu
- * keser), kapanis kancasi butcesiyle sinirli. Mongo yoksa ya da suresizse varsayilan.
+ * keser), kapanis kancasinin butcesinden Mongo kapanis payi dusulerek
+ * sinirli. Mongo yoksa ya da suresizse varsayilan (yine butceyle sinirli).
  */
 export function recordDrainTimeoutMs(
   mongo: Pick<MongoEnv, 'operationTimeoutMs'> | undefined,
+  hookTimeoutMs: number,
 ): number {
   const operation = mongo?.operationTimeoutMs ?? 0;
-  return Math.min(operation > 0 ? operation : RISK_EVENT_DRAIN_DEFAULT_MS, RISK_EVENT_DRAIN_MAX_MS);
+  const budget = Math.max(0, hookTimeoutMs - RISK_STORE_CLOSE_RESERVE_MS);
+  return Math.min(operation > 0 ? operation : RISK_EVENT_DRAIN_DEFAULT_MS, budget);
 }
 
 export interface DrainThenCloseOptions {

@@ -10,7 +10,7 @@ import type { GrpcServiceRegistration } from '@getir/service-kit';
 import { createEvaluateAndRecord } from './application/evaluate-and-record.js';
 import { createEvaluateRisk } from './application/evaluate-risk.js';
 import { createGetLastEvaluation } from './application/get-last-evaluation.js';
-import { PendingRecords } from './application/pending-records.js';
+import type { PendingRecords } from './application/pending-records.js';
 import {
   RISK_EVENT_RECORD_TIMEOUT_MS,
   RISK_SERVICE_FULL_NAME,
@@ -19,7 +19,10 @@ import {
 import { riskRulesConfig } from './config/risk-rules.js';
 import type { RiskEventRepository } from './domain/risk-event-repository.js';
 import { InMemoryRiskEventStore } from './infrastructure/memory/in-memory-risk-event-store.js';
-import { recordRiskEvent } from './infrastructure/metrics/risk-event-metrics.js';
+import {
+  initRiskEventMetrics,
+  recordRiskEvent,
+} from './infrastructure/metrics/risk-event-metrics.js';
 import { createRiskImplementation } from './interfaces/grpc/risk-handlers.js';
 import { createCoreRules } from './rules/index.js';
 import { createRuleRegistry } from './rules/registry.js';
@@ -32,11 +35,14 @@ export interface BootstrapOptions {
   readonly clock?: Clock;
   /** Kaydin sure siniri (ms); verilmezse RISK_EVENT_RECORD_TIMEOUT_MS (testte kisaltilir). */
   readonly recordTimeoutMs?: number;
-  /** Arka planda suren kayitlar; main.ts verir ve kapanista bekler (drain). Verilmezse yeni (testler). */
-  readonly pendingRecords?: PendingRecords;
+  /**
+   * Ucustaki kayitlar; ZORUNLU: main.ts kapanista ayni nesneyi bosaltir (drain).
+   * Kurulumun kendi gizli kopyasi olsaydi kapanis kayitlari goremezdi.
+   */
+  readonly pendingRecords: PendingRecords;
 }
 
-export function buildRiskService(options: BootstrapOptions = {}): GrpcServiceRegistration {
+export function buildRiskService(options: BootstrapOptions): GrpcServiceRegistration {
   const logger = options.logger;
   const clock = options.clock ?? systemClock;
   const events = options.events ?? new InMemoryRiskEventStore();
@@ -47,6 +53,7 @@ export function buildRiskService(options: BootstrapOptions = {}): GrpcServiceReg
   // Use-case'ler gunlukcuyu bagimlilik olarak ALMAZ: her cagrida handler'in
   // requestId bagli gunlukcusu gecer (ctx.logger).
   const evaluateRisk = createEvaluateRisk({ rules, clock, ruleTimeoutMs: RULE_TIMEOUT_MS });
+  initRiskEventMetrics();
 
   return {
     name: RISK_SERVICE_FULL_NAME,
@@ -56,7 +63,7 @@ export function buildRiskService(options: BootstrapOptions = {}): GrpcServiceReg
         evaluateRisk,
         events,
         recordTimeoutMs: options.recordTimeoutMs ?? RISK_EVENT_RECORD_TIMEOUT_MS,
-        pending: options.pendingRecords ?? new PendingRecords(),
+        pending: options.pendingRecords,
         onRecord: recordRiskEvent,
       }),
       getLastEvaluation: createGetLastEvaluation(events),

@@ -17,6 +17,7 @@
 
 import {
   createLogger,
+  DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS,
   installProcessHandlers,
   startGrpcServer,
   startOrExit,
@@ -37,13 +38,15 @@ const logger = createLogger({ name: SERVICE_NAME, level: env.LOG_LEVEL });
 const { handle, store } = await startOrExit(
   async () => {
     const opened = await openRiskEventStore(env.mongo, logger);
-    // Sure sinirini asip arka planda suren kayitlar (#167): kapanista beklenir.
+    // Ucustaki kayitlar (#167): her kayit yazim baslarken izlenir, kapanista beklenir.
     const pendingRecords = new PendingRecords();
     const server = await startGrpcServer({
       serviceName: SERVICE_NAME,
       host: env.GRPC_HOST,
       port: env.RISK_GRPC_PORT,
       shutdownTimeoutMs: env.GRPC_SHUTDOWN_TIMEOUT_MS,
+      // Kanca butcesi acikca: kayit bosaltmasi bundan turetilir (#167).
+      shutdownHookTimeoutMs: DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS,
       // Izler (D15): adres yoksa olusur ve tasinir, disari gonderilmez.
       otlpEndpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT,
       logger,
@@ -53,7 +56,7 @@ const { handle, store } = await startOrExit(
       onShutdown: () =>
         drainThenClose({
           pending: pendingRecords,
-          timeoutMs: recordDrainTimeoutMs(env.mongo),
+          timeoutMs: recordDrainTimeoutMs(env.mongo, DEFAULT_SHUTDOWN_HOOK_TIMEOUT_MS),
           close: () => opened.close(),
           logger,
         }),

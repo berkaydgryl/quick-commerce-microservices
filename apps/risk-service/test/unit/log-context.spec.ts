@@ -14,6 +14,7 @@ import type { TestGrpcServer } from '@getir/service-kit/testing';
 import { Metadata } from '@grpc/grpc-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { PendingRecords } from '../../src/application/pending-records.js';
 import { buildRiskService } from '../../src/bootstrap.js';
 import type { RiskEventRepository } from '../../src/domain/risk-event-repository.js';
 import { PERSONA_NOW, PERSONAS } from '../support/personas.js';
@@ -37,6 +38,7 @@ beforeAll(async () => {
         clock: fixedClock(PERSONA_NOW),
         events: brokenEvents,
         logger: recordingLogger(lines),
+        pendingRecords: new PendingRecords(),
       }),
     ],
   });

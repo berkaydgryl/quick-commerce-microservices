@@ -30,14 +30,16 @@ export const RULE_TIMEOUT_MS = 200;
 export const RISK_EVENT_RECORD_TIMEOUT_MS = 200;
 
 /**
- * Kapanista arka planda suren kayitlarin en fazla beklenecegi sure (#167):
- * gRPC durduktan sonra, Mongo kapanmadan once. Mongo'nun islem siniri
+ * Kapanista ucustaki kayitlarin en fazla beklenecegi sure (#167): gRPC
+ * durduktan sonra, Mongo kapanmadan once. Mongo'nun islem siniri
  * (MONGO_OPERATION_TIMEOUT_MS) kadar: o surede kayit ya biter ya surucu keser.
- * Ust sinir: kapanis kancasinin 10 sn butcesinde Mongo kapanisina pay kalsin.
- * Mongo yoksa (MOCK) varsayilan. Bitmeyen kayit `failed` sayilir.
+ * Ust sinir kapanis kancasinin butcesinden turetilir (kanca - Mongo kapanis
+ * payi; infrastructure/record-shutdown.ts). Mongo yoksa (MOCK) varsayilan.
+ * Bitmeyen kayit `failed` sayilir.
  */
 export const RISK_EVENT_DRAIN_DEFAULT_MS = 2_000;
-export const RISK_EVENT_DRAIN_MAX_MS = 8_000;
+/** Kapanis kancasinda Mongo'nun kapanmasina ayrilan pay (ms). */
+export const RISK_STORE_CLOSE_RESERVE_MS = 2_000;
 
 // ---------------------------------------------------------------------------
 // Cekirdek kural esikleri (T6.2). Agirliklar config/risk.rules.json'da;

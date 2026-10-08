@@ -56,6 +56,18 @@ const outcome = async (value: string) =>
 const timeouts = async () => (await metricValue(RISK_EVENT_METRICS.TIMEOUTS)) ?? 0;
 
 describe('risk_event_records_total ve risk_event_record_timeouts_total', () => {
+  it('servis kurulunca sonuc serileri 0 ile acilir (ilk kayip da oran olarak gorunur)', async () => {
+    buildRiskService({
+      events: new InMemoryRiskEventStore(),
+      pendingRecords: new PendingRecords(),
+    });
+
+    for (const value of [RECORD_EVENT.RECORDED, RECORD_EVENT.LATE, RECORD_EVENT.FAILED]) {
+      expect(await metricValue(RISK_EVENT_METRICS.RECORDS, { outcome: value })).toBe(0);
+    }
+    expect(await metricValue(RISK_EVENT_METRICS.TIMEOUTS)).toBe(0);
+  });
+
   it('zamaninda kayit: recorded, sinir asimi yok', async () => {
     await evaluateOnce(new InMemoryRiskEventStore());
 

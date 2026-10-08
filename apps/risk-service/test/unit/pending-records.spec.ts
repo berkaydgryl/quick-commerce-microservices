@@ -35,7 +35,7 @@ function deferred() {
 }
 
 function handlers() {
-  return { onLate: vi.fn(), onLost: vi.fn() };
+  return { onDone: vi.fn(), onLost: vi.fn() };
 }
 
 describe('PendingRecords', () => {
@@ -57,10 +57,10 @@ describe('PendingRecords', () => {
     bad.reject(new Error('mongo yok'));
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(okWatch.onLate).toHaveBeenCalledTimes(1);
+    expect(okWatch.onDone).toHaveBeenCalledTimes(1);
     expect(okWatch.onLost).not.toHaveBeenCalled();
     expect(badWatch.onLost).toHaveBeenCalledWith(new Error('mongo yok'));
-    expect(badWatch.onLate).not.toHaveBeenCalled();
+    expect(badWatch.onDone).not.toHaveBeenCalled();
     expect(pending.size).toBe(0);
     expect(unhandled).toEqual([]);
   });
@@ -76,7 +76,7 @@ describe('PendingRecords', () => {
     await vi.advanceTimersByTimeAsync(500);
 
     expect(await drained).toBe(0);
-    expect(watch.onLate).toHaveBeenCalledTimes(1);
+    expect(watch.onDone).toHaveBeenCalledTimes(1);
     expect(watch.onLost).not.toHaveBeenCalled();
   });
 
@@ -96,8 +96,28 @@ describe('PendingRecords', () => {
     expect(watch.onLost).toHaveBeenCalledWith(new Error(ABANDONED_REASON));
     record.resolve();
     await vi.advanceTimersByTimeAsync(0);
-    expect(watch.onLate).not.toHaveBeenCalled();
+    expect(watch.onDone).not.toHaveBeenCalled();
     expect(watch.onLost).toHaveBeenCalledTimes(1);
+  });
+
+  it('bosaltma SURERKEN gelen kayit da beklenir (Mongo hala acik): bitince birakilmaz', async () => {
+    const pending = new PendingRecords();
+    const first = deferred();
+    const firstWatch = handlers();
+    pending.watch(first.promise, firstWatch);
+
+    const drained = pending.drain(1_000);
+    const late = deferred();
+    const lateWatch = handlers();
+    pending.watch(late.promise, lateWatch);
+    setTimeout(first.resolve, 100);
+    setTimeout(late.resolve, 300);
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(await drained).toBe(0);
+    expect(firstWatch.onDone).toHaveBeenCalledTimes(1);
+    expect(lateWatch.onDone).toHaveBeenCalledTimes(1);
+    expect(lateWatch.onLost).not.toHaveBeenCalled();
   });
 
   it('kapanistan SONRA izlemeye giren kayit hemen birakilir (Mongo kapaniyor)', async () => {
@@ -114,7 +134,7 @@ describe('PendingRecords', () => {
   it('bildirim firlatsa da: diger kayitlar yine birakilir, unhandledRejection yok', async () => {
     const pending = new PendingRecords();
     const throwing = {
-      onLate: vi.fn(),
+      onDone: vi.fn(),
       onLost: vi.fn(() => {
         throw new Error('gunluk bozuk');
       }),

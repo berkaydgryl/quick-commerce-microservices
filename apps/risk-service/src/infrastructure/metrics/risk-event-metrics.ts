@@ -36,6 +36,16 @@ const timeouts = counter({
   help: 'Sure sinirini asan (karar beklemeden donen) risk_events kayitlari',
 });
 
+/** Nihai sonuclar: seriler 0 ile acilir (ilk kayit kaybi da oran olarak gorunsun). */
+const OUTCOMES = [RECORD_EVENT.RECORDED, RECORD_EVENT.LATE, RECORD_EVENT.FAILED] as const;
+
+/** Sonuc serilerini 0 ile baslatir; tekrar cagrilabilir (servis kurulumu cagirir). */
+export function initRiskEventMetrics(): void {
+  for (const outcome of OUTCOMES) {
+    records.inc({ outcome }, 0);
+  }
+}
+
 export function recordRiskEvent(event: RecordEvent): void {
   if (event === RECORD_EVENT.TIMED_OUT) {
     timeouts.inc();

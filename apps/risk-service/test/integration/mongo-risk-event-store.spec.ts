@@ -17,6 +17,7 @@ import { MongoDBContainer } from '@testcontainers/mongodb';
 import type { StartedMongoDBContainer } from '@testcontainers/mongodb';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { PendingRecords } from '../../src/application/pending-records.js';
 import { buildRiskService } from '../../src/bootstrap.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
 import type { RiskEventDocument } from '../../src/infrastructure/mongo/documents.js';
@@ -80,7 +81,13 @@ describe('T6.3: Evaluate kaydi Mongo da gorulur ve sorgulanir', () => {
   beforeAll(async () => {
     server = await startTestGrpcServer({
       serviceName: 'risk-int',
-      services: [buildRiskService({ events: store, clock: fixedClock(PERSONA_NOW) })],
+      services: [
+        buildRiskService({
+          events: store,
+          clock: fixedClock(PERSONA_NOW),
+          pendingRecords: new PendingRecords(),
+        }),
+      ],
     });
   });
 
