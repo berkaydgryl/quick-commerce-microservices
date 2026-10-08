@@ -11,16 +11,9 @@ import { AppError, ERROR_CODES, fixedClock, ORDER_STATUS, silentLogger } from '@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { CreateDraftOrderInput } from '../../src/application/create-draft-order.js';
-import { createCreateDraftOrder } from '../../src/application/create-draft-order.js';
-import { ORPHAN_LOCK_MIN_AGE_SECONDS } from '../../src/config/constants.js';
-import type { OrderHistoryReader } from '../../src/domain/order-history-reader.js';
-import { InMemoryOrderStore } from '../../src/infrastructure/memory/in-memory-order-store.js';
-import {
-  CLOSED_MARKET_ID,
-  FAKE_MARKET_ID,
-  FakeCatalogPricing,
-} from '../support/fake-catalog-pricing.js';
-import { FAKE_TTL_SECONDS, FakeStockReservations } from '../support/fake-stock-reservations.js';
+import { CLOSED_MARKET_ID, FAKE_MARKET_ID } from '../support/fake-catalog-pricing.js';
+import { draftHarness, rejectionOf } from '../support/draft-order-harness.js';
+import type { DraftHarness } from '../support/draft-order-harness.js';
 import { DRAFT_TOTAL_MINOR } from '../support/order-fixtures.js';
 
 const clock = fixedClock(1_760_000_000_000);
@@ -35,49 +28,23 @@ const input: CreateDraftOrderInput = {
   expectedTotalMinor: DRAFT_TOTAL_MINOR,
 };
 
-let repository: InMemoryOrderStore;
-let catalog: FakeCatalogPricing;
-let stock: FakeStockReservations;
-
-function useCase(history: Pick<OrderHistoryReader, 'hasPaidOrder'> = repository) {
-  return createCreateDraftOrder({
-    repository,
-    history,
-    catalog,
-    stock,
-    reservationTtlSeconds: FAKE_TTL_SECONDS,
-    orphanLockMinAgeSeconds: ORPHAN_LOCK_MIN_AGE_SECONDS,
-    onOrphanLockReleased: () => undefined,
-    clock,
-  });
-}
-
-async function rejectionOf(promise: Promise<unknown>): Promise<AppError> {
-  const error = await promise.then(
-    () => undefined,
-    (reason: unknown) => reason,
-  );
-  if (error instanceof AppError) return error;
-  throw new Error('AppError beklenirdi');
-}
+let h: DraftHarness;
 
 beforeEach(() => {
-  repository = new InMemoryOrderStore();
-  stock = new FakeStockReservations(() => clock.now());
-  catalog = new FakeCatalogPricing();
-  catalog.closedMarketIds.add(CLOSED_MARKET_ID);
+  h = draftHarness(clock);
+  h.catalog.closedMarketIds.add(CLOSED_MARKET_ID);
 });
 
 describe('CreateDraftOrder: kapali market (#154)', () => {
   it('NO_STORE; ayrinti YALNIZCA sebep; taslak, olay ve stok kilidi YOK', async () => {
-    const error = await rejectionOf(useCase()(input, scope));
+    const error = await rejectionOf(h.useCase()(input, scope));
 
     expect(error.code).toBe(ERROR_CODES.NO_STORE);
     expect(error.details).toEqual({ reason: 'STORE_CLOSED' });
     expect(JSON.stringify(error.details)).not.toContain(CLOSED_MARKET_ID);
-    expect(repository.size).toBe(0);
-    expect(repository.recordedEvents).toEqual([]);
-    expect(stock.reserves).toEqual([]);
+    expect(h.repository.size).toBe(0);
+    expect(h.repository.recordedEvents).toEqual([]);
+    expect(h.stock.reserves).toEqual([]);
   });
 
   it('fiyat degisimi (PRICE_CHANGED) ve minimum sepetten (MIN_BASKET_NOT_MET) ONCE gelir', async () => {
@@ -90,14 +57,14 @@ describe('CreateDraftOrder: kapali market (#154)', () => {
     };
     // Denetim: ayni girdiler ACIK markette gercekten bu hatalari verir.
     const whenOpen = [
-      await rejectionOf(useCase()(changedTotal, scope)),
-      await rejectionOf(useCase()(belowMinimum, scope)),
+      await rejectionOf(h.useCase()(changedTotal, scope)),
+      await rejectionOf(h.useCase()(belowMinimum, scope)),
     ];
-    catalog.closedMarketIds.add(FAKE_MARKET_ID);
+    h.catalog.closedMarketIds.add(FAKE_MARKET_ID);
 
     const whenClosed = [
-      await rejectionOf(useCase()(changedTotal, scope)),
-      await rejectionOf(useCase()(belowMinimum, scope)),
+      await rejectionOf(h.useCase()(changedTotal, scope)),
+      await rejectionOf(h.useCase()(belowMinimum, scope)),
     ];
 
     expect(whenOpen.map((error) => error.code)).toEqual([
@@ -108,48 +75,51 @@ describe('CreateDraftOrder: kapali market (#154)', () => {
       ERROR_CODES.NO_STORE,
       ERROR_CODES.NO_STORE,
     ]);
-    expect(stock.reserves).toEqual([]);
+    expect(h.stock.reserves).toEqual([]);
   });
 
   it('teklif ya da gecmis okumasi dusse de kapali market NO_STORE doner (503/500 degil)', async () => {
-    catalog.offersFailure = new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'catalog teklifleri yok');
+    h.catalog.offersFailure = new AppError(
+      ERROR_CODES.SERVICE_UNAVAILABLE,
+      'catalog teklifleri yok',
+    );
     const failingHistory = {
       hasPaidOrder: () =>
         Promise.reject(new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'gecmis okunamadi')),
     };
 
-    const offersDown = await rejectionOf(useCase()(input, scope));
-    catalog.offersFailure = undefined;
+    const offersDown = await rejectionOf(h.useCase()(input, scope));
+    h.catalog.offersFailure = undefined;
     const historyDown = await rejectionOf(
-      useCase(failingHistory)({ ...input, couponCode: 'ILK10' }, scope),
+      h.useCase(failingHistory)({ ...input, couponCode: 'ILK10' }, scope),
     );
 
     expect([offersDown.code, historyDown.code]).toEqual([
       ERROR_CODES.NO_STORE,
       ERROR_CODES.NO_STORE,
     ]);
-    expect(stock.reserves).toEqual([]);
+    expect(h.stock.reserves).toEqual([]);
   });
 
   it('kullanicinin BASKA marketteki kilidi etkilenmez: eski taslak ve kilidi yerinde', async () => {
-    const previous = await useCase()({ ...input, marketId: FAKE_MARKET_ID }, scope);
+    const previous = await h.useCase()({ ...input, marketId: FAKE_MARKET_ID }, scope);
 
-    const error = await rejectionOf(useCase()(input, scope));
+    const error = await rejectionOf(h.useCase()(input, scope));
 
     expect(error.code).toBe(ERROR_CODES.NO_STORE);
-    const kept = await repository.findById(previous.id);
+    const kept = await h.repository.findById(previous.id);
     expect(kept?.status).toBe(ORDER_STATUS.DRAFT);
     expect(kept?.reservation).toEqual(previous.reservation);
-    expect(stock.stateOf(previous.id)).toBe('held');
-    expect(stock.releases).toEqual([]);
-    expect(stock.reserves.map((request) => request.orderId)).toEqual([previous.id]);
-    expect(repository.size).toBe(1);
+    expect(h.stock.stateOf(previous.id)).toBe('held');
+    expect(h.stock.releases).toEqual([]);
+    expect(h.stock.reserves.map((request) => request.orderId)).toEqual([previous.id]);
+    expect(h.repository.size).toBe(1);
   });
 
   it('acik market etkilenmez: taslak acilir ve kilitlenir', async () => {
-    const order = await useCase()({ ...input, marketId: FAKE_MARKET_ID }, scope);
+    const order = await h.useCase()({ ...input, marketId: FAKE_MARKET_ID }, scope);
 
     expect(order.status).toBe(ORDER_STATUS.DRAFT);
-    expect(stock.stateOf(order.id)).toBe('held');
+    expect(h.stock.stateOf(order.id)).toBe('held');
   });
 });

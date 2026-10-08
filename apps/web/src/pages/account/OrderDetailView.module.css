@@ -1,7 +1,8 @@
 /*
  * Siparis detayi (T11.16): Gecmis Siparislerim'in gorsel dili. Ustte listeye
- * donus baglantisi, market adi ve durum; altinda beyaz kartlar: tarih ve
- * adres, urunler, tutar dokumu. Uzun ad ve adres kirilir.
+ * donus baglantisi, market adi ve durum; altinda beyaz kartlar (OrderCard):
+ * tarih ve adres, urunler (OrderLines), tutar dokumu (OrderTotals). Uzun ad
+ * ve adres kirilir.
  */
 .c-order-detail {
   display: grid;
@@ -36,16 +37,6 @@
   overflow-wrap: anywhere;
 }
 
-.c-order-detail__card {
-  display: grid;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  margin: 0;
-  background: var(--bg-surface);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-surface);
-}
-
 .c-order-detail__fact {
   display: grid;
   gap: var(--space-1);
@@ -56,69 +47,7 @@
   color: var(--text-muted);
 }
 
-.c-order-detail__fact dd,
-.c-order-detail__sum dd {
+.c-order-detail__fact dd {
   margin: 0;
   overflow-wrap: anywhere;
-}
-
-.c-order-detail__subtitle {
-  font-size: var(--font-size-md);
-}
-
-.c-order-detail__lines {
-  display: grid;
-}
-
-.c-order-detail__line {
-  display: flex;
-  gap: var(--space-3);
-  align-items: baseline;
-  padding-block: var(--space-2);
-}
-
-.c-order-detail__line + .c-order-detail__line {
-  border-block-start: var(--border-width-thin) solid var(--border-faint);
-}
-
-.c-order-detail__quantity {
-  font-weight: var(--font-weight-bold);
-  color: var(--color-brand-primary);
-}
-
-.c-order-detail__name {
-  display: grid;
-  flex: 1;
-  gap: var(--space-1);
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.c-order-detail__undelivered {
-  font-size: var(--font-size-sm);
-  color: var(--text-muted);
-}
-
-.c-order-detail__amount {
-  white-space: nowrap;
-}
-
-.c-order-detail__sum {
-  display: flex;
-  gap: var(--space-3);
-  justify-content: space-between;
-}
-
-.c-order-detail__sum dt {
-  color: var(--text-muted);
-}
-
-.c-order-detail__sum--total {
-  padding-block-start: var(--space-3);
-  font-weight: var(--font-weight-bold);
-  border-block-start: var(--border-width-thin) solid var(--border-faint);
-}
-
-.c-order-detail__sum--total dt {
-  color: var(--text-default);
 }

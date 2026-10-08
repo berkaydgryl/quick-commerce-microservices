@@ -552,5 +552,14 @@
     "approachTitle": "Kuryen konumuna yaklaştı!",
     "approachActionLabel": "Konumu gör",
     "approachCloseLabel": "Bildirimi kapat"
+  },
+  "orderConfirmation": {
+    "placedTitle": "Siparişin alındı!",
+    "reviewTitle": "Siparişin inceleniyor",
+    "reviewNotice": "İnceleme bitince durumunu buradan izleyebilirsin.",
+    "summaryTitle": "Sipariş özeti",
+    "detailsTitle": "Teslimat ayrıntıları",
+    "ordersLinkLabel": "Siparişlerime git",
+    "continueLabel": "Alışverişe devam et"
   }
 }

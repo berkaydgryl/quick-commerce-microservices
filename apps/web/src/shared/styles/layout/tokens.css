@@ -164,6 +164,10 @@
   --size-order-row: 2.75rem;
   --size-order-arrow: 1.25rem;
 
+  /* Siparis onay ekrani (F17): ortada tek sutun ve basliktaki onay dairesi. */
+  --container-max-confirmation: 38rem;
+  --size-confirmation-mark: 4.5rem;
+
   /* Bildirim (toast, T11.13): en genis hali ve kapatma dugmesi. */
   --container-max-toast: 24rem;
   --size-toast-dismiss: 1.75rem;

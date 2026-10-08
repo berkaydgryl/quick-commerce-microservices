@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import { COURIER_STATUS } from '../../src/domain/courier.js';
 import type { Courier } from '../../src/domain/courier.js';
-import type { CourierRepository } from '../../src/domain/courier-repository.js';
+import type { CarrierReader, CourierRepository } from '../../src/domain/courier-repository.js';
 import type { MarketLocator } from '../../src/domain/market-locator.js';
 import {
   courier,
@@ -30,7 +30,7 @@ import {
 
 export type StoreSetup = (
   couriers: readonly Courier[],
-) => Promise<CourierRepository & MarketLocator>;
+) => Promise<CourierRepository & CarrierReader & MarketLocator>;
 
 const at = (minute: number): Date => new Date(Date.UTC(2026, 9, 4, 9, minute));
 
@@ -187,6 +187,29 @@ export function describeCourierStoreContract(name: string, setup: StoreSetup): v
       await expect(claim(store, order, 2)).rejects.toMatchObject({ code: ERROR_CODES.CONFLICT });
       expect(await store.findById(courierId(2))).toEqual(idleAt(2, 100, 0));
       expect(await store.findByOrder(order)).toEqual(holder);
+    });
+
+    it('listCarrying (#205): yalnizca siparis tasiyanlar, siparis kimligine gore artan, sinirli, imlecten sonrasi', async () => {
+      const [first, second, third] = [orderId(), orderId(), orderId()].sort() as [
+        string,
+        string,
+        string,
+      ];
+      const carrying = (n: number, order: string) =>
+        courier(n, { status: COURIER_STATUS.BUSY, currentOrderId: order, lastAssignedAt: at(n) });
+      const store = await setup([
+        carrying(1, third),
+        courier(2),
+        carrying(3, first),
+        carrying(4, second),
+      ]);
+      const ids = async (limit: number, after?: string) =>
+        (await store.listCarrying(limit, after)).map((entry) => entry.id);
+
+      expect(await ids(10)).toEqual([courierId(3), courierId(4), courierId(1)]);
+      expect(await ids(2)).toEqual([courierId(3), courierId(4)]);
+      expect(await ids(2, second)).toEqual([courierId(1)]);
+      expect(await ids(10, third)).toEqual([]);
     });
 
     it('birakma: IDLE olur, siparis bagi silinir, bosta bekleme birakma aninda baslar, son atama ani ve konum kalir; ikinci birakma null', async () => {

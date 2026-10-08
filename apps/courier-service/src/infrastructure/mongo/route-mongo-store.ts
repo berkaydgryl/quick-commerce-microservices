@@ -5,11 +5,15 @@
 
 import { ROUTE_STATE } from '../../domain/route.js';
 import type { Route, RoutePatch } from '../../domain/route.js';
-import type { MovingRouteRepository, RouteRepository } from '../../domain/route-repository.js';
+import type {
+  MovingRouteRepository,
+  RouteBatchReader,
+  RouteRepository,
+} from '../../domain/route-repository.js';
 import { fromRouteDocument, routeProgressFields, toRouteDocument } from './mappers.js';
 import type { RoutesCollection } from './routes-collection.js';
 
-export class RouteMongoStore implements RouteRepository, MovingRouteRepository {
+export class RouteMongoStore implements RouteRepository, MovingRouteRepository, RouteBatchReader {
   constructor(private readonly routes: RoutesCollection) {}
 
   async findByOrder(orderId: string): Promise<Route | null> {
@@ -23,6 +27,13 @@ export class RouteMongoStore implements RouteRepository, MovingRouteRepository {
 
   async replace(route: Route): Promise<void> {
     await this.routes.replace(toRouteDocument(route));
+  }
+
+  async findByOrders(orderIds: readonly string[]): Promise<readonly Route[]> {
+    if (orderIds.length === 0) {
+      return [];
+    }
+    return (await this.routes.findByOrders(orderIds)).map(fromRouteDocument);
   }
 
   async listMoving(limit: number): Promise<readonly Route[]> {

@@ -1,6 +1,7 @@
+import type { GeoPoint } from '@getir/core';
+import { distanceMeters } from '@getir/core';
+
 import type { Market } from '../../domain/catalog.js';
-import type { GeoPoint } from '../../domain/geo.js';
-import { distanceMeters } from '../../domain/geo.js';
 import { coveringMarkets } from '../../domain/market-coverage.js';
 import type { MarketDistance } from '../../domain/market-coverage.js';
 import type { MarketReader } from '../../domain/market-reader.js';

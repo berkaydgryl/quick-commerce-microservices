@@ -64,8 +64,24 @@ export class GrpcCatalogPricing implements CatalogPricing {
     if (rules === undefined) {
       throw AppError.internal('Catalog market kurallarini dondurmedi', { details: { marketId } });
     }
+    // Konum ya da yaricap bozuksa catalog verisi bozuk (2dsphere indeksi konum
+    // ister; proto3 int32'de eksik yaricap 0 gelir): "yaricap disi" diye sessiz ret
+    // yok, 500 + gunluk (#203).
+    const location = market.location;
+    if (
+      location === undefined ||
+      !Number.isFinite(location.lat) ||
+      !Number.isFinite(location.lng)
+    ) {
+      throw AppError.internal('Catalog market konumunu dondurmedi', { details: { marketId } });
+    }
+    if (!Number.isFinite(market.deliveryRadiusMeters) || market.deliveryRadiusMeters <= 0) {
+      throw AppError.internal('Catalog market yaricapi gecersiz', { details: { marketId } });
+    }
     return {
       isOpen: true,
+      location: { lat: location.lat, lng: location.lng },
+      deliveryRadiusMeters: market.deliveryRadiusMeters,
       rules: {
         minBasketMinor: minorOf(rules.minBasket, 'minBasket'),
         deliveryFeeMinor: minorOf(rules.deliveryFee, 'deliveryFee'),

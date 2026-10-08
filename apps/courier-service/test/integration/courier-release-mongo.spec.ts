@@ -16,6 +16,7 @@ import { MongoDBContainer } from '@testcontainers/mongodb';
 import type { StartedMongoDBContainer } from '@testcontainers/mongodb';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { createReconcileCarriers } from '../../src/application/reconcile-carriers.js';
 import { createReleaseCourier } from '../../src/application/release-courier.js';
 import { COURIER_STATUS } from '../../src/domain/courier.js';
 import { ROUTE_STATE } from '../../src/domain/route.js';
@@ -24,10 +25,12 @@ import { planRoute } from '../../src/domain/route-planner.js';
 import { routeProgress } from '../../src/domain/route-progress.js';
 import { CourierMongoStore } from '../../src/infrastructure/mongo/courier-mongo-store.js';
 import {
+  carryingFilter,
   CouriersCollection,
   RELEASE_BY_COURIER_HINT,
   releaseFilter,
 } from '../../src/infrastructure/mongo/couriers-collection.js';
+import type { CourierDocument } from '../../src/infrastructure/mongo/documents.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
 import { MarketsCollection } from '../../src/infrastructure/mongo/markets-collection.js';
 import { MongoCourierSeedWriter } from '../../src/infrastructure/mongo/mongo-courier-seed-writer.js';
@@ -149,5 +152,46 @@ describe('iptal yolu - gercek Mongo (#174, #177)', () => {
 
     expect((await store.findById(courierId(1)))?.status).toBe(COURIER_STATUS.BUSY);
     expect((await routes.findByOrder(order))?.state).toBe(ROUTE_STATE.MOVING);
+  });
+});
+
+describe('BUSY kalan kurye uzlastirmasi - gercek Mongo (#205)', () => {
+  it.each([undefined, 'ord_imlec'])(
+    'tasiyan kuryelerin sayfasi kismi indeksten okunur (currentOrderId_unique), bellek ici SIRALAMA yok (imlec: %s)',
+    async (afterOrderId) => {
+      const plan: unknown = await connection.db
+        .collection<CourierDocument>(COLLECTIONS.COURIERS)
+        .find(carryingFilter(afterOrderId))
+        .sort({ currentOrderId: 1 })
+        .limit(200)
+        .explain('queryPlanner');
+
+      const text = JSON.stringify(plan);
+      expect(text).toContain('currentOrderId_unique');
+      expect(text).not.toContain('COLLSCAN');
+      expect(text).not.toContain('"SORT"');
+    },
+  );
+
+  it('rota ENDED, kurye hala BUSY: tick uzlastirmasi kuryeyi bitis anindaki konumda birakir', async () => {
+    const endedAt = new Date(NOW_MS + 30_000);
+    await routes.update(route, { state: ROUTE_STATE.ENDED, endedAt });
+    const reconcile = createReconcileCarriers({
+      couriers: store,
+      routes,
+      rule: RULE,
+      batchSize: 200,
+      graceMs: 30_000,
+      clock: fixedClock(endedAt.getTime() + 30_000),
+    });
+
+    expect(await reconcile(silentLogger)).toBe(1);
+
+    const released = await store.findById(courierId(1));
+    const expected = routeProgress(route, endedAt, RULE).position;
+    expect(released?.status).toBe(COURIER_STATUS.IDLE);
+    expect(released?.lastLocation.lat).toBeCloseTo(expected.lat, 9);
+    expect(released?.idleSince).toEqual(endedAt);
+    expect(await reconcile(silentLogger)).toBe(0);
   });
 });

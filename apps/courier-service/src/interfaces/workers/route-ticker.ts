@@ -70,7 +70,10 @@ export function startRouteTicker(options: RouteTickerOptions): RouteTicker {
         { ...summary, budgetMs: options.budgetMs },
         'tur butcesi doldu; kalan rotalar sonraki turda',
       );
-    } else if (summary.picked_up + summary.delivered + summary.ended + summary.failed > 0) {
+    } else if (
+      summary.picked_up + summary.delivered + summary.ended + summary.failed + summary.reconciled >
+      0
+    ) {
       logger.info({ ...summary }, 'rotalar ilerletildi');
     }
   };

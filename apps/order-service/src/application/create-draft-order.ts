@@ -11,8 +11,10 @@
  *
  * Kapali market (#154) taslak ACMAZ: NO_STORE + sebep STORE_CLOSED, fiyatlamadan
  * ve stok kilidinden ONCE (stoga dokunulmaz; kullanicinin baska marketteki
- * kilidi etkilenmez). CreateOrder marketi yeniden okumaz: kilit suresi icinde
- * kapanan markette siparis kabul edilir.
+ * kilidi etkilenmez). Teslimat adresi marketin yaricapi disindaysa (#203) ayni
+ * yerde, kapali market denetiminden SONRA: NO_STORE + sebep OUT_OF_RANGE.
+ * CreateOrder marketi yeniden okumaz: kilit suresi icinde kapanan markette
+ * siparis kabul edilir.
  *
  * KAPSAM DISI: risk degerlendirmesi ve odeme (T7.1 saga), banda gore kilit
  * suresi (T11.3).
@@ -24,7 +26,7 @@ import { orderCreatedEvents } from '../domain/order-events.js';
 import type { OrderHistoryReader } from '../domain/order-history-reader.js';
 import type { OrderRepository } from '../domain/order-repository.js';
 import type { DeliveryLocation, Order } from '../domain/order.js';
-import { assertMarketOpen } from '../domain/market-terms.js';
+import { assertMarketOpen, deliveryReach, outOfDeliveryRange } from '../domain/market-terms.js';
 import { createDraftOrder as buildDraftOrder } from '../domain/order.js';
 import { RELEASE_REASON } from '../domain/stock-reservation.js';
 import type { CartLine } from '../domain/price-draft.js';
@@ -77,6 +79,20 @@ export function createCreateDraftOrder(deps: CreateDraftOrderDeps): CreateDraftO
     // fiyat ve stok hatalarindan once gelir.
     const market = await marketRead;
     assertMarketOpen(market);
+    const reach = deliveryReach(market, input.deliveryLocation);
+    if (reach.outside) {
+      // Istemciye mesafe yankilanmaz; sinir uyusmazligini (Mongo +-1 m) ya da bozuk
+      // catalog verisini ayirt etmek icin gunlukte. Koordinat YAZILMAZ.
+      scope.logger.info(
+        {
+          marketId: input.marketId,
+          distanceMeters: Math.round(reach.distanceMeters),
+          radiusMeters: market.deliveryRadiusMeters,
+        },
+        'teslimat adresi yaricap disinda',
+      );
+      throw outOfDeliveryRange();
+    }
     const [offers, isFirstOrder] = await otherReads;
 
     const { items, pricing } = priceDraft({

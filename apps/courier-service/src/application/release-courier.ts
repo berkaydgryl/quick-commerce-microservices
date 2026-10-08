@@ -21,6 +21,7 @@
  * _id indeksi): arada kurye degistiyse kimse birakilmaz.
  */
 
+import { AppError, ERROR_CODES } from '@getir/core';
 import type { Clock, Logger } from '@getir/core';
 
 import type { Courier, GeoPoint } from '../domain/courier.js';
@@ -35,7 +36,7 @@ import {
 } from '../domain/route.js';
 import type { Route } from '../domain/route.js';
 import type { MovementRule } from '../domain/route-progress.js';
-import { courierLocation, routeProgress } from '../domain/route-progress.js';
+import { positionAt } from '../domain/route-progress.js';
 import type { MovingRouteRepository, RouteRepository } from '../domain/route-repository.js';
 
 export interface CourierRelease {
@@ -139,6 +140,13 @@ async function endRoute(
   if (deliveredMeanwhile(route, again)) {
     return { kind: 'delivered' };
   }
+  if (again !== null && sameRoute(again, route) && routeState(again) === ROUTE_STATE.MOVING) {
+    // Yama tutmadi ama rota hala ayni, ilerliyor ve teslimsiz: karar verilemedi.
+    // Kor birakma yok (#177): hata, order yeniden dener.
+    throw new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'Rota bitirilemedi; tekrar deneyin', {
+      details: { orderId: route.orderId },
+    });
+  }
   return again !== null && sameRoute(again, route)
     ? endedDecision(again, rule)
     : { kind: 'cancelled' };
@@ -149,9 +157,4 @@ function endedDecision(route: Route, rule: MovementRule): RouteDecision {
   return route.endedAt === undefined
     ? { kind: 'cancelled' }
     : { kind: 'cancelled', location: positionAt(route, route.endedAt, rule) };
-}
-
-/** Kuryenin `at`'teki yazilacak konumu (rotanin kurali, #197; market kurali). */
-function positionAt(route: Route, at: Date, rule: MovementRule): GeoPoint {
-  return courierLocation(route, routeProgress(route, at, rule));
 }

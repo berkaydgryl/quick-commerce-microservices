@@ -22,6 +22,7 @@ import { favoritesContentSchema } from './favorites.js';
 import { loginCardContentSchema } from './login-card.js';
 import { marketListContentSchema } from './market-list.js';
 import { marketPageContentSchema } from './market-page.js';
+import { orderConfirmationContentSchema } from './order-confirmation.js';
 import { ordersContentSchema } from './orders.js';
 import { paymentMethodsContentSchema } from './payment-methods.js';
 import { profileContentSchema } from './profile.js';
@@ -72,6 +73,8 @@ export const welcomeContentSchema = z.object({
   appLoading: appLoadingContentSchema,
   /** Kurye takibi (F22): "Kuryem nerede" penceresi ve yaklasma bildirimi. */
   courierTracking: courierTrackingContentSchema,
+  /** Siparis onay ekrani (F17): basliklar ve iki dugme. */
+  orderConfirmation: orderConfirmationContentSchema,
 });
 
 export type WelcomeContent = z.infer<typeof welcomeContentSchema>;

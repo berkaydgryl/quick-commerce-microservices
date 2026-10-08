@@ -1,0 +1,10 @@
+/* Siparis karti (T11.16; F17'de ortak): beyaz kart; tanim listesinin dis boslugu sifir. */
+.c-order-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  margin: 0;
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-surface);
+}

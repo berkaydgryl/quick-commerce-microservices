@@ -7,6 +7,7 @@
 import { COURIER_CLAIM_CANDIDATES } from '../../config/constants.js';
 import type { Courier, GeoPoint } from '../../domain/courier.js';
 import type {
+  CarrierReader,
   CourierBatchReader,
   CourierRepository,
   NearestClaimRequest,
@@ -27,7 +28,9 @@ export interface ClaimTuning {
   readonly candidates: number;
 }
 
-export class CourierMongoStore implements CourierRepository, CourierBatchReader, MarketLocator {
+export class CourierMongoStore
+  implements CourierRepository, CourierBatchReader, CarrierReader, MarketLocator
+{
   constructor(
     private readonly couriers: CouriersCollection,
     private readonly markets: MarketsCollection,
@@ -40,6 +43,10 @@ export class CourierMongoStore implements CourierRepository, CourierBatchReader,
 
   async findByOrder(orderId: string): Promise<Courier | null> {
     return toCourier(await this.couriers.findByOrder(orderId));
+  }
+
+  async listCarrying(limit: number, afterOrderId?: string): Promise<readonly Courier[]> {
+    return (await this.couriers.findCarrying(limit, afterOrderId)).map(fromCourierDocument);
   }
 
   async findByIds(ids: readonly string[]): Promise<readonly Courier[]> {

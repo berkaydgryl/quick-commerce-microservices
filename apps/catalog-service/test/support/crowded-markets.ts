@@ -4,8 +4,9 @@
  * Bellek ve Mongo ayni marketlerle kosar (covering-limit-contract.ts).
  */
 
+import type { GeoPoint } from '@getir/core';
+
 import type { Market } from '../../src/domain/catalog.js';
-import type { GeoPoint } from '../../src/domain/geo.js';
 import { CLASSIC_SNAPSHOT } from './classic-catalog.js';
 
 /** Senaryonun konumu (Kadikoy'den uzak; demo marketleriyle karismaz). */

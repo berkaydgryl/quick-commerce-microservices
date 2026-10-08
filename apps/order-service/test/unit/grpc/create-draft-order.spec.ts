@@ -124,3 +124,17 @@ describe('CreateDraftOrder: kapali market (#154)', () => {
     expect(appErrorOf(error)?.details).toEqual({ reason: 'STORE_CLOSED' });
   });
 });
+
+describe('CreateDraftOrder: teslimat yaricapi (#203)', () => {
+  it('yaricap disi teslimat adresi: NOT_FOUND + NO_STORE; ayrinti YALNIZCA { reason: OUT_OF_RANGE }', async () => {
+    const { error, response } = await call(orderV1.OrderServiceService.createDraftOrder, {
+      ...draftRequest,
+      deliveryLocation: { lat: 41.09, lng: 29.02 },
+    });
+
+    expect(response).toBeUndefined();
+    expect(error?.code).toBe(GRPC_STATUS.NOT_FOUND);
+    expect(appErrorOf(error)?.code).toBe(ERROR_CODES.NO_STORE);
+    expect(appErrorOf(error)?.details).toEqual({ reason: 'OUT_OF_RANGE' });
+  });
+});
