@@ -34,6 +34,9 @@ service OrderService {
   // Risk CreateOrder'da sorulur. Kapali market (catalog Market.is_open false,
   // #154): NOT_FOUND + "NO_STORE", ayrinti yalnizca reason "STORE_CLOSED";
   // taslak acilmaz, stoga dokunulmaz (fiyat ve minimum sepet hatalarindan once).
+  // delivery_location marketin teslimat yaricapi disindaysa (#203; sinir dahil,
+  // catalog kapsamasiyla ayni kural) ayni kod, reason "OUT_OF_RANGE"; kapali
+  // market denetiminden sonra, fiyatlamadan once.
   // Gateway karsiligi: POST /v1/cart/reserve
   rpc CreateDraftOrder(CreateDraftOrderRequest) returns (CreateDraftOrderResponse);
 

@@ -26,9 +26,17 @@ Kapalı market taslak açmaz: `NO_STORE` (gRPC `NOT_FOUND`, HTTP 404), ayrıntı
 `{ reason: "STORE_CLOSED" }` (market kimliği ya da adı yankılanmaz). Kod ve sebep catalog.proto'daki
 kararla aynı; taşıma `x-app-error` ayrıntısı, mesafe anahtarı yok. Denetim yalnız market okumasını
 bekler: teklif ve geçmiş okumasının hatasından, `PRICE_CHANGED` ve `MIN_BASKET_NOT_MET`'ten ve stok
-kilidinden ÖNCE gelir; stoğa dokunulmaz, kullanıcının başka marketteki kilidi etkilenmez. Teslimat
-yarıçapı rezervasyonda HENÜZ denetlenmiyor (bekleyen iş). **KABUL:** `CreateOrder` marketi yeniden okumaz; kilit süresi içinde
-kapanan markette sipariş kabul edilir (stok zaten ayrılmış).
+kilidinden ÖNCE gelir; stoğa dokunulmaz, kullanıcının başka marketteki kilidi etkilenmez. **KABUL:**
+`CreateOrder` marketi yeniden okumaz; kilit süresi içinde kapanan markette sipariş kabul edilir (stok
+zaten ayrılmış).
+
+**Teslimat yarıçapı (#203):** açık marketin konumu ve yarıçapı aynı `GetMarket` çağrısından gelir;
+teslimat adresi (istekteki zorunlu `delivery_location`) yarıçap dışındaysa taslak açılmaz: `NO_STORE`,
+ayrıntı yalnızca `{ reason: "OUT_OF_RANGE" }` (mesafe ve konum yankılanmaz). Sıra: kapalı market →
+yarıçap → fiyat → stok kilidi. Kural catalog kapsamasıyla ORTAK: `@getir/core` `distanceMeters`
+(haversine, Mongo uyumlu 6378,1 km) ve `isWithinDeliveryRadius` (sınır dahil). Konumsuz açık market
+catalog veri hatasıdır: `INTERNAL`. **KABUL:** catalog listesi Mongo `$geoNear`'dan gelir; haversine ile
+fark ±1 m'dir, yarıçap sınırında listede görünen market rezervasyonda nadiren `OUT_OF_RANGE` verebilir.
 
 RPC'lerin yanında iki işçi çalışır: kilidi dolan siparişleri kapatan süpürücü (T11.2 PR 2) ve
 ödenen siparişe courier-svc'den kurye isteyen kurye işçisi (T13.1 PR 2; sırası T13.2 PR 2'de ödeme
