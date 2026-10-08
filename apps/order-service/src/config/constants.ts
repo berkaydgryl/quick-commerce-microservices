@@ -44,6 +44,15 @@ export const DEFAULT_PAYMENT_GRPC_ADDR = 'localhost:50054';
 export const RISK_CALL_TIMEOUT_MS = 1_000;
 export const PAYMENT_CALL_TIMEOUT_MS = 3_000;
 
+/**
+ * GetOrder'in 3DS okumasinin (payment GetPayment, #163 B1) sure siniri (ms). Bu
+ * okuma en iyi cabadir ve kritik odeme yolundan AYRIDIR: kendi kisa siniri var,
+ * yeniden denenmez ve payment devresine hata saymaz (web'in siparis yoklamasi
+ * payment yavasken Charge/Confirm3Ds'in devresini acmasin). En kotu GetOrder
+ * suresi: Mongo okumasi (MONGO_OPERATION_TIMEOUT_MS, 2 sn) + 1 sn.
+ */
+export const THREE_DS_READ_TIMEOUT_MS = 1_000;
+
 /** Stok servisinin varsayilan adresi (roadmap port haritasi: inventory 50052). */
 export const DEFAULT_INVENTORY_GRPC_ADDR = 'localhost:50052';
 

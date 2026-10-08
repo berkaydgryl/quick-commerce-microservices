@@ -28,13 +28,22 @@ const (
 )
 
 // fakeCardVault, kasanin sahtesi: cagrilari ve kullaniciyi saklar; ekleme
-// cevabi addResult'tan (verilmezse maskeli kart).
+// cevabi addResult'tan, ad duzenleme cevabi renameResult'tan (verilmezse
+// maskeli kart).
 type fakeCardVault struct {
-	mu        sync.Mutex
-	users     []string
-	inputs    []cards.AddInput
-	deleted   []string
-	addResult func(call int) error
+	mu           sync.Mutex
+	users        []string
+	inputs       []cards.AddInput
+	deleted      []string
+	renames      []cardRename
+	addResult    func(call int) error
+	renameResult error
+}
+
+// cardRename, kasaya giden ad duzenlemesi; nickname nil ise alan eksik gitti.
+type cardRename struct {
+	cardID   string
+	nickname *string
 }
 
 func (f *fakeCardVault) AddCard(_ context.Context, userID string, input cards.AddInput) (cards.SavedCard, error) {
@@ -67,6 +76,27 @@ func (f *fakeCardVault) DeleteCard(_ context.Context, userID, cardID string) (ca
 	return cards.SavedCardList{Items: []cards.SavedCard{}}, nil
 }
 
+func (f *fakeCardVault) UpdateCardNickname(_ context.Context, userID, cardID string, nickname *string) (cards.SavedCard, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.users = append(f.users, userID)
+	f.renames = append(f.renames, cardRename{cardID: cardID, nickname: nickname})
+	if f.renameResult != nil {
+		return cards.SavedCard{}, f.renameResult
+	}
+	card := savedTestCard()
+	if nickname != nil {
+		card.Nickname = *nickname
+	}
+	return card, nil
+}
+
+func (f *fakeCardVault) renameCalls() []cardRename {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]cardRename(nil), f.renames...)
+}
+
 func (f *fakeCardVault) addCalls() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -92,6 +122,11 @@ type cardsHarness struct {
 // cardsOptions, duzenegin degisebilen parcalari.
 type cardsOptions struct {
 	logger *slog.Logger
+	// general, kullanici basina genel sinir (pencere 1 dk); sifirsa fiilen sinirsiz.
+	general int
+	// renamer, ad duzenlemenin kasasi; nil ise sahte kasa (gercek cards.Service
+	// verilirse hata gercek gRPC yolundan gecer).
+	renamer CardRenamer
 }
 
 func newCardsHarness(t *testing.T, options cardsOptions) *cardsHarness {
@@ -106,12 +141,20 @@ func newCardsHarness(t *testing.T, options cardsOptions) *cardsHarness {
 	if logger == nil {
 		logger = silentLogger()
 	}
+	general := options.general
+	if general == 0 {
+		general = 10000
+	}
+	var renamer CardRenamer = vault
+	if options.renamer != nil {
+		renamer = options.renamer
+	}
 	app := New(Deps{
 		Health:       fakeReporter{report: healthyReport()},
-		Cards:        CardRoutes{Lister: vault, Adder: vault, Deleter: vault, Failures: counter, Inflight: counter},
+		Cards:        CardRoutes{Lister: vault, Adder: vault, Deleter: vault, Renamer: renamer, Failures: counter, Inflight: counter},
 		AccessTokens: testTokens(),
 		Idempotency:  Idempotency{Store: store, FingerprintKey: testFingerprintKey, TTL: 24 * time.Hour},
-		RateLimit:    RateLimit{Limiter: counter, Window: time.Minute, General: 10000, Auth: 10000, Order: 10000},
+		RateLimit:    RateLimit{Limiter: counter, Window: time.Minute, General: general, Auth: 10000, Order: 10000},
 		Logger:       logger,
 		Metrics:      recorder,
 	})
@@ -156,11 +199,18 @@ func cardRequest(t *testing.T, method, target, authorization, key, body string) 
 // envelope, istegi verir ve zarfi okur (govde decode'da kapanir).
 func (h *cardsHarness) envelope(t *testing.T, request *http.Request) Envelope {
 	t.Helper()
+	_, envelope := h.statusAndEnvelope(t, request)
+	return envelope
+}
+
+// statusAndEnvelope, istegi verir; durum ve zarf (govde decode'da kapanir).
+func (h *cardsHarness) statusAndEnvelope(t *testing.T, request *http.Request) (int, Envelope) {
+	t.Helper()
 	response, err := h.app.Test(request)
 	if err != nil {
 		t.Fatalf("istek: %v", err)
 	}
-	return decode(t, response)
+	return response.StatusCode, decode(t, response)
 }
 
 // rawBody, istegi verir; durum ve ham govde (govde BURADA kapanir).

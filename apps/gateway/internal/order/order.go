@@ -186,38 +186,42 @@ func (s *Service) ConfirmThreeDS(ctx context.Context, in ConfirmInput) (Placemen
 // (oda jetonu) ve "zaten iptal" yolu bunu kullanir. Baskasinin siparisi
 // NOT_FOUND doner (varlik bilgisi bile sizmaz; order-service).
 func (s *Service) Get(ctx context.Context, userID, orderID string) (Order, error) {
-	raw, err := s.fetch(ctx, userID, orderID)
+	response, err := s.fetch(ctx, userID, orderID)
 	if err != nil {
 		return Order{}, err
 	}
-	return toOrder(raw, s.now())
+	return toOrder(response.GetOrder(), s.now())
 }
 
-// GetDetailed, GET /v1/orders/{id}: siparis ve ayrintisi (T12.4), SAHIBINE.
-// Ayrinti yalnizca bu cevap tipinde vardir; liste (Page) ve Get onu tasiyamaz.
+// GetDetailed, GET /v1/orders/{id}: siparis ve ayrintisi (T12.4) ve odeme
+// bekleyen sipariste 3DS durumu (#163 B1), SAHIBINE. Ikisi yalnizca bu cevap
+// tipinde vardir; liste (Page) ve Get onlari tasiyamaz. Kalan 3DS suresi ile
+// acik/kapali karari ayni saatten (TEK SAAT, three_ds_view.go).
 func (s *Service) GetDetailed(ctx context.Context, userID, orderID string) (OrderDetail, error) {
-	raw, err := s.fetch(ctx, userID, orderID)
+	response, err := s.fetch(ctx, userID, orderID)
 	if err != nil {
 		return OrderDetail{}, err
 	}
-	found, err := toOrder(raw, s.now())
+	now := s.now()
+	found, err := toOrder(response.GetOrder(), now)
 	if err != nil {
 		return OrderDetail{}, err
 	}
-	details, err := toDetailsView(raw.GetDetails())
+	details, err := toDetailsView(response.GetOrder().GetDetails())
 	if err != nil {
 		return OrderDetail{}, err
 	}
-	return OrderDetail{Order: found, Details: details}, nil
+	threeDS := toOrderThreeDS(response.GetThreeDs(), response.GetOrder().GetStatus(), now)
+	return OrderDetail{Order: found, Details: details, ThreeDS: threeDS}, nil
 }
 
-func (s *Service) fetch(ctx context.Context, userID, orderID string) (*orderv1.Order, error) {
+func (s *Service) fetch(ctx context.Context, userID, orderID string) (*orderv1.GetOrderResponse, error) {
 	request := &orderv1.GetOrderRequest{OrderId: orderID, UserId: userID}
 	response, err := rpc.Invoke(ctx, s.timeout, service, "GetOrder", s.rpc.GetOrder, request)
 	if err != nil {
 		return nil, rpc.RenameFields(err, getFieldNames)
 	}
-	return response.GetOrder(), nil
+	return response, nil
 }
 
 // OrderPage, kullanicinin siparislerinin bir sayfasi, yeniden eskiye (ham:

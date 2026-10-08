@@ -1,0 +1,90 @@
+/*
+ * Duyuru bolgesi: akis disinda (sayfanin izgarasinda bosluk acmaz), boyutsuz.
+ * Sabit konum kendi yigin baglamini kurar: bildirim katmani BURADA verilir,
+ * yoksa ust bar (z-header) bildirimin ustune cizilir.
+ */
+.c-approach-notice-region {
+  position: fixed;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  z-index: var(--z-toast);
+}
+
+/*
+ * Yaklasma bildirimi (F22): ekranin sag ustunde, ust barin ve sepet
+ * cubugunun ustunde (bildirim katmani). Beyaz kart, mor baslik; solda X,
+ * sagda "Konumu gör" (takip satirinin kapsul dugmesi, dolu mor). Saga dogru
+ * kayarak gelir; hareket azaltmada animasyonsuz. Telefonda ust kenarda tam
+ * genislik (kenar boslugu kadar iceride).
+ */
+.c-approach-notice {
+  position: fixed;
+  inset-block-start: var(--space-4);
+  inset-inline-end: var(--space-gutter);
+  z-index: var(--z-toast);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+  width: min(100% - var(--space-gutter) * 2, var(--container-max-toast));
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-3);
+  background: var(--bg-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-raised);
+  animation: c-approach-notice-in var(--duration-fast) var(--easing-standard);
+}
+
+@keyframes c-approach-notice-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--space-4));
+  }
+}
+
+.c-approach-notice__close {
+  display: grid;
+  place-items: center;
+  width: var(--size-toast-dismiss);
+  height: var(--size-toast-dismiss);
+  padding: var(--space-1);
+  color: var(--text-muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: var(--radius-pill);
+}
+
+.c-approach-notice__close:hover {
+  color: var(--text-default);
+  background: var(--bg-page);
+}
+
+.c-approach-notice__title {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+}
+
+/* "Konumu gör" ikinci satirda, basligin hizasinda (X'in altinda bos kalir). */
+.c-approach-notice__action {
+  grid-column: 2;
+  justify-self: start;
+  padding: var(--space-2) var(--space-4);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-on-brand);
+  cursor: pointer;
+  background: var(--color-brand-primary);
+  border: none;
+  border-radius: var(--radius-pill);
+}
+
+.c-approach-notice__action:hover {
+  background: var(--color-brand-primary-strong);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-approach-notice {
+    animation: none;
+  }
+}

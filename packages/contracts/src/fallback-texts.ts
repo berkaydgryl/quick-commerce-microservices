@@ -8,6 +8,7 @@ import type {
 } from './content.js';
 import { CART_PAGE_FALLBACK, FOOTER_FALLBACK } from './content/cart-page-fallback.js';
 import { CHECKOUT_FALLBACK } from './content/checkout-fallback.js';
+import { COURIER_TRACKING_FALLBACK } from './content/courier-tracking-fallback.js';
 import { ADDRESS_SETUP_FALLBACK, APP_HEADER_FALLBACK } from './content/header-fallback.js';
 import { MARKET_PAGE_FALLBACK } from './content/market-page-fallback.js';
 import { PAYMENT_METHODS_FALLBACK } from './content/payment-methods-fallback.js';
@@ -275,6 +276,8 @@ export const CONTENT_FALLBACK = {
   checkout: CHECKOUT_FALLBACK,
   /** confirm: ortak onay penceresinin dugmeleri (F13). */
   confirm: { yesLabel: 'Evet', noLabel: 'Hayır' },
+  /** courierTracking: kurye penceresi ve bildirimi (F22). */
+  courierTracking: COURIER_TRACKING_FALLBACK,
 } as const;
 
 export type ContentFallback = typeof CONTENT_FALLBACK;

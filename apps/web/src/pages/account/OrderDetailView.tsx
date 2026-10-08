@@ -22,6 +22,12 @@ export interface OrderDetailViewProps {
   readonly onRetry: () => void;
   /** Gecmis Siparislerim listesine donus. */
   readonly listHref: string;
+  /** "Kuryem nerede" penceresini acar (F22); yalniz "Kurye yolda"da basilir. */
+  readonly onWhereIsCourier?: () => void;
+  /** "Kuryem nerede" dugmesinin kimligi (pencere kapaninca odak). */
+  readonly courierButtonId?: string;
+  /** Takip kartinin basliginin kimligi (dugme yoksa odagin yedegi). */
+  readonly trackHeadingId?: string;
 }
 
 /**
@@ -39,6 +45,9 @@ export function OrderDetailView({
   error,
   onRetry,
   listHref,
+  onWhereIsCourier,
+  courierButtonId,
+  trackHeadingId,
 }: OrderDetailViewProps) {
   const titleId = useId();
   const itemsId = useId();
@@ -86,7 +95,13 @@ export function OrderDetailView({
           </dl>
           <OrderLines texts={texts} order={order} headingId={itemsId} />
           <OrderTotals texts={texts} order={order} />
-          <OrderTrack status={order.status} texts={texts} />
+          <OrderTrack
+            status={order.status}
+            texts={texts}
+            {...(onWhereIsCourier === undefined ? {} : { onWhereIsCourier })}
+            {...(courierButtonId === undefined ? {} : { courierButtonId })}
+            {...(trackHeadingId === undefined ? {} : { headingId: trackHeadingId })}
+          />
         </>
       )}
     </section>

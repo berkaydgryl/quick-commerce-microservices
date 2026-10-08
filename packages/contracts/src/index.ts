@@ -31,6 +31,7 @@ export * from './order-status.js';
 export * from './cart.js';
 export * from './checkout-rules.js';
 export * from './order.js';
+export * from './order-three-ds.js';
 export * from './socket.js';
 export * from './events.js';
 export * from './favorites.js';

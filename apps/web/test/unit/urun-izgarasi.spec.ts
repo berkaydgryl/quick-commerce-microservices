@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ProductCard } from '../../src/features/catalog/ui/ProductCard';
 
-import { block, css } from './css-test-support';
+import { block, css, tokens } from './css-test-support';
 
 describe('urun izgarasi (magaza sayfasi; 07.10 kullanici karari: yuzdesel, satiri doldurur)', () => {
   const grid = block(
@@ -30,7 +30,7 @@ describe('urun izgarasi (magaza sayfasi; 07.10 kullanici karari: yuzdesel, satir
 
     expect(catalog).not.toContain('@container');
     expect(catalog).not.toContain('container-type');
-    expect(css('shared/styles/tokens.css')).toMatch(/--size-product-card-min: [0-9.]+rem;/);
+    expect(tokens()).toMatch(/--size-product-card-min: [0-9.]+rem;/);
   });
 
   it('bos hucre beyaz: izgara zemini yuzey, cizgiler kartin golgesinden', () => {

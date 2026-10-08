@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { distanceMeters } from '../../src/domain/geo.js';
+import { deliveredNoEarlierThan } from '../../src/domain/route.js';
 import type { Route } from '../../src/domain/route.js';
 import { planRoute } from '../../src/domain/route-planner.js';
 import {
@@ -139,6 +140,119 @@ describe('routeProgress', () => {
 
   it('rotanin anindan once sorulursa baslangic sayilir', () => {
     expect(routeProgress(subject, after(-10), RULE).position).toEqual(COURIER);
+  });
+});
+
+describe('routeProgress: kayitli alma ikinci bacagi baslatir (#195)', () => {
+  const SLOW = { speedKmh: 6, prepSeconds: 600 };
+  const FAST = { speedKmh: 120, prepSeconds: 0 };
+  /** Ikinci bacagin suresi (ms), kurala gore. */
+  const legTwoMs = (rule: typeof RULE) =>
+    Math.round(routeSchedule(route(), rule).legTwoSeconds * 1_000);
+
+  it('hiz ayari hizlansa da kayitli almadan sonra TO_CUSTOMER; varis = alma + 2. bacak / yeni hiz', () => {
+    // Eski (yavas) ayarla alma 600. sn'de kaydedildi; yeni (hizli) ayarla cizelge
+    // varisi cok once olurdu (ikinci bacak sifir saniye, TO_CUSTOMER atlanirdi).
+    const recorded = { ...route(), pickedUpAt: after(600) };
+    expect(routeSchedule(recorded, FAST).arrivalSeconds).toBeLessThan(600);
+
+    const justAfter = routeProgress(recorded, after(600.5), FAST);
+    expect(justAfter).toMatchObject({ phase: TRACKING_PHASE.TO_CUSTOMER, pickedUpAt: after(600) });
+
+    const arrived = routeProgress(recorded, new Date(after(600).getTime() + legTwoMs(FAST)), FAST);
+    expect(arrived).toMatchObject({
+      phase: TRACKING_PHASE.DELIVERED,
+      pickedUpAt: after(600),
+      deliveredAt: new Date(after(600).getTime() + legTwoMs(FAST)),
+    });
+  });
+
+  it('hiz ayari yavaslarsa ikinci bacak uzar; kayitli alma ani korunur', () => {
+    const recorded = { ...route(), pickedUpAt: after(60) };
+    const arrivalMs = after(60).getTime() + legTwoMs(SLOW);
+
+    expect(routeProgress(recorded, new Date(arrivalMs - 1), SLOW).phase).toBe(
+      TRACKING_PHASE.TO_CUSTOMER,
+    );
+    expect(routeProgress(recorded, new Date(arrivalMs), SLOW)).toMatchObject({
+      phase: TRACKING_PHASE.DELIVERED,
+      pickedUpAt: after(60),
+      deliveredAt: new Date(arrivalMs),
+    });
+  });
+
+  it('kayit x hiz ayari x her an: kayitli almadan sonra asla TO_MARKET; asama tek yonlu; ikinci bacak suresi tam', () => {
+    for (const pickupSeconds of [0, 45, 114, 600]) {
+      for (const rule of [SLOW, RULE, FAST]) {
+        const pickedUpAt = after(pickupSeconds);
+        const recorded = { ...route(), pickedUpAt };
+        const order = [
+          TRACKING_PHASE.TO_MARKET,
+          TRACKING_PHASE.TO_CUSTOMER,
+          TRACKING_PHASE.DELIVERED,
+        ];
+        let previous = 0;
+        const end = pickupSeconds * 1_000 + legTwoMs(rule) + 5_000;
+        for (let ms = -5_000; ms <= end; ms += 997) {
+          const progress = routeProgress(recorded, new Date(START.getTime() + ms), rule);
+          const at = `${pickupSeconds} sn alma, ${rule.speedKmh} km/sa, ${ms} ms`;
+          const rank = order.indexOf(progress.phase);
+          expect(rank, at).toBeGreaterThanOrEqual(previous);
+          previous = rank;
+          if (ms >= pickupSeconds * 1_000) {
+            expect(progress.phase, at).not.toBe(TRACKING_PHASE.TO_MARKET);
+            expect(progress.pickedUpAt, at).toEqual(pickedUpAt);
+          }
+          if (progress.phase === TRACKING_PHASE.DELIVERED) {
+            expect(progress.deliveredAt?.getTime(), at).toBe(pickedUpAt.getTime() + legTwoMs(rule));
+          }
+        }
+      }
+    }
+  });
+
+  it('saat kayitli almanin gerisindeyse hesap TO_MARKET (gosterim asamayi kayittan alir)', () => {
+    const recorded = { ...route(), pickedUpAt: after(300) };
+
+    // Cizelgeye gore 200. sn'de paket alinmis olurdu; kayit 300. sn: hesap henuz TO_MARKET.
+    expect(routeSchedule(recorded, RULE).pickupSeconds).toBeLessThan(200);
+    expect(routeProgress(recorded, after(200), RULE).phase).toBe(TRACKING_PHASE.TO_MARKET);
+  });
+
+  it('kayitli alma rotanin uretilme anindan once ise de alma ani kayittir (kirpilmaz)', () => {
+    const early = new Date(START.getTime() - 1_000);
+    const recorded = { ...route(), pickedUpAt: early };
+
+    expect(routeProgress(recorded, after(0), RULE)).toMatchObject({
+      phase: TRACKING_PHASE.TO_CUSTOMER,
+      pickedUpAt: early,
+    });
+    expect(routeProgress(recorded, after(3_600), RULE)).toMatchObject({
+      phase: TRACKING_PHASE.DELIVERED,
+      pickedUpAt: early,
+      deliveredAt: new Date(early.getTime() + legTwoMs(RULE)),
+    });
+  });
+
+  it('kayitsiz rota cizelgeyle AYNEN (eski davranis degismedi)', () => {
+    const plain = route();
+    const schedule = routeSchedule(plain, RULE);
+    const arrivalMs = Math.round(schedule.arrivalSeconds * 1_000);
+
+    expect(routeProgress(plain, new Date(START.getTime() + arrivalMs), RULE)).toMatchObject({
+      phase: TRACKING_PHASE.DELIVERED,
+      pickedUpAt: after(schedule.pickupSeconds),
+      deliveredAt: new Date(START.getTime() + arrivalMs),
+    });
+  });
+});
+
+describe('deliveredNoEarlierThan (#190 savunmasi; tick ve takip ortak)', () => {
+  it('teslim almadan once ise teslim = alma; degilse ya da alma yoksa teslim aynen', () => {
+    expect(deliveredNoEarlierThan(after(10), after(20))).toEqual(after(20));
+    expect(deliveredNoEarlierThan(after(30), after(20))).toEqual(after(30));
+    expect(deliveredNoEarlierThan(after(20), after(20))).toEqual(after(20));
+    expect(deliveredNoEarlierThan(after(10), undefined)).toEqual(after(10));
   });
 });
 

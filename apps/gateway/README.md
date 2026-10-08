@@ -29,9 +29,9 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `DELETE /v1/cart/reserve/{orderId}` | ✅ order `CancelOrder` (T11.4): taslağı ya da ödeme bekleyen siparişi bırakır, stok döner; zaten bırakılmışsa 200 `released:false`; parası alınmışsa 409 `REQUEST_IN_PROGRESS`; başkasının siparişi 404 |
 | `POST /v1/orders`    | ✅ order `CreateOrder` (saga): 201 `PAID` ya da `AWAITING_PAYMENT` + `threeDs` (sunucunun saatiyle `ttlSeconds`, T12.4); kart `payment.cardId` (kayıtlı kart) ya da eski `cardToken`, tam biri; kapıda ödeme `CASH_ON_DELIVERY` + `onDelivery` (`CASH` ya da `POS`), kart alanı yok, orta bantta 422 `PAYMENT_METHOD_NOT_ALLOWED`; `details` (hediye, not, "Zili Çalma", sözleşme onayı) zorunlu, kuralları `internal/order/details.go` (T12.4); kasada olmayan kart 404 `resource: card` |
 | `POST /v1/orders/{id}/3ds` | ✅ order `ConfirmPayment`; yanlış kod 402 + kalan hak |
-| `GET /v1/orders` | ✅ Geçmiş siparişler (T11.16, `internal/orderhistory`): order `ListMyOrders` + market adları sayfa başına TEK `BatchGetMarkets` (katalog hatasında adsız, sipariş yine listelenir); yeniden eskiye, imleçle; `DRAFT` ve hiç ilerlemeden süresi dolan `EXPIRED` süzülür, eksik kadar en fazla 3 tur (sunucu tarafı süzme #101); `CANCELLED` + geçmişte `PAID` = `refunded`; sayfa 20, en fazla 50 (kırpılır); önbelleğe alınmaz |
-| `GET /v1/orders/{id}` | ✅ order `GetOrder`; başkasının siparişi 404; kilit canlıyken `reservationExpiresAt` ve `reservationTtlSeconds` (T11.4); sipariş ayrıntısı `details` yalnızca burada, sahibine (T12.4; liste ve geçmiş taşımaz); ödeme seçimi `payment` (`method`, kapıda ödemede `onDelivery`; seçimsiz eski siparişte yok); T11.16'dan beri önbelleğe alınmaz (`no-store`) |
-| `GET /v1/orders/{id}/token` | ✅ T12.2: sahiplik order `GetOrder` ile (başkasınınki 404, bitmiş sipariş 200); `order:{id}` odası için 60 sn'lik oda jetonu (`internal/roomtoken`, `REALTIME_TOKEN_SECRET`) |
+| `GET /v1/orders` | ✅ Geçmiş siparişler (T11.16, `internal/orderhistory`): order `ListMyOrders` + market adları sayfa başına TEK `BatchGetMarkets` (katalog hatasında adsız, sipariş yine listelenir); yeniden eskiye, imleçle; `DRAFT` ve hiç ilerlemeden süresi dolan `EXPIRED` süzülür, eksik kadar en fazla 3 tur (sunucu tarafı süzme #101); `CANCELLED` + geçmişte `PAID` = `refunded`; sayfa 20, en fazla 50 (kırpılır); önbelleğe alınmaz (`no-store` rotanın ilk ara katmanı, hata cevapları dahil; #186) |
+| `GET /v1/orders/{id}` | ✅ order `GetOrder`; başkasının siparişi 404; kilit canlıyken `reservationExpiresAt` ve `reservationTtlSeconds` (T11.4); sipariş ayrıntısı `details` yalnızca burada, sahibine (T12.4; liste ve geçmiş taşımaz); ödeme seçimi `payment` (`method`, kapıda ödemede `onDelivery`; seçimsiz eski siparişte yok); `AWAITING_PAYMENT`'ta bekleyen 3DS durumu `threeDs` (#163 B1, aşağıda); T11.16'dan beri önbelleğe alınmaz (`no-store`; #186'dan beri rotanın ilk ara katmanı, 401/404/429/500/503 dahil) |
+| `GET /v1/orders/{id}/token` | ✅ T12.2: sahiplik order `GetOrder` ile (başkasınınki 404, bitmiş sipariş 200); `order:{id}` odası için 60 sn'lik oda jetonu (`internal/roomtoken`, `REALTIME_TOKEN_SECRET`); `no-store`, hata cevapları dahil (#186) |
 | `GET /v1/orders/{id}/tracking` | ✅ T14.2: kurye takibi (`internal/tracking`, aşağıda "Kurye takibi"); önce sahiplik order `GetOrder`, sonra courier `GetTracking`; `no-store` |
 | `POST /v1/auth/register` | ✅ Kayıt + oturum (201); telefon benzersiz, şifre bcrypt (T8.1) |
 | `POST /v1/auth/login` | ✅ Giriş (200); yanlış şifre ile kayıtsız numara aynı cevabı alır |
@@ -43,7 +43,7 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `GET /v1/me/addresses` | ✅ Adres defteri (T9.5): kayıtlı adresler, kayıt sırasında; en fazla 10 (sınırlı liste); önbelleğe alınmaz |
 | `POST /v1/me/addresses` | ✅ Adres ekleme (T11.8): tür, bina/kat/daire, tarif; aynı ad ve 11. adres tek atomik Mongo yazımında reddedilir; `Idempotency-Key` ister, cevap güncel defter |
 | `PUT`, `DELETE /v1/me/addresses/{addressId}` | ✅ Adres düzenleme ve silme (T11.15): kalıcı kimlik `adr_…` (eski adreslere göç 0001); düzenleme tam gövde, aynı ad başka adreste olamaz (birebir karşılaştırma: "Ev" ile "ev" farklı), tek atomik Mongo yazımı; yok olan adres 404; `Idempotency-Key` ister, cevap güncel defter |
-| `GET`, `POST /v1/me/cards`, `DELETE /v1/me/cards/{cardId}` | ✅ Kart kasası (T11.17, `internal/cards`, `httpapi/cards.go`): kasa payment'ta (`CardVaultService`); gateway numarayı ve CVV'yi yalnızca iletir. Production'da KAPALI (404; sağlayıcı mock). Ayrıntı: "Kart uçları" bölümü |
+| `GET`, `POST /v1/me/cards`, `DELETE` ve `PATCH /v1/me/cards/{cardId}` | ✅ Kart kasası (T11.17, `internal/cards`, `httpapi/cards.go`): kasa payment'ta (`CardVaultService`); gateway numarayı ve CVV'yi yalnızca iletir. `PATCH` yalnızca kart adını değiştirir (#148). Production'da KAPALI (404; sağlayıcı mock). Ayrıntı: "Kart uçları" bölümü |
 | `GET /v1/geo/reverse?lat&lng`, `GET /v1/geo/search?q` | ✅ Harita adres servisi (T11.8, `internal/geo`): OpenStreetMap Nominatim'e **tek sıra** (saniyede en fazla bir istek, kullanım koşulu) ve 24 saat önbellekle; sıra `GEO_TIMEOUT_MS` içinde ilerlemezse 503, adres yoksa 404. Oturum ister |
 | Kullanıcı kimliği    | ✅ `Authorization: Bearer` JWT (HS256); `X-User-Id` kalktı (T8.1) |
 | Kimlik deposu        | ✅ Mongo `users` + `sessions` (TTL indeksi); MOCK'ta bellek |
@@ -393,6 +393,13 @@ Kasa payment-svc'dedir (`getir/cardvault/v1`, `CardVaultService`); kart kurallar
   sağlayıcı gelince açılır (bekleyen iş).
 - **Kimlik yalnızca jetondan (QA G6):** gövdede ya da sorguda kullanıcı alanı yoktur; bilinmeyen alan 400.
   Biçimsiz `cardId` kasaya gitmeden 404; başkasının, olmayan ve silinmiş kart kasadan 404.
+- **Kart adı düzenleme (#148, `PATCH /v1/me/cards/{cardId}`):** gövde SIKI, yalnızca `nickname`
+  (bilinmeyen alan 400). Alan yoksa ya da `null` ise kasaya EKSİK gider ve kasa "Kart adı gönderilmedi"
+  der (boş gövde adı silmez); boş metin adı kaldırır. Kurallar ve cümleler kasada. Kasanın 404'ü
+  ayrıntısız döner: biçimsiz kimlik, olmayan, başkasının ve silinmiş kart AYNI zarf. Hız sınırı diğer
+  kart uçlarıyla aynı (kullanıcı başına, rota kalıbıyla: kart başına değil). Tekrar kaydı 15 dk ve
+  silmeyle aynı kural (`cardChangePolicy`): parmak izi gövdenin HMAC'i; saklanan cevap güncel maskeli
+  karttır ve kart adını AÇIK taşır (ekleme ve silme cevapları gibi; numara, CVV ve jeton yok).
 - **Deneme sınırı (K2, QA S1):** kullanıcı başına BAŞARISIZ doğrulama (`PAYMENT_DECLINED`; numara, CVV
   ya da son kullanma hatası) saatte 5, günde 20 (`ratelimit.FailureCounter`: bakmak yazmaz, yalnızca
   sonuç yazılır); IP başına her deneme saatte 30. Eşikte kasaya gidilmeden 429 + `Retry-After`.
@@ -497,6 +504,14 @@ order-service'tedir.
   sahiplik denetimi (oda jetonu) onu taşıyamaz. 3DS `ttlSeconds` payment'ın bitiş anından,
   gateway'in saatiyle; hiçbir zaman negatif değil. Tekrar edilen cevaptaki `ttlSeconds` ilk
   cevabınkidir (rezervasyonla aynı).
+- **3DS sürdürme (`GET /v1/orders/{id}`, #163 B1):** order'ın `three_ds`'i `threeDs` olur
+  (`internal/order/three_ds_view.go`). `ttlSeconds` = bitişe kalan TAM saniye, gateway'in saatiyle
+  (aşağı yuvarlanır; `now >= bitiş` ise 0, Confirm3Ds ile aynı sınır). Açık: `challengeId` +
+  `ttlSeconds >= 1` + `attemptsLeft >= 1`; aksi halde kapalı ve jeton ATILIR (payment göndermiş
+  olsa da). Alan yok: order göndermedi, sipariş ödeme beklemiyor ya da durum sözleşmeyi bozuyor
+  (bitiş yok, negatif hak, açık doğrulamada biçimsiz jeton); sipariş okuması düşmez. Jeton yalnızca
+  bu `no-store` cevapta; ayrıntısız `Get` (oda jetonu, takip) taşımaz, günlüğe ve hataya girmez.
+  Kurallar ve openapi örnekleri `internal/order/three_ds_contract_test.go` ile karşılaştırılır.
 
 ```bash
 # TOKEN: yukaridaki giris komutundan. Basliklar her komutta acikca yazilir.
@@ -655,7 +670,9 @@ aykırı cevap istemciye gitmez, ayrıntısız 500 olur (koordinat aralığı co
 
 Hatanın günlüğe giden nedeni yalnızca alan adlarını taşır. Courier hatasının mesaj metni de günlüğe
 gitmez (adı ya da konumu taşıyabilir): neden yalnızca servis, metot ve gRPC durum kodudur.
-Courier'in doğrulama hatasındaki `orderId` yol adıyla (`id`) döner. Courier `GetTracking`'i
+Courier hatasının ayrıntısı istemciye izin listesiyle geçer (#187): yalnızca doğrulama hatasındaki
+`orderId` (yol adıyla, `id`); `NOT_FOUND` ucun tek 404'üdür, başka her kod (409, 500, 503 ...)
+ayrıntısız döner (kurye kimliği, konum ya da başka sipariş sızmaz). Courier `GetTracking`'i
 uygulamadıysa uç 501 döner (D5). Konum, rota, adres ve kurye adı kişisel veridir: `no-store` rotanın
 ilk ara katmanıdır (`noStoreRoute`, kart uçlarıyla aynı), 401, 404, 429, 500 ve 503 cevapları da
 önbelleğe girmez; günlüğe koordinat ve ad yazılmaz (testler: `internal/httpapi/tracking_errors_test.go`,

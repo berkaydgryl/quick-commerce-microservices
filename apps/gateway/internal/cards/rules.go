@@ -1,5 +1,5 @@
 // Package cards, kart kasasi uclarinin (T11.17, GET/POST /v1/me/cards, DELETE
-// /v1/me/cards/{cardId}) gateway tarafidir. Kasa payment'tadir
+// ve PATCH (#148, kart adi) /v1/me/cards/{cardId}) gateway tarafidir. Kasa payment'tadir
 // (getir/cardvault/v1); gateway istegi iletir, kart numarasini ve CVV'yi
 // saklamaz, gunluge yazmaz.
 //

@@ -22,6 +22,8 @@ import { MarketHero } from '../../src/features/markets/ui/MarketHero';
 
 import { nearbyMarket } from './market-list-test-support';
 
+import { tokens as allTokens } from './css-test-support';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WEB = join(HERE, '../..');
 const LOGOS = join(WEB, 'public/img/market-logo');
@@ -95,7 +97,7 @@ describe('MarketBadge', () => {
 
   it('konum: sol ORTA, soldan yuzde token (4%); kare rozet ve logo ayni kural', () => {
     const css = readFileSync(join(WEB, 'src/features/markets/ui/MarketBadge.module.css'), 'utf8');
-    const tokens = readFileSync(join(WEB, 'src/shared/styles/tokens.css'), 'utf8');
+    const tokens = allTokens();
     const block = /\.c-market-badge \{([^}]*)\}/.exec(css)?.[1] ?? '';
 
     expect(block).toContain('inset-block-start: 50%;');

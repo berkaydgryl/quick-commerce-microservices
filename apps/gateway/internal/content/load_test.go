@@ -152,7 +152,8 @@ const validJSON = `{
     "trackDeliveredLabel": "Teslim edildi", "whereIsCourierLabel": "Kuryem nerede",
     "whereIsCourierHint": "Kurye yola çıkınca konumunu izleyebilirsin."
   },
-  "confirm": {"yesLabel": "Evet", "noLabel": "Hayır"}
+  "confirm": {"yesLabel": "Evet", "noLabel": "Hayır"},
+  "courierTracking": {"title": "Kuryem nerede", "closeLabel": "Kapat", "courierLabel": "Kuryen", "mapLabel": "Kuryenin ve teslimat adresinin haritası", "etaLabel": "Tahmini varış", "etaPrefix": "~", "minuteSuffix": "dk", "distanceLabel": "Kalan mesafe", "kilometerSuffix": "km", "meterSuffix": "m", "addressLabel": "Teslimat adresi", "loadingLabel": "Kuryenin konumu yükleniyor…", "pickupNotice": "Kuryen siparişini marketten alıyor; yola çıkınca konumu burada görünür.", "deliveredNotice": "Siparişin teslim edildi.", "unavailableNotice": "Kuryenin konumu şu an alınamıyor.", "retryLabel": "Tekrar dene", "approachTitle": "Kuryen konumuna yaklaştı!", "approachActionLabel": "Konumu gör", "approachCloseLabel": "Bildirimi kapat"}
 }`
 
 func TestEmbeddedWelcomeLoads(t *testing.T) {

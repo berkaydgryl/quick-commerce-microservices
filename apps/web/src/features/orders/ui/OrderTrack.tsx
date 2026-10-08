@@ -22,6 +22,10 @@ interface OrderTrackProps {
   readonly texts: OrderTrackTexts;
   /** "Kuryem nerede" penceresini acar (F22); verilmezse dugme pasif kalir. */
   readonly onWhereIsCourier?: () => void;
+  /** Dugmenin kimligi: pencere kapaninca odak buraya donebilsin (F22). */
+  readonly courierButtonId?: string;
+  /** Basligin kimligi: dugme yok olduysa (teslimde) odagin yedegi (F22 B3). */
+  readonly headingId?: string;
 }
 
 const LABEL_KEY: Readonly<Record<TrackStep, keyof OrderTrackTexts>> = {
@@ -49,8 +53,15 @@ const PROGRESS_CLASS: Readonly<Record<TrackStep, string | undefined>> = {
  * (kurye isi bitti; PM 07.10). Cizgi disi durumda (odeme
  * oncesi, inceleme, iptal) hicbir sey cizilmez. Durumsuz.
  */
-export function OrderTrack({ status, texts, onWhereIsCourier }: OrderTrackProps) {
-  const titleId = useId();
+export function OrderTrack({
+  status,
+  texts,
+  onWhereIsCourier,
+  courierButtonId,
+  headingId,
+}: OrderTrackProps) {
+  const generatedId = useId();
+  const titleId = headingId ?? generatedId;
   const hintId = useId();
   const current = trackStep(status);
   if (current === null) {
@@ -59,7 +70,7 @@ export function OrderTrack({ status, texts, onWhereIsCourier }: OrderTrackProps)
 
   return (
     <section className={styles['c-order-track']} aria-labelledby={titleId}>
-      <h2 id={titleId} className={styles['c-order-track__title']}>
+      <h2 id={titleId} className={styles['c-order-track__title']} tabIndex={-1}>
         {texts.trackTitle}
       </h2>
       <ol className={`${styles['c-order-track__steps']} ${PROGRESS_CLASS[current]}`} role="list">
@@ -82,6 +93,7 @@ export function OrderTrack({ status, texts, onWhereIsCourier }: OrderTrackProps)
       {current !== 'delivered' && (
         <div className={styles['c-order-track__actions']}>
           <button
+            id={courierButtonId}
             type="button"
             className={styles['c-order-track__courier']}
             disabled={current !== 'onTheWay' || onWhereIsCourier === undefined}

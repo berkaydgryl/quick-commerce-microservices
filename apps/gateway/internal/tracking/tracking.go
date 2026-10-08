@@ -20,7 +20,9 @@
 //
 // GIZLILIK: konum, rota, adres ve kurye adi kisisel veridir. Bu paket gunluge
 // yazmaz; courier hatasinin nedeni (Cause) yalnizca servis, metot ve gRPC durum
-// kodunu tasir (courier'in mesaj metni atilir).
+// kodunu tasir (courier'in mesaj metni atilir). Courier hatasinin ayrintisi da
+// istemciye IZIN LISTESIYLE gecer (#187): yalnizca VALIDATION_FAILED'in siparis
+// kimligi alani (REST'te "id"); NOT_FOUND ucun tek 404'udur, gerisi ayrintisiz.
 package tracking
 
 import (
@@ -43,9 +45,12 @@ import (
 // service, gunluge giden hata metnindeki servis adi.
 const service = "courier"
 
+// courierOrderIDField, courier'in dogrulama hatasinda siparis kimliginin alani.
+const courierOrderIDField = "orderId"
+
 // courierFieldNames, courier'in dogrulama hatasindaki alan -> REST adi: siparis
 // kimligi yol parametresidir ("id"; order adaptorunun GetOrder eslemesiyle ayni).
-var courierFieldNames = rpc.Names(map[string]string{"orderId": "id"})
+var courierFieldNames = rpc.Names(map[string]string{courierOrderIDField: "id"})
 
 // Orders, sahiplik ve durum icin siparis (gercegi order.Service.Get; ayrintisiz).
 type Orders interface {
@@ -85,24 +90,45 @@ func (s *Service) Track(ctx context.Context, userID, orderID string) (Tracking, 
 	request := &courierv1.GetTrackingRequest{OrderId: orderID}
 	response, err := rpc.Invoke(ctx, s.timeout, service, "GetTracking", s.courier.GetTracking, request)
 	if err != nil {
-		return Tracking{}, rpc.RenameFields(sameNotFound(withoutCourierText(err), orderID), courierFieldNames)
+		return Tracking{}, rpc.RenameFields(sameNotFound(scrubbedCourierError(err), orderID), courierFieldNames)
 	}
 	return toTracking(orderID, found.Status, response)
 }
 
-// withoutCourierText, courier hatasinin METNINI gunlukten cikarir (#179):
-// mesajda kurye adi ya da konum olabilir. Neden yalnizca servis, metot ve gRPC
-// durum kodunu tasir; kod ve ayrinti (istemciye giden) degismez.
-func withoutCourierText(err error) error {
+// scrubbedCourierError, courier hatasini gunluk ve istemci icin temizler:
+//   - METIN gunlukten cikar (#179): mesajda kurye adi ya da konum olabilir;
+//     neden yalnizca servis, metot ve gRPC durum kodunu tasir.
+//   - AYRINTI izin listesinden gecer (#187): istemciye yalnizca
+//     VALIDATION_FAILED'in siparis kimligi alani gider; baska kodun (NOT_FOUND
+//     disinda; o sameNotFound'da ucun tek 404'u olur) ayrintisi atilir. Courier
+//     ayrintisinda kurye kimligi, konum ya da baska siparis olabilir.
+//
+// Kod degismez.
+func scrubbedCourierError(err error) error {
 	var appErr *apperror.Error
 	if !errors.As(err, &appErr) {
 		return err
 	}
 	return &apperror.Error{
 		Code:    appErr.Code,
-		Details: appErr.Details,
+		Details: allowedCourierDetails(appErr.Code, appErr.Details),
 		Cause:   fmt.Errorf("%s GetTracking: %s", service, status.Code(appErr.Cause)),
 	}
+}
+
+// allowedCourierDetails, istemciye gecebilen courier ayrintisi; yoksa nil.
+// Alanin degeri yalnizca METIN ise gecer (dogrulama sebebi): ic ice nesne ya
+// da dizi (apperror ham JSON olarak tasir) anahtar adinin arkasinda baska veri
+// sizdirabilir.
+func allowedCourierDetails(code apperror.Code, details map[string]any) map[string]any {
+	if code != apperror.CodeValidationFailed {
+		return nil
+	}
+	reason, isText := details[courierOrderIDField].(string)
+	if !isText {
+		return nil
+	}
+	return map[string]any{courierOrderIDField: reason}
 }
 
 // notFound, ucun TEK 404 cevabi (openapi OrderNotFound: ayrinti {orderId}).

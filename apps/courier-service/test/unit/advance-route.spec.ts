@@ -140,6 +140,42 @@ describe('createAdvanceRoute', () => {
     expect(freed?.idleSince).toEqual(deliveredAt);
   });
 
+  it('hiz ayari yol ortasinda hizlanirsa ikinci bacak KAYITLI almadan baslar (#195): once yolda, sonra teslim = alma + 2. bacak / yeni hiz', async () => {
+    const slow = { speedKmh: 6, prepSeconds: 600 };
+    const fast = { speedKmh: 120, prepSeconds: 0 };
+    const stepWith = async (rule: typeof RULE) => {
+      const current = await stored();
+      return createAdvanceRoute({ routes, couriers, events, live, rule, clock })(
+        current,
+        await couriers.findById(current.courierId),
+        recordingLogger(lines),
+      );
+    };
+    // On kosul (fikstur geometrisi): yavas ayarla alma 600. sn; yeni (hizli) ayarin
+    // cizelgesi teslimi cok once koyardi (eskiden ikinci bacak sifir saniye surerdi).
+    expect(routeSchedule(route, slow).pickupSeconds).toBe(600);
+    expect(routeSchedule(route, fast).arrivalSeconds).toBeLessThan(600);
+    const legTwoMs = Math.round(routeSchedule(route, fast).legTwoSeconds * 1_000);
+    expect(legTwoMs).toBeGreaterThan(2);
+    const pickedUpAt = new Date(NOW_MS + 600_000);
+
+    clock.set(NOW_MS + 600_001);
+    expect(await stepWith(slow)).toBe(ADVANCE_OUTCOME.PICKED_UP);
+    expect((await stored()).pickedUpAt).toEqual(pickedUpAt);
+
+    // Yeni ayarla ikinci bacagin ortasi: hala yolda, teslim yazilmaz.
+    clock.set(pickedUpAt.getTime() + Math.floor(legTwoMs / 2));
+    expect(await stepWith(fast)).toBe(ADVANCE_OUTCOME.MOVING);
+    expect((await stored()).deliveredAt).toBeUndefined();
+
+    clock.set(pickedUpAt.getTime() + legTwoMs);
+    expect(await stepWith(fast)).toBe(ADVANCE_OUTCOME.DELIVERED);
+    const deliveredAt = new Date(pickedUpAt.getTime() + legTwoMs);
+    expect(await stored()).toMatchObject({ state: ROUTE_STATE.DONE, pickedUpAt, deliveredAt });
+    expect(events.published.at(-1)).toMatchObject({ type: 'delivered', at: deliveredAt });
+    expect((await couriers.findById(courierId(1)))?.idleSince).toEqual(deliveredAt);
+  });
+
   it('EN AZ BIR KEZ: teslimat yayini duserse sonraki tur yayinlar; kurye bir kez birakilir', async () => {
     clock.advance(3_600_000);
     events.failNext('picked_up');

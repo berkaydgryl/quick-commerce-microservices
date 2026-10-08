@@ -5,7 +5,7 @@
  * esli adimdir; es zamanli cagrilar araya giremez.
  */
 
-import { CARD_STATUS, cardKeyOf, deletedCard, isSameCard } from '../../domain/card.js';
+import { CARD_STATUS, cardKeyOf, deletedCard, isSameCard, renamedCard } from '../../domain/card.js';
 import type { Card } from '../../domain/card.js';
 import { cardAlreadySaved, cardWalletFull } from '../../domain/card-errors.js';
 import type { CardRepository } from '../../domain/card-repository.js';
@@ -37,23 +37,40 @@ export class InMemoryCardStore implements CardRepository {
   }
 
   findActive(userId: string, cardId: string): Promise<Card | null> {
-    const card = this.cards.get(cardId);
-    const owned = card?.userId === userId && card.status === CARD_STATUS.ACTIVE;
-    return Promise.resolve(owned ? card : null);
+    return Promise.resolve(this.ownedActive(userId, cardId));
   }
 
   softDelete(userId: string, cardId: string, at: Date): Promise<boolean> {
-    const card = this.cards.get(cardId);
-    if (card === undefined || card.userId !== userId || card.status !== CARD_STATUS.ACTIVE) {
+    const card = this.ownedActive(userId, cardId);
+    if (card === null) {
       return Promise.resolve(false);
     }
     this.cards.set(cardId, deletedCard(card, at));
     return Promise.resolve(true);
   }
 
+  updateNickname(userId: string, cardId: string, nickname: string | null): Promise<Card | null> {
+    const card = this.ownedActive(userId, cardId);
+    if (card === null) {
+      return Promise.resolve(null);
+    }
+    const renamed = renamedCard(card, nickname);
+    this.cards.set(cardId, renamed);
+    return Promise.resolve(renamed);
+  }
+
   /** Yalnizca test icin: silinenler dahil kayit (P2/P5 jeton denetimi). */
   stored(cardId: string): Card | undefined {
     return this.cards.get(cardId);
+  }
+
+  /**
+   * Kart BU kullanicinin ve silinmemis mi: okuma, silme ve ad duzenleme ayni
+   * kosulu kullanir (yok, baskasinin ve silinmis ayirt edilemez).
+   */
+  private ownedActive(userId: string, cardId: string): Card | null {
+    const card = this.cards.get(cardId);
+    return card?.userId === userId && card.status === CARD_STATUS.ACTIVE ? card : null;
   }
 
   private active(userId: string): Card[] {
