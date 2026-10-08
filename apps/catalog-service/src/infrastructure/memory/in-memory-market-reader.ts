@@ -1,6 +1,7 @@
 import type { Market } from '../../domain/catalog.js';
 import type { GeoPoint } from '../../domain/geo.js';
 import { distanceMeters } from '../../domain/geo.js';
+import { coveringMarkets } from '../../domain/market-coverage.js';
 import type { MarketDistance } from '../../domain/market-coverage.js';
 import type { MarketReader } from '../../domain/market-reader.js';
 
@@ -26,12 +27,11 @@ export class InMemoryMarketReader implements MarketReader {
     return Promise.resolve(this.markets.filter((market) => wanted.has(market.id)));
   }
 
-  /** Mongo'daki $geoNear'in karsiligi: mesafe hesabi + siralama + sinir. */
-  listMarketsByDistance(point: GeoPoint, limit: number): Promise<readonly MarketDistance[]> {
+  /** Mongo sorgusunun karsiligi: mesafe + siralama + KAPSAMA (domain kurali) + sinir. */
+  listCoveringMarkets(point: GeoPoint, limit: number): Promise<readonly MarketDistance[]> {
     const ranked = this.markets
       .map((market) => ({ market, distanceMeters: distanceMeters(point, market) }))
-      .sort((left, right) => left.distanceMeters - right.distanceMeters)
-      .slice(0, limit);
-    return Promise.resolve(ranked);
+      .sort((left, right) => left.distanceMeters - right.distanceMeters);
+    return Promise.resolve(coveringMarkets(ranked).slice(0, limit));
   }
 }
