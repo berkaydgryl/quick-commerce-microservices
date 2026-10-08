@@ -11,8 +11,8 @@
  *      courier.delivered tek basina iki gecisi yaptirir (contracts events.ts).
  *   3. Varis ani geldiyse deliveredAt kaydedilir; kurye TESLIMAT NOKTASINDA
  *      bosa cikar, courier.delivered yayinlanir, rota DONE. Teslim ani kayitli
- *      alma anindan once yazilmaz (#190: hiz ayari yol ortasinda degisirse
- *      hesap almanin gerisinde kalabilir; deliveredNoEarlierThan).
+ *      alma anindan once yazilmaz (#190, deliveredNoEarlierThan). #195'ten beri
+ *      ikinci bacak kayitli almadan hesaplandigi icin bu yalnizca savunmadir.
  *   4. Ilerliyorsa kuryenin canli konumu yazilir (kisa omurlu).
  *
  * Her adim kosulludur ve tekrar guvenlidir: yayin dustuyse sonraki tur ayni

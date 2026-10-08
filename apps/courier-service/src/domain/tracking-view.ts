@@ -67,7 +67,7 @@ function later(left: TrackingPhase, right: TrackingPhase): TrackingPhase {
  * biri vardir (yoksa bos doner). Alma: kayitli; teslim hesaptansa hesaplanan
  * alma; yoksa teslim (kayitli teslime hesaplanan alma karistirilmaz: yazicisi
  * olmayan "teslim var, alma yok" kaydi). Teslim almadan once gosterilmez
- * (karisik kaynak: kayitli alma + yeni hiz ayariyla hesaplanan teslim).
+ * (savunma; #195'ten beri hesap teslimi kayitli almadan once koyamaz).
  */
 function deliveredMilestones(
   route: Pick<Route, 'pickedUpAt' | 'deliveredAt'>,
@@ -102,7 +102,7 @@ export function trackingView(
     };
   }
   if (phase === TRACKING_PHASE.TO_CUSTOMER) {
-    // Hesap geride kalabilir (kayitli alma ani, hiz ayari degisti): o zaman
+    // Hesap geride kalabilir (saat kayitli almanin gerisinde, #195): o zaman
     // konum market ve tahmin yine yuvarli; ilk bacagin suresi sizmaz.
     const ahead = progress.phase === TRACKING_PHASE.TO_CUSTOMER;
     return {

@@ -70,10 +70,9 @@ export function routeState(route: Pick<Route, 'state'>): RouteState {
 }
 
 /**
- * Teslim ani alma anindan ONCE olamaz (#190): hiz ayari yol ortasinda degisirse
- * yeni kuralla hesaplanan teslim, eski kuralla kaydedilmis almanin gerisinde
- * kalabilir. O zaman teslim = alma. Tick (yazarken) ve takip (gosterirken) ayni
- * kurali kullanir.
+ * Teslim ani alma anindan ONCE olamaz (#190): olursa teslim = alma. Tick
+ * (yazarken) ve takip (gosterirken) ayni kurali kullanir. #195'ten beri ikinci
+ * bacak kayitli almadan hesaplanir; bu kural savunmadir (kayit disi kaynak).
  */
 export function deliveredNoEarlierThan(deliveredAt: Date, pickedUpAt: Date | undefined): Date {
   return pickedUpAt !== undefined && pickedUpAt.getTime() > deliveredAt.getTime()

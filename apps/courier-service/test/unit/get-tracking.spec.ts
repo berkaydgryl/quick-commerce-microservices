@@ -15,7 +15,7 @@ import { ROUTE_STATE } from '../../src/domain/route.js';
 import type { Route } from '../../src/domain/route.js';
 import { planRoute } from '../../src/domain/route-planner.js';
 import type { MovementRule } from '../../src/domain/route-progress.js';
-import { routeSchedule, TRACKING_PHASE } from '../../src/domain/route-progress.js';
+import { milestonesMs, routeSchedule, TRACKING_PHASE } from '../../src/domain/route-progress.js';
 import { InMemoryCourierStore } from '../../src/infrastructure/memory/in-memory-courier-store.js';
 import { InMemoryLiveLocationStore } from '../../src/infrastructure/memory/in-memory-live-location.js';
 import { InMemoryRouteStore } from '../../src/infrastructure/memory/in-memory-route-store.js';
@@ -53,15 +53,24 @@ const tracking = () => trackingWith(RULE);
  * sinirlar milisaniyeye yuvarlanir).
  */
 function instants(rule: MovementRule): number[] {
-  const schedule = routeSchedule(route, rule);
-  const pickupMs = Math.round(schedule.pickupSeconds * 1_000);
-  const arrivalMs = Math.max(pickupMs, Math.round(schedule.arrivalSeconds * 1_000));
+  // Sinirlar routeProgress'inkiyle AYNI kaynaktan: kayitli alma varsa ondan (#195).
+  const { pickupMs, arrivalMs } = milestonesMs(route, routeSchedule(route, rule));
   const sweep: number[] = [];
   for (let ms = -30_000; ms <= arrivalMs + 10_000; ms += 7_000) {
     sweep.push(ms);
   }
-  return [...sweep, pickupMs - 1, pickupMs, pickupMs + 1, arrivalMs - 1, arrivalMs, arrivalMs + 1];
+  return [
+    ...sweep,
+    pickupMs - 1,
+    pickupMs,
+    pickupMs + 1,
+    arrivalMs - 1,
+    arrivalMs,
+    arrivalMs + 1,
+  ].sort((left, right) => left - right);
 }
+
+const PHASE_ORDER: readonly string[] = ['TO_MARKET', 'TO_CUSTOMER', 'DELIVERED'];
 
 /**
  * Rota boyunca her anda cikti sozlesmeden (orderTrackingSchema +
@@ -70,10 +79,19 @@ function instants(rule: MovementRule): number[] {
  */
 async function everyMoment(rule: MovementRule): Promise<string[]> {
   const phases = new Set<string>();
+  let previous = 0;
   for (const ms of instants(rule)) {
     clock.set(NOW_MS + ms);
     const result = await trackingWith(rule);
     phases.add(result.phase);
+    // Asama TEK YONLU (#195): zaman ilerlerken geri donmez; kayitli almadan
+    // sonra TO_MARKET olmaz.
+    const rank = PHASE_ORDER.indexOf(result.phase);
+    expect(rank, `${ms} ms: ${result.phase}`).toBeGreaterThanOrEqual(previous);
+    previous = rank;
+    if (route.pickedUpAt !== undefined && NOW_MS + ms >= route.pickedUpAt.getTime()) {
+      expect(result.phase, `${ms} ms`).not.toBe(TRACKING_PHASE.TO_MARKET);
+    }
     const parsed = orderTrackingSchema.safeParse(toRest(order, result));
     expect(parsed.success, `${ms} ms: ${JSON.stringify(parsed.error?.issues)}`).toBe(true);
     if (result.phase === TRACKING_PHASE.DELIVERED) {
@@ -148,10 +166,10 @@ describe('createGetTracking', () => {
     });
   });
 
-  it('kaydedilmis kilometre tasi asamayi GERI GOTURMEZ (hiz ayari degisse de)', async () => {
+  it('kaydedilmis kilometre tasi asamayi GERI GOTURMEZ (saat kayitli almanin gerisinde)', async () => {
     const pickedUpAt = new Date(NOW_MS + 5_000);
     await routes.update(route, { pickedUpAt });
-    clock.advance(6_000); // hesap henuz TO_MARKET
+    clock.advance(4_000); // saat kayitli almanin gerisinde: hesap TO_MARKET
 
     const result = await tracking();
 
@@ -160,6 +178,19 @@ describe('createGetTracking', () => {
     expect(result.location).toEqual(MARKET_LOCATION);
     // Hesap geride: tahmin ilk bacagin suresini tasir, o yuzden dakikaya yuvarli.
     expect(result.etaSeconds % 60).toBe(0);
+  });
+
+  it('kayitli almadan sonra ikinci bacak ONDAN baslar (#195): konum yolda, tahmin saniye hassasiyetinde', async () => {
+    const pickedUpAt = new Date(NOW_MS + 5_000);
+    await routes.update(route, { pickedUpAt });
+    clock.advance(6_000); // cizelgeye gore alma cok sonra; kayit 5. sn: 1 sn yol alindi
+
+    const result = await tracking();
+
+    const legTwoMs = Math.round(routeSchedule(route, RULE).legTwoSeconds * 1_000);
+    expect(result).toMatchObject({ phase: TRACKING_PHASE.TO_CUSTOMER, pickedUpAt });
+    expect(result.location).not.toEqual(MARKET_LOCATION);
+    expect(result.etaSeconds).toBe(Math.ceil((legTwoMs - 1_000) / 1_000));
   });
 
   it('NOT_FOUND: rota yok, rota ENDED, teslimattan once kurye birakildi', async () => {
