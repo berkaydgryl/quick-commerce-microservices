@@ -65,6 +65,10 @@ const MARKET_LIST_FALLBACK: MarketListContent = {
     clearConfirmQuestion: 'Sepeti boşaltmak istediğinden emin misin?',
     switchConfirmPrefix: 'Sepetinde başka bir marketin ürünleri var. Sepeti boşaltıp',
     switchConfirmSuffix: 'ile devam etmek istediğinden emin misin?',
+    addressChangePrefix: 'Sepetindeki',
+    addressChangeSuffix:
+      'bu adrese teslimat yapmıyor. Adresi değiştirirsen sepetin boşaltılacak. Devam edilsin mi?',
+    cartClearedToast: 'Sepetin boşaltıldı.',
     decreaseSuffix: 'adedini azalt',
     increaseSuffix: 'adedini artır',
     removeSuffix: 'sepetten çıkar',

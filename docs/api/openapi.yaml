@@ -4812,6 +4812,9 @@ components:
               clearConfirmQuestion,
               switchConfirmPrefix,
               switchConfirmSuffix,
+              addressChangePrefix,
+              addressChangeSuffix,
+              cartClearedToast,
               decreaseSuffix,
               increaseSuffix,
               removeSuffix,
@@ -4837,6 +4840,11 @@ components:
               $ref: "#/components/schemas/ContentText"
               description: Başka marketten eklerken sepeti boşaltma sorusu (F13); önek + hedef market + sonek.
             switchConfirmSuffix: { $ref: "#/components/schemas/ContentText" }
+            addressChangePrefix:
+              $ref: "#/components/schemas/ContentText"
+              description: Adres değişince sepetin marketi yeni adrese teslim etmiyorsa sorulur (F16); önek + market + sonek.
+            addressChangeSuffix: { $ref: "#/components/schemas/ContentText" }
+            cartClearedToast: { $ref: "#/components/schemas/ContentText" }
             decreaseSuffix: { $ref: "#/components/schemas/ContentText" }
             increaseSuffix: { $ref: "#/components/schemas/ContentText" }
             removeSuffix: { $ref: "#/components/schemas/ContentText" }

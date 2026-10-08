@@ -6,6 +6,7 @@ import { ADD_CARD_PATH, PAYMENT_METHODS_PATH } from '../features/cards/routes';
 import { CART_PATH } from '../features/cart/routes';
 import { CHECKOUT_PATH } from '../features/checkout/routes';
 import { FAVORITES_PATH } from '../features/favorites/routes';
+import { MARKET_LIST_PATH, MARKET_ROUTE } from '../features/markets/routes';
 import { ORDER_DETAIL_ROUTE, ORDERS_PATH } from '../features/orders/routes';
 import { AccountPage } from '../pages/account/AccountPage';
 import { AddCardPage } from '../pages/account/AddCardPage';
@@ -32,8 +33,8 @@ export const router = createBrowserRouter([
     children: [
       // Oturumsuz: karsilama ekrani; oturumda: ana sayfa (T11.6).
       { path: AUTH_ROUTES.welcome, element: <RootPage /> },
-      { path: '/markets', element: <NearbyMarketsPage /> },
-      { path: '/markets/:marketId', element: <MarketPage /> },
+      { path: MARKET_LIST_PATH, element: <NearbyMarketsPage /> },
+      { path: MARKET_ROUTE, element: <MarketPage /> },
       // Sepet sayfasi (T16.3): oturum ister, sayfa kendisi korur.
       { path: CART_PATH, element: <CartPage /> },
       // Odeme sayfasi (T17.1): oturum ister, sayfa kendisi korur.

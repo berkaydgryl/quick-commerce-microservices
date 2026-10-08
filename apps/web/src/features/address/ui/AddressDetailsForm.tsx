@@ -8,10 +8,13 @@ import { Controller, useForm } from 'react-hook-form';
 import { formFeedback } from '../../auth/services/server-errors';
 import { AuthField } from '../../auth/ui/AuthField';
 import { focusFirstInvalid, showServerErrors } from '../../auth/ui/form-errors';
+import { useAddressChangeGuard } from '../../../shared/address-change/guard';
 import { useNearbyMarkets } from '../../markets/hooks/useNearbyMarkets';
 import { useAddAddress } from '../hooks/useAddAddress';
+import { useAddressBook } from '../hooks/useAddressBook';
 import { useSavedAddresses } from '../hooks/useSavedAddresses';
 import { useUpdateAddress } from '../hooks/useUpdateAddress';
+import { addMovesDelivery, editMovesDelivery } from '../services/delivery-move';
 import {
   ADDRESS_BOOK_FIELD,
   ADDRESS_FORM_FIELDS,
@@ -54,7 +57,8 @@ interface AddressDetailsFormProps {
  * Adres detayi (T11.8; 2. adim; referans: getir.com): secilen noktanin kucuk
  * haritasi, tur + baslik ("Ev"), adres satiri (haritadan dolu gelir), bina /
  * kat / daire, adres tarifi ve "Kaydet". Kaydedilince defter guncellenir ve
- * yeni adres secilir; ana sayfa kapisi (RootPage) market listesine gecer.
+ * yeni adres secilir (F16: sepetin marketi teslim etmiyorsa bekci sorar); ana
+ * sayfa kapisi (RootPage) market listesine gecer.
  *
  * Secilen yere hizmet veren market yoksa uyari gorunur ama kayit engellenmez.
  *
@@ -74,6 +78,8 @@ export function AddressDetailsForm({
   const adding = useAddAddress(userId);
   const updating = useUpdateAddress(userId);
   const markets = useNearbyMarkets(location);
+  const guard = useAddressChangeGuard();
+  const { delivery } = useAddressBook();
   // Defterdeki adlar: onerilen baslik bunlardan biri olmasin ("Ev 2"). Duzenlenen
   // adresin kendi adi sayilmaz.
   const taken = (useSavedAddresses(userId).data ?? [])
@@ -108,10 +114,26 @@ export function AddressDetailsForm({
     setFormMessage(null);
     try {
       const request = toCreateAddressRequest(values, location);
+      // Kayit gecerli adresi kendiliginden tasiyorsa bekci ONCE sorar (F16); "Hayır"da kayit
+      // yok. Izin kayit basarili olunca commit edilir: kayit duserse sepet kalir.
+      const moves =
+        editing === undefined
+          ? addMovesDelivery(delivery)
+          : editMovesDelivery({
+              delivery,
+              editedId: editing.address.id,
+              before: editing.address.location,
+              after: location,
+            });
+      const approval = moves ? await guard(location) : undefined;
+      if (approval === null) {
+        return;
+      }
       if (editing === undefined) {
-        await adding.mutateAsync(request);
+        await adding.mutateAsync({ request, approval });
       } else {
         await updating.mutateAsync({ addressId: editing.address.id, request });
+        approval?.commit();
       }
       onSaved?.();
     } catch (error) {

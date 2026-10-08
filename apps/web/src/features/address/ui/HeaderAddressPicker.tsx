@@ -36,8 +36,9 @@ type OpenDialog = 'none' | AddressDialog;
  *    alt banttaki "Adres Ekle" T11.8'in harita + detay penceresini acar.
  *    Orada X yalnizca kapatir (cikis degil); kaydedince yeni adres secilir.
  *
- * Secim sepete DOKUNMAZ: urunun yeni adreste satilip satilmadigina
- * rezervasyon karar verir (T11.4).
+ * Secim sepete yalniz adres degisiminin bekcisiyle dokunur (F16): sepetin
+ * marketi yeni adrese teslim etmiyorsa onayla bosaltilir. Urunun satilip
+ * satilmadigina yine rezervasyon karar verir (T11.4).
  */
 export function HeaderAddressPicker({
   content,
