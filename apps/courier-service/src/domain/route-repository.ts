@@ -32,6 +32,8 @@ export interface MovingRouteRepository {
   /**
    * Rotaya yamayi yazar; YALNIZCA saklanan rota hala BU rotaysa (ayni kurye,
    * ayni uretilme ani: yeniden atamada yenisiyle degismediyse) ve MOVING ise.
+   * ENDED yamasi ayrica teslim ani KAYITLI rotaya yazilmaz (#177: iptal ile
+   * teslim yarisinda tek sonuc; tek belgede kosullu karar).
    * @returns Guncel rota; kosul tutmadiysa null (degisiklik yok).
    */
   update(route: Route, patch: RoutePatch): Promise<Route | null>;

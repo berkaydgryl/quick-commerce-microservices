@@ -360,12 +360,18 @@ describe('QA tekrar istek tel uzerinde (komut izleme)', () => {
 
     const explained = await Promise.all(sent.map((command) => explainAsSent(command)));
 
-    expect(explained.map(({ kind }) => kind).sort()).toEqual([
-      'aggregate:havuz', // marketin cevresindeki adaylar ($geoNear)
-      'find', // siparisin kuryesi var mi (findByOrder)
-      'findAndModify:atama', // aday hala IDLE ise al (kimlikle)
-      'findAndModify:birakma',
-    ]);
+    // Yazimlar TAM sayida: tek havuz okumasi, tek atama, tek atomik birakma (iki yazimli birakma
+    // arada kuryeyi baska siparise kaptirir). Okuma ('find') bir ya da iki: #174 ile birakma once
+    // kuryeyi okuyabilir (couriers'ta tek fazladan okuma; rota bu duzenekte bellekte, yalniz
+    // couriers komutlari izlenir). HER komut asagida indeksten okumali.
+    const count = (kind: string) => explained.filter((entry) => entry.kind === kind).length;
+    expect({
+      havuz: count('aggregate:havuz'),
+      atama: count('findAndModify:atama'),
+      birakma: count('findAndModify:birakma'),
+    }).toEqual({ havuz: 1, atama: 1, birakma: 1 });
+    expect(count('find')).toBeGreaterThanOrEqual(1);
+    expect(count('find')).toBeLessThanOrEqual(2);
     for (const { kind, plan } of explained) {
       expect(plan, kind).not.toContain('COLLSCAN');
       if (kind !== 'aggregate:havuz') {
@@ -376,8 +382,22 @@ describe('QA tekrar istek tel uzerinde (komut izleme)', () => {
     expect(byKind.get('aggregate:havuz')).toContain('GEO_NEAR_2DSPHERE');
     expect(byKind.get('aggregate:havuz')).toContain('lastLocation_2dsphere_status');
     expect(byKind.get('findAndModify:atama')).toMatch(/IDHACK|"_id_"/);
-    expect(byKind.get('find')).toContain('currentOrderId_unique');
-    expect(byKind.get('findAndModify:birakma')).toContain('currentOrderId_unique');
+    // Siparisin kuryesi okumasi currentOrderId indeksinden (birakma rotayi da okuyabilir: o
+    // okuma baska plan; biri bu olmali).
+    expect(
+      explained.some(({ kind, plan }) => kind === 'find' && plan.includes('currentOrderId_unique')),
+    ).toBe(true);
+    // #174 (PM karari): birakma {_id: kurye, currentOrderId: siparis} ile, TEK atomik adim:
+    // kimlik hedefler, siparis kosulu kurye bu arada baska siparise gectiyse dokunmaz. Plan
+    // GONDERILEN sorgunun bicimiyle denetlenir: explain birakmadan SONRA calisir, eslesen belge
+    // yokken planlayici _id_ yerine currentOrderId_unique'i secebilir (ikisi de indeks; COLLSCAN
+    // yukarida yasak).
+    const release = sent
+      .map((raw) => sentCommandSchema.parse(raw))
+      .find(
+        (command) => command.findAndModify !== undefined && command.query?.['status'] === undefined,
+      );
+    expect(Object.keys(release?.query ?? {}).sort()).toEqual(['_id', 'currentOrderId']);
   });
 });
 
