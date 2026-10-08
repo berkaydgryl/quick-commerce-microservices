@@ -15,8 +15,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createEvaluateAndRecord } from '../../src/application/evaluate-and-record.js';
 import type { EvaluateRisk } from '../../src/application/evaluate-risk.js';
 import { createEvaluateWithRecentBand } from '../../src/application/evaluate-with-recent-band.js';
+import { PendingRecords } from '../../src/application/pending-records.js';
 import { createReadRecentBand } from '../../src/application/read-recent-band.js';
-import { RECENT_BAND_READ_TIMEOUT_MS, RECENT_BAND_WINDOW_MS } from '../../src/config/constants.js';
+import {
+  RECENT_BAND_READ_TIMEOUT_MS,
+  RECENT_BAND_WINDOW_MS,
+  RISK_EVENT_RECORD_TIMEOUT_MS,
+} from '../../src/config/constants.js';
 import { bandForScore } from '../../src/domain/bands.js';
 import {
   raiseToRecentBand,
@@ -75,7 +80,12 @@ function harness(scores: number[], events: InMemoryRiskEventStore = new InMemory
       readTimeoutMs: RECENT_BAND_READ_TIMEOUT_MS,
     }),
   });
-  const evaluate = createEvaluateAndRecord({ evaluateRisk, events });
+  const evaluate = createEvaluateAndRecord({
+    evaluateRisk,
+    events,
+    recordTimeoutMs: RISK_EVENT_RECORD_TIMEOUT_MS,
+    pending: new PendingRecords(),
+  });
   return { clock, lines, events, run: () => evaluate(context, recordingLogger(lines)) };
 }
 

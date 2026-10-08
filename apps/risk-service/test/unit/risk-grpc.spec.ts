@@ -10,6 +10,7 @@ import { appErrorOf, startTestGrpcServer } from '@getir/service-kit/testing';
 import type { TestGrpcServer, UnaryCall } from '@getir/service-kit/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { PendingRecords } from '../../src/application/pending-records.js';
 import { buildRiskService } from '../../src/bootstrap.js';
 import { PERSONA_NOW, PERSONAS } from '../support/personas.js';
 import { toProtoContext } from '../support/proto-context.js';
@@ -33,7 +34,9 @@ const BAND = {
 beforeAll(async () => {
   server = await startTestGrpcServer({
     serviceName: 'risk-test',
-    services: [buildRiskService({ clock: fixedClock(PERSONA_NOW) })],
+    services: [
+      buildRiskService({ clock: fixedClock(PERSONA_NOW), pendingRecords: new PendingRecords() }),
+    ],
   });
 });
 

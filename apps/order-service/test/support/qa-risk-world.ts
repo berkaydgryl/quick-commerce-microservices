@@ -17,6 +17,7 @@ import { startTestGrpcServer } from '@getir/service-kit/testing';
 import type { CallResult } from '@getir/service-kit/testing';
 
 import { InMemoryPaymentStore } from '../../../payment-service/src/infrastructure/memory/in-memory-payment-store.js';
+import { PendingRecords } from '../../../risk-service/src/application/pending-records.js';
 import { buildRiskService } from '../../../risk-service/src/bootstrap.js';
 import type { RiskEvent } from '../../../risk-service/src/domain/risk-event.js';
 import { InMemoryRiskEventStore } from '../../../risk-service/src/infrastructure/memory/in-memory-risk-event-store.js';
@@ -102,7 +103,10 @@ async function openRiskShop(world: InventoryWorld, closers: Closers): Promise<Ri
   const riskServer = await startTestGrpcServer({
     serviceName: 'qa-risk',
     logger: silentLogger,
-    services: [buildRiskService({ events, clock: world.clock })],
+    // Kayitlar bellekte (aninda yazilir): kapanista bosaltilacak ucustaki kayit kalmaz.
+    services: [
+      buildRiskService({ events, clock: world.clock, pendingRecords: new PendingRecords() }),
+    ],
   });
   closers.push(() => riskServer.stop());
   const risk = new GrpcRiskAssessment(

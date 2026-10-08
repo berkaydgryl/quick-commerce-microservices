@@ -9,16 +9,20 @@
  *   R2 GetLastEvaluation sahipligi: baskasinin siparisi NOT_FOUND, olmayan siparisle AYNI cevap
  *      (varlik ve sahibin kimligi sizmaz); sahip ayni siparisi okur; yalniz kullaniciyla sorgu
  *      onun en son degerlendirmesi.
- *   R3 BULGU (#167): kayit yazilamazsa karar yine doner (tasarim, T6.3) ama kayit BEKLENIR. Mongo
- *      donarsa (dondurulabilen vekil) order'in GERCEK risk istemcisi kendi butcesiyle (1 sn) karari
- *      alamaz: DEADLINE_EXCEEDED -> SERVICE_UNAVAILABLE. Genis sureli cagiran karari alir, ama
- *      order'in butcesinden gec. Duzeltme PR'i (kayda ayri kisa sinir) bu beklentiyi cevirir.
+ *   R3 #167 DUZELTMESI: kayit yazilamazsa karar yine doner (tasarim, T6.3) ve kayit artik kendi kisa
+ *      sinirindan (RISK_EVENT_RECORD_TIMEOUT_MS) fazla BEKLENMEZ. Mongo donarsa (dondurulabilen vekil)
+ *      order'in GERCEK risk istemcisi karari kendi butcesinde (1 sn) alir; genis sureli cagiran da
+ *      ayni hizda. Her iki cagri en az kayit siniri kadar surer (dondurma etkili). Vekil cozulunce
+ *      donukken baslayan kayitlar arka planda, yeni kayit da yazilir (sinirli bekleme, sabit aralik);
+ *      servis iki kaydi izleyip "gec yazildi" (late) sayar, hicbirini kayip (failed) saymaz.
+ *      (Eski bulgu: karar kaydi bekliyordu, order DEADLINE_EXCEEDED -> SERVICE_UNAVAILABLE aliyordu.)
  */
 
 import { AppError, fixedClock, silentLogger } from '@getir/core';
 import type { MutableClock } from '@getir/core';
 import { connectMongo, mongoEnvSchemaFor } from '@getir/mongo-kit';
 import type { MongoEnv } from '@getir/mongo-kit';
+import { metricValue } from '@getir/observability/testing';
 import { riskV1 } from '@getir/proto';
 import { appErrorPayloadOf, startTestGrpcServer } from '@getir/service-kit/testing';
 import type { TestGrpcServer } from '@getir/service-kit/testing';
@@ -36,9 +40,12 @@ import {
 import { GrpcRiskAssessment } from '../../../order-service/src/infrastructure/risk/grpc-risk-assessment.js';
 import { startFreezingProxy } from '../../../../packages/mongo-kit/test/support/freezing-proxy.js';
 import type { FreezingProxy } from '../../../../packages/mongo-kit/test/support/freezing-proxy.js';
+import { PendingRecords } from '../../src/application/pending-records.js';
 import { buildRiskService } from '../../src/bootstrap.js';
-import { DEFAULT_MONGO_DB } from '../../src/config/constants.js';
+import { DEFAULT_MONGO_DB, RISK_EVENT_RECORD_TIMEOUT_MS } from '../../src/config/constants.js';
 import type { RiskContext } from '../../src/domain/risk-context.js';
+import { RISK_EVENT_METRICS } from '../../src/infrastructure/metrics/risk-event-metrics.js';
+import { RECORD_EVENT } from '../../src/application/evaluate-and-record.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
 import { RiskEventsCollection } from '../../src/infrastructure/mongo/risk-events-collection.js';
 import { openRiskEventStore } from '../../src/infrastructure/risk-event-store.js';
@@ -48,6 +55,12 @@ const CONTAINER_START_TIMEOUT_MS = 120_000;
 const T0 = Date.parse('2026-10-07T12:00:00.000Z');
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const EVALUATIONS = 12;
+/**
+ * Kaydin beklenmesi (#167): Evaluate dondugunde kayit yazilmis OLMAYABILIR (kayit siniri 200 ms;
+ * asilirsa arka planda surer). Mongo okumalari sinirli bekleme ve sabit aralikla yoklanir.
+ */
+const RECORD_WAIT_MS = 5_000;
+const POLL_INTERVAL_MS = 50;
 /** Kisisel sinyaller: geofence (oturum ~56 km uzakta) ve ip-device (IP degisti) tetiklenir. */
 const DELIVERY = { lat: 40.9912, lng: 29.0271 };
 const SESSION = { lat: 41.4943, lng: 29.0271 };
@@ -103,7 +116,14 @@ async function startRiskCopy(env: MongoEnv, clock: MutableClock): Promise<TestGr
   const server = await startTestGrpcServer({
     serviceName: 'qa-risk-kopya',
     logger: silentLogger,
-    services: [buildRiskService({ events: store.repository, clock, logger: silentLogger })],
+    services: [
+      buildRiskService({
+        events: store.repository,
+        clock,
+        logger: silentLogger,
+        pendingRecords: new PendingRecords(),
+      }),
+    ],
   });
   closers.push(() => server.stop());
   return server;
@@ -151,6 +171,21 @@ function visible(error: ServiceError | undefined, ...ids: string[]): string {
   return text;
 }
 
+/** Kayit arka planda yazilana kadar yoklar (#167); sure dolarsa mesajla duser. */
+const settled = <T>(read: () => Promise<T>, message: string) =>
+  expect.poll(read, { timeout: RECORD_WAIT_MS, interval: POLL_INTERVAL_MS, message });
+
+/** Kayit sayaclari: zaman asimi (ara olay) ve nihai sonuclar (gec yazildi, kayip); yoksa 0. */
+async function recordCounts() {
+  const records = async (outcome: string) =>
+    (await metricValue(RISK_EVENT_METRICS.RECORDS, { outcome })) ?? 0;
+  return {
+    timedOut: (await metricValue(RISK_EVENT_METRICS.TIMEOUTS)) ?? 0,
+    late: await records(RECORD_EVENT.LATE),
+    failed: await records(RECORD_EVENT.FAILED),
+  };
+}
+
 describe('QA RQ2 risk_events kaydi ve son degerlendirme (iki kopya, gercek Mongo)', () => {
   it('R1 es zamanli degerlendirmeler: her biri tek kayit; tekrar ikinci kayit; son degerlendirme iki kopyada ayni', async () => {
     databases += 1;
@@ -171,12 +206,15 @@ describe('QA RQ2 risk_events kaydi ve son degerlendirme (iki kopya, gercek Mongo
     clock.advance(1_000);
     const retried = await evaluate(second, context(userId, orderOf(0)));
 
-    const perOrder = await Promise.all(
-      Array.from({ length: EVALUATIONS }, (_, n) =>
-        reader.events.count({ userId, orderId: orderOf(n) }),
-      ),
+    const perOrder = () =>
+      Promise.all(
+        Array.from({ length: EVALUATIONS }, (_, n) =>
+          reader.events.count({ userId, orderId: orderOf(n) }),
+        ),
+      );
+    await settled(perOrder, 'R1: siparis basina kayitlar yazilmadi').toEqual(
+      Array.from({ length: EVALUATIONS }, (_, n) => (n === 0 ? 2 : 1)),
     );
-    expect(perOrder).toEqual(Array.from({ length: EVALUATIONS }, (_, n) => (n === 0 ? 2 : 1)));
     for (const copy of [first, second]) {
       const { response } = await copy.call(riskV1.RiskServiceService.getLastEvaluation, {
         userId,
@@ -215,6 +253,20 @@ describe('QA RQ2 risk_events kaydi ve son degerlendirme (iki kopya, gercek Mongo
     clock.advance(1_000);
     const latest = await evaluate(risk, context(owner, orderOf(101)));
 
+    // Once sahibin kayitlari yazilmis olmali (#167): yoksa asagidaki NOT_FOUND kaydin yoklugundan
+    // gelirdi. Kontrol: ayni siparisi sahibi okur; kullanici sorgusu en son degerlendirme.
+    // Bos esitlik (undefined = undefined) korumasi bos gecmesin.
+    expect([earlier.evaluatedAt, latest.evaluatedAt].every((at) => at instanceof Date)).toBe(true);
+    const lastOf = async (userId: string, orderId: string) =>
+      (await risk.call(riskV1.RiskServiceService.getLastEvaluation, { userId, orderId })).response
+        ?.evaluation?.evaluatedAt;
+    await settled(() => lastOf(owner, orderOf(100)), 'R2: sahibin 100 kaydi okunmadi').toEqual(
+      earlier.evaluatedAt,
+    );
+    await settled(() => lastOf(owner, ''), 'R2: sahibin en son kaydi okunmadi').toEqual(
+      latest.evaluatedAt,
+    );
+
     const foreign = await risk.call(riskV1.RiskServiceService.getLastEvaluation, {
       userId: stranger,
       orderId: orderOf(100),
@@ -230,22 +282,9 @@ describe('QA RQ2 risk_events kaydi ve son degerlendirme (iki kopya, gercek Mongo
     ]);
     expect(visible(foreign.error, orderOf(100))).toBe(visible(missing.error, orderOf(999)));
     expect(JSON.stringify(foreign.error?.metadata.getMap() ?? {})).not.toContain(owner);
-
-    // Kontrol: ayni siparisi sahibi okur (NOT_FOUND kaydin yoklugundan degil).
-    const mine = await risk.call(riskV1.RiskServiceService.getLastEvaluation, {
-      userId: owner,
-      orderId: orderOf(100),
-    });
-    expect(mine.response?.evaluation?.evaluatedAt).toEqual(earlier.evaluatedAt);
-
-    const own = await risk.call(riskV1.RiskServiceService.getLastEvaluation, {
-      userId: owner,
-      orderId: '',
-    });
-    expect(own.response?.evaluation?.evaluatedAt).toEqual(latest.evaluatedAt);
   });
 
-  it('R3 BULGU #167: Mongo donunca order in risk istemcisi kendi butcesinde karar alamaz; genis sure karari gec alir', async () => {
+  it('R3 #167 duzeltildi: Mongo donunca order in risk istemcisi karari kendi butcesinde alir; vekil cozulunce kayit yazilir', async () => {
     if (mongo === undefined) throw new Error('Mongo yok');
     databases += 1;
     const proxy: FreezingProxy = await startFreezingProxy({
@@ -284,27 +323,70 @@ describe('QA RQ2 risk_events kaydi ve son degerlendirme (iki kopya, gercek Mongo
     await expect(order.evaluate(request, scope)).resolves.toMatchObject({ band: 'LOW' });
     expect(env.operationTimeoutMs).toBeGreaterThan(RISK_CALL_TIMEOUT_MS);
 
-    // Mongo donar: kural motoru karari bulur, ama cevap kaydin yazilmasini bekler.
+    // Kayit sayaclari (dosya ici R1-R2 de saydi): R3 farki olcer.
+    const before = await recordCounts();
+
+    // Mongo donar: kural motoru karari bulur; kayit kendi sinirini asar ve beklenmez (#167).
     proxy.freeze();
     try {
-      const failure: unknown = await order
+      const orderStartedAt = performance.now();
+      const decision: unknown = await order
         .evaluate({ ...request, orderId: orderOf(201) }, scope)
         .then(
-          () => 'karar geldi',
+          (evaluation) => evaluation,
           (error: unknown) => error,
         );
-      expect(failure).toBeInstanceOf(AppError);
-      const { code, cause } = failure as AppError & { cause?: ServiceError };
-      expect([code, cause?.code]).toEqual(['SERVICE_UNAVAILABLE', status.DEADLINE_EXCEEDED]);
+      expect(decision).not.toBeInstanceOf(AppError);
+      expect(decision).toMatchObject({ band: 'LOW' });
+      const orderElapsed = performance.now() - orderStartedAt;
+      expect(orderElapsed).toBeLessThan(RISK_CALL_TIMEOUT_MS);
+      // Dondurma etkili: karar kayit sinirini bekledi (kayit gercekten takildi).
+      expect(orderElapsed).toBeGreaterThanOrEqual(RISK_EVENT_RECORD_TIMEOUT_MS - 5);
 
-      // Kaydi bekleyebilen cagiran karari alir: kayit Mongo'nun islem sinirinda duser, karar doner.
+      // Genis sureli cagiran da kaydi beklemez: karar ayni hizda, order'in butcesinin altinda.
       const startedAt = performance.now();
       await expect(
         patient.evaluate({ ...request, orderId: orderOf(202) }, scope),
       ).resolves.toMatchObject({ band: 'LOW' });
-      expect(performance.now() - startedAt).toBeGreaterThanOrEqual(RISK_CALL_TIMEOUT_MS);
+      const patientElapsed = performance.now() - startedAt;
+      expect(patientElapsed).toBeLessThan(RISK_CALL_TIMEOUT_MS);
+      expect(patientElapsed).toBeGreaterThanOrEqual(RISK_EVENT_RECORD_TIMEOUT_MS - 5);
     } finally {
       proxy.thaw();
     }
+
+    // Vekil cozulunce: donukken baslayan kayitlar (201, 202) arka planda, yeni kayit (203) yazilir.
+    await expect(
+      order.evaluate({ ...request, orderId: orderOf(203) }, scope),
+    ).resolves.toMatchObject({ band: 'LOW' });
+    const reader = await openEventsReader(env);
+    for (const n of [201, 202, 203]) {
+      await settled(
+        () => reader.events.count({ userId: request.userId, orderId: orderOf(n) }),
+        `${orderOf(n)} kaydi vekil cozuldukten sonra yazilmadi`,
+      ).toBe(1);
+    }
+    // Kayit sayisi tek basina kanit degil: vekil, servisin biraktigi bekletilmis yazimi da cozulunce
+    // Mongo'ya iletir. Servisin kendisi sinirini asan HER kaydi izleyip bir kez sonuclandirmali:
+    // gec yazildi (late) + kayip (failed) = zaman asimi; kayip yok. Donukken baslayan iki kayit
+    // (201, 202) kesin zaman asimidir; yavas makinede 200 ya da 203 de asabilir, iliski yine tutar.
+    const delta = async () => {
+      const now = await recordCounts();
+      return {
+        timedOut: now.timedOut - before.timedOut,
+        late: now.late - before.late,
+        failed: now.failed - before.failed,
+      };
+    };
+    await settled(async () => {
+      const { timedOut, late, failed } = await delta();
+      return late + failed === timedOut;
+    }, 'sinirini asan her kayit bir kez sonuclanmadi (late + failed != timed_out)').toBe(true);
+    const outcome = await delta();
+    expect(
+      outcome.timedOut,
+      'donukken baslayan iki kayit zaman asimina dusmedi',
+    ).toBeGreaterThanOrEqual(2);
+    expect(outcome.failed, 'zaman asimina dusen kayit kayip sayildi').toBe(0);
   });
 });
