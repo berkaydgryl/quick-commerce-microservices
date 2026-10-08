@@ -117,6 +117,21 @@ export function pointAlong(points: readonly GeoPoint[], meters: number): GeoPoin
   return points[points.length - 1] ?? first;
 }
 
+/**
+ * Kuryenin YAZILACAK konumu (canli konum, iptalde birakma; #174, #197): paket
+ * alinmisken (kayitli) saat kaydin gerisindeyse hesap TO_MARKET der; o zaman
+ * birinci bacak konumu (onceki musterinin sokagi olabilir) degil market noktasi.
+ */
+export function courierLocation(
+  route: Pick<Route, 'points' | 'pickupIndex' | 'pickedUpAt'>,
+  progress: Pick<RouteProgress, 'phase' | 'position'>,
+): GeoPoint {
+  if (route.pickedUpAt !== undefined && progress.phase === TRACKING_PHASE.TO_MARKET) {
+    return routeLegs(route).legTwo[0] ?? progress.position;
+  }
+  return progress.position;
+}
+
 /** Rotanin iki bacagi: market noktasi ikisinde de var. */
 export function routeLegs(route: Pick<Route, 'points' | 'pickupIndex'>): {
   readonly legOne: readonly GeoPoint[];

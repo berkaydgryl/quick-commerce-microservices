@@ -3,6 +3,7 @@
  * bellek deposuyla ayni sozlesme testinden gecer.
  */
 
+import { ROUTE_STATE } from '../../domain/route.js';
 import type { Route, RoutePatch } from '../../domain/route.js';
 import type { MovingRouteRepository, RouteRepository } from '../../domain/route-repository.js';
 import { fromRouteDocument, routeProgressFields, toRouteDocument } from './mappers.js';
@@ -30,7 +31,10 @@ export class RouteMongoStore implements RouteRepository, MovingRouteRepository {
 
   async update(route: Route, patch: RoutePatch): Promise<Route | null> {
     const document = toRouteDocument(route);
-    const updated = await this.routes.updateCurrent(document, routeProgressFields(patch));
+    // #177: ENDED yamasi teslim ani kayitli rotaya yazilmaz (kosul belgede).
+    const updated = await this.routes.updateCurrent(document, routeProgressFields(patch), {
+      requireUndelivered: patch.state === ROUTE_STATE.ENDED,
+    });
     return updated === null ? null : fromRouteDocument(updated);
   }
 }
