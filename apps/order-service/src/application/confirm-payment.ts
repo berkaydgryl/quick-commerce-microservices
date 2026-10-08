@@ -4,6 +4,7 @@
  *  - Kod dogru          -> PAID (PAID yazilamazsa iade telafisi, payment-step.ts)
  *  - Yanlis kod, hak var -> THREEDS_FAILED (kalan hak ayrintida); siparis bekler
  *  - Hak bitti / sure doldu -> siparis PAYMENT_FAILED, sonra THREEDS_FAILED
+ *    (yazim duserse de THREEDS_FAILED; #213, failClosedChallenge)
  *
  * TEKRAR ISTEK: siparis zaten PAID ise (onay cevabi kaybolmus) ayni sonuc
  * doner, payment-svc'ye gidilmez.
@@ -71,7 +72,7 @@ export function createConfirmPayment(deps: ConfirmPaymentDeps): ConfirmPayment {
       if (isClosedChallenge(error)) {
         // Siparis PAYMENT_FAILED yazilir; istemci payment-svc'nin hatasini
         // (kalan hak 0, sebep: expired / attempts_exhausted) aynen gorur.
-        await failPayment(deps, windowed, ERROR_CODES.THREEDS_FAILED, scope);
+        await failClosedChallenge(deps, windowed, scope);
       }
       throw error;
     }
@@ -79,6 +80,28 @@ export function createConfirmPayment(deps: ConfirmPaymentDeps): ConfirmPayment {
     // 3DS yalnizca kartli odemede vardir.
     return (await settleOrderPayment(deps, windowed, PAYMENT_METHOD.CARD, result, scope)).order;
   };
+}
+
+/**
+ * Kapanmis dogrulamada siparisi PAYMENT_FAILED yazar. Yazim duserse (ayni anda
+ * iptal, veritabani) payment-svc'nin hatasi EZILMEZ (#213): gateway son yanlis
+ * kodu bu hatadan sayar (#163). Siparis iptalse oyle kalir; yazilamadiysa odeme
+ * bekler, sonraki onay kapanmis dogrulamayi yine alir ve yazimi yeniden dener
+ * (web hak bitince vazgecer: siparis iptal edilir; kilit dolarsa supurucu kapatir).
+ */
+async function failClosedChallenge(
+  deps: ConfirmPaymentDeps,
+  order: Order,
+  scope: RequestScope,
+): Promise<void> {
+  try {
+    await failPayment(deps, order, ERROR_CODES.THREEDS_FAILED, scope);
+  } catch (writeError: unknown) {
+    scope.logger.warn(
+      { err: writeError, orderId: order.id },
+      'odeme basarisiz yazilamadi; 3DS hatasi aynen donuyor',
+    );
+  }
 }
 
 function isClosedChallenge(error: unknown): boolean {
