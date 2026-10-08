@@ -21,4 +21,5 @@ export const COURIER_TRACKING_FALLBACK: CourierTrackingContent = {
   approachTitle: 'Kuryen konumuna yaklaştı!',
   approachActionLabel: 'Konumu gör',
   approachCloseLabel: 'Bildirimi kapat',
+  offscreenCourierLabel: 'Kuryeyi haritada göster',
 };

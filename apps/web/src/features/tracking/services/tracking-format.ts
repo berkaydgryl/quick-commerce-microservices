@@ -1,6 +1,6 @@
 /**
  * Kurye penceresinin sayilari (F22): tahmini varis ("~8 dk") ve kalan mesafe
- * ("1,2 km", "300 m"); kuryenin kisaltilmis adi ("Mehmet K."). Saf
+ * ("1,2 km", "300 m"; ekran disi gostergede de); kuryenin kisaltilmis adi ("Mehmet K."). Saf
  * fonksiyonlar; birimler icerikten.
  */
 

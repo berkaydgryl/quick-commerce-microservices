@@ -555,7 +555,8 @@
     "retryLabel": "Tekrar dene",
     "approachTitle": "Kuryen konumuna yaklaştı!",
     "approachActionLabel": "Konumu gör",
-    "approachCloseLabel": "Bildirimi kapat"
+    "approachCloseLabel": "Bildirimi kapat",
+    "offscreenCourierLabel": "Kuryeyi haritada göster"
   },
   "orderConfirmation": {
     "placedTitle": "Siparişin alındı!",

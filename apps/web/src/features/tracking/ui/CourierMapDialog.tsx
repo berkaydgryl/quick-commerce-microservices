@@ -79,7 +79,7 @@ function ReadyView({
           {courierDisplayName(tracking.courier.name)}
         </span>
       </p>
-      <LazyTrackingMap map={map} label={texts.mapLabel} tracking={tracking} />
+      <LazyTrackingMap map={map} label={texts.mapLabel} tracking={tracking} texts={texts} />
       {tracking.phase === 'TO_MARKET' && (
         <p className={styles['c-courier-map__notice']}>{texts.pickupNotice}</p>
       )}

@@ -4258,7 +4258,9 @@ components:
         Kurye takibi (F22; T13.3 aşama 1): "Kuryem nerede" penceresi (başlık, "Kuryen" ve
         kısaltılmış ad, harita, tahmini varış "~8 dk", kalan mesafe "1,2 km" / "300 m",
         teslimat adresi, aşama cümleleri) ve kurye yaklaşınca sağ üstteki bildirim
-        ("Konumu gör" aynı pencereyi açar). Konum, süre ve mesafe takip ucundan.
+        ("Konumu gör" aynı pencereyi açar). Harita kaydırılınca kurye görünmezse
+        kenarda kurye göstergesi ve kalan mesafe (`offscreenCourierLabel`).
+        Konum, süre ve mesafe takip ucundan.
       required:
         [
           title,
@@ -4280,6 +4282,7 @@ components:
           approachTitle,
           approachActionLabel,
           approachCloseLabel,
+          offscreenCourierLabel,
         ]
       properties:
         title: { $ref: "#/components/schemas/ContentText" }
@@ -4301,6 +4304,7 @@ components:
         approachTitle: { $ref: "#/components/schemas/ContentText" }
         approachActionLabel: { $ref: "#/components/schemas/ContentText" }
         approachCloseLabel: { $ref: "#/components/schemas/ContentText" }
+        offscreenCourierLabel: { $ref: "#/components/schemas/ContentText" }
 
     FavoritesContent:
       type: object

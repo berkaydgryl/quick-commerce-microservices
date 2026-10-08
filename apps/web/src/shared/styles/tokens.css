@@ -162,4 +162,8 @@
      kontrolleri (1000) haritanin KENDI yigininda kalir (isolation); bu deger
      yalnizca o yigin icinde gecerlidir, sayfanin katmanlariyla yarismaz. */
   --z-map-overlay: 1001;
+
+  /* Kurye haritasinin ekran disi gostergesi: isaretlerin (600) ustunde, Leaflet
+     kontrollerinin (yakinlastirma, atif: 1000) ALTINDA; ayni yigin kurali. */
+  --z-map-indicator: 900;
 }
