@@ -392,11 +392,11 @@ Kasa payment-svc'dedir (`getir/cardvault/v1`, `CardVaultService`); kart kurallar
   bağlanmaz (404), payment havuza ve `/healthz` listesine girmez. Sağlayıcı bugün mock'tur; gerçek
   sağlayıcı gelince açılır (bekleyen iş).
 - **Kimlik yalnızca jetondan (QA G6):** gövdede ya da sorguda kullanıcı alanı yoktur; bilinmeyen alan 400.
-  Biçimsiz `cardId` kasaya gitmeden 404; başkasının, olmayan ve silinmiş kart kasadan 404.
+  Biçimsiz `cardId` kasaya gitmeden 404; başkasının, olmayan ve silinmiş kart kasadan 404. Silmede ve ad
+  düzenlemede kasanın 404 ayrıntısı (`cardId`) `cards.Service`'te atılır: dört durum AYNI zarf (#148, #194).
 - **Kart adı düzenleme (#148, `PATCH /v1/me/cards/{cardId}`):** gövde SIKI, yalnızca `nickname`
   (bilinmeyen alan 400). Alan yoksa ya da `null` ise kasaya EKSİK gider ve kasa "Kart adı gönderilmedi"
-  der (boş gövde adı silmez); boş metin adı kaldırır. Kurallar ve cümleler kasada. Kasanın 404'ü
-  ayrıntısız döner: biçimsiz kimlik, olmayan, başkasının ve silinmiş kart AYNI zarf. Hız sınırı diğer
+  der (boş gövde adı silmez); boş metin adı kaldırır. Kurallar ve cümleler kasada. Hız sınırı diğer
   kart uçlarıyla aynı (kullanıcı başına, rota kalıbıyla: kart başına değil). Tekrar kaydı 15 dk ve
   silmeyle aynı kural (`cardChangePolicy`): parmak izi gövdenin HMAC'i; saklanan cevap güncel maskeli
   karttır ve kart adını AÇIK taşır (ekleme ve silme cevapları gibi; numara, CVV ve jeton yok).

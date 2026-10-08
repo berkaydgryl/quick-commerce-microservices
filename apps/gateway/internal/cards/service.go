@@ -75,11 +75,12 @@ func (s *Service) ListCards(ctx context.Context, userID string) (SavedCardList, 
 	return toSavedCardList(response.GetCards())
 }
 
-// DeleteCard, karti siler; cevap guncel liste.
+// DeleteCard, karti siler; cevap guncel liste. Kasanin 404'u ayrintisiz doner
+// (sameNotFound; #194).
 func (s *Service) DeleteCard(ctx context.Context, userID, cardID string) (SavedCardList, error) {
 	response, err := rpc.Invoke(ctx, s.timeout, service, "DeleteCard", s.rpc.DeleteCard, &cardvaultv1.DeleteCardRequest{UserId: userID, CardId: cardID})
 	if err != nil {
-		return SavedCardList{}, err
+		return SavedCardList{}, sameNotFound(err)
 	}
 	return toSavedCardList(response.GetCards())
 }
@@ -102,8 +103,8 @@ func (s *Service) UpdateCardNickname(ctx context.Context, userID, cardID string,
 
 // sameNotFound, kasanin NOT_FOUND'unu AYRINTISIZ 404'e cevirir (tracking
 // paketindeki desen): kasa ayrintiya kart kimligini koyar, gateway'in bicimsiz
-// kimlik 404'u koymaz; istemci ikisini ayirmasin (openapi: ayrintisiz). Neden
-// gunluk icin kalir; diger hatalar oldugu gibi gecer.
+// kimlik 404'u koymaz; istemci ikisini ayirmasin (openapi: ayrintisiz). Silme
+// ve ad duzenleme kullanir. Neden gunluk icin kalir; diger hatalar oldugu gibi gecer.
 func sameNotFound(err error) error {
 	var appErr *apperror.Error
 	if errors.As(err, &appErr) && appErr.Code == apperror.CodeNotFound {

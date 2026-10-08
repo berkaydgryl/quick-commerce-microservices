@@ -1,23 +1,14 @@
 package httpapi
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/gofiber/fiber/v3"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/timestamppb"
-
-	cardvaultv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/cardvault/v1"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/cards"
@@ -40,43 +31,6 @@ func cardPath(cardID string) string {
 func renameRequest(t *testing.T, cardID, authorization, key, body string) *http.Request {
 	t.Helper()
 	return cardRequest(t, http.MethodPatch, cardPath(cardID), authorization, key, body)
-}
-
-// vaultRPC, uretilen kasa istemcisinin sahtesi. Gercek cards.Service onu
-// cagirir: hata gercek rpc.Invoke/FromGRPC yolundan (x-app-error, sebep) gecer.
-// Yalnizca UpdateCardNickname uygulanir; digerleri cagrilmaz.
-type vaultRPC struct {
-	cards.RPC
-	calls   int
-	err     error
-	trailer metadata.MD
-}
-
-func (v *vaultRPC) UpdateCardNickname(_ context.Context, in *cardvaultv1.UpdateCardNicknameRequest, opts ...grpc.CallOption) (*cardvaultv1.UpdateCardNicknameResponse, error) {
-	v.calls++
-	testkit.SetTrailer(opts, v.trailer)
-	if v.err != nil {
-		return nil, v.err
-	}
-	return &cardvaultv1.UpdateCardNicknameResponse{Card: &cardvaultv1.SavedCard{
-		Id: testCardID, Brand: cardvaultv1.CardBrand_CARD_BRAND_AMEX, First4: "3782", Last4: "0005",
-		ExpiryMonth: 12, ExpiryYear: 2031, HolderName: "Zeynep Kılıçarslan", Nickname: in.GetNickname(),
-		CreatedAt: timestamppb.New(time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)),
-	}}, nil
-}
-
-// fail, sonraki cagrilarin kasa hatasi: gRPC durumu ve x-app-error yuku (bossa yok).
-func (v *vaultRPC) fail(code codes.Code, message, appError string) {
-	v.err = status.Error(code, message)
-	v.trailer = nil
-	if appError != "" {
-		v.trailer = metadata.Pairs(apperror.MetadataKey, appError)
-	}
-}
-
-// realRenamer, sahte gRPC istemcili GERCEK kart servisi.
-func realRenamer(rpc *vaultRPC) CardRenamer {
-	return cards.New(rpc, time.Second)
 }
 
 func TestCardRenameUsesTheTokenUserAndReturnsTheMaskedCard(t *testing.T) {
@@ -189,29 +143,6 @@ func TestCardRenameNeedsAnIdempotencyKey(t *testing.T) {
 	}
 }
 
-func TestCardRenameNotFoundIsIndistinguishable(t *testing.T) {
-	// Bicimsiz kimlik kasaya gitmeden 404. Kasanin 404'u (yok, baskasinin,
-	// silinmis) x-app-error ayrintisinda kart kimligini tasir; cards.Service onu
-	// atar: dordu AYNI zarf. Gercek servis + sahte gRPC istemcisi.
-	rpc := &vaultRPC{}
-	h := newCardsHarness(t, cardsOptions{renamer: realRenamer(rpc)})
-
-	malformedStatus, malformed := h.statusAndEnvelope(t, renameRequest(t, "crd_bicimsiz", bearer(t), "anahtar-yok-0001", cardRenameBody))
-	if rpc.calls != 0 {
-		t.Fatalf("bicimsiz kimlik kasaya gitmemeli: %d", rpc.calls)
-	}
-	rpc.fail(codes.NotFound, "Kart bulunamadi", `{"code":"NOT_FOUND","message":"Kart bulunamadi","details":{"cardId":"`+testCardID+`"}}`)
-	vaultStatus, vault := h.statusAndEnvelope(t, renameRequest(t, testCardID, bearer(t), "anahtar-yok-0002", cardRenameBody))
-
-	if malformedStatus != http.StatusNotFound || vaultStatus != http.StatusNotFound || malformed.Error == nil || vault.Error == nil {
-		t.Fatalf("iki istek de 404 olmali: %d %d", malformedStatus, vaultStatus)
-	}
-	malformed.Error.RequestID, vault.Error.RequestID = "", ""
-	if !reflect.DeepEqual(malformed.Error, vault.Error) || vault.Error.Details != nil {
-		t.Errorf("404'ler ayirt edilebiliyor: %+v / %+v", *malformed.Error, *vault.Error)
-	}
-}
-
 func TestCardRenameIsNeverCachedEvenWhenRejectedEarly(t *testing.T) {
 	// QA: noStoreRoute ILK ara katman. Kimliksiz (401) ve hiz siniri (429) ucun
 	// handler'ina varmadan doner; onlarda da no-store.
@@ -316,7 +247,7 @@ func TestCardRenameWritesNoNicknameToTheLogOrTheErrorCause(t *testing.T) {
 	var output lockedBuffer
 	logger := slog.New(slog.NewJSONHandler(&output, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	rpc := &vaultRPC{}
-	h := newCardsHarness(t, cardsOptions{logger: logger, renamer: realRenamer(rpc)})
+	h := newCardsHarness(t, cardsOptions{logger: logger, renamer: realVault(rpc)})
 	const secret = "Gizli Yeni Ad"
 	body := `{"nickname":"` + secret + `"}`
 	requests := []*http.Request{

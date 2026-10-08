@@ -55,6 +55,13 @@ export const marketListCartContentSchema = z.object({
    */
   switchConfirmPrefix: contentTextSchema,
   switchConfirmSuffix: contentTextSchema,
+  /**
+   * Adres degisince sepetin marketi yeni adrese teslim etmiyorsa (F16): onek +
+   * sepetin marketi + sonek; "Evet" sepeti bosaltir ve tost.
+   */
+  addressChangePrefix: contentTextSchema,
+  addressChangeSuffix: contentTextSchema,
+  cartClearedToast: contentTextSchema,
   /** Adet dugmelerinin adi, urun adinin arkasina: "Saksıda Küçük Ağaç adedini azalt" (T16.3). */
   decreaseSuffix: contentTextSchema,
   increaseSuffix: contentTextSchema,

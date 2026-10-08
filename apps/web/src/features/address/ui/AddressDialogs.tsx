@@ -27,7 +27,8 @@ interface AddressDialogsProps {
  * "Adreslerim" ve "Adres Ekle" pencereleri (T11.10; T11.13'ten beri ortak):
  * ust bardaki adres secici ve profil sayfasinin menusu ayni pencereleri
  * acar. "Adresi Onayla" secilen adresi gecerli yapar; "Adres Ekle" T11.8'in
- * penceresine gecer, kaydedince yeni adres secilir.
+ * penceresine gecer, kaydedince yeni adres secilir. Ikisi de adres degisiminin
+ * bekcisinden gecer (F16).
  */
 export function AddressDialogs({
   book,
@@ -80,8 +81,10 @@ export function AddressDialogs({
       current={current}
       notice={notice}
       onConfirm={(address) => {
-        choose(address.id);
-        onClose();
+        // Bekci "Hayır" derse (sepet korunur) pencere acik kalir: baska adres secilebilir.
+        void choose(address.id).then((changed) => {
+          if (changed) onClose();
+        });
       }}
       onAdd={() => onOpen('add')}
       onClose={onClose}

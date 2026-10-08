@@ -247,6 +247,32 @@ describe('routeProgress: kayitli alma ikinci bacagi baslatir (#195)', () => {
   });
 });
 
+describe('routeProgress: rotanin kendi hareket kurali (#197)', () => {
+  const SLOW = { speedKmh: 6, prepSeconds: 600 };
+  const FAST = { speedKmh: 120, prepSeconds: 0 };
+  const moments = [0, 30, 114, 200, 600, 650, 900, 3_600].map((seconds) => after(seconds));
+
+  it('rotanin kurali o anki ayardan once gelir; kurali olmayan eski rota o anki ayarla ilerler', () => {
+    const own = { ...route(), movement: SLOW };
+    for (const at of moments) {
+      expect(routeProgress(own, at, FAST)).toEqual(routeProgress(route(), at, SLOW));
+      // Geriye uyumlu: #197 oncesi rota (movement yok) verilen ayarla.
+      expect(routeProgress(route(), at, FAST)).toEqual(
+        routeProgress({ ...route(), movement: FAST }, at, SLOW),
+      );
+    }
+  });
+
+  it('ayar degisse de gecmis anlar kaymaz: her an ayni konum, asama ve anlar', () => {
+    for (const movement of [SLOW, RULE, FAST]) {
+      const own = { ...route(), movement };
+      for (const at of moments) {
+        expect(routeProgress(own, at, FAST)).toEqual(routeProgress(own, at, SLOW));
+      }
+    }
+  });
+});
+
 describe('deliveredNoEarlierThan (#190 savunmasi; tick ve takip ortak)', () => {
   it('teslim almadan once ise teslim = alma; degilse ya da alma yoksa teslim aynen', () => {
     expect(deliveredNoEarlierThan(after(10), after(20))).toEqual(after(20));

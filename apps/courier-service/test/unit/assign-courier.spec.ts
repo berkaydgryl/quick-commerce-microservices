@@ -27,6 +27,7 @@ import {
   MARKET,
   MARKET_LOCATION,
   NOW_MS,
+  MOVEMENT_RULE,
   orderId,
   POOL_RULE,
   ROUTE_RULE,
@@ -39,6 +40,7 @@ const routeOf = (markets: MarketLocator) =>
     routes: new InMemoryRouteStore(),
     markets,
     rule: ROUTE_RULE,
+    movement: MOVEMENT_RULE,
     clock: fixedClock(NOW_MS),
   });
 
