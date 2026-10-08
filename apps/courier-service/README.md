@@ -101,7 +101,9 @@ idleSince silinir)`. Aday o arada başka siparişe gittiyse koşul tutmaz, sıra
   2. alma anı geldiyse `pickedUpAt` **bir kez** yazılır, `courier.picked_up` yayınlanır, sonra
      `pickupPublished`;
   3. varış anı geldiyse `deliveredAt` yazılır, kurye adreste `IDLE` olur (yalnızca siparişi hâlâ
-     **bu kurye** taşıyorsa), `courier.delivered` yayınlanır, rota `DONE`;
+     **bu kurye** taşıyorsa), `courier.delivered` yayınlanır, rota `DONE`. Teslim anı kayıtlı alma
+     anından önce yazılmaz (#190, `deliveredNoEarlierThan`): hız ayarı yol ortasında hızlanırsa
+     yeni hesap eski almanın gerisinde kalır, o zaman teslim = alma;
   4. aksi halde canlı konum `courier:{id}:last`'a yazılır (okuyan aşama 2). Yazım hatası günlüğe
      konum taşımaz (ioredis hatası komut argümanlarını taşır; argümansız hataya çevrilir).
 
@@ -118,7 +120,10 @@ idleSince silinir)`. Aday o arada başka siparişe gittiyse koşul tutmaz, sıra
   (`TO_MARKET`) konum **verilmez**, kalan yol yalnızca market → adres bacağıdır, ETA dakikaya
   yukarı yuvarlanır ve rota yalnızca market → adres parçasıdır (`@getir/contracts`
   `enforceTrackingPhase` ile aynı kural; test her anı o şemadan geçirir). Kayıtlı alma anı hesabın
-  ilerisindeyse (hız ayarı değişti) konum market, ETA yine yuvarlı. Bilinen sınır: alma anı
+  ilerisindeyse (hız ayarı değişti) konum market, ETA yine yuvarlı. `DELIVERED`'da iki an da her
+  zaman vardır ve alma ≤ teslim (#190): teslim kayıtlı ?? hesap, alma kayıtlı ?? (teslim hesaptansa)
+  hesap ?? teslim; karışık kaynakta (kayıtlı alma + yeni ayarla hesaplanan teslim) teslim almaya
+  kıstırılır; kalan yol ve ETA 0. Bilinen sınır: alma anı
   (`pickedUpAt`) gösterildiği için kurye → market süresi, dolayısıyla yönsüz bir uzaklık
   çıkarılabilir; sözleşme bunu kabul eder. Sahiplik (sipariş kimin) gateway'dedir. Koordinatlar
   kişisel veridir: günlüğe yazılmaz.
