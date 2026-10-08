@@ -13,6 +13,12 @@ import { ITEM_UNIT } from '../../src/domain/order-item.js';
 import type { CatalogOffer } from '../../src/domain/price-draft.js';
 
 export const FAKE_MARKET_ID = 'mkt_migros-jet-moda';
+/**
+ * Sahte marketin konumu ve yaricapi: seed'deki mkt_migros-jet-moda ile AYNI
+ * (catalog fixtures/markets/pilot.ts); testlerin teslimat noktalari icinde.
+ */
+export const FAKE_MARKET_LOCATION = { lat: 40.985, lng: 29.0275 } as const;
+export const FAKE_RADIUS_METERS = 2_500;
 /** Kapali seed marketi (#154); closedMarketIds'e eklenince taninir. */
 export const CLOSED_MARKET_ID = 'mkt_a101-abbasaga';
 
@@ -54,6 +60,8 @@ export class FakeCatalogPricing implements CatalogPricing {
   readonly closedMarketIds = new Set<string>();
   /** Verilirse yalnizca teklif okumasi bu hatayla reddedilir. */
   offersFailure: AppError | undefined;
+  /** Acik marketin teslimat yaricapi (#203); sinir testleri degistirir. */
+  radiusMeters = FAKE_RADIUS_METERS;
 
   constructor(
     private readonly offers: readonly CatalogOffer[] = FAKE_OFFERS,
@@ -69,7 +77,16 @@ export class FakeCatalogPricing implements CatalogPricing {
     if (marketId !== FAKE_MARKET_ID && !closed) {
       return Promise.reject(AppError.notFound('Market bulunamadi', { details: { marketId } }));
     }
-    return Promise.resolve(closed ? { isOpen: false } : { isOpen: true, rules: this.rules });
+    return Promise.resolve(
+      closed
+        ? { isOpen: false }
+        : {
+            isOpen: true,
+            rules: this.rules,
+            location: FAKE_MARKET_LOCATION,
+            deliveryRadiusMeters: this.radiusMeters,
+          },
+    );
   }
 
   activeOffers(

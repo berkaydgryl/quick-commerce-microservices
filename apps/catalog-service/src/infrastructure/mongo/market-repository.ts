@@ -1,7 +1,7 @@
+import type { GeoPoint } from '@getir/core';
 import type { Db, Document, IndexDescription } from 'mongodb';
 
 import type { Market } from '../../domain/catalog.js';
-import type { GeoPoint } from '../../domain/geo.js';
 import type { MarketDistance } from '../../domain/market-coverage.js';
 import type { MarketReader } from '../../domain/market-reader.js';
 import type { MarketDocument } from './documents.js';
@@ -17,8 +17,9 @@ interface MarketWithDistance extends MarketDocument {
 /**
  * Konumu kapsayan marketler (#175): $geoNear 2dsphere indeksiyle yakindan
  * uzaga akitir (ilk asama olmak ZORUNDA), $match her marketi KENDI yaricapiyla
- * suzer (sinir dahil: domain evaluateCoverage ile ayni esitsizlik; use-case
- * ayrica domain kuralindan gecirir), $limit kapsayanlara uygulanir.
+ * suzer (sinir dahil: @getir/core isOutsideDeliveryRadius'un tersi, $lte; Mongo
+ * TS cagiramaz, use-case ayrica coveringMarkets'ten gecirir ve sozlesme testi iki
+ * modu karsilastirir), $limit kapsayanlara uygulanir.
  *
  * maxDistance VERILMEZ: yaricap markete gore degisir ve sozlesmede ust sinir
  * yok. Bedeli: `limit` kadar kapsayan bulunursa okuma orada durur; daha azi

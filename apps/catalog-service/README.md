@@ -34,8 +34,9 @@ T4.2'nin "yarıçap içinde ama kapalı → `STORE_CLOSED`, yarıçap dışı �
 kaybolmadı: tek market için `domain/market-coverage.ts` → `evaluateCoverage`'da duruyor. Kapalı
 marketin sipariş almaması order-service'tedir (#154): `CreateDraftOrder` `GetMarket`'ın `is_open`'ını
 okur, kapalıysa `NO_STORE` + `reason: STORE_CLOSED`. `GetMarket` kapalı markette başarılı döner.
-Teslimat yarıçapı (`OUT_OF_RANGE`) rezervasyonda HENÜZ sorulmuyor: adres değişince seçili marketin
-hâlâ hizmet verip vermediği bu kurala sorulacak (bekleyen iş).
+Teslimat yarıçapı (`OUT_OF_RANGE`) da rezervasyonda sorulur (#203): `CreateDraftOrder` aynı mesafe ve
+eşitsizliği `@getir/core`'dan kullanır (`distanceMeters`, `isWithinDeliveryRadius`; sınır dahil).
+Liste `$geoNear`'dan, rezervasyon haversine'den: sınırda ±1 m fark (KABUL).
 
 ## İstek doğrulaması (D6)
 
