@@ -32,7 +32,7 @@ describe('isOutsideDeliveryRadius', () => {
     expect(isOutsideDeliveryRadius(3_001, 3_000)).toBe(true);
   });
 
-  it('NaN disarida SAYILMAZ (catalog\'un ilk yazimiyla ayni; veriyi cagiran dogrular)', () => {
+  it("NaN disarida SAYILMAZ (catalog'un ilk yazimiyla ayni; veriyi cagiran dogrular)", () => {
     expect(isOutsideDeliveryRadius(Number.NaN, 3_000)).toBe(false);
     expect(isOutsideDeliveryRadius(3_001, Number.NaN)).toBe(false);
   });
