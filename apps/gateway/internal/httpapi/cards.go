@@ -170,7 +170,8 @@ func addCardHandler(adder CardAdder, attempts cardAttempts) fiber.Handler {
 
 // deleteCardHandler, DELETE /v1/me/cards/{cardId}: cevap guncel liste.
 // Bicimsiz kimlik kasaya gitmeden 404 (QA G6); baskasinin, olmayan ya da
-// silinmis kart da kasadan 404 doner, uc durum ayirt edilemez.
+// silinmis kart kasadan 404 doner. Dort durum AYNI zarfla doner (ayrintisiz;
+// kasanin 404 ayrintisini cards.Service atar, #194).
 func deleteCardHandler(deleter CardDeleter) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if err := rejectUnknownQuery(c); err != nil {

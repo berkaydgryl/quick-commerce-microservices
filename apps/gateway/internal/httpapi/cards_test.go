@@ -2,10 +2,12 @@ package httpapi
 
 import (
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/gofiber/fiber/v3"
+	"google.golang.org/grpc/codes"
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
 )
@@ -132,5 +134,46 @@ func TestCardEndpointsAreAbsentWhenTheVaultIsOff(t *testing.T) {
 		if response.StatusCode != http.StatusNotFound {
 			t.Errorf("%s: uclar kapaliyken 404 bekleniyordu: %d", method, response.StatusCode)
 		}
+	}
+}
+
+func TestCardNotFoundIsIndistinguishable(t *testing.T) {
+	// #194 ve #148: silme ve ad duzenlemede bicimsiz kimlik kasaya gitmeden 404.
+	// Kasanin 404'u (yok, baskasinin, silinmis) x-app-error ayrintisinda kart
+	// kimligini tasir; cards.Service onu atar: dordu AYNI zarf. Gercek servis +
+	// sahte gRPC istemcisi; ikinci istegin gercekten kasaya gittigi de denetlenir.
+	cases := []struct {
+		name    string
+		method  string
+		rpc     string
+		body    string
+		options func(realCardVault) cardsOptions
+	}{
+		{"silme", http.MethodDelete, "DeleteCard", "", func(v realCardVault) cardsOptions { return cardsOptions{deleter: v} }},
+		{"ad duzenleme", http.MethodPatch, "UpdateCardNickname", cardRenameBody, func(v realCardVault) cardsOptions { return cardsOptions{renamer: v} }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rpc := &vaultRPC{}
+			h := newCardsHarness(t, tc.options(realVault(rpc)))
+
+			malformedStatus, malformed := h.statusAndEnvelope(t, cardRequest(t, tc.method, cardPath("crd_bicimsiz"), bearer(t), "anahtar-yok-0001", tc.body))
+			if len(rpc.sent) != 0 {
+				t.Fatalf("bicimsiz kimlik kasaya gitmemeli: %+v", rpc.sent)
+			}
+			rpc.fail(codes.NotFound, "Kart bulunamadi", `{"code":"NOT_FOUND","message":"Kart bulunamadi","details":{"cardId":"`+testCardID+`"}}`)
+			vaultStatus, vault := h.statusAndEnvelope(t, cardRequest(t, tc.method, cardPath(testCardID), bearer(t), "anahtar-yok-0002", tc.body))
+
+			if want := []vaultCall{{tc.rpc, testUserID, testCardID}}; !reflect.DeepEqual(rpc.sent, want) {
+				t.Fatalf("ikinci istek kasaya bir kez gitmeli: %+v", rpc.sent)
+			}
+			if malformedStatus != http.StatusNotFound || vaultStatus != http.StatusNotFound || malformed.Error == nil || vault.Error == nil {
+				t.Fatalf("iki istek de 404 olmali: %d %d", malformedStatus, vaultStatus)
+			}
+			malformed.Error.RequestID, vault.Error.RequestID = "", ""
+			if !reflect.DeepEqual(malformed.Error, vault.Error) || vault.Error.Details != nil {
+				t.Errorf("404'ler ayirt edilebiliyor: %+v / %+v", *malformed.Error, *vault.Error)
+			}
+		})
 	}
 }
