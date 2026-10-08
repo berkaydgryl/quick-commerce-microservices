@@ -78,7 +78,7 @@ func releaseReservationHandler(releaser ReservationReleaser) fiber.Handler {
 //
 // Risk sinyalleri (T8.1) bicim dogrulamasindan SONRA okunur: bicimsiz istek
 // veritabanina gitmez. Oturum kapatilmissa sinyal okuyucu 401 doner.
-func placeOrderHandler(placer OrderPlacer, signalReader CheckoutSignalReader) fiber.Handler {
+func placeOrderHandler(placer OrderPlacer, signalReader CheckoutSignalReader, threeDS threeDSAttempts) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if err := rejectUnknownQuery(c); err != nil {
 			return err
@@ -92,6 +92,12 @@ func placeOrderHandler(placer OrderPlacer, signalReader CheckoutSignalReader) fi
 		input := body.toInput(userIDOf(c), key, errs)
 		if len(errs) > 0 {
 			return apperror.New(apperror.CodeValidationFailed, errs)
+		}
+		// #163: yanlis kod siniri dolu kullanici kartla yeni siparis (yeni 3DS hakki) acamaz.
+		if input.Method == order.MethodCard {
+			if err := threeDS.admitCardOrder(c); err != nil {
+				return err
+			}
 		}
 
 		// IP baglantidan (B9): istemcinin yazabildigi X-Forwarded-For'a guvenilmez;
@@ -111,7 +117,9 @@ func placeOrderHandler(placer OrderPlacer, signalReader CheckoutSignalReader) fi
 }
 
 // confirmThreeDSHandler, POST /v1/orders/{id}/3ds: kod dogruysa siparis PAID.
-func confirmThreeDSHandler(confirmer ThreeDSConfirmer) fiber.Handler {
+// Deneme siniri govde dogrulandiktan sonra bakilir; sonuc 3DS deneme sayacina ve
+// metrige yazilir (#163; yalniz yanlis kod sayilir).
+func confirmThreeDSHandler(confirmer ThreeDSConfirmer, threeDS threeDSAttempts) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if err := rejectUnknownQuery(c); err != nil {
 			return err
@@ -125,9 +133,13 @@ func confirmThreeDSHandler(confirmer ThreeDSConfirmer) fiber.Handler {
 		if len(errs) > 0 {
 			return apperror.New(apperror.CodeValidationFailed, errs)
 		}
+		if err := threeDS.admitConfirm(c); err != nil {
+			return err
+		}
 
 		input := body.toInput(userIDOf(c), c.Params(orderIDParam), key)
 		placement, err := confirmer.ConfirmThreeDS(outgoingContext(c), input)
+		threeDS.observe(c, err)
 		if err != nil {
 			return err
 		}

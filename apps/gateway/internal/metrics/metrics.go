@@ -31,6 +31,8 @@ const (
 	RateLimitedName   = "rate_limit_rejections_total"
 	// CardVerificationsName, kart ekleme denemeleri (T11.17, K2); service="gateway" etiketiyle.
 	CardVerificationsName = "card_verifications_total"
+	// ThreeDSAttemptsName, 3DS onay denemeleri (#163); service="gateway" etiketiyle.
+	ThreeDSAttemptsName = "threeds_attempts_total"
 )
 
 // durationBuckets, Node'daki DURATION_BUCKETS_SECONDS ile ayni (5 ms - 10 sn).
@@ -38,13 +40,14 @@ var durationBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5
 
 // Metrics, gateway'in metrikleri ve defteri.
 type Metrics struct {
-	registry      *prometheus.Registry
-	requests      *prometheus.CounterVec
-	duration      *prometheus.HistogramVec
-	replays       *prometheus.CounterVec
-	keyRejections *prometheus.CounterVec
-	rateLimited   *prometheus.CounterVec
-	cardResults   *prometheus.CounterVec
+	registry       *prometheus.Registry
+	requests       *prometheus.CounterVec
+	duration       *prometheus.HistogramVec
+	replays        *prometheus.CounterVec
+	keyRejections  *prometheus.CounterVec
+	rateLimited    *prometheus.CounterVec
+	cardResults    *prometheus.CounterVec
+	threeDSResults *prometheus.CounterVec
 }
 
 // New, defteri ve metrikleri kurar; Go calisma zamani ve surec metrikleri dahil.
@@ -77,10 +80,14 @@ func New() *Metrics {
 			Name: CardVerificationsName,
 			Help: "Kart ekleme denemeleri; result: approved, declined, invalid, limited, other",
 		}, []string{"result"}),
+		threeDSResults: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: ThreeDSAttemptsName,
+			Help: "3DS onay denemeleri; result: succeeded, wrong_code, expired, limited, other",
+		}, []string{"result"}),
 	}
 	registerer := prometheus.WrapRegistererWith(prometheus.Labels{"service": ServiceName}, m.registry)
 	registerer.MustRegister(
-		m.requests, m.duration, m.replays, m.keyRejections, m.rateLimited, m.cardResults,
+		m.requests, m.duration, m.replays, m.keyRejections, m.rateLimited, m.cardResults, m.threeDSResults,
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
@@ -111,6 +118,11 @@ func (m *Metrics) CountRateLimited(route string) {
 // CountCardVerification, kart ekleme denemesinin sonucunu sayar (T11.17).
 func (m *Metrics) CountCardVerification(result string) {
 	m.cardResults.WithLabelValues(result).Inc()
+}
+
+// CountThreeDSAttempt, 3DS onay denemesinin sonucunu sayar (#163).
+func (m *Metrics) CountThreeDSAttempt(result string) {
+	m.threeDSResults.WithLabelValues(result).Inc()
 }
 
 // Handler, defterin Prometheus metin bicimi; toplama hatasi 500 doner.

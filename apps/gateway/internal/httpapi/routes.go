@@ -70,12 +70,13 @@ func registerMeRoutes(v1 fiber.Router, deps Deps, mw routeMiddleware, cardDeps c
 	v1.Get("/geo/search", mw.user, mw.generalByUser, searchPlacesHandler(deps.GeoSearcher))
 }
 
-// registerOrderRoutes, sepet ve siparis uclari (kimlik gerekir).
-func registerOrderRoutes(v1 fiber.Router, deps Deps, mw routeMiddleware) {
+// registerOrderRoutes, sepet ve siparis uclari (kimlik gerekir). 3DS deneme
+// siniri (#163) iki ucun isleyicisinde, tekrar korumasindan SONRA.
+func registerOrderRoutes(v1 fiber.Router, deps Deps, mw routeMiddleware, threeDS threeDSAttempts) {
 	v1.Post("/cart/reserve", mw.user, mw.orderByUser, mw.mutation, reserveCartHandler(deps.CartReserver))
 	v1.Delete("/cart/reserve/:"+reservationIDParam, mw.user, mw.orderByUser, mw.mutation, releaseReservationHandler(deps.ReservationReleaser))
-	v1.Post("/orders", mw.user, mw.orderByUser, mw.checkout, placeOrderHandler(deps.OrderPlacer, deps.CheckoutSignals))
-	v1.Post("/orders/:"+orderIDParam+"/3ds", mw.user, mw.orderByUser, mw.checkout, confirmThreeDSHandler(deps.ThreeDSConfirmer))
+	v1.Post("/orders", mw.user, mw.orderByUser, mw.checkout, placeOrderHandler(deps.OrderPlacer, deps.CheckoutSignals, threeDS))
+	v1.Post("/orders/:"+orderIDParam+"/3ds", mw.user, mw.orderByUser, mw.checkout, confirmThreeDSHandler(deps.ThreeDSConfirmer, threeDS))
 	// Siparis okumalari kisisel veridir (adres, urunler, 3DS jetonu, oda jetonu,
 	// konum): HER cevap, hata dahil (401, 404, 429, 500, 503), onbelleklenmez.
 	// noStoreRoute ILK ara katmandir (#186; takip #179 N3).

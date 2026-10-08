@@ -342,7 +342,7 @@ bellek içi sayaç sınırı örnek sayısı kadar gevşetirdi (proje kuralları
 | -------------------------------------------------------- | -------------------------------- | ----------- |
 | `POST /v1/auth/register`, `/login`, `/phone-check`, `/password-reset` | `RATE_LIMIT_AUTH_MAX_REQUESTS` (10) | IP          |
 | `POST /v1/auth/refresh`, `/v1/auth/logout` (T8.5)         | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
-| `POST`/`DELETE /v1/cart/reserve`, `/v1/orders`, `/v1/orders/{id}/3ds` | `RATE_LIMIT_ORDER_MAX_REQUESTS` (20) | kullanıcı   |
+| `POST`/`DELETE /v1/cart/reserve`, `/v1/orders`, `/v1/orders/{id}/3ds`; 3DS'e ek deneme sınırı: "3DS deneme sınırı" | `RATE_LIMIT_ORDER_MAX_REQUESTS` (20) | kullanıcı   |
 | Katalog, market ve genel arama uçları                     | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
 | `GET /v1/me`, `/v1/me/addresses`, `GET /v1/orders` (T11.16), `GET /v1/orders/{id}` (`/token` ve `/tracking` dahil) | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
 | `POST`/`PUT`/`DELETE /v1/me/addresses…`, `/v1/geo/*` (T11.8, T11.15) | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
@@ -512,6 +512,28 @@ order-service'tedir.
   (bitiş yok, negatif hak, açık doğrulamada biçimsiz jeton); sipariş okuması düşmez. Jeton yalnızca
   bu `no-store` cevapta; ayrıntısız `Get` (oda jetonu, takip) taşımaz, günlüğe ve hataya girmez.
   Kurallar ve openapi örnekleri `internal/order/three_ds_contract_test.go` ile karşılaştırılır.
+- **3DS deneme sınırı (siparişler arası, #163):** siparişin 3 hakkı kendi içindedir; siparişi bırakıp
+  yeniden veren kullanıcı her seferinde yeni hak alırdı. YANLIŞ KOD sayılır: kullanıcı başına saatte 5,
+  günde 10; IP başına saatte 30 (çok hesapla deneme). Payment'ın `THREEDS_FAILED`'ı süre dolması
+  (`expired`) dışında yanlış koddur (`wrong_code`, son hakta `attempts_exhausted`; bilinmeyen ya da eksik
+  sebep de sayılır: sözleşme kayarsa sayaç susmaz; `internal/order/threeds_attempts.go`). Eşikte `/3ds`
+  ve KARTLA `POST /v1/orders` order'a gidilmeden 429 + `Retry-After` (en uzun dolu pencere); kapıda ödeme
+  etkilenmez. Doğru kod, süre dolması, biçimsiz istek ve kesinti sayılmaz: aynı NAT'ın arkasındakiler
+  birbirinin hakkını çöp istekle tüketemez. Başarısız ya da iptal edilmiş siparişe gelen istek
+  `ORDER_STATE_INVALID` alır (sayılmaz, kod denenmez); ödenmiş siparişe yeni anahtarla gelen istek 200
+  alır ve metrikte `succeeded` sayılır. Kapı iki ucun işleyicisinde, tekrar korumasından SONRA
+  (`attempt_gate.go`, kart uçlarıyla ortak): aynı anahtarlı tekrar sınır dolmuş olsa da ilk cevabı alır
+  ve ikinci kez sayılmaz; 429 saklanmaz, anahtar serbest kalır. Sayaç önce bakılır, sonuçtan sonra yazılır
+  (kart uçlarındaki eşzamanlılık kilidi yok): kullanıcının aynı anda tek açık 3DS'i (3 hak) olduğu için
+  eşzamanlı denemeler kullanıcı sınırını en fazla 2 aşar (saatte 7, günde 12); IP penceresini ise aynı
+  anda açık 3DS'i olan K hesap tek patlamada K×3'e kadar aşabilir (her hesap yine kendi sınırında).
+  Anahtarlar `rate:{usr_…}:POST_/v1/orders/3ds/fail-1h|fail-1d` ve `rate:{ip}:POST_/v1/orders/3ds/ip-fail-1h`;
+  sebep metinleri `payment.proto` ile karşılaştırılır (`TestThreeDSReasonsMatchPaymentContract`). Sayaca
+  ulaşılamazsa istek geçer (fail-open, genel sınırla aynı uyarı; Redis tümden düşerse tekrar koruması
+  zaten 503 döner); `RATE_LIMIT_ENABLED=false` sınırı da kapatır. Metrik `threeds_attempts_total{result}`
+  (`succeeded`, `wrong_code`, `expired`, `limited`, `other`; `service="gateway"`); kartla siparişin reddi
+  3DS denemesi değildir, yalnızca `rate_limit_rejections_total{route}`'a yazılır. `challengeId` etikete,
+  günlüğe ve hataya girmez.
 
 ```bash
 # TOKEN: yukaridaki giris komutundan. Basliklar her komutta acikca yazilir.

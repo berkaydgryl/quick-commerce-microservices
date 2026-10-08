@@ -236,6 +236,7 @@ func bootstrap(ctx context.Context, cfg config.Config, logger *slog.Logger, trac
 		FavoriteAdder:     favoriteService,
 		FavoriteRemover:   favoriteService,
 		Cards:             cardRoutes,
+		ThreeDSFailures:   threeDSFailures(rateLimit),
 		CheckoutSignals:   identity.service,
 		AccessTokens:      identity.tokens,
 		GeoReverser:       places,

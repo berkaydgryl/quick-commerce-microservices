@@ -2797,6 +2797,11 @@ paths:
         hesabın açıldığı cihazdan açılmış hesap sayısı kullanıcı kaydından
         (T8.1). Oturum kapatılmışsa (çıkış) jeton süresi dolmamış olsa bile
         `401` döner.
+
+        3DS deneme sınırına (`/v1/orders/{id}/3ds`; kullanıcı ya da IP başına
+        yanlış kod) ulaşıldıysa KARTLA sipariş order'a gidilmeden
+        `429 RATE_LIMITED` ve `Retry-After` alır: siparişi bırakıp yeniden
+        vermek yeni 3DS hakkı açmaz (#163). Kapıda ödeme bu sınırdan etkilenmez.
       security:
         - bearerAuth: []
       parameters:
@@ -2991,6 +2996,16 @@ paths:
         ile gönderilir. Aynı anahtarla farklı kod `409 CONFLICT` alır; aynı kodun
         aynı anahtarla tekrarı ilk cevabı (ör. `402`, aynı `attemptsLeft`) alır,
         hak ikinci kez düşmez.
+
+        Deneme sınırı (siparişler arası, #163): siparişin kendi hakkı bitince
+        siparişi bırakıp yeniden vermek yeni hak açar; bu yüzden YANLIŞ KOD
+        (`wrong_code`, `attempts_exhausted`) kullanıcı başına saatte 5 ve günde
+        10, IP başına saatte 30 sayılır. Eşikte order'a gidilmeden
+        `429 RATE_LIMITED` ve `Retry-After` (en uzun dolu pencere); aynı sınır
+        kartla yeni siparişe de uygulanır. Doğru kod, süre dolması (`expired`),
+        biçimi bozuk istek ve kesinti sayılmaz. Sınır tekrar korumasından sonra
+        bakılır: aynı anahtarlı tekrar sınır dolmuş olsa da ilk cevabı alır ve
+        ikinci kez sayılmaz. Sayaca ulaşılamazsa istek geçer.
       security:
         - bearerAuth: []
       parameters:
