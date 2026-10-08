@@ -4098,6 +4098,7 @@ components:
           footer,
           checkout,
           confirm,
+          appLoading,
           courierTracking,
         ]
       properties:
@@ -4162,8 +4163,19 @@ components:
           $ref: "#/components/schemas/CheckoutContent"
         confirm:
           $ref: "#/components/schemas/ConfirmContent"
+        appLoading:
+          $ref: "#/components/schemas/AppLoadingContent"
         courierTracking:
           $ref: "#/components/schemas/CourierTrackingContent"
+
+    AppLoadingContent:
+      type: object
+      description: |
+        Tam ekran Yükleniyor göstergesi (F18): dairenin altında harf harf yazılan yazı. Gösterge
+        içerik gelmeden de görünür (istemcinin yedeği); logonun iki parçası header bloğundan.
+      required: [label]
+      properties:
+        label: { $ref: "#/components/schemas/ContentText" }
 
     ConfirmContent:
       type: object

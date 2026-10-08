@@ -52,6 +52,9 @@
   --text-success: var(--palette-green-700);
   --border-subtle: var(--palette-gray-300);
 
+  /* Yukleniyor dairesinin ince siyah cercevesi (F18). */
+  --border-strong: var(--palette-gray-900);
+
   /* Kart icindeki satir ayiricisi (profil karti ve hesap menusu, T11.14 PR 2;
      referans getircarsi): marka morunun en acik tonu, zeminden zor ayrilir. */
   --border-faint: var(--palette-purple-50);
@@ -122,6 +125,14 @@
   --opacity-disabled: 0.6;
 
   /* --- Hareket --- */
+
+  /* Yukleniyor yazisi (F18): dongunun suresi ve harflerin yazilma suresi.
+     Yazma dongunun %20'si (EN FAZLA %30: kelime %70'te birden silinir); kelime
+     ~0,5 sn'de tamamlanir, gostergenin en az 600 ms'si icinde tam gorunur. */
+  --duration-loader-cycle: 2.4s;
+  --duration-loader-typing: calc(var(--duration-loader-cycle) * 0.2);
+
+  /* Genel sureler ve egri. */
   --duration-fast: 150ms;
   --duration-pulse: 1.6s;
   --easing-standard: cubic-bezier(0.2, 0, 0, 1);
@@ -135,6 +146,9 @@
 
   /* Bildirim alani (T11.13): sabit ust bar ve sepet cubugunun da ustunde. */
   --z-toast: 20;
+
+  /* Yukleniyor gostergesi (F18): bar, sepet cubugu ve bildirimin de ustunde. */
+  --z-app-loader: 30;
 
   /* Sayfanin ustune acilan liste (karsilama kartinin demo hesaplari, T11.6):
      alttaki icerigin ustunde, sabit ust barin (--z-header) ALTINDA kalir;

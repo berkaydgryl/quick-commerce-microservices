@@ -35,6 +35,7 @@ const WELCOME = JSON.parse(
   footer: unknown;
   checkout: unknown;
   confirm: unknown;
+  appLoading: unknown;
   courierTracking: unknown;
 };
 
@@ -103,6 +104,10 @@ describe('CONTENT_FALLBACK', () => {
 
   it('ortak onay penceresinin dugmeleri (F13) welcome.json confirm ile birebir', () => {
     expect(CONTENT_FALLBACK.confirm).toEqual(WELCOME.confirm);
+  });
+
+  it('Yukleniyor gostergesinin yazisi (F18) welcome.json appLoading ile birebir', () => {
+    expect(CONTENT_FALLBACK.appLoading).toEqual(WELCOME.appLoading);
   });
 
   it('Gecmis Siparislerim metinleri (T11.16) welcome.json orders ile birebir', () => {

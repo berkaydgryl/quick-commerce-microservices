@@ -276,6 +276,8 @@ export const CONTENT_FALLBACK = {
   checkout: CHECKOUT_FALLBACK,
   /** confirm: ortak onay penceresinin dugmeleri (F13). */
   confirm: { yesLabel: 'Evet', noLabel: 'Hayır' },
+  /** appLoading: Yukleniyor gostergesi (F18); icerik gelmeden gosterilir. */
+  appLoading: { label: 'Yükleniyor...' },
   /** courierTracking: kurye penceresi ve bildirimi (F22). */
   courierTracking: COURIER_TRACKING_FALLBACK,
 } as const;

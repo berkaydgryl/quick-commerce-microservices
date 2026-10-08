@@ -11,6 +11,7 @@ import { addressSetupContentSchema } from './address-setup.js';
 import { addressesContentSchema } from './addresses.js';
 import { appDownloadContentSchema, featureContentSchema } from './app-download.js';
 import { appHeaderContentSchema } from './app-header.js';
+import { appLoadingContentSchema } from './app-loading.js';
 import { bannerSchema } from './banner.js';
 import { cartPageContentSchema, footerContentSchema } from './cart-page.js';
 import { checkoutContentSchema } from './checkout.js';
@@ -67,6 +68,8 @@ export const welcomeContentSchema = z.object({
   checkout: checkoutContentSchema,
   /** Ortak onay penceresi (F13): "Evet" ve "Hayır". */
   confirm: confirmContentSchema,
+  /** Tam ekran Yukleniyor gostergesi (F18). */
+  appLoading: appLoadingContentSchema,
   /** Kurye takibi (F22): "Kuryem nerede" penceresi ve yaklasma bildirimi. */
   courierTracking: courierTrackingContentSchema,
 });
