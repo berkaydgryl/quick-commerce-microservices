@@ -56,6 +56,15 @@ export class CardMongoStore implements CardRepository {
     return document === null ? null : fromCardDocument(document);
   }
 
+  async updateNickname(
+    userId: string,
+    cardId: string,
+    nickname: string | null,
+  ): Promise<Card | null> {
+    const document = await this.cards.updateNickname(userId, cardId, nickname);
+    return document === null ? null : fromCardDocument(document);
+  }
+
   async softDelete(userId: string, cardId: string, at: Date): Promise<boolean> {
     return this.transactions.withTransaction(async (session) => {
       const deleted = await this.cards.softDelete(userId, cardId, at, { session });

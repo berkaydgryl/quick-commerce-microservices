@@ -38,6 +38,8 @@ type fakeOrders struct {
 	err   error
 	// details, GetDetailed'in dondurdugu ayrinti (T12.4); nil = ayrintisiz.
 	details *order.DetailsView
+	// threeDS, GetDetailed'in dondurdugu 3DS durumu (#163 B1); nil = alan yok.
+	threeDS *order.OrderThreeDS
 }
 
 func (f *fakeOrders) Reserve(ctx context.Context, input order.ReserveInput) (order.Reservation, error) {
@@ -67,7 +69,7 @@ func (f *fakeOrders) Get(ctx context.Context, userID, orderID string) (order.Ord
 
 func (f *fakeOrders) GetDetailed(ctx context.Context, userID, orderID string) (order.OrderDetail, error) {
 	found, err := f.Get(ctx, userID, orderID)
-	return order.OrderDetail{Order: found, Details: f.details}, err
+	return order.OrderDetail{Order: found, Details: f.details, ThreeDS: f.threeDS}, err
 }
 
 func (f *fakeOrders) List(ctx context.Context, userID string, pageSize int32, pageToken string) (orderhistory.List, error) {

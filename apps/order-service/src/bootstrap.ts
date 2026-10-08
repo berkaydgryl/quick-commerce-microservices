@@ -136,7 +136,7 @@ export function buildOrderService(options: BootstrapOptions): GrpcServiceRegistr
       clock,
       lockPolicy,
     }),
-    getOrder: createGetOrder({ repository }),
+    getOrder: createGetOrder({ repository, payments: options.payments }),
     listMyOrders: createListMyOrders({ history }),
     cancelOrder: createCancelOrder({ repository, payments: options.payments, stock, clock }),
     ...(options.logger === undefined ? {} : { logger: options.logger }),

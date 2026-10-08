@@ -30,7 +30,7 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `POST /v1/orders`    | ✅ order `CreateOrder` (saga): 201 `PAID` ya da `AWAITING_PAYMENT` + `threeDs` (sunucunun saatiyle `ttlSeconds`, T12.4); kart `payment.cardId` (kayıtlı kart) ya da eski `cardToken`, tam biri; kapıda ödeme `CASH_ON_DELIVERY` + `onDelivery` (`CASH` ya da `POS`), kart alanı yok, orta bantta 422 `PAYMENT_METHOD_NOT_ALLOWED`; `details` (hediye, not, "Zili Çalma", sözleşme onayı) zorunlu, kuralları `internal/order/details.go` (T12.4); kasada olmayan kart 404 `resource: card` |
 | `POST /v1/orders/{id}/3ds` | ✅ order `ConfirmPayment`; yanlış kod 402 + kalan hak |
 | `GET /v1/orders` | ✅ Geçmiş siparişler (T11.16, `internal/orderhistory`): order `ListMyOrders` + market adları sayfa başına TEK `BatchGetMarkets` (katalog hatasında adsız, sipariş yine listelenir); yeniden eskiye, imleçle; `DRAFT` ve hiç ilerlemeden süresi dolan `EXPIRED` süzülür, eksik kadar en fazla 3 tur (sunucu tarafı süzme #101); `CANCELLED` + geçmişte `PAID` = `refunded`; sayfa 20, en fazla 50 (kırpılır); önbelleğe alınmaz (`no-store` rotanın ilk ara katmanı, hata cevapları dahil; #186) |
-| `GET /v1/orders/{id}` | ✅ order `GetOrder`; başkasının siparişi 404; kilit canlıyken `reservationExpiresAt` ve `reservationTtlSeconds` (T11.4); sipariş ayrıntısı `details` yalnızca burada, sahibine (T12.4; liste ve geçmiş taşımaz); ödeme seçimi `payment` (`method`, kapıda ödemede `onDelivery`; seçimsiz eski siparişte yok); T11.16'dan beri önbelleğe alınmaz (`no-store`; #186'dan beri rotanın ilk ara katmanı, 401/404/429/500/503 dahil) |
+| `GET /v1/orders/{id}` | ✅ order `GetOrder`; başkasının siparişi 404; kilit canlıyken `reservationExpiresAt` ve `reservationTtlSeconds` (T11.4); sipariş ayrıntısı `details` yalnızca burada, sahibine (T12.4; liste ve geçmiş taşımaz); ödeme seçimi `payment` (`method`, kapıda ödemede `onDelivery`; seçimsiz eski siparişte yok); `AWAITING_PAYMENT`'ta bekleyen 3DS durumu `threeDs` (#163 B1, aşağıda); T11.16'dan beri önbelleğe alınmaz (`no-store`; #186'dan beri rotanın ilk ara katmanı, 401/404/429/500/503 dahil) |
 | `GET /v1/orders/{id}/token` | ✅ T12.2: sahiplik order `GetOrder` ile (başkasınınki 404, bitmiş sipariş 200); `order:{id}` odası için 60 sn'lik oda jetonu (`internal/roomtoken`, `REALTIME_TOKEN_SECRET`); `no-store`, hata cevapları dahil (#186) |
 | `GET /v1/orders/{id}/tracking` | ✅ T14.2: kurye takibi (`internal/tracking`, aşağıda "Kurye takibi"); önce sahiplik order `GetOrder`, sonra courier `GetTracking`; `no-store` |
 | `POST /v1/auth/register` | ✅ Kayıt + oturum (201); telefon benzersiz, şifre bcrypt (T8.1) |
@@ -497,6 +497,14 @@ order-service'tedir.
   sahiplik denetimi (oda jetonu) onu taşıyamaz. 3DS `ttlSeconds` payment'ın bitiş anından,
   gateway'in saatiyle; hiçbir zaman negatif değil. Tekrar edilen cevaptaki `ttlSeconds` ilk
   cevabınkidir (rezervasyonla aynı).
+- **3DS sürdürme (`GET /v1/orders/{id}`, #163 B1):** order'ın `three_ds`'i `threeDs` olur
+  (`internal/order/three_ds_view.go`). `ttlSeconds` = bitişe kalan TAM saniye, gateway'in saatiyle
+  (aşağı yuvarlanır; `now >= bitiş` ise 0, Confirm3Ds ile aynı sınır). Açık: `challengeId` +
+  `ttlSeconds >= 1` + `attemptsLeft >= 1`; aksi halde kapalı ve jeton ATILIR (payment göndermiş
+  olsa da). Alan yok: order göndermedi, sipariş ödeme beklemiyor ya da durum sözleşmeyi bozuyor
+  (bitiş yok, negatif hak, açık doğrulamada biçimsiz jeton); sipariş okuması düşmez. Jeton yalnızca
+  bu `no-store` cevapta; ayrıntısız `Get` (oda jetonu, takip) taşımaz, günlüğe ve hataya girmez.
+  Kurallar ve openapi örnekleri `internal/order/three_ds_contract_test.go` ile karşılaştırılır.
 
 ```bash
 # TOKEN: yukaridaki giris komutundan. Basliklar her komutta acikca yazilir.
