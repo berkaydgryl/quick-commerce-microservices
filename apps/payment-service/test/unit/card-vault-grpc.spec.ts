@@ -12,15 +12,14 @@ import { withoutRandomNoise } from '@getir/core/testing';
 import { cardvaultV1 } from '@getir/proto';
 import { appErrorOf, unaryCall } from '@getir/service-kit/testing';
 import type { CallResult } from '@getir/service-kit/testing';
-import type { MethodDefinition, ServiceError } from '@grpc/grpc-js';
+import type { MethodDefinition } from '@grpc/grpc-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { startCardVault } from '../support/card-vault-grpc-client.js';
+import { startCardVault, visibleError } from '../support/card-vault-grpc-client.js';
 import type { RunningCardVault } from '../support/card-vault-grpc-client.js';
 
 /** 5 Ekim 2026 12.00 UTC. */
 const NOW_MS = Date.parse('2026-10-05T12:00:00Z');
-const ERROR_METADATA_KEY = 'x-app-error';
 
 const Vault = cardvaultV1.CardVaultServiceService;
 
@@ -54,20 +53,6 @@ function addRequest(
     nickname: '',
     ...overrides,
   };
-}
-
-/**
- * Hatanin disari giden her parcasi: durum metni, mesaj ve x-app-error yuku.
- * Istek kimligi rastgele: kisa sir onun icinde tesadufen gecebilir (maskelenir).
- */
-function visibleError(error: ServiceError | undefined): string {
-  return withoutRandomNoise(
-    JSON.stringify([
-      error?.message,
-      error?.details,
-      error?.metadata.get(ERROR_METADATA_KEY).map((value) => value.toString()),
-    ]),
-  );
 }
 
 beforeAll(async () => {

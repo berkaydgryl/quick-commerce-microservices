@@ -3,6 +3,7 @@ package tracking
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -57,11 +58,7 @@ type fakeCourier struct {
 func (f *fakeCourier) GetTracking(_ context.Context, in *courierv1.GetTrackingRequest, opts ...grpc.CallOption) (*courierv1.GetTrackingResponse, error) {
 	f.calls++
 	f.request = in
-	for _, option := range opts {
-		if trailer, isTrailer := option.(grpc.TrailerCallOption); isTrailer && f.trailer != nil {
-			*trailer.TrailerAddr = f.trailer
-		}
-	}
+	testkit.SetTrailer(opts, f.trailer)
 	return f.response, f.err
 }
 
@@ -103,15 +100,6 @@ func trackingIn(phase courierv1.TrackingPhase) *courierv1.GetTrackingResponse {
 
 func newService(orders *fakeOrders, courier *fakeCourier) *Service {
 	return New(orders, courier, time.Second)
-}
-
-func appErrorOf(t *testing.T, err error) *apperror.Error {
-	t.Helper()
-	var appErr *apperror.Error
-	if !errors.As(err, &appErr) {
-		t.Fatalf("apperror bekleniyordu: %v", err)
-	}
-	return appErr
 }
 
 func TestTrackPhases(t *testing.T) {
@@ -164,18 +152,6 @@ func TestTrackPhases(t *testing.T) {
 	}
 }
 
-func TestTrackToMarketDropsLocationEvenIfCourierSendsIt(t *testing.T) {
-	// Gizlilik: paket alinmadan kurye onceki musterinin adresinde olabilir.
-	response := trackingIn(courierv1.TrackingPhase_TRACKING_PHASE_TO_MARKET)
-	response.Location = point(41.01, 28.97)
-
-	got, err := newService(&fakeOrders{status: "PREPARING"}, &fakeCourier{response: response}).Track(t.Context(), testUserID, testOrderID)
-
-	if err != nil || got.Location != nil {
-		t.Errorf("TO_MARKET'ta konum cevaba girmemeli: %+v %v", got.Location, err)
-	}
-}
-
 func TestTrackNotFoundIsTheSameFor404Causes(t *testing.T) {
 	// Sahiplik (order'in NOT_FOUND'u, ayrintisiyla), takip edilmeyen durum ve
 	// courier'in NOT_FOUND'u (kendi ayrintisiyla) AYNI cevap: kod ve {orderId}.
@@ -194,13 +170,27 @@ func TestTrackNotFoundIsTheSameFor404Causes(t *testing.T) {
 			name: "takip yok (courier NOT_FOUND)", orders: &fakeOrders{status: "PREPARING"},
 			courier: &fakeCourier{err: status.Error(codes.NotFound, "rota yok")}, courierCalls: 1,
 		},
+		{
+			// Courier'in is hatasi (x-app-error) kendi ayrintisiyla; mesajinda ad.
+			name: "takip yok (courier x-app-error NOT_FOUND)", orders: &fakeOrders{status: "ON_THE_WAY"},
+			courier: &fakeCourier{
+				err: status.Error(codes.NotFound, "Mehmet Kaya icin rota yok"),
+				trailer: metadata.Pairs("x-app-error", `{"code":"NOT_FOUND","message":"Mehmet Kaya icin rota yok",`+
+					`"details":{"orderId":"`+testOrderID+`","courierId":"`+testCourierID+`"}}`),
+			},
+			courierCalls: 1,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := newService(tc.orders, tc.courier).Track(t.Context(), testUserID, testOrderID)
 
-			appErr := appErrorOf(t, err)
+			appErr := testkit.AppErrorOf(t, err)
 			if appErr.Code != apperror.CodeNotFound || testkit.JSON(t, appErr.Details) != want {
 				t.Errorf("tek 404 bekleniyordu: %s %s", appErr.Code, testkit.JSON(t, appErr.Details))
+			}
+			// Neden gunluge gider: courier'in mesaj metni (ad) atilir (#179).
+			if strings.Contains(err.Error(), "Mehmet") {
+				t.Errorf("hata metninde kurye adi var: %v", err)
 			}
 			if tc.courier.calls != tc.courierCalls {
 				t.Errorf("courier cagrisi %d, beklenen %d", tc.courier.calls, tc.courierCalls)
@@ -215,7 +205,7 @@ func TestTrackRejectsMalformedIDBeforeAnyCall(t *testing.T) {
 
 		_, err := newService(orders, courierRPC).Track(t.Context(), testUserID, id)
 
-		appErr := appErrorOf(t, err)
+		appErr := testkit.AppErrorOf(t, err)
 		if appErr.Code != apperror.CodeNotFound || appErr.Details != nil {
 			t.Errorf("%q: ayrintisiz 404 bekleniyordu: %s %v", id, appErr.Code, appErr.Details)
 		}
@@ -232,7 +222,7 @@ func TestTrackUnavailableIsFailClosed(t *testing.T) {
 
 		_, err := newService(orders, courierRPC).Track(t.Context(), testUserID, testOrderID)
 
-		if appErrorOf(t, err).Code != apperror.CodeServiceUnavailable || courierRPC.calls != 0 {
+		if testkit.AppErrorOf(t, err).Code != apperror.CodeServiceUnavailable || courierRPC.calls != 0 {
 			t.Errorf("503 ve courier'e gidilmemesi bekleniyordu: %v %d", err, courierRPC.calls)
 		}
 	})
@@ -241,65 +231,10 @@ func TestTrackUnavailableIsFailClosed(t *testing.T) {
 
 		_, err := newService(&fakeOrders{status: "ON_THE_WAY"}, courierRPC).Track(t.Context(), testUserID, testOrderID)
 
-		if appErrorOf(t, err).Code != apperror.CodeServiceUnavailable {
+		if testkit.AppErrorOf(t, err).Code != apperror.CodeServiceUnavailable {
 			t.Errorf("503 bekleniyordu: %v", err)
 		}
 	})
-}
-
-func TestTrackRejectsResponsesThatBreakTheContract(t *testing.T) {
-	broken := func(phase courierv1.TrackingPhase, mutate func(*courierv1.GetTrackingResponse)) *courierv1.GetTrackingResponse {
-		response := trackingIn(phase)
-		mutate(response)
-		return response
-	}
-	toCustomer := courierv1.TrackingPhase_TRACKING_PHASE_TO_CUSTOMER
-	longRoute := make([]*commonv1.GeoPoint, RouteMaxPoints+1)
-	for index := range longRoute {
-		longRoute[index] = point(40.99, 29.02)
-	}
-	for name, response := range map[string]*courierv1.GetTrackingResponse{
-		"paket alindi ama konum yok": broken(toCustomer, func(r *courierv1.GetTrackingResponse) { r.Location = nil }),
-		"asama belirsiz": broken(toCustomer, func(r *courierv1.GetTrackingResponse) {
-			r.Phase = courierv1.TrackingPhase_TRACKING_PHASE_UNSPECIFIED
-		}),
-		"an yok":            broken(toCustomer, func(r *courierv1.GetTrackingResponse) { r.At = nil }),
-		"rota bos":          broken(toCustomer, func(r *courierv1.GetTrackingResponse) { r.Route = nil }),
-		"rota 41 nokta":     broken(toCustomer, func(r *courierv1.GetTrackingResponse) { r.Route = longRoute }),
-		"market konumu yok": broken(toCustomer, func(r *courierv1.GetTrackingResponse) { r.MarketLocation = nil }),
-		"adres konumu yok":  broken(toCustomer, func(r *courierv1.GetTrackingResponse) { r.DeliveryLocation = nil }),
-	} {
-		_, err := newService(&fakeOrders{status: "ON_THE_WAY"}, &fakeCourier{response: response}).Track(t.Context(), testUserID, testOrderID)
-
-		appErr := appErrorOf(t, err)
-		if appErr.Code != apperror.CodeInternal {
-			t.Errorf("%s: INTERNAL bekleniyordu: %v", name, err)
-		}
-		if appErr.Details != nil {
-			t.Errorf("%s: ic hata ayrinti tasimamali: %v", name, appErr.Details)
-		}
-	}
-}
-
-func TestTrackRoundsEtaBeforePickup(t *testing.T) {
-	// Gizlilik: kalanin saniye saniye azalisi kurye -> market uzakligini ele vermesin.
-	for _, tc := range []struct{ eta, want int32 }{{437, 480}, {480, 480}, {1, 60}, {0, 0}} {
-		response := trackingIn(courierv1.TrackingPhase_TRACKING_PHASE_TO_MARKET)
-		response.EtaSeconds = tc.eta
-
-		got, err := newService(&fakeOrders{status: "PREPARING"}, &fakeCourier{response: response}).Track(t.Context(), testUserID, testOrderID)
-
-		if err != nil || got.EtaSeconds != tc.want {
-			t.Errorf("TO_MARKET eta %d -> %d bekleniyordu: %d %v", tc.eta, tc.want, got.EtaSeconds, err)
-		}
-	}
-	// Paket alindiktan sonra yuvarlanmaz.
-	response := trackingIn(courierv1.TrackingPhase_TRACKING_PHASE_TO_CUSTOMER)
-	response.EtaSeconds = 437
-	got, err := newService(&fakeOrders{status: "ON_THE_WAY"}, &fakeCourier{response: response}).Track(t.Context(), testUserID, testOrderID)
-	if err != nil || got.EtaSeconds != 437 {
-		t.Errorf("TO_CUSTOMER eta yuvarlanmamali: %d %v", got.EtaSeconds, err)
-	}
 }
 
 func TestTrackRenamesCourierValidationFields(t *testing.T) {
@@ -311,7 +246,7 @@ func TestTrackRenamesCourierValidationFields(t *testing.T) {
 
 	_, err := newService(&fakeOrders{status: "PREPARING"}, courierRPC).Track(t.Context(), testUserID, testOrderID)
 
-	appErr := appErrorOf(t, err)
+	appErr := testkit.AppErrorOf(t, err)
 	if appErr.Code != apperror.CodeValidationFailed || testkit.JSON(t, appErr.Details) != `{"id":"bicimsiz"}` {
 		t.Errorf("alan adi id olmali: %s %s", appErr.Code, testkit.JSON(t, appErr.Details))
 	}

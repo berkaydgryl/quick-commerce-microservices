@@ -5,7 +5,7 @@
 
 import { MongoRepository } from '@getir/mongo-kit';
 import type { SessionOption } from '@getir/mongo-kit';
-import type { Db, IndexDescription } from 'mongodb';
+import type { Db, Filter, IndexDescription } from 'mongodb';
 
 import { COURIER_STATUS } from '../../domain/courier.js';
 import type { GeoPoint } from '../../domain/courier.js';
@@ -41,6 +41,20 @@ export class CouriersCollection extends MongoRepository<CourierDocument> {
         partialFilterExpression: { currentOrderId: { $exists: true } },
       },
     ];
+  }
+
+  /**
+   * Siparis tasiyan kuryeler, siparis kimligine gore artan sayfa (#205):
+   * currentOrderId_unique (kismi) indeksinden; yeni indeks gerekmez.
+   */
+  async findCarrying(limit: number, afterOrderId?: string): Promise<CourierDocument[]> {
+    return this.run('findCarrying', () =>
+      this.collection
+        .find(carryingFilter(afterOrderId))
+        .sort({ currentOrderId: 1 })
+        .limit(limit)
+        .toArray(),
+    );
   }
 
   async findByOrder(orderId: string): Promise<CourierDocument | null> {
@@ -111,7 +125,11 @@ export class CouriersCollection extends MongoRepository<CourierDocument> {
   /**
    * Siparisi tasiyan (`courierId` verildiyse yalnizca O) kuryeyi IDLE'a
    * dondurur; bosta beklemesi `at`'te baslar. lastAssignedAt kalir. `location`
-   * verilirse (teslimat noktasi) konum ve ani yazilir; verilmezse konum kalir.
+   * verilirse (teslimat noktasi ya da rotadaki anlik konum, #174) konum ve ani
+   * yazilir; verilmezse konum kalir.
+   *
+   * Kurye kimligiyle birakma (#174) {_id, currentOrderId} filtresiyle ve _id
+   * indeksiyle (ipucu) okur: plan sorgu planlayicisinin secimine birakilmaz.
    */
   async releaseByOrder(
     orderId: string,
@@ -122,12 +140,15 @@ export class CouriersCollection extends MongoRepository<CourierDocument> {
     const moved = location === undefined ? {} : { lastLocation: location, lastLocationAt: at };
     return this.run('releaseByOrder', () =>
       this.collection.findOneAndUpdate(
-        { currentOrderId: orderId, ...(courierId === undefined ? {} : { _id: courierId }) },
+        releaseFilter(orderId, courierId),
         {
           $set: { status: COURIER_STATUS.IDLE, idleSince: at, ...moved },
           $unset: { currentOrderId: '' },
         },
-        { returnDocument: 'after' },
+        {
+          returnDocument: 'after',
+          ...(courierId === undefined ? {} : { hint: RELEASE_BY_COURIER_HINT }),
+        },
       ),
     );
   }
@@ -144,4 +165,27 @@ export class CouriersCollection extends MongoRepository<CourierDocument> {
       this.bulkCollection(options).insertMany([...documents], session),
     );
   }
+}
+
+/** Kurye kimligiyle birakmanin indeksi (#174): _id (IXSCAN _id_). */
+export const RELEASE_BY_COURIER_HINT = { _id: 1 } as const;
+
+/**
+ * Birakma filtresi: kurye kimligi verildiyse {_id, currentOrderId} (#174),
+ * verilmezse siparisi tasiyan kurye (currentOrderId_unique).
+ */
+export function releaseFilter(orderId: string, courierId?: string): Filter<CourierDocument> {
+  return courierId === undefined
+    ? { currentOrderId: orderId }
+    : { _id: courierId, currentOrderId: orderId };
+}
+
+/**
+ * Siparis tasiyan kuryelerin sayfasi: kismi indeksin ($exists) filtresiyle
+ * uyumlu, `afterOrderId`'den sonrakiler.
+ */
+export function carryingFilter(afterOrderId?: string): Filter<CourierDocument> {
+  return afterOrderId === undefined
+    ? { currentOrderId: { $exists: true } }
+    : { currentOrderId: { $exists: true, $gt: afterOrderId } };
 }

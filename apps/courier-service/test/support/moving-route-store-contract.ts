@@ -48,6 +48,22 @@ async function movingIds(store: Store, own: readonly string[]): Promise<string[]
 
 export function describeMovingRouteStoreContract(name: string, getStore: () => Store): void {
   describe(`MovingRouteRepository sozlesmesi: ${name}`, () => {
+    it('ENDED yamasi teslim ani KAYITLI rotaya yazilmaz (#177); teslimsiz rotaya yazilir', async () => {
+      const store = getStore();
+      const delivered = movingRoute(orderId(), 1, NOW_MS);
+      const open = movingRoute(orderId(), 2, NOW_MS);
+      await store.insertOnce(delivered);
+      await store.insertOnce(open);
+      const at = new Date(NOW_MS + 60_000);
+      expect((await store.update(delivered, { deliveredAt: at }))?.deliveredAt).toEqual(at);
+
+      expect(await store.update(delivered, { state: ROUTE_STATE.ENDED, endedAt: at })).toBeNull();
+      expect((await store.findByOrder(delivered.orderId))?.state).toBe(ROUTE_STATE.MOVING);
+      expect(await store.update(open, { state: ROUTE_STATE.ENDED, endedAt: at })).toMatchObject({
+        state: ROUTE_STATE.ENDED,
+      });
+    });
+
     it('listMoving: yalnizca MOVING, uretilme anina gore eskiden yeniye', async () => {
       const store = getStore();
       const [later, earlier, done, ended] = [orderId(), orderId(), orderId(), orderId()];

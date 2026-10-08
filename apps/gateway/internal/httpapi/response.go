@@ -53,3 +53,12 @@ func fail(c fiber.Ctx, code apperror.Code, details any) error {
 		},
 	})
 }
+
+// noStoreRoute, kisisel veri tasiyan rotanin HER cevabina (hata dahil: 401,
+// 404, 429, 500, 503) no-store yazar. Rotanin ILK ara katmanidir: sonraki ara
+// katman ya da uc hata dondururse baslik zaten yazilmistir (kart uclari QA G7;
+// kurye takibi #179).
+func noStoreRoute(c fiber.Ctx) error {
+	c.Set(fiber.HeaderCacheControl, noStore)
+	return c.Next()
+}

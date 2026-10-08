@@ -1,7 +1,7 @@
-import type { Db, IndexDescription } from 'mongodb';
+import type { GeoPoint } from '@getir/core';
+import type { Db, Document, IndexDescription } from 'mongodb';
 
 import type { Market } from '../../domain/catalog.js';
-import type { GeoPoint } from '../../domain/geo.js';
 import type { MarketDistance } from '../../domain/market-coverage.js';
 import type { MarketReader } from '../../domain/market-reader.js';
 import type { MarketDocument } from './documents.js';
@@ -12,6 +12,32 @@ import { ReplaceableRepository } from './replaceable-repository.js';
 /** $geoNear'in belgeye ekledigi mesafe alani. */
 interface MarketWithDistance extends MarketDocument {
   distanceMeters: number;
+}
+
+/**
+ * Konumu kapsayan marketler (#175): $geoNear 2dsphere indeksiyle yakindan
+ * uzaga akitir (ilk asama olmak ZORUNDA), $match her marketi KENDI yaricapiyla
+ * suzer (sinir dahil: @getir/core isOutsideDeliveryRadius'un tersi, $lte; Mongo
+ * TS cagiramaz, use-case ayrica coveringMarkets'ten gecirir ve sozlesme testi iki
+ * modu karsilastirir), $limit kapsayanlara uygulanir.
+ *
+ * maxDistance VERILMEZ: yaricap markete gore degisir ve sozlesmede ust sinir
+ * yok. Bedeli: `limit` kadar kapsayan bulunursa okuma orada durur; daha azi
+ * kapsiyorsa indeks butun marketleri yakindan uzaga gezer (bugun 33 market).
+ */
+export function coveringMarketsPipeline(point: GeoPoint, limit: number): Document[] {
+  return [
+    {
+      $geoNear: {
+        // GeoJSON sirasi: [BOYLAM, ENLEM].
+        near: { type: 'Point', coordinates: [point.lng, point.lat] },
+        distanceField: 'distanceMeters',
+        spherical: true,
+      },
+    },
+    { $match: { $expr: { $lte: ['$distanceMeters', '$deliveryRadiusMeters'] } } },
+    { $limit: limit },
+  ];
 }
 
 export class MarketRepository
@@ -47,26 +73,11 @@ export class MarketRepository
     return documents.map(fromMarketDocument);
   }
 
-  /**
-   * Konuma en yakin marketler, yakindan uzaga (T4.2'nin sorgusu).
-   *
-   * maxDistance VERILMEZ: yaricap markete gore degisir; kapsama karari
-   * domain'dedir (coveringMarkets).
-   */
-  async listMarketsByDistance(point: GeoPoint, limit: number): Promise<readonly MarketDistance[]> {
-    const documents = await this.run('listMarketsByDistance', () =>
+  /** Konumu kapsayan marketler, yakindan uzaga, en fazla `limit` (coveringMarketsPipeline). */
+  async listCoveringMarkets(point: GeoPoint, limit: number): Promise<readonly MarketDistance[]> {
+    const documents = await this.run('listCoveringMarkets', () =>
       this.collection
-        .aggregate<MarketWithDistance>([
-          {
-            $geoNear: {
-              // GeoJSON sirasi: [BOYLAM, ENLEM].
-              near: { type: 'Point', coordinates: [point.lng, point.lat] },
-              distanceField: 'distanceMeters',
-              spherical: true,
-            },
-          },
-          { $limit: limit },
-        ])
+        .aggregate<MarketWithDistance>(coveringMarketsPipeline(point, limit))
         .toArray(),
     );
 

@@ -1,0 +1,6 @@
+/* Harita paketi gelene kadar ayni boyda yer tutucu (TrackingMap ile ayni olcu ve kose). */
+.c-tracking-map-placeholder {
+  height: var(--size-address-map);
+  background: var(--bg-page);
+  border-radius: var(--radius-md);
+}

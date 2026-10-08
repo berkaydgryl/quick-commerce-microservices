@@ -8,10 +8,19 @@ import type { PricingRules } from '@getir/pricing';
 
 import type { CatalogPricing } from '../../src/application/catalog-pricing.js';
 import type { RequestScope } from '../../src/application/request-scope.js';
+import type { MarketTerms } from '../../src/domain/market-terms.js';
 import { ITEM_UNIT } from '../../src/domain/order-item.js';
 import type { CatalogOffer } from '../../src/domain/price-draft.js';
 
 export const FAKE_MARKET_ID = 'mkt_migros-jet-moda';
+/**
+ * Sahte marketin konumu ve yaricapi: seed'deki mkt_migros-jet-moda ile AYNI
+ * (catalog fixtures/markets/pilot.ts); testlerin teslimat noktalari icinde.
+ */
+export const FAKE_MARKET_LOCATION = { lat: 40.985, lng: 29.0275 } as const;
+export const FAKE_RADIUS_METERS = 2_500;
+/** Kapali seed marketi (#154); closedMarketIds'e eklenince taninir. */
+export const CLOSED_MARKET_ID = 'mkt_a101-abbasaga';
 
 /** Minimum sepet 50 TL, teslimat 14,90 TL, 250 TL ustu ucretsiz. */
 export const FAKE_RULES: PricingRules = {
@@ -44,21 +53,40 @@ export class FakeCatalogPricing implements CatalogPricing {
   readonly requestIds: string[] = [];
   /** Verilirse her cagri bu hatayla reddedilir (catalog'a ulasilamadi vb.). */
   failure: AppError | undefined;
+  /**
+   * Kapali marketler (#154): okuma BASARILI, isOpen false, kurallar yok;
+   * teklifleri gercekteki gibi DURUR. FAKE_MARKET_ID de eklenebilir.
+   */
+  readonly closedMarketIds = new Set<string>();
+  /** Verilirse yalnizca teklif okumasi bu hatayla reddedilir. */
+  offersFailure: AppError | undefined;
+  /** Acik marketin teslimat yaricapi (#203); sinir testleri degistirir. */
+  radiusMeters = FAKE_RADIUS_METERS;
 
   constructor(
     private readonly offers: readonly CatalogOffer[] = FAKE_OFFERS,
     private readonly rules: PricingRules = FAKE_RULES,
   ) {}
 
-  marketRules(marketId: string, scope: RequestScope): Promise<PricingRules> {
+  marketRules(marketId: string, scope: RequestScope): Promise<MarketTerms> {
     this.requestIds.push(scope.requestId);
     if (this.failure !== undefined) {
       return Promise.reject(this.failure);
     }
-    if (marketId !== FAKE_MARKET_ID) {
+    const closed = this.closedMarketIds.has(marketId);
+    if (marketId !== FAKE_MARKET_ID && !closed) {
       return Promise.reject(AppError.notFound('Market bulunamadi', { details: { marketId } }));
     }
-    return Promise.resolve(this.rules);
+    return Promise.resolve(
+      closed
+        ? { isOpen: false }
+        : {
+            isOpen: true,
+            rules: this.rules,
+            location: FAKE_MARKET_LOCATION,
+            deliveryRadiusMeters: this.radiusMeters,
+          },
+    );
   }
 
   activeOffers(
@@ -67,13 +95,13 @@ export class FakeCatalogPricing implements CatalogPricing {
     scope: RequestScope,
   ): Promise<readonly CatalogOffer[]> {
     this.requestIds.push(scope.requestId);
-    if (this.failure !== undefined) {
-      return Promise.reject(this.failure);
+    const failure = this.failure ?? this.offersFailure;
+    if (failure !== undefined) {
+      return Promise.reject(failure);
     }
+    const known = marketId === FAKE_MARKET_ID || this.closedMarketIds.has(marketId);
     return Promise.resolve(
-      marketId === FAKE_MARKET_ID
-        ? this.offers.filter((offer) => productIds.includes(offer.productId))
-        : [],
+      known ? this.offers.filter((offer) => productIds.includes(offer.productId)) : [],
     );
   }
 }

@@ -77,7 +77,11 @@ export function useCheckoutOrder({
       vaultOpen: __CARD_VAULT__,
     });
     if (prepared !== undefined) {
-      void flow.place(prepared.request, prepared.orderBody);
+      void flow.place(
+        prepared.request,
+        prepared.orderBody,
+        payment?.kind === 'card' ? payment.cardId : undefined,
+      );
     }
   };
 

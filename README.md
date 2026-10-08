@@ -442,7 +442,7 @@ quick-commerce-microservices/
 │   ├── realtime-service/      # Node - Socket.io fan-out
 │   └── web/                   # React + Vite arayüz
 ├── packages/                  # Paylaşılan kod; hiçbiri apps/* tanımaz
-│   ├── core/                  # @getir/core - Result, AppError, ID üretimi, config loader
+│   ├── core/                  # @getir/core - Result, AppError, ID üretimi, config loader, mesafe (geo)
 │   ├── contracts/             # @getir/contracts - Zod şemaları, ApiResponse zarfı
 │   ├── proto/                 # @getir/proto - .proto + buf + üretilen TS/Go kodu
 │   ├── pricing/               # @getir/pricing - sepet hesabı, market kuralları, kupon  (T4.3)

@@ -1,0 +1,108 @@
+/*
+ * Yukleniyor gostergesi (F18): karartilmis zemin, ortada beyaz kutu (onay
+ * penceresinin kabugu gibi); mor daire, sari "getir" ve beyaz "market"; altinda
+ * harf harf yazilan yazi. Tek hareket yazidir; hareket azaltmada yazi tam ve
+ * sabit. Gosterge her seyin ustunde (bar, sepet cubugu, bildirim).
+ */
+.c-app-loader {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-app-loader);
+  display: grid;
+  place-items: center;
+  padding: var(--space-gutter);
+  background: var(--bg-overlay);
+}
+
+.c-app-loader__box {
+  display: grid;
+  gap: var(--space-4);
+  justify-items: center;
+  padding: var(--space-6) var(--space-6) var(--space-5);
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-raised);
+}
+
+.c-app-loader__disc {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  width: var(--size-app-loader-disc);
+  aspect-ratio: 1;
+  padding: var(--space-2);
+  font-size: var(--font-size-lg);
+  text-align: center;
+
+  /* Icerikten gelen uzun ad daireden tasmasin. */
+  overflow-wrap: anywhere;
+  background: var(--color-brand-primary);
+  border: var(--border-width-thin) solid var(--border-strong);
+  border-radius: var(--radius-pill);
+}
+
+.c-app-loader__label {
+  font-weight: var(--font-weight-bold);
+  color: var(--text-default);
+}
+
+/* Ekran okuyucunun okudugu tam metin; gorunmez. */
+.c-app-loader__spoken {
+  position: absolute;
+  width: var(--size-visually-hidden);
+  height: var(--size-visually-hidden);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/*
+ * Dongu: harfler yazma suresi (dongunun %30'u) icinde sirayla belirir; yazi
+ * tam kalir; dongunun %70'inde kelimenin tamami AYNI ANDA silinir (kap) ve
+ * bastan yazilir. Harf gecikmesi en fazla %30 oldugundan her harfin kendi
+ * sonmesi kap gizliyken olur; yarim kelime gorunmez.
+ */
+.c-app-loader__typed {
+  animation: c-app-loader-clear var(--duration-loader-cycle) steps(1, end) infinite;
+}
+
+.c-app-loader__letter {
+  animation: c-app-loader-type var(--duration-loader-cycle) steps(1, end) infinite both;
+  animation-delay: calc(
+    var(--duration-loader-typing) * var(--c-app-loader-index) / var(--c-app-loader-count)
+  );
+}
+
+@keyframes c-app-loader-type {
+  0% {
+    opacity: 0;
+  }
+
+  2% {
+    opacity: 1;
+  }
+
+  70%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes c-app-loader-clear {
+  0% {
+    opacity: 1;
+  }
+
+  70%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-app-loader__typed,
+  .c-app-loader__letter {
+    opacity: 1;
+    animation: none;
+  }
+}

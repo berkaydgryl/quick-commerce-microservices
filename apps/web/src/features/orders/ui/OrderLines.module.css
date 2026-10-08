@@ -1,0 +1,41 @@
+/* Siparisin urunleri (T11.16; F17'de ortak): adet, ad, tutar; satirlar ince cizgiyle ayrilir, uzun ad kirilir. */
+.c-order-lines__title {
+  font-size: var(--font-size-md);
+}
+
+.c-order-lines__list {
+  display: grid;
+}
+
+.c-order-lines__line {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding-block: var(--space-2);
+}
+
+.c-order-lines__line + .c-order-lines__line {
+  border-block-start: var(--border-width-thin) solid var(--border-faint);
+}
+
+.c-order-lines__quantity {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+}
+
+.c-order-lines__name {
+  display: grid;
+  flex: 1;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.c-order-lines__undelivered {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.c-order-lines__amount {
+  white-space: nowrap;
+}

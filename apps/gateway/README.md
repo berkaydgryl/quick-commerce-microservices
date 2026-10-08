@@ -29,9 +29,9 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `DELETE /v1/cart/reserve/{orderId}` | ✅ order `CancelOrder` (T11.4): taslağı ya da ödeme bekleyen siparişi bırakır, stok döner; zaten bırakılmışsa 200 `released:false`; parası alınmışsa 409 `REQUEST_IN_PROGRESS`; başkasının siparişi 404 |
 | `POST /v1/orders`    | ✅ order `CreateOrder` (saga): 201 `PAID` ya da `AWAITING_PAYMENT` + `threeDs` (sunucunun saatiyle `ttlSeconds`, T12.4); kart `payment.cardId` (kayıtlı kart) ya da eski `cardToken`, tam biri; kapıda ödeme `CASH_ON_DELIVERY` + `onDelivery` (`CASH` ya da `POS`), kart alanı yok, orta bantta 422 `PAYMENT_METHOD_NOT_ALLOWED`; `details` (hediye, not, "Zili Çalma", sözleşme onayı) zorunlu, kuralları `internal/order/details.go` (T12.4); kasada olmayan kart 404 `resource: card` |
 | `POST /v1/orders/{id}/3ds` | ✅ order `ConfirmPayment`; yanlış kod 402 + kalan hak |
-| `GET /v1/orders` | ✅ Geçmiş siparişler (T11.16, `internal/orderhistory`): order `ListMyOrders` + market adları sayfa başına TEK `BatchGetMarkets` (katalog hatasında adsız, sipariş yine listelenir); yeniden eskiye, imleçle; `DRAFT` ve hiç ilerlemeden süresi dolan `EXPIRED` süzülür, eksik kadar en fazla 3 tur (sunucu tarafı süzme #101); `CANCELLED` + geçmişte `PAID` = `refunded`; sayfa 20, en fazla 50 (kırpılır); önbelleğe alınmaz |
-| `GET /v1/orders/{id}` | ✅ order `GetOrder`; başkasının siparişi 404; kilit canlıyken `reservationExpiresAt` ve `reservationTtlSeconds` (T11.4); sipariş ayrıntısı `details` yalnızca burada, sahibine (T12.4; liste ve geçmiş taşımaz); ödeme seçimi `payment` (`method`, kapıda ödemede `onDelivery`; seçimsiz eski siparişte yok); T11.16'dan beri önbelleğe alınmaz (`no-store`) |
-| `GET /v1/orders/{id}/token` | ✅ T12.2: sahiplik order `GetOrder` ile (başkasınınki 404, bitmiş sipariş 200); `order:{id}` odası için 60 sn'lik oda jetonu (`internal/roomtoken`, `REALTIME_TOKEN_SECRET`) |
+| `GET /v1/orders` | ✅ Geçmiş siparişler (T11.16, `internal/orderhistory`): order `ListMyOrders` + market adları sayfa başına TEK `BatchGetMarkets` (katalog hatasında adsız, sipariş yine listelenir); yeniden eskiye, imleçle; `DRAFT` ve hiç ilerlemeden süresi dolan `EXPIRED` süzülür, eksik kadar en fazla 3 tur (sunucu tarafı süzme #101); `CANCELLED` + geçmişte `PAID` = `refunded`; sayfa 20, en fazla 50 (kırpılır); önbelleğe alınmaz (`no-store` rotanın ilk ara katmanı, hata cevapları dahil; #186) |
+| `GET /v1/orders/{id}` | ✅ order `GetOrder`; başkasının siparişi 404; kilit canlıyken `reservationExpiresAt` ve `reservationTtlSeconds` (T11.4); sipariş ayrıntısı `details` yalnızca burada, sahibine (T12.4; liste ve geçmiş taşımaz); ödeme seçimi `payment` (`method`, kapıda ödemede `onDelivery`; seçimsiz eski siparişte yok); `AWAITING_PAYMENT`'ta bekleyen 3DS durumu `threeDs` (#163 B1, aşağıda); T11.16'dan beri önbelleğe alınmaz (`no-store`; #186'dan beri rotanın ilk ara katmanı, 401/404/429/500/503 dahil) |
+| `GET /v1/orders/{id}/token` | ✅ T12.2: sahiplik order `GetOrder` ile (başkasınınki 404, bitmiş sipariş 200); `order:{id}` odası için 60 sn'lik oda jetonu (`internal/roomtoken`, `REALTIME_TOKEN_SECRET`); `no-store`, hata cevapları dahil (#186) |
 | `GET /v1/orders/{id}/tracking` | ✅ T14.2: kurye takibi (`internal/tracking`, aşağıda "Kurye takibi"); önce sahiplik order `GetOrder`, sonra courier `GetTracking`; `no-store` |
 | `POST /v1/auth/register` | ✅ Kayıt + oturum (201); telefon benzersiz, şifre bcrypt (T8.1) |
 | `POST /v1/auth/login` | ✅ Giriş (200); yanlış şifre ile kayıtsız numara aynı cevabı alır |
@@ -43,7 +43,7 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `GET /v1/me/addresses` | ✅ Adres defteri (T9.5): kayıtlı adresler, kayıt sırasında; en fazla 10 (sınırlı liste); önbelleğe alınmaz |
 | `POST /v1/me/addresses` | ✅ Adres ekleme (T11.8): tür, bina/kat/daire, tarif; aynı ad ve 11. adres tek atomik Mongo yazımında reddedilir; `Idempotency-Key` ister, cevap güncel defter |
 | `PUT`, `DELETE /v1/me/addresses/{addressId}` | ✅ Adres düzenleme ve silme (T11.15): kalıcı kimlik `adr_…` (eski adreslere göç 0001); düzenleme tam gövde, aynı ad başka adreste olamaz (birebir karşılaştırma: "Ev" ile "ev" farklı), tek atomik Mongo yazımı; yok olan adres 404; `Idempotency-Key` ister, cevap güncel defter |
-| `GET`, `POST /v1/me/cards`, `DELETE /v1/me/cards/{cardId}` | ✅ Kart kasası (T11.17, `internal/cards`, `httpapi/cards.go`): kasa payment'ta (`CardVaultService`); gateway numarayı ve CVV'yi yalnızca iletir. Production'da KAPALI (404; sağlayıcı mock). Ayrıntı: "Kart uçları" bölümü |
+| `GET`, `POST /v1/me/cards`, `DELETE` ve `PATCH /v1/me/cards/{cardId}` | ✅ Kart kasası (T11.17, `internal/cards`, `httpapi/cards.go`): kasa payment'ta (`CardVaultService`); gateway numarayı ve CVV'yi yalnızca iletir. `PATCH` yalnızca kart adını değiştirir (#148). Production'da KAPALI (404; sağlayıcı mock). Ayrıntı: "Kart uçları" bölümü |
 | `GET /v1/geo/reverse?lat&lng`, `GET /v1/geo/search?q` | ✅ Harita adres servisi (T11.8, `internal/geo`): OpenStreetMap Nominatim'e **tek sıra** (saniyede en fazla bir istek, kullanım koşulu) ve 24 saat önbellekle; sıra `GEO_TIMEOUT_MS` içinde ilerlemezse 503, adres yoksa 404. Oturum ister |
 | Kullanıcı kimliği    | ✅ `Authorization: Bearer` JWT (HS256); `X-User-Id` kalktı (T8.1) |
 | Kimlik deposu        | ✅ Mongo `users` + `sessions` (TTL indeksi); MOCK'ta bellek |
@@ -342,7 +342,7 @@ bellek içi sayaç sınırı örnek sayısı kadar gevşetirdi (proje kuralları
 | -------------------------------------------------------- | -------------------------------- | ----------- |
 | `POST /v1/auth/register`, `/login`, `/phone-check`, `/password-reset` | `RATE_LIMIT_AUTH_MAX_REQUESTS` (10) | IP          |
 | `POST /v1/auth/refresh`, `/v1/auth/logout` (T8.5)         | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
-| `POST`/`DELETE /v1/cart/reserve`, `/v1/orders`, `/v1/orders/{id}/3ds` | `RATE_LIMIT_ORDER_MAX_REQUESTS` (20) | kullanıcı   |
+| `POST`/`DELETE /v1/cart/reserve`, `/v1/orders`, `/v1/orders/{id}/3ds`; 3DS'e ek deneme sınırı: "3DS deneme sınırı" | `RATE_LIMIT_ORDER_MAX_REQUESTS` (20) | kullanıcı   |
 | Katalog, market ve genel arama uçları                     | `RATE_LIMIT_MAX_REQUESTS` (120)  | IP          |
 | `GET /v1/me`, `/v1/me/addresses`, `GET /v1/orders` (T11.16), `GET /v1/orders/{id}` (`/token` ve `/tracking` dahil) | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
 | `POST`/`PUT`/`DELETE /v1/me/addresses…`, `/v1/geo/*` (T11.8, T11.15) | `RATE_LIMIT_MAX_REQUESTS` (120)  | kullanıcı   |
@@ -392,7 +392,14 @@ Kasa payment-svc'dedir (`getir/cardvault/v1`, `CardVaultService`); kart kurallar
   bağlanmaz (404), payment havuza ve `/healthz` listesine girmez. Sağlayıcı bugün mock'tur; gerçek
   sağlayıcı gelince açılır (bekleyen iş).
 - **Kimlik yalnızca jetondan (QA G6):** gövdede ya da sorguda kullanıcı alanı yoktur; bilinmeyen alan 400.
-  Biçimsiz `cardId` kasaya gitmeden 404; başkasının, olmayan ve silinmiş kart kasadan 404.
+  Biçimsiz `cardId` kasaya gitmeden 404; başkasının, olmayan ve silinmiş kart kasadan 404. Silmede ve ad
+  düzenlemede kasanın 404 ayrıntısı (`cardId`) `cards.Service`'te atılır: dört durum AYNI zarf (#148, #194).
+- **Kart adı düzenleme (#148, `PATCH /v1/me/cards/{cardId}`):** gövde SIKI, yalnızca `nickname`
+  (bilinmeyen alan 400). Alan yoksa ya da `null` ise kasaya EKSİK gider ve kasa "Kart adı gönderilmedi"
+  der (boş gövde adı silmez); boş metin adı kaldırır. Kurallar ve cümleler kasada. Hız sınırı diğer
+  kart uçlarıyla aynı (kullanıcı başına, rota kalıbıyla: kart başına değil). Tekrar kaydı 15 dk ve
+  silmeyle aynı kural (`cardChangePolicy`): parmak izi gövdenin HMAC'i; saklanan cevap güncel maskeli
+  karttır ve kart adını AÇIK taşır (ekleme ve silme cevapları gibi; numara, CVV ve jeton yok).
 - **Deneme sınırı (K2, QA S1):** kullanıcı başına BAŞARISIZ doğrulama (`PAYMENT_DECLINED`; numara, CVV
   ya da son kullanma hatası) saatte 5, günde 20 (`ratelimit.FailureCounter`: bakmak yazmaz, yalnızca
   sonuç yazılır); IP başına her deneme saatte 30. Eşikte kasaya gidilmeden 429 + `Retry-After`.
@@ -497,6 +504,42 @@ order-service'tedir.
   sahiplik denetimi (oda jetonu) onu taşıyamaz. 3DS `ttlSeconds` payment'ın bitiş anından,
   gateway'in saatiyle; hiçbir zaman negatif değil. Tekrar edilen cevaptaki `ttlSeconds` ilk
   cevabınkidir (rezervasyonla aynı).
+- **3DS sürdürme (`GET /v1/orders/{id}`, #163 B1):** order'ın `three_ds`'i `threeDs` olur
+  (`internal/order/three_ds_view.go`). `ttlSeconds` = bitişe kalan TAM saniye, gateway'in saatiyle
+  (aşağı yuvarlanır; `now >= bitiş` ise 0, Confirm3Ds ile aynı sınır). Açık: `challengeId` +
+  `ttlSeconds >= 1` + `attemptsLeft >= 1`; aksi halde kapalı ve jeton ATILIR (payment göndermiş
+  olsa da). Alan yok: order göndermedi, sipariş ödeme beklemiyor ya da durum sözleşmeyi bozuyor
+  (bitiş yok, negatif hak, açık doğrulamada biçimsiz jeton); sipariş okuması düşmez. Jeton yalnızca
+  bu `no-store` cevapta; ayrıntısız `Get` (oda jetonu, takip) taşımaz, günlüğe ve hataya girmez.
+  Kurallar ve openapi örnekleri `internal/order/three_ds_contract_test.go` ile karşılaştırılır.
+- **3DS deneme sınırı (siparişler arası, #163):** siparişin 3 hakkı kendi içindedir; siparişi bırakıp
+  yeniden veren kullanıcı her seferinde yeni hak alırdı. YANLIŞ KOD sayılır: kullanıcı başına saatte 5,
+  günde 10 (her zaman açık); IP başına saatte 30 (çok hesapla deneme; `THREEDS_IP_LIMIT_ENABLED`,
+  varsayılan KAPALI). IP soketin adresidir (`X-Forwarded-For`'a güvenilmez): yük dengeleyici, ingress
+  ya da Vite vekili arkasında herkes aynı IP olur ve IP penceresi 30 yanlış koddan sonra HERKESİN kart
+  ödemesini ve 3DS'ini bir saat kilitler (G1). Yalnız istemcinin gateway'e doğrudan bağlandığı kurulumda
+  açılır: güvenilir vekil desteği henüz yok (bekleyen iş #213(3)); ingress'te gerçek IP başlığı ayarlamak
+  yetmez. Açıkken bedeli (G2): CGNAT ya da ofis ağının arkasında birkaç hesabın 30 yanlış kodu o ağdaki
+  herkesin kartla ödemesini bir saat durdurur (kapıda ödeme açık kalır). Payment'ın `THREEDS_FAILED`'ı süre dolması
+  (`expired`) dışında yanlış koddur (`wrong_code`, son hakta `attempts_exhausted`; bilinmeyen ya da eksik
+  sebep de sayılır: sözleşme kayarsa sayaç susmaz; `internal/order/threeds_attempts.go`). Eşikte `/3ds`
+  ve KARTLA `POST /v1/orders` order'a gidilmeden 429 + `Retry-After` (en uzun dolu pencere); kapıda ödeme
+  etkilenmez. Doğru kod, süre dolması, biçimsiz istek ve kesinti sayılmaz: aynı NAT'ın arkasındakiler
+  birbirinin hakkını çöp istekle tüketemez. Başarısız ya da iptal edilmiş siparişe gelen istek
+  `ORDER_STATE_INVALID` alır (sayılmaz, kod denenmez); ödenmiş siparişe yeni anahtarla gelen istek 200
+  alır ve metrikte `succeeded` sayılır. Kapı iki ucun işleyicisinde, tekrar korumasından SONRA
+  (`attempt_gate.go`, kart uçlarıyla ortak): aynı anahtarlı tekrar sınır dolmuş olsa da ilk cevabı alır
+  ve ikinci kez sayılmaz; 429 saklanmaz, anahtar serbest kalır. Sayaç önce bakılır, sonuçtan sonra yazılır
+  (kart uçlarındaki eşzamanlılık kilidi yok): kullanıcının aynı anda tek açık 3DS'i (3 hak) olduğu için
+  eşzamanlı denemeler kullanıcı sınırını en fazla 2 aşar (saatte 7, günde 12); IP penceresini ise aynı
+  anda açık 3DS'i olan K hesap tek patlamada K×3'e kadar aşabilir (her hesap yine kendi sınırında).
+  Anahtarlar `rate:{usr_…}:POST_/v1/orders/3ds/fail-1h|fail-1d` ve (bayrak açıksa) `rate:{ip}:POST_/v1/orders/3ds/ip-fail-1h`;
+  sebep metinleri `payment.proto` ile karşılaştırılır (`TestThreeDSReasonsMatchPaymentContract`). Sayaca
+  ulaşılamazsa istek geçer (fail-open, genel sınırla aynı uyarı; Redis tümden düşerse tekrar koruması
+  zaten 503 döner); `RATE_LIMIT_ENABLED=false` sınırı da kapatır. Metrik `threeds_attempts_total{result}`
+  (`succeeded`, `wrong_code`, `expired`, `limited`, `other`; `service="gateway"`); kartla siparişin reddi
+  3DS denemesi değildir, yalnızca `rate_limit_rejections_total{route}`'a yazılır. `challengeId` etikete,
+  günlüğe ve hataya girmez.
 
 ```bash
 # TOKEN: yukaridaki giris komutundan. Basliklar her komutta acikca yazilir.
@@ -591,6 +634,7 @@ curl -s "localhost:8080/v1/search?lat=40.9885&lng=29.0262&q=s%C3%BCt" \
 | `RATE_LIMIT_MAX_REQUESTS`    | `120`             | Genel sınır: katalog, market, `/v1/me`, sipariş okuma (1-10000) |
 | `RATE_LIMIT_AUTH_MAX_REQUESTS` | `10`            | Kayıt ve giriş (IP başına); yenileme ve çıkış genel sınırda |
 | `RATE_LIMIT_ORDER_MAX_REQUESTS` | `20`           | Rezervasyon, sipariş, 3DS (kullanıcı başına) |
+| `THREEDS_IP_LIMIT_ENABLED`   | `false`           | 3DS yanlış kod sınırının IP penceresi (saatte 30, #163). Yalnız istemci doğrudan bağlanıyorsa açın: vekil arkasında herkes aynı IP olur (G1); güvenilir vekil desteği yok (#213(3)) |
 | `NODE_ENV`                   | `development`     | `development/test/production`                   |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | yok              | İzlerin OTLP/HTTP taban adresi (D15; yerelde `http://localhost:4318`, Jaeger). Boşsa izler oluşur ama gönderilmez |
 | `GEO_BASE_URL`               | `https://nominatim.openstreetmap.org` | Harita adres servisinin kökü (T11.8); kendi Nominatim'ini kuran ortam değiştirir |
@@ -635,15 +679,34 @@ denetlenir:
 Geçerli biçimli kimlikte bütün 404'ler aynıdır (`NOT_FOUND`, ayrıntı `{orderId}`): sahiplik,
 durum ve takip yokluğu dışarıdan ayırt edilemez. `status` order'ın kaydıdır, `phase` courier'in.
 Gizlilik kuralları cevap istemciye çıkmadan burada son kez uygulanır: `TO_MARKET`'ta courier konum
-gönderse de cevaba girmez (kurye önceki müşterinin adresinde olabilir) ve varış tahmini dakikaya
-yukarı yuvarlanır (kalanın azalışı kuryenin markete uzaklığını ele vermesin). Sözleşmenin zorunlu
-alanları (an, 1–40 noktalı rota, market ve adres konumu; paket alındıktan sonra kurye konumu) yoksa ya
-da aşama bilinmiyorsa cevap 500'dür: sözleşmeyi bozan gövde istemciye gitmez. Aşamaların diğer
-tutarlılık kuralları courier'dedir. Courier'in doğrulama hatasındaki `orderId` yol adıyla (`id`)
-döner. Courier `GetTracking`'i uygulamadıysa uç 501 döner (D5). Konum,
-rota ve adres kişisel veridir: cevap `no-store`, günlüğe koordinat yazılmaz (test:
-`TestOrderTrackingLogsNoCoordinates`). Alan adları, aşamalar ve takip edilen durumlar sözleşmeyle
-`internal/tracking/contract_test.go`'da karşılaştırılır.
+gönderse de cevaba girmez (kurye önceki müşterinin adresinde olabilir), varış tahmini dakikaya
+yukarı yuvarlanır (kalanın azalışı kuryenin markete uzaklığını ele vermesin; `int64`, `int32`
+sınırında taşmaz) ve kurye adı kısaltılır (#183, `ShortCourierName`: ilk ad + son soyadın ilk harfi,
+"Mehmet Kaya" -> "Mehmet K."; baş harf Türkçe kuralla büyür, "i" -> "İ"; soyadda harf yoksa yalnızca ilk
+ad kalır; tam ad gateway'den çıkmaz).
+
+Courier'in cevabı şu sözleşme kurallarıyla denetlenir (#179, `internal/tracking/invariants.go`); bunlara
+aykırı cevap istemciye gitmez, ayrıntısız 500 olur (koordinat aralığı courier'in girdisinde,
+`geoPointSchema` ile denetlenir):
+
+- zorunlu parçalar: an, 1–40 noktalı rota, market ve adres konumu, `crr_` biçimli kurye kimliği, boş
+  olmayan ad, negatif olmayan kalan yol ve tahmin;
+- rota market -> adres parçasıdır: ilk nokta market, son nokta adres (enlem ve boylam tam eşit; courier
+  iki konumu rotanın uçlarından üretir). Paket alınmadan rotaya kurye -> market bacağı girerse kuryenin
+  önceki müşterinin adresindeki konumu sızardı;
+- aşamanın anları: `TO_MARKET`'ta alma ve teslim anı yok, `TO_CUSTOMER`'da alma anı var, teslim anı yok,
+  `DELIVERED`'da ikisi var ve kalan yol ile tahmin 0; paket alındıktan sonra kurye konumu zorunlu.
+
+Hatanın günlüğe giden nedeni yalnızca alan adlarını taşır. Courier hatasının mesaj metni de günlüğe
+gitmez (adı ya da konumu taşıyabilir): neden yalnızca servis, metot ve gRPC durum kodudur.
+Courier hatasının ayrıntısı istemciye izin listesiyle geçer (#187): yalnızca doğrulama hatasındaki
+`orderId` (yol adıyla, `id`); `NOT_FOUND` ucun tek 404'üdür, başka her kod (409, 500, 503 ...)
+ayrıntısız döner (kurye kimliği, konum ya da başka sipariş sızmaz). Courier `GetTracking`'i
+uygulamadıysa uç 501 döner (D5). Konum, rota, adres ve kurye adı kişisel veridir: `no-store` rotanın
+ilk ara katmanıdır (`noStoreRoute`, kart uçlarıyla aynı), 401, 404, 429, 500 ve 503 cevapları da
+önbelleğe girmez; günlüğe koordinat ve ad yazılmaz (testler: `internal/httpapi/tracking_errors_test.go`,
+`TestOrderTrackingLogsNoCoordinates`). Alan adları, aşamalar, takip edilen durumlar ve sayıların üst
+sınırsız tamsayı kuralı sözleşmeyle `internal/tracking/contract_test.go`'da karşılaştırılır.
 
 ## `/healthz` sözleşmesi
 

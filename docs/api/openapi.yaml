@@ -1144,6 +1144,15 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/UpdateCardNicknameRequest"
+            examples:
+              rename:
+                summary: Kart adını değiştir
+                value:
+                  nickname: "İş kartım"
+              remove:
+                summary: Kart adını kaldır (boş metin)
+                value:
+                  nickname: ""
       responses:
         "200":
           description: Kart adı güncellendi; güncel kart (maskeli)
@@ -1158,6 +1167,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SavedCardResponse"
+              examples:
+                renamed:
+                  summary: Ad değişti
+                  value:
+                    success: true
+                    data:
+                      id: "crd_0123456789abcdef0123456789abcdef"
+                      brand: VISA
+                      first4: "4242"
+                      last4: "4242"
+                      expiryMonth: 12
+                      expiryYear: 2031
+                      holderName: "Ayşe Yılmaz"
+                      nickname: "İş kartım"
+                      expired: false
+                      createdAt: "2026-10-05T12:00:00Z"
+                removed:
+                  summary: Ad kaldırıldı (alan yok)
+                  value:
+                    success: true
+                    data:
+                      id: "crd_0123456789abcdef0123456789abcdef"
+                      brand: VISA
+                      first4: "4242"
+                      last4: "4242"
+                      expiryMonth: 12
+                      expiryYear: 2031
+                      holderName: "Ayşe Yılmaz"
+                      expired: false
+                      createdAt: "2026-10-05T12:00:00Z"
         "400":
           description: |
             Kart adı kurala uymuyor ya da gönderilmedi, bilinmeyen alan ya da
@@ -1167,14 +1206,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                nicknameMissing:
+                  summary: VALIDATION_FAILED (alan yok ya da null)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        nickname: "Kart adı gönderilmedi"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                nicknameDigits:
+                  summary: VALIDATION_FAILED (kart adında kart numarası)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        nickname: "Kart adında 8 ya da daha fazla rakam yan yana olamaz"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                unknownField:
+                  summary: VALIDATION_FAILED (bilinmeyen alan, ör. CVV)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        cvv: "bu uc bu alani kabul etmiyor"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
-          description: Kart bu hesabın kasasında yok (NOT_FOUND; ayrıntısız).
+          description: |
+            Kart bu hesabın kasasında yok (NOT_FOUND; ayrıntısız). Biçimsiz kimlik,
+            olmayan, başkasının ve silinmiş kart AYNI zarfla döner.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                notFound:
+                  $ref: "#/components/examples/CardNotFound"
         "409":
           description: |
             Aynı `Idempotency-Key` ile ilk istek hâlâ işleniyor
@@ -1234,11 +1309,16 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
-          description: Kart bu hesabın kasasında yok (NOT_FOUND; ayrıntısız).
+          description: |
+            Kart bu hesabın kasasında yok (NOT_FOUND; ayrıntısız). Biçimsiz kimlik,
+            olmayan, başkasının ve silinmiş kart AYNI zarfla döner.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                notFound:
+                  $ref: "#/components/examples/CardNotFound"
         "409":
           description: |
             Aynı `Idempotency-Key` ile ilk istek hâlâ işleniyor
@@ -2328,6 +2408,21 @@ paths:
         `409 PRICE_CHANGED` güncel toplamla döner. Kalem `sku` taşımaz; sunucu
         onu catalog teklifinden alır.
 
+        Kapalı market (`Market.isOpen` false, #154) taslak açmaz: `404 NO_STORE`,
+        ayrıntı yalnızca `reason: STORE_CLOSED`; stoğa dokunulmaz ve fiyat ya da
+        minimum sepet hatalarından önce gelir. `POST /v1/orders` marketi yeniden
+        okumaz: kilit süresi içinde kapanan markette sipariş kabul edilir. Bu 404
+        `Idempotency-Key` ile saklanır: market yeniden açılınca aynı anahtar eski
+        cevabı tekrar eder; yeniden denemede yeni anahtar üretilir.
+
+        Teslimat adresi (`address.location`) seçili marketin teslimat yarıçapı
+        dışındaysa (#203) taslak açılmaz: `404 NO_STORE`, ayrıntı yalnızca
+        `reason: OUT_OF_RANGE` (mesafe yankılanmaz). Sıra: kapalı market → yarıçap
+        → fiyat → stok. Kural market listesiyle aynı (sınır dahil); liste Mongo
+        `$geoNear`'dan geldiği için sınırda ±1 m fark olabilir. Bu 404 de
+        `Idempotency-Key` ile saklanır: adres düzeltilip yeniden denenirken yeni
+        anahtar üretilir (aynı anahtar + farklı gövde `409 CONFLICT`).
+
         Stok taslak açılırken kilitlenir (T11.2; inventory, Redis + Lua). Cevapta
         kilidin bitiş anı (`expiresAt`) ve sunucunun saatiyle kalan saniye
         (`ttlSeconds`, T11.4) döner: istemci geri sayımı bundan başlatır. Sepet tek
@@ -2405,11 +2500,35 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
-          description: Market bulunamadı
+          description: |
+            Market bulunamadı (`NOT_FOUND`), market kapalı (`NO_STORE`, ayrıntı yalnızca
+            `reason: STORE_CLOSED`; #154) ya da teslimat adresi yarıçap dışında
+            (`NO_STORE`, `reason: OUT_OF_RANGE`; #203).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                marketClosed:
+                  summary: NO_STORE (market kapalı)
+                  value:
+                    success: false
+                    error:
+                      code: NO_STORE
+                      message: "Bu adrese şu anda teslimat yapamıyoruz."
+                      details:
+                        reason: STORE_CLOSED
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                outOfRange:
+                  summary: NO_STORE (teslimat adresi yarıçap dışında)
+                  value:
+                    success: false
+                    error:
+                      code: NO_STORE
+                      message: "Bu adrese şu anda teslimat yapamıyoruz."
+                      details:
+                        reason: OUT_OF_RANGE
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "409":
           description: |
             Fiyat değişti (`PRICE_CHANGED`, ayrıntıda güncel toplam). Aynı
@@ -2678,6 +2797,11 @@ paths:
         hesabın açıldığı cihazdan açılmış hesap sayısı kullanıcı kaydından
         (T8.1). Oturum kapatılmışsa (çıkış) jeton süresi dolmamış olsa bile
         `401` döner.
+
+        3DS deneme sınırına (`/v1/orders/{id}/3ds`; kullanıcı başına, açıksa IP
+        başına yanlış kod) ulaşıldıysa KARTLA sipariş order'a gidilmeden
+        `429 RATE_LIMITED` ve `Retry-After` alır: siparişi bırakıp yeniden
+        vermek yeni 3DS hakkı açmaz (#163). Kapıda ödeme bu sınırdan etkilenmez.
       security:
         - bearerAuth: []
       parameters:
@@ -2872,6 +2996,18 @@ paths:
         ile gönderilir. Aynı anahtarla farklı kod `409 CONFLICT` alır; aynı kodun
         aynı anahtarla tekrarı ilk cevabı (ör. `402`, aynı `attemptsLeft`) alır,
         hak ikinci kez düşmez.
+
+        Deneme sınırı (siparişler arası, #163): siparişin kendi hakkı bitince
+        siparişi bırakıp yeniden vermek yeni hak açar; bu yüzden YANLIŞ KOD
+        (`wrong_code`, `attempts_exhausted`) kullanıcı başına saatte 5 ve günde
+        10 sayılır; IP başına saatte 30 penceresi yapılandırmayla açılır
+        (`THREEDS_IP_LIMIT_ENABLED`, varsayılan kapalı: vekil arkasında herkes
+        aynı IP olur). Eşikte order'a gidilmeden
+        `429 RATE_LIMITED` ve `Retry-After` (en uzun dolu pencere); aynı sınır
+        kartla yeni siparişe de uygulanır. Doğru kod, süre dolması (`expired`),
+        biçimi bozuk istek ve kesinti sayılmaz. Sınır tekrar korumasından sonra
+        bakılır: aynı anahtarlı tekrar sınır dolmuş olsa da ilk cevabı alır ve
+        ikinci kez sayılmaz. Sayaca ulaşılamazsa istek geçer.
       security:
         - bearerAuth: []
       parameters:
@@ -2983,6 +3119,11 @@ paths:
         teslimat adresi ve durum geçmişi. Başkasının siparişi `404` döner
         (403 değil): "bu kimlikte bir sipariş var" bilgisi bile sızmamalı.
         Kişisel veridir: önbelleğe alınmaz (T11.16'dan beri `no-store`).
+
+        `AWAITING_PAYMENT` siparişte bekleyen 3DS doğrulamasının durumu `threeDs`
+        alanındadır (#163 B1; anlamı `OrderThreeDs`). Alanın yokluğu "bilinmiyor ya
+        da doğrulama yok" demektir; süresi dolmuş ya da hakkı bitmiş doğrulama
+        alanla birlikte `ttlSeconds: 0` ya da `attemptsLeft: 0` olarak gelir.
       security:
         - bearerAuth: []
       parameters:
@@ -3004,6 +3145,95 @@ paths:
                     properties:
                       data:
                         $ref: "#/components/schemas/Order"
+              examples:
+                threeDsOpen:
+                  summary: "3DS açık: kod girilebilir"
+                  value:
+                    success: true
+                    data:
+                      id: "ord_db77f4c0e24f49919cc1d78a649c9c94"
+                      status: AWAITING_PAYMENT
+                      marketId: mkt_migros-jet-moda
+                      lines: []
+                      subtotal: { amountMinor: 18990, currency: TRY }
+                      deliveryFee: { amountMinor: 0, currency: TRY }
+                      discount: { amountMinor: 0, currency: TRY }
+                      total: { amountMinor: 18990, currency: TRY }
+                      address:
+                        line: "Caferağa Mah. Moda Cad. No: 1, Kadıköy"
+                        location: { lat: 40.9853, lng: 29.0256 }
+                      timeline:
+                        - status: AWAITING_PAYMENT
+                          at: "2026-10-08T09:00:00.000Z"
+                      createdAt: "2026-10-08T09:00:00.000Z"
+                      threeDs:
+                        {
+                          challengeId: "tds_0009d7cd0e904b689aabcacf4458d520",
+                          ttlSeconds: 42,
+                          attemptsLeft: 2,
+                        }
+                threeDsExpired:
+                  summary: "3DS süresi doldu: jeton yok, yeni kod yok"
+                  value:
+                    success: true
+                    data:
+                      id: "ord_db77f4c0e24f49919cc1d78a649c9c94"
+                      status: AWAITING_PAYMENT
+                      marketId: mkt_migros-jet-moda
+                      lines: []
+                      subtotal: { amountMinor: 18990, currency: TRY }
+                      deliveryFee: { amountMinor: 0, currency: TRY }
+                      discount: { amountMinor: 0, currency: TRY }
+                      total: { amountMinor: 18990, currency: TRY }
+                      address:
+                        line: "Caferağa Mah. Moda Cad. No: 1, Kadıköy"
+                        location: { lat: 40.9853, lng: 29.0256 }
+                      timeline:
+                        - status: AWAITING_PAYMENT
+                          at: "2026-10-08T09:00:00.000Z"
+                      createdAt: "2026-10-08T09:00:00.000Z"
+                      threeDs: { ttlSeconds: 0, attemptsLeft: 2 }
+                threeDsExhausted:
+                  summary: "3DS hakkı bitti (PAYMENT_FAILED geçişine denk gelen okuma)"
+                  value:
+                    success: true
+                    data:
+                      id: "ord_db77f4c0e24f49919cc1d78a649c9c94"
+                      status: AWAITING_PAYMENT
+                      marketId: mkt_migros-jet-moda
+                      lines: []
+                      subtotal: { amountMinor: 18990, currency: TRY }
+                      deliveryFee: { amountMinor: 0, currency: TRY }
+                      discount: { amountMinor: 0, currency: TRY }
+                      total: { amountMinor: 18990, currency: TRY }
+                      address:
+                        line: "Caferağa Mah. Moda Cad. No: 1, Kadıköy"
+                        location: { lat: 40.9853, lng: 29.0256 }
+                      timeline:
+                        - status: AWAITING_PAYMENT
+                          at: "2026-10-08T09:00:00.000Z"
+                      createdAt: "2026-10-08T09:00:00.000Z"
+                      threeDs: { ttlSeconds: 31, attemptsLeft: 0 }
+                threeDsUnknown:
+                  summary: "Alan yok: bilinmiyor ya da doğrulama yok (istemci yeniden yoklar)"
+                  value:
+                    success: true
+                    data:
+                      id: "ord_db77f4c0e24f49919cc1d78a649c9c94"
+                      status: AWAITING_PAYMENT
+                      marketId: mkt_migros-jet-moda
+                      lines: []
+                      subtotal: { amountMinor: 18990, currency: TRY }
+                      deliveryFee: { amountMinor: 0, currency: TRY }
+                      discount: { amountMinor: 0, currency: TRY }
+                      total: { amountMinor: 18990, currency: TRY }
+                      address:
+                        line: "Caferağa Mah. Moda Cad. No: 1, Kadıköy"
+                        location: { lat: 40.9853, lng: 29.0256 }
+                      timeline:
+                        - status: AWAITING_PAYMENT
+                          at: "2026-10-08T09:00:00.000Z"
+                      createdAt: "2026-10-08T09:00:00.000Z"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
@@ -3299,6 +3529,17 @@ components:
         default: 20
 
   examples:
+    CardNotFound:
+      summary: NOT_FOUND (kart; ayrıntısız)
+      description: |
+        Kayıtlı kart silme ve ad düzenlemenin TEK 404'ü: biçimsiz kimlik, olmayan,
+        başkasının ve silinmiş kart aynı zarfla döner.
+      value:
+        success: false
+        error:
+          code: NOT_FOUND
+          message: "Aradığın kaydı bulamadık."
+          requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
     IdempotencyKeyInvalid:
       summary: VALIDATION_FAILED (anahtar biçimi)
       value:
@@ -3893,6 +4134,9 @@ components:
           footer,
           checkout,
           confirm,
+          appLoading,
+          courierTracking,
+          orderConfirmation,
         ]
       properties:
         header:
@@ -3956,6 +4200,21 @@ components:
           $ref: "#/components/schemas/CheckoutContent"
         confirm:
           $ref: "#/components/schemas/ConfirmContent"
+        appLoading:
+          $ref: "#/components/schemas/AppLoadingContent"
+        courierTracking:
+          $ref: "#/components/schemas/CourierTrackingContent"
+        orderConfirmation:
+          $ref: "#/components/schemas/OrderConfirmationContent"
+
+    AppLoadingContent:
+      type: object
+      description: |
+        Tam ekran Yükleniyor göstergesi (F18): dairenin altında harf harf yazılan yazı. Gösterge
+        içerik gelmeden de görünür (istemcinin yedeği); logonun iki parçası header bloğundan.
+      required: [label]
+      properties:
+        label: { $ref: "#/components/schemas/ContentText" }
 
     ConfirmContent:
       type: object
@@ -3966,6 +4225,82 @@ components:
       properties:
         yesLabel: { $ref: "#/components/schemas/ContentText" }
         noLabel: { $ref: "#/components/schemas/ContentText" }
+
+    OrderConfirmationContent:
+      type: object
+      description: |
+        Sipariş onay ekranı (F17; /siparis/:id/onay): sipariş verildiyse "Siparişin alındı!",
+        risk incelemesindeyse "Siparişin inceleniyor" ve kısa not; özet ve teslimat ayrıntıları
+        başlıkları, "Siparişlerime git" ve "Alışverişe devam et". Diğer etiketler orders,
+        checkout, paymentMethods (kart markaları) ve cartPage (deliveryTimeLabel) bloklarından.
+      required:
+        [
+          placedTitle,
+          reviewTitle,
+          reviewNotice,
+          summaryTitle,
+          detailsTitle,
+          ordersLinkLabel,
+          continueLabel,
+        ]
+      properties:
+        placedTitle: { $ref: "#/components/schemas/ContentText" }
+        reviewTitle: { $ref: "#/components/schemas/ContentText" }
+        reviewNotice: { $ref: "#/components/schemas/ContentText" }
+        summaryTitle: { $ref: "#/components/schemas/ContentText" }
+        detailsTitle: { $ref: "#/components/schemas/ContentText" }
+        ordersLinkLabel: { $ref: "#/components/schemas/ContentText" }
+        continueLabel: { $ref: "#/components/schemas/ContentText" }
+
+    CourierTrackingContent:
+      type: object
+      description: |
+        Kurye takibi (F22; T13.3 aşama 1): "Kuryem nerede" penceresi (başlık, "Kuryen" ve
+        kısaltılmış ad, harita, tahmini varış "~8 dk", kalan mesafe "1,2 km" / "300 m",
+        teslimat adresi, aşama cümleleri) ve kurye yaklaşınca sağ üstteki bildirim
+        ("Konumu gör" aynı pencereyi açar). Konum, süre ve mesafe takip ucundan.
+      required:
+        [
+          title,
+          closeLabel,
+          courierLabel,
+          mapLabel,
+          etaLabel,
+          etaPrefix,
+          minuteSuffix,
+          distanceLabel,
+          kilometerSuffix,
+          meterSuffix,
+          addressLabel,
+          loadingLabel,
+          pickupNotice,
+          deliveredNotice,
+          unavailableNotice,
+          retryLabel,
+          approachTitle,
+          approachActionLabel,
+          approachCloseLabel,
+        ]
+      properties:
+        title: { $ref: "#/components/schemas/ContentText" }
+        closeLabel: { $ref: "#/components/schemas/ContentText" }
+        courierLabel: { $ref: "#/components/schemas/ContentText" }
+        mapLabel: { $ref: "#/components/schemas/ContentText" }
+        etaLabel: { $ref: "#/components/schemas/ContentText" }
+        etaPrefix: { $ref: "#/components/schemas/ContentText" }
+        minuteSuffix: { $ref: "#/components/schemas/ContentText" }
+        distanceLabel: { $ref: "#/components/schemas/ContentText" }
+        kilometerSuffix: { $ref: "#/components/schemas/ContentText" }
+        meterSuffix: { $ref: "#/components/schemas/ContentText" }
+        addressLabel: { $ref: "#/components/schemas/ContentText" }
+        loadingLabel: { $ref: "#/components/schemas/ContentText" }
+        pickupNotice: { $ref: "#/components/schemas/ContentText" }
+        deliveredNotice: { $ref: "#/components/schemas/ContentText" }
+        unavailableNotice: { $ref: "#/components/schemas/ContentText" }
+        retryLabel: { $ref: "#/components/schemas/ContentText" }
+        approachTitle: { $ref: "#/components/schemas/ContentText" }
+        approachActionLabel: { $ref: "#/components/schemas/ContentText" }
+        approachCloseLabel: { $ref: "#/components/schemas/ContentText" }
 
     FavoritesContent:
       type: object
@@ -4812,6 +5147,9 @@ components:
               clearConfirmQuestion,
               switchConfirmPrefix,
               switchConfirmSuffix,
+              addressChangePrefix,
+              addressChangeSuffix,
+              cartClearedToast,
               decreaseSuffix,
               increaseSuffix,
               removeSuffix,
@@ -4837,6 +5175,11 @@ components:
               $ref: "#/components/schemas/ContentText"
               description: Başka marketten eklerken sepeti boşaltma sorusu (F13); önek + hedef market + sonek.
             switchConfirmSuffix: { $ref: "#/components/schemas/ContentText" }
+            addressChangePrefix:
+              $ref: "#/components/schemas/ContentText"
+              description: Adres değişince sepetin marketi yeni adrese teslim etmiyorsa sorulur (F16); önek + market + sonek.
+            addressChangeSuffix: { $ref: "#/components/schemas/ContentText" }
+            cartClearedToast: { $ref: "#/components/schemas/ContentText" }
             decreaseSuffix: { $ref: "#/components/schemas/ContentText" }
             increaseSuffix: { $ref: "#/components/schemas/ContentText" }
             removeSuffix: { $ref: "#/components/schemas/ContentText" }
@@ -6220,6 +6563,70 @@ components:
           $ref: "#/components/schemas/OrderDetailsView"
         payment:
           $ref: "#/components/schemas/OrderPaymentView"
+        threeDs:
+          $ref: "#/components/schemas/OrderThreeDs"
+
+    OrderThreeDs:
+      description: |
+        Bekleyen 3DS doğrulamasının durumu (#163 B1): sayfa yenilense de doğrulama
+        kaldığı yerden sürer. Yalnızca sipariş `AWAITING_PAYMENT` iken ve yalnızca
+        siparişin sahibine döner (`no-store`). Kod (OTP) hiçbir zaman yoktur.
+
+        - **Açık** (`OpenOrderThreeDs`): `challengeId` vardır, kod
+          `POST /v1/orders/{id}/3ds` ile girilir.
+        - **Kapalı** (`ClosedOrderThreeDs`): `ttlSeconds = 0` süresi doldu,
+          `attemptsLeft = 0` hakkı bitti (ikisi birden ise "hakkı bitti").
+          `challengeId` yoktur ve yeni kod ucu yoktur. Süresi dolan sipariş stok
+          kilidi bitince kapanır; hakkı biten doğrulamada sipariş normalde anında
+          `PAYMENT_FAILED` olur (alan gelmez), "hakkı bitti" yalnızca o geçiş
+          anına denk gelen okumada görülür.
+        - **Alan yok:** bilinmiyor (ödeme servisine ulaşılamadı) ya da doğrulama yok.
+          İstemci siparişi bırakmaz, yeniden yoklar.
+
+        Gateway `ttlSeconds`'ı kendi saatiyle hesaplar ve `challengeId`'yi yalnızca
+        kendi hesabı açık diyorsa koyar (tek saat). `attemptsLeft` = en fazla hak −
+        yanlış kod sayısı; doğrulama hangi sebeple kapanmış olursa olsun. Biçim
+        jetona göre seçilir: jetonsuz durum her zaman kapalıdır (saat yarışında
+        ikisi de > 0 gelebilir; hak varsa "süresi doldu" sayılır).
+      oneOf:
+        - $ref: "#/components/schemas/OpenOrderThreeDs"
+        - $ref: "#/components/schemas/ClosedOrderThreeDs"
+
+    OpenOrderThreeDs:
+      type: object
+      description: Açık 3DS doğrulaması; kod girilebilir.
+      required: [challengeId, ttlSeconds, attemptsLeft]
+      properties:
+        challengeId:
+          type: string
+          pattern: "^tds_[0-9a-f]{32}$"
+          description: Confirm jetonu (`POST /v1/orders/{id}/3ds` gövdesine aynen gider).
+        ttlSeconds:
+          type: integer
+          minimum: 1
+          description: Kodun sunucunun saatiyle kalan geçerliliği, saniye.
+        attemptsLeft:
+          type: integer
+          minimum: 1
+          description: Kalan yanlış kod hakkı.
+
+    ClosedOrderThreeDs:
+      type: object
+      description: |
+        Kapalı 3DS doğrulaması: jeton yoktur. Normalde `ttlSeconds` ya da
+        `attemptsLeft` 0'dır; saat yarışında ikisi de > 0 gelebilir, yine kapalıdır.
+      required: [ttlSeconds, attemptsLeft]
+      not:
+        required: [challengeId]
+      properties:
+        ttlSeconds:
+          type: integer
+          minimum: 0
+          description: 0 = süresi doldu.
+        attemptsLeft:
+          type: integer
+          minimum: 0
+          description: 0 = hakkı bitti.
 
     OrderSummary:
       type: object

@@ -22,6 +22,7 @@ const QUIET: AdvanceSummary = {
   stale: 0,
   failed: 0,
   deferred: 0,
+  reconciled: 0,
 };
 
 class FakeLock implements LeaderLock {

@@ -31,13 +31,20 @@ option go_package = "github.com/berkaydgryl/quick-commerce-microservices/package
 // Siparis servisi.
 service OrderService {
   // Sepeti fiyatlayip taslak siparise cevirir ve stogu kilitler (T11.2).
-  // Risk CreateOrder'da sorulur. Gateway karsiligi: POST /v1/cart/reserve
+  // Risk CreateOrder'da sorulur. Kapali market (catalog Market.is_open false,
+  // #154): NOT_FOUND + "NO_STORE", ayrinti yalnizca reason "STORE_CLOSED";
+  // taslak acilmaz, stoga dokunulmaz (fiyat ve minimum sepet hatalarindan once).
+  // delivery_location marketin teslimat yaricapi disindaysa (#203; sinir dahil,
+  // catalog kapsamasiyla ayni kural) ayni kod, reason "OUT_OF_RANGE"; kapali
+  // market denetiminden sonra, fiyatlamadan once.
+  // Gateway karsiligi: POST /v1/cart/reserve
   rpc CreateDraftOrder(CreateDraftOrderRequest) returns (CreateDraftOrderResponse);
 
   // Taslak siparisi gercek siparise cevirir: risk gecisi, odeme ve stok
   // dusumu (saga, T7.1). Kilidi dusmus taslak ilerlemez: siparis CANCELLED,
   // FAILED_PRECONDITION + "RESERVATION_EXPIRED"; sepet yeniden onaylanir
-  // (T11.2). Gateway karsiligi: POST /v1/orders
+  // (T11.2). Market yeniden okunmaz (#154): kilit suresi icinde kapanan
+  // markette siparis kabul edilir. Gateway karsiligi: POST /v1/orders
   rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
 
   // 3DS kodunu dogrular ve siparisi odeme sonucuna gore ilerletir (T7.1):
@@ -354,6 +361,10 @@ message GetOrderRequest {
 
 message GetOrderResponse {
   Order order = 1;
+
+  // 3DS durumu (#163 B1): yalnizca AWAITING_PAYMENT'ta ve payment cevap verdiyse
+  // dolu; bos = bilinmiyor ya da dogrulama yok (istemci siparisi birakmaz).
+  getir.payment.v1.ThreeDsStatus three_ds = 2;
 }
 
 message ListMyOrdersRequest {

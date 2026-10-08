@@ -9,6 +9,8 @@ interface LogoProps {
   readonly service: string;
   /** "inverse": mor zemin (karsilama, giris, kayit ekraninin ust bari): marka sari, servis beyaz. */
   readonly tone?: 'brand' | 'inverse';
+  /** "stacked": marka ustte, servis altta (Yukleniyor gostergesinin dairesi, F18). */
+  readonly layout?: 'inline' | 'stacked';
 }
 
 /**
@@ -17,9 +19,14 @@ interface LogoProps {
  * renkler token'dan gelir, boyut cevresindeki yazi boyutunu izler. Beyaz
  * zeminde marka mor, servis koyu mor; mor zeminde marka sari, servis beyaz.
  */
-export function Logo({ brand, service, tone = 'brand' }: LogoProps) {
-  const className =
-    tone === 'inverse' ? `${styles['c-logo']} ${styles['c-logo--inverse']}` : styles['c-logo'];
+export function Logo({ brand, service, tone = 'brand', layout = 'inline' }: LogoProps) {
+  const className = [
+    styles['c-logo'],
+    tone === 'inverse' ? styles['c-logo--inverse'] : '',
+    layout === 'stacked' ? styles['c-logo--stacked'] : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
   return (
     <span className={className} role="img" aria-label={`${brand}${service}`}>
       <span className={styles['c-logo__brand']} aria-hidden="true">

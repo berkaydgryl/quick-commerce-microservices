@@ -10,11 +10,15 @@
  *
  * Asama TEK YONLUDUR: kaydedilmis kilometre tasi (pickedUpAt, deliveredAt)
  * asamayi geri goturmez (or. hiz ayari degisip hesap geride kalsa da).
+ *
+ * DELIVERED'da iki an da HER ZAMAN vardir ve alma <= teslim (#190; kurallar
+ * deliveredMilestones'ta). Kalan yol ve tahmin 0, konum adres.
  */
 
 import { TRACKING_ETA_STEP_BEFORE_PICKUP_SECONDS } from '@getir/contracts';
 
 import type { GeoPoint } from './courier.js';
+import { deliveredNoEarlierThan } from './route.js';
 import type { Route } from './route.js';
 import type { RouteProgress, TrackingPhase } from './route-progress.js';
 import { routeLegs, TRACKING_PHASE } from './route-progress.js';
@@ -58,6 +62,26 @@ function later(left: TrackingPhase, right: TrackingPhase): TrackingPhase {
   return PHASE_ORDER.indexOf(left) >= PHASE_ORDER.indexOf(right) ? left : right;
 }
 
+/**
+ * DELIVERED'in anlari (#190). Teslim: kayitli ?? hesap; DELIVERED tanimi geregi
+ * biri vardir (yoksa bos doner). Alma: kayitli; teslim hesaptansa hesaplanan
+ * alma; yoksa teslim (kayitli teslime hesaplanan alma karistirilmaz: yazicisi
+ * olmayan "teslim var, alma yok" kaydi). Teslim almadan once gosterilmez
+ * (savunma; #195'ten beri hesap teslimi kayitli almadan once koyamaz).
+ */
+function deliveredMilestones(
+  route: Pick<Route, 'pickedUpAt' | 'deliveredAt'>,
+  progress: RouteProgress,
+): { readonly pickedUpAt?: Date; readonly deliveredAt?: Date } {
+  const delivered = route.deliveredAt ?? progress.deliveredAt;
+  if (delivered === undefined) {
+    return {};
+  }
+  const computedPickup = route.deliveredAt === undefined ? progress.pickedUpAt : undefined;
+  const pickedUpAt = route.pickedUpAt ?? computedPickup ?? delivered;
+  return { pickedUpAt, deliveredAt: deliveredNoEarlierThan(delivered, pickedUpAt) };
+}
+
 export function trackingView(
   route: Pick<Route, 'points' | 'pickupIndex' | 'pickedUpAt' | 'deliveredAt'>,
   progress: RouteProgress,
@@ -78,7 +102,7 @@ export function trackingView(
     };
   }
   if (phase === TRACKING_PHASE.TO_CUSTOMER) {
-    // Hesap geride kalabilir (kayitli alma ani, hiz ayari degisti): o zaman
+    // Hesap geride kalabilir (saat kayitli almanin gerisinde, #195): o zaman
     // konum market ve tahmin yine yuvarli; ilk bacagin suresi sizmaz.
     const ahead = progress.phase === TRACKING_PHASE.TO_CUSTOMER;
     return {
@@ -90,14 +114,12 @@ export function trackingView(
       ...(pickedUpAt === undefined ? {} : { pickedUpAt }),
     };
   }
-  const deliveredAt = route.deliveredAt ?? progress.deliveredAt;
   return {
     ...base,
     phase,
     location: dropoff,
     remainingMeters: 0,
     etaSeconds: 0,
-    ...(pickedUpAt === undefined ? {} : { pickedUpAt }),
-    ...(deliveredAt === undefined ? {} : { deliveredAt }),
+    ...deliveredMilestones(route, progress),
   };
 }

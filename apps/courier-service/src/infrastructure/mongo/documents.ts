@@ -54,6 +54,8 @@ export interface RouteDocument extends BaseDocument {
   distanceMeters: number;
   etaSeconds: number;
   createdAt: Date;
+  // #197: uretildigi andaki hareket kurali; #197 oncesi belgede yok (o anki ayar).
+  movement?: { speedKmh: number; prepSeconds: number };
   // T13.3: alanlar T13.3 oncesi belgede yok; durumu olmayan rota ilerliyor sayilir.
   marketId?: string;
   state?: 'MOVING' | 'DONE' | 'ENDED';

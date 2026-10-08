@@ -21,6 +21,21 @@ export const DEFAULT_MONGO_DB = 'getir_risk';
  */
 export const RULE_TIMEOUT_MS = 200;
 
+/**
+ * Yapiskan bant (#164): yeni degerlendirmenin bandi, kullanicinin son bu kadar
+ * suredeki degerlendirmelerinin SKORDAN gelen en yuksek bandinin altina inmez.
+ * Pencereyi degistirmek icin TEK YER burasidir.
+ */
+export const RECENT_BAND_WINDOW_MS = 15 * 60 * 1000;
+
+/**
+ * Yakin bant okumasinin siniri. Kurallarla PARALEL kosar; asilirsa yapiskanlik
+ * o degerlendirmede uygulanmaz, WARN yazilir (fail-open; kayit yolunun sure
+ * siniriyla ayni ilke, #167). Alttaki Mongo sorgusu ayrica veritabani duzeyindeki
+ * islem siniriyla (MONGO_OPERATION_TIMEOUT_MS) sinirlidir.
+ */
+export const RECENT_BAND_READ_TIMEOUT_MS = 150;
+
 // ---------------------------------------------------------------------------
 // Cekirdek kural esikleri (T6.2). Agirliklar config/risk.rules.json'da;
 // burada yalnizca "ne zaman tetiklenir" sinirlari durur.

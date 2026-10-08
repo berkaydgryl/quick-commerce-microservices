@@ -1,9 +1,13 @@
 /**
- * Kure uzerinde mesafe (saf).
+ * Kure uzerinde mesafe ve teslimat yaricapi kurali (saf). Teslimat yaricapini
+ * denetleyen her servis BU fonksiyonlari kullanir (catalog kapsamasi ilk
+ * kullanicidir): mesafe ve esitsizlik tek yerde.
  *
- * Bellek uygulamasi (MOCK) icin: Mongo mesafeyi $geoNear ile kendisi hesaplar.
- * Iki uygulamanin ayni sonucu verdigi sozlesme testinde OLCULUR
- * (test/support/dark-store-reader-contract.ts), +-1 m.
+ * Mongo uretimde mesafeyi $geoNear ile kendisi hesaplar ve yaricapi $lte ile
+ * suzer; bu fonksiyonlar onunla ayni sonucu verir. Catalog sozlesme testi
+ * (apps/catalog-service/test/support/market-reader-contract.ts) iki modu
+ * karsilastirir: +-1 m (216 m'de olculur). Yaricap sinirinda bu fark nadiren
+ * farkli karar verebilir.
  */
 
 /** WGS84 koordinati. */
@@ -36,4 +40,13 @@ export function distanceMeters(from: GeoPoint, to: GeoPoint): number {
     Math.sin(deltaLat / 2) ** 2 +
     Math.cos(toRadians(from.lat)) * Math.cos(toRadians(to.lat)) * Math.sin(deltaLng / 2) ** 2;
   return 2 * EARTH_RADIUS_METERS * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+/**
+ * Konum marketin teslimat yaricapi DISINDA mi? Sinir DAHILDIR: mesafe == yaricap
+ * hizmet verir (disarida degil). Catalog'un ilk yazimiyla birebir (`>`): NaN
+ * mesafe ya da yaricap "disarida" SAYILMAZ; cagiran veriyi kendisi dogrular.
+ */
+export function isOutsideDeliveryRadius(distance: number, radiusMeters: number): boolean {
+  return distance > radiusMeters;
 }

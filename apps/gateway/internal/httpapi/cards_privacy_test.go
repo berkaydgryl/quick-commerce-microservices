@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -36,12 +35,10 @@ func TestIdempotencyRecordHoldsNoCardNumberOrCVVAndLivesShort(t *testing.T) {
 
 	h.send(t, cardRequest(t, http.MethodPost, cardsPath, bearer(t), "anahtar-kayit-0001", cardAddBody))
 
-	records, err := json.Marshal(h.store.saved)
-	if err != nil {
-		t.Fatalf("kayitlar: %v", err)
-	}
+	// Parmak izi maskeli govdenin (CVV'siz) anahtarli HMAC'i; jeton rastgele (#194).
+	assertRecordSecrets(t, h.store.saved, expectedFingerprint(http.MethodPost, cardsPath, cards.FingerprintBody([]byte(cardAddBody))))
 	// Saklanan cevap maskeli karttir; kart sahibinin adi cevapta zaten vardir.
-	assertNoCardSecrets(t, "tekrar kaydi", strings.ReplaceAll(string(records), "Zeynep Kılıçarslan", ""))
+	assertNoCardSecrets(t, "tekrar kaydi", strings.ReplaceAll(searchableRecords(t, h.store.saved), "Zeynep Kılıçarslan", ""))
 	if len(h.store.ttls) == 0 {
 		t.Fatal("kayit yazilmadi")
 	}

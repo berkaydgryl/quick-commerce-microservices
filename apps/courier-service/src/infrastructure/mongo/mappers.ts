@@ -1,5 +1,7 @@
 /** Kurye ve market <-> belge cevirisi. Yok olan istege bagli alan iki yonde de HIC yazilmaz. */
 
+import { z } from 'zod';
+
 import type { Courier, GeoPoint } from '../../domain/courier.js';
 import type { MarketLocation } from '../../domain/market-locator.js';
 import type { Route } from '../../domain/route.js';
@@ -53,9 +55,29 @@ export function toRouteDocument(route: Route): RouteDocument {
     distanceMeters: route.distanceMeters,
     etaSeconds: route.etaSeconds,
     createdAt: route.createdAt,
+    ...(route.movement === undefined
+      ? {}
+      : {
+          movement: { speedKmh: route.movement.speedKmh, prepSeconds: route.movement.prepSeconds },
+        }),
     ...routeProgressFields(route),
   };
 }
+
+/**
+ * Belgedeki #197 hareket kurali; yoksa ya da gecersizse (null, eksik alan, hiz
+ * 0 ya da negatif, sayi olmayan) YOK sayilir: rota o anki ayarla ilerler. Bozuk
+ * tek belge hesabi (sonsuz/NaN) ya da tick partisini dusurmez.
+ */
+function storedMovement(value: unknown): Pick<Route, 'movement'> {
+  const parsed = storedMovementSchema.safeParse(value);
+  return parsed.success ? { movement: parsed.data } : {};
+}
+
+const storedMovementSchema = z.object({
+  speedKmh: z.number().finite().positive(),
+  prepSeconds: z.number().finite().min(0),
+});
 
 /** T13.3 alanlari: tanimsiz olan belgeye YAZILMAZ (Mongo'da null olmasin); tick yamasi da bundan. */
 export function routeProgressFields(source: RouteProgressFields): RouteProgressFields {
@@ -92,6 +114,7 @@ export function fromRouteDocument(document: RouteDocument): Route {
     distanceMeters: document.distanceMeters,
     etaSeconds: document.etaSeconds,
     createdAt: document.createdAt,
+    ...storedMovement(document.movement),
     ...routeProgressFields(document),
   };
 }

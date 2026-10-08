@@ -16,9 +16,27 @@ skor önerir.
 | `CreateDraftOrder` | ✅ Fiyatı catalog'dan okur, sunucuda hesaplar, `expected_total` ile karşılaştırır; tutarı taslakta dondurur (T7.2); stoku kilitler (T11.2)             |
 | `CreateOrder`      | ✅ Saga (T7.1): risk-svc → bant kararı → payment-svc çekimi → stok kesinleşir (T11.2); `PAID`, `PAYMENT_FAILED`, 3DS ya da `REVIEW`/`REJECTED`         |
 | `ConfirmPayment`   | ✅ 3DS kodu (T7.1): doğruysa stok kesinleşir ve `PAID`; hak biter / süre dolarsa `PAYMENT_FAILED`, kilit bırakılır                                     |
-| `GetOrder`         | ✅ Tek sipariş, zaman çizelgesi dahil; başkasının siparişi `NOT_FOUND`                                                                                 |
+| `GetOrder`         | ✅ Tek sipariş, zaman çizelgesi dahil; başkasının siparişi `NOT_FOUND`; `AWAITING_PAYMENT`'ta bekleyen 3DS durumu `three_ds` (#163 B1, aşağıda)        |
 | `ListMyOrders`     | ✅ Yeniden eskiye, imleçle sayfalı; yalnızca geçmişte görünen siparişler (#101, aşağıda "Geçmiş kapsamı"); sipariş yoksa boş liste                     |
 | `CancelOrder`      | ✅ Kullanıcı iptali: yalnızca `DRAFT`, `RESERVED`, `AWAITING_PAYMENT` (B29); Idempotency-Key zorunlu (D4); kilit bırakılır; parası alınmışsa iptal yok |
+
+**Kapalı market (#154):** `CreateDraftOrder` catalog'dan marketin açık olup olmadığını ve
+kurallarını okur (`GetMarket`, `Market.is_open`; tek çağrı; kapalı marketin kuralları okunmaz).
+Kapalı market taslak açmaz: `NO_STORE` (gRPC `NOT_FOUND`, HTTP 404), ayrıntı yalnızca
+`{ reason: "STORE_CLOSED" }` (market kimliği ya da adı yankılanmaz). Kod ve sebep catalog.proto'daki
+kararla aynı; taşıma `x-app-error` ayrıntısı, mesafe anahtarı yok. Denetim yalnız market okumasını
+bekler: teklif ve geçmiş okumasının hatasından, `PRICE_CHANGED` ve `MIN_BASKET_NOT_MET`'ten ve stok
+kilidinden ÖNCE gelir; stoğa dokunulmaz, kullanıcının başka marketteki kilidi etkilenmez. **KABUL:**
+`CreateOrder` marketi yeniden okumaz; kilit süresi içinde kapanan markette sipariş kabul edilir (stok
+zaten ayrılmış).
+
+**Teslimat yarıçapı (#203):** açık marketin konumu ve yarıçapı aynı `GetMarket` çağrısından gelir;
+teslimat adresi (istekteki zorunlu `delivery_location`) yarıçap dışındaysa taslak açılmaz: `NO_STORE`,
+ayrıntı yalnızca `{ reason: "OUT_OF_RANGE" }` (mesafe ve konum yankılanmaz). Sıra: kapalı market →
+yarıçap → fiyat → stok kilidi. Kural catalog kapsamasıyla ORTAK: `@getir/core` `distanceMeters`
+(haversine, Mongo uyumlu 6378,1 km) ve `isWithinDeliveryRadius` (sınır dahil). Konumsuz açık market
+catalog veri hatasıdır: `INTERNAL`. **KABUL:** catalog listesi Mongo `$geoNear`'dan gelir; haversine ile
+fark ±1 m'dir, yarıçap sınırında listede görünen market rezervasyonda nadiren `OUT_OF_RANGE` verebilir.
 
 RPC'lerin yanında iki işçi çalışır: kilidi dolan siparişleri kapatan süpürücü (T11.2 PR 2) ve
 ödenen siparişe courier-svc'den kurye isteyen kurye işçisi (T13.1 PR 2; sırası T13.2 PR 2'de ödeme
@@ -322,7 +340,8 @@ Yalnızca idempotent çağrılar yeniden denenir (en fazla 2 kez, ~100/200 ms ar
 sınırı içinde):
 
 - catalog `GetMarket` ve `BatchGetOffers`;
-- payment `Charge` (anahtarlı), `Refund` ve `GetPayment`;
+- payment `Charge` (anahtarlı), `Refund` ve `GetPayment` (GetOrder'ın 3DS okuması hariç: o ne
+  denenir ne de devreye sayılır, aşağıda "3DS sürdürme");
 - inventory `Reserve`, `Commit` ve `Release`.
 
 Denenmeyenler:
@@ -331,6 +350,18 @@ Denenmeyenler:
 - payment `Confirm3Ds`: tekrar, 3DS hakkını boşa yakabilir.
 
 Süre bütçesi değişmedi: denemeler çağrının kendi sınırını paylaşır.
+
+**3DS sürdürme (`GetOrder`, #163 B1):** sipariş `AWAITING_PAYMENT` ise payment `GetPayment` okunur
+ve `three_ds` olduğu gibi döner; açık/kapalı kararı ve kalan süre gateway'dedir (tek saat). Bu okuma
+en iyi çabadır ve kritik ödeme yolundan AYRIDIR: kendi kısa sınırı (`THREE_DS_READ_TIMEOUT_MS`, 1 sn),
+yeniden deneme yok, payment devresine hata saymaz (web'in sipariş yoklaması payment yavaşken
+`Charge`/`Confirm3Ds`'in devresini açmaz). Sahiplik ÖNCE denetlenir: başkasının siparişi `NOT_FOUND`,
+payment'a gidilmez. Başka durumda payment çağrılmaz. Kaydın sahibi siparişinki değilse, payment
+ulaşılamazsa, süre dolarsa ya da sözleşmeyi bozarsa (kayıtsız cevap, bitişsiz doğrulama) alan gelmez ve
+`WARN` yazılır; sipariş okuması düşmez (`application/pending-three-ds.ts`). Günlük yalnızca `orderId`
+ve hata kodunu taşır: `challenge_id` yetenek jetonudur; hiçbir satıra, hata ayrıntısına, sipariş
+belgesine ve outbox'a girmez, `getPayment` anlık görüntüsü (süpürücü, iptal) onu tutmaz. En kötü
+süre: Mongo okuması (2 sn) + 3DS okuması (1 sn) = 3 sn, gateway'in 5 sn'sinin altında.
 
 ## Stok kilidi (T11.2)
 

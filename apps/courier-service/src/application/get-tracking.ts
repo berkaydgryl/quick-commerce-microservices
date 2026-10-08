@@ -22,10 +22,10 @@ import type { Courier } from '../domain/courier.js';
 import type { CourierRepository } from '../domain/courier-repository.js';
 import {
   belongsToAssignment,
+  deliveredMeanwhile,
   isDelivered,
   ROUTE_STATE,
   routeState,
-  sameRoute,
 } from '../domain/route.js';
 import type { Route } from '../domain/route.js';
 import type { MovementRule } from '../domain/route-progress.js';
@@ -97,10 +97,5 @@ async function trackedRoute(
     return belongsToAssignment(first, courier) ? first : null;
   }
   const again = await reread();
-  return again !== null &&
-    sameRoute(again, first) &&
-    routeState(again) !== ROUTE_STATE.ENDED &&
-    isDelivered(again)
-    ? again
-    : null;
+  return deliveredMeanwhile(first, again) ? again : null;
 }

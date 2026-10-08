@@ -2,12 +2,15 @@ import type { Order, OrdersContent } from '@getir/contracts';
 import { useId } from 'react';
 import { Link } from 'react-router-dom';
 
-import { statusGroup, wasRefunded } from '../../features/orders/services/order-status';
+import { wasRefunded } from '../../features/orders/services/order-status';
 import { paymentLabel } from '../../features/orders/services/payment-label';
+import { OrderCard } from '../../features/orders/ui/OrderCard';
+import { OrderLines } from '../../features/orders/ui/OrderLines';
 import { OrderStatusLabel } from '../../features/orders/ui/OrderStatusLabel';
+import { OrderTotals } from '../../features/orders/ui/OrderTotals';
 import { OrderTrack } from '../../features/orders/ui/OrderTrack';
 import { ChevronLeftIcon } from '../../features/profile/ui/icons';
-import { formatDateTime, formatMoney } from '../../shared/services/format';
+import { formatDateTime } from '../../shared/services/format';
 import { QueryError, QueryLoading } from '../../shared/ui/query-status/QueryStatus';
 
 import styles from './OrderDetailView.module.css';
@@ -22,6 +25,12 @@ export interface OrderDetailViewProps {
   readonly onRetry: () => void;
   /** Gecmis Siparislerim listesine donus. */
   readonly listHref: string;
+  /** "Kuryem nerede" penceresini acar (F22); yalniz "Kurye yolda"da basilir. */
+  readonly onWhereIsCourier?: () => void;
+  /** "Kuryem nerede" dugmesinin kimligi (pencere kapaninca odak). */
+  readonly courierButtonId?: string;
+  /** Takip kartinin basliginin kimligi (dugme yoksa odagin yedegi). */
+  readonly trackHeadingId?: string;
 }
 
 /**
@@ -39,6 +48,9 @@ export function OrderDetailView({
   error,
   onRetry,
   listHref,
+  onWhereIsCourier,
+  courierButtonId,
+  trackHeadingId,
 }: OrderDetailViewProps) {
   const titleId = useId();
   const itemsId = useId();
@@ -66,7 +78,7 @@ export function OrderDetailView({
             </h1>
             <OrderStatusLabel texts={texts} status={order.status} refunded={wasRefunded(order)} />
           </header>
-          <dl className={styles['c-order-detail__card']}>
+          <OrderCard as="dl">
             <div className={styles['c-order-detail__fact']}>
               <dt>{texts.dateLabel}</dt>
               <dd>
@@ -83,76 +95,18 @@ export function OrderDetailView({
                 <dd>{payment}</dd>
               </div>
             )}
-          </dl>
+          </OrderCard>
           <OrderLines texts={texts} order={order} headingId={itemsId} />
           <OrderTotals texts={texts} order={order} />
-          <OrderTrack status={order.status} texts={texts} />
+          <OrderTrack
+            status={order.status}
+            texts={texts}
+            {...(onWhereIsCourier === undefined ? {} : { onWhereIsCourier })}
+            {...(courierButtonId === undefined ? {} : { courierButtonId })}
+            {...(trackHeadingId === undefined ? {} : { headingId: trackHeadingId })}
+          />
         </>
       )}
     </section>
-  );
-}
-
-function OrderLines({
-  texts,
-  order,
-  headingId,
-}: {
-  readonly texts: OrdersContent;
-  readonly order: Order;
-  readonly headingId: string;
-}) {
-  const undelivered = statusGroup(order.status) === 'cancelled';
-  return (
-    <section className={styles['c-order-detail__card']} aria-labelledby={headingId}>
-      <h2 id={headingId} className={styles['c-order-detail__subtitle']}>
-        {texts.itemsTitle}
-      </h2>
-      <ul className={styles['c-order-detail__lines']} role="list">
-        {order.lines.map((line) => (
-          <li key={line.productId} className={styles['c-order-detail__line']}>
-            <span className={styles['c-order-detail__quantity']}>{line.quantity}×</span>
-            <span className={styles['c-order-detail__name']}>
-              {line.name}
-              {undelivered && (
-                <span className={styles['c-order-detail__undelivered']}>
-                  {texts.notDeliveredLabel}
-                </span>
-              )}
-            </span>
-            <span className={styles['c-order-detail__amount']}>{formatMoney(line.lineTotal)}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function OrderTotals({ texts, order }: { readonly texts: OrdersContent; readonly order: Order }) {
-  return (
-    <dl className={styles['c-order-detail__card']}>
-      <div className={styles['c-order-detail__sum']}>
-        <dt>{texts.subtotalLabel}</dt>
-        <dd>{formatMoney(order.subtotal)}</dd>
-      </div>
-      <div className={styles['c-order-detail__sum']}>
-        <dt>{texts.deliveryFeeLabel}</dt>
-        <dd>
-          {order.deliveryFee.amountMinor === 0
-            ? texts.freeDeliveryLabel
-            : formatMoney(order.deliveryFee)}
-        </dd>
-      </div>
-      {order.discount.amountMinor > 0 && (
-        <div className={styles['c-order-detail__sum']}>
-          <dt>{texts.discountLabel}</dt>
-          <dd>−{formatMoney(order.discount)}</dd>
-        </div>
-      )}
-      <div className={`${styles['c-order-detail__sum']} ${styles['c-order-detail__sum--total']}`}>
-        <dt>{texts.totalLabel}</dt>
-        <dd>{formatMoney(order.total)}</dd>
-      </div>
-    </dl>
   );
 }

@@ -12,6 +12,8 @@ import {
   RISK_BANDS,
   silentLogger,
 } from '@getir/core';
+import { recordingLogger } from '@getir/core/testing';
+import type { LogLine } from '@getir/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { createConfirmPayment } from '../../src/application/confirm-payment.js';
@@ -172,6 +174,65 @@ describe('ConfirmPayment', () => {
     await expect(confirm({ ...input(id), userId: 'usr_2' }, scope)).rejects.toMatchObject({
       code: ERROR_CODES.NOT_FOUND,
     });
+  });
+
+  it('dogrulama kapandi, siparis ayni anda iptal edildi: payment-svc nin hatasi EZILMEZ (#213)', async () => {
+    const awaiting = await awaiting3Ds();
+    payments.confirmOutcome = threeDsFailed(0, 'attempts_exhausted');
+    const original = payments.confirmThreeDs.bind(payments);
+    payments.confirmThreeDs = async (request) => {
+      await repository.update(
+        transitionOrder(awaiting, ORDER_STATUS.CANCELLED, clock, 'USER_CANCELLED'),
+        awaiting.version,
+        [],
+      );
+      return original(request);
+    };
+    const lines: LogLine[] = [];
+    const recorded = { requestId: 'req_3ds_2', logger: recordingLogger(lines) };
+
+    // Gateway son yanlis kodu bu hatadan sayar (#163); CONFLICT olsaydi saymazdi.
+    await expect(confirm(input(awaiting.id, '000000'), recorded)).rejects.toMatchObject({
+      code: ERROR_CODES.THREEDS_FAILED,
+      details: { attemptsLeft: 0, reason: 'attempts_exhausted' },
+    });
+    expect((await repository.findById(awaiting.id))?.status).toBe(ORDER_STATUS.CANCELLED);
+    const warning = lines.find((line) => line.level === 'warn');
+    expect(warning?.fields).toMatchObject({
+      orderId: awaiting.id,
+      err: { code: ERROR_CODES.CONFLICT },
+    });
+    // Dogrulama jetonu yetkidir, kod gizlidir: gunluge girmez.
+    expect(JSON.stringify(lines)).not.toContain(FAKE_CHALLENGE_ID);
+    expect(JSON.stringify(lines)).not.toContain('000000');
+  });
+
+  it('dogrulama kapandi, PAYMENT_FAILED yazilamadi: hata korunur, sonraki onay yazimi yeniden dener', async () => {
+    const { id, marketId } = await awaiting3Ds();
+    payments.confirmOutcome = threeDsFailed(0, 'attempts_exhausted');
+    const update = repository.update.bind(repository);
+    let outages = 1;
+    repository.update = async (order, expectedVersion, events) => {
+      if (order.status === ORDER_STATUS.PAYMENT_FAILED && outages > 0) {
+        outages -= 1;
+        throw new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'veritabanina ulasilamadi');
+      }
+      return update(order, expectedVersion, events);
+    };
+
+    await expect(confirm(input(id, '000000'), scope)).rejects.toMatchObject({
+      code: ERROR_CODES.THREEDS_FAILED,
+      details: { attemptsLeft: 0, reason: 'attempts_exhausted' },
+    });
+    expect((await repository.findById(id))?.status).toBe(ORDER_STATUS.AWAITING_PAYMENT);
+    expect(stock.releases).toEqual([]);
+
+    // payment-svc dogrulamayi kapali tutar: ikinci deneme siparisi kapatir.
+    await expect(confirm(input(id, '000000'), scope)).rejects.toMatchObject({
+      code: ERROR_CODES.THREEDS_FAILED,
+    });
+    expect((await repository.findById(id))?.status).toBe(ORDER_STATUS.PAYMENT_FAILED);
+    expect(stock.releases).toEqual([{ orderId: id, marketId, reason: 'payment_failed' }]);
   });
 
   it('onay basarili ama siparis ayni anda iptal edildi: tutar iade edilir, CONFLICT', async () => {

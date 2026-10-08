@@ -12,6 +12,12 @@
  *   alma ani   = max(1. bacak / hiz, hazirlik suresi)
  *   varis ani  = alma ani + 2. bacak / hiz
  *
+ * KAYITLI ALMA (#195): tick alma anini kaydettiyse alma ani O andir ve ikinci
+ * bacak ondan baslar (varis = kayitli alma + 2. bacak / hiz). Hiz ayari yol
+ * ortasinda degisse de ikinci bacak sifir saniye surmez, kayitli almadan sonra
+ * asama TO_MARKET'a donmez. Saat kayitli almanin gerisindeyse hesap TO_MARKET
+ * der; gosterim asamayi kayittan alir (tracking-view.ts).
+ *
  * Ilerleme NOKTA BASINA degil MESAFEYLE olculur (QA B3): rota noktalari iki
  * bacakta farkli araliklidir; kurye her saniye hiz kadar yol alir ve bulundugu
  * parcada dogrusal ara degerle konumlanir (100 m olcekte yeterli).
@@ -19,7 +25,7 @@
 
 import type { GeoPoint } from './courier.js';
 import { distanceMeters } from './geo.js';
-import type { Route } from './route.js';
+import type { Route, RouteMovement } from './route.js';
 
 /** Takibin asamasi (proto TrackingPhase, contracts trackingPhaseSchema). */
 export const TRACKING_PHASE = {
@@ -30,11 +36,15 @@ export const TRACKING_PHASE = {
 
 export type TrackingPhase = (typeof TRACKING_PHASE)[keyof typeof TRACKING_PHASE];
 
-/** Hareket kurali (config: COURIER_SPEED_KMH, ORDER_PREP_SECONDS). */
-export interface MovementRule {
-  readonly speedKmh: number;
-  /** Siparisin markette hazirlanma suresi, saniye: kurye erken varirsa bekler. */
-  readonly prepSeconds: number;
+/** Hareket kurali (config: COURIER_SPEED_KMH, ORDER_PREP_SECONDS); rotaya da yazilir (#197). */
+export type MovementRule = RouteMovement;
+
+/**
+ * Rotanin ilerledigi kural: rotanin kendi kaydi (#197; uretildigi andaki ayar),
+ * yoksa (#197 oncesi rota) verilen o anki ayar.
+ */
+export function movementOf(route: Pick<Route, 'movement'>, current: MovementRule): MovementRule {
+  return route.movement ?? current;
 }
 
 /** Rotanin zaman cizelgesi: saniye, rotanin uretildigi andan itibaren. */
@@ -43,6 +53,8 @@ export interface RouteSchedule {
   readonly legOneMeters: number;
   /** Market -> adres yolu, metre. */
   readonly legTwoMeters: number;
+  /** Market -> adres yolunun suresi, saniye (2. bacak / hiz). */
+  readonly legTwoSeconds: number;
   /** Paketin alindigi an. */
   readonly pickupSeconds: number;
   /** Teslimat ani. */
@@ -105,6 +117,39 @@ export function pointAlong(points: readonly GeoPoint[], meters: number): GeoPoin
   return points[points.length - 1] ?? first;
 }
 
+/**
+ * Kuryenin YAZILACAK konumu (canli konum, iptalde birakma; #174, #197): paket
+ * alinmisken (kayitli) saat kaydin gerisindeyse hesap TO_MARKET der; o zaman
+ * birinci bacak konumu (onceki musterinin sokagi olabilir) degil market noktasi.
+ */
+export function courierLocation(
+  route: Pick<Route, 'points' | 'pickupIndex' | 'pickedUpAt'>,
+  progress: Pick<RouteProgress, 'phase' | 'position'>,
+): GeoPoint {
+  if (route.pickedUpAt !== undefined && progress.phase === TRACKING_PHASE.TO_MARKET) {
+    return routeLegs(route).legTwo[0] ?? progress.position;
+  }
+  return progress.position;
+}
+
+/**
+ * Kuryenin `at`'teki yazilacak konumu: rotanin kuraliyla (#197) hesaplanan
+ * konum, market kuraliyla (courierLocation). Iptalde birakma ve uzlastirma
+ * (#174, #205) ayni yerden alir.
+ */
+export function positionAt(
+  route: Pick<Route, 'points' | 'pickupIndex' | 'createdAt' | 'pickedUpAt' | 'movement'>,
+  at: Date,
+  current: MovementRule,
+): GeoPoint {
+  return courierLocation(route, routeProgress(route, at, current));
+}
+
+/** Rotanin teslimat noktasi (son nokta); teslimatta kurye burada bosa cikar. */
+export function dropoffOf(route: Pick<Route, 'points'>): GeoPoint | undefined {
+  return route.points[route.points.length - 1];
+}
+
 /** Rotanin iki bacagi: market noktasi ikisinde de var. */
 export function routeLegs(route: Pick<Route, 'points' | 'pickupIndex'>): {
   readonly legOne: readonly GeoPoint[];
@@ -125,34 +170,55 @@ export function routeSchedule(
   const legOneMeters = polylineMeters(legOne);
   const legTwoMeters = polylineMeters(legTwo);
   const pickupSeconds = Math.max(legOneMeters / speed, rule.prepSeconds);
+  const legTwoSeconds = legTwoMeters / speed;
   return {
     legOneMeters,
     legTwoMeters,
+    legTwoSeconds,
     pickupSeconds,
-    arrivalSeconds: pickupSeconds + legTwoMeters / speed,
+    arrivalSeconds: pickupSeconds + legTwoSeconds,
   };
+}
+
+/**
+ * Alma ve varis anlari, rotanin uretildigi andan milisaniye. Kayitli alma
+ * yoksa cizelgeden; varsa alma TAM kayittan (uretilmeden once bile olsa:
+ * negatif), varis ondan 2. bacak suresi sonra.
+ */
+export function milestonesMs(
+  route: Pick<Route, 'createdAt' | 'pickedUpAt'>,
+  schedule: RouteSchedule,
+): { readonly pickupMs: number; readonly arrivalMs: number } {
+  if (route.pickedUpAt === undefined) {
+    const pickupMs = Math.round(schedule.pickupSeconds * MILLISECONDS_PER_SECOND);
+    return {
+      pickupMs,
+      arrivalMs: Math.max(pickupMs, Math.round(schedule.arrivalSeconds * MILLISECONDS_PER_SECOND)),
+    };
+  }
+  const pickupMs = route.pickedUpAt.getTime() - route.createdAt.getTime();
+  const legTwoMs = Math.round(schedule.legTwoSeconds * MILLISECONDS_PER_SECOND);
+  return { pickupMs, arrivalMs: pickupMs + legTwoMs };
 }
 
 /**
  * `at` anindaki ilerleme. Rotanin uretildigi andan oncesi baslangic sayilir.
  * Sinirlar MILISANIYEDE: alma ve varis anlari milisaniyeye yuvarlanir ve o
  * andan itibaren yeni asama baslar (dondurulen pickedUpAt ile asama tutarli).
+ * Kayitli alma varsa ikinci bacak ondan baslar (#195, milestonesMs).
  */
 export function routeProgress(
-  route: Pick<Route, 'points' | 'pickupIndex' | 'createdAt'>,
+  route: Pick<Route, 'points' | 'pickupIndex' | 'createdAt' | 'pickedUpAt' | 'movement'>,
   at: Date,
-  rule: MovementRule,
+  current: MovementRule,
 ): RouteProgress {
+  const rule = movementOf(route, current);
   const speed = rule.speedKmh * METERS_PER_SECOND_PER_KMH;
   const schedule = routeSchedule(route, rule);
   const { legOne, legTwo } = routeLegs(route);
   const start = route.createdAt.getTime();
   const elapsedMs = Math.max(0, at.getTime() - start);
-  const pickupMs = Math.round(schedule.pickupSeconds * MILLISECONDS_PER_SECOND);
-  const arrivalMs = Math.max(
-    pickupMs,
-    Math.round(schedule.arrivalSeconds * MILLISECONDS_PER_SECOND),
-  );
+  const { pickupMs, arrivalMs } = milestonesMs(route, schedule);
   const etaSeconds = Math.ceil(Math.max(0, arrivalMs - elapsedMs) / MILLISECONDS_PER_SECOND);
 
   if (elapsedMs < pickupMs) {

@@ -3,6 +3,10 @@
  * her deger buradaki bir degiskenden gelir. Adlar RENGI degil ISLEVI anlatir:
  * marka rengi degisirse ad yalan soylemez, tema (dark mode) degisimi de
  * yalnizca bu dosyada yeni bir blokla yapilir.
+ *
+ * Duzen ve bilesen olculeri (kapsayici, kirilim genislikleri, --size-*) ayri
+ * dosyada: layout/tokens.css (300 satir kurali; F22). Yukleme sirasi
+ * main.tsx'te: bu dosya -> layout/tokens.css -> payment-card/tokens.css.
  */
 
 :root {
@@ -47,6 +51,9 @@
      onay, T11.14). Beyaz zeminde 5:1 karsitlik. */
   --text-success: var(--palette-green-700);
   --border-subtle: var(--palette-gray-300);
+
+  /* Yukleniyor dairesinin ince siyah cercevesi (F18). */
+  --border-strong: var(--palette-gray-900);
 
   /* Kart icindeki satir ayiricisi (profil karti ve hesap menusu, T11.14 PR 2;
      referans getircarsi): marka morunun en acik tonu, zeminden zor ayrilir. */
@@ -94,162 +101,6 @@
   /* Sayfa kenar boslugu ekranla buyur. */
   --space-gutter: clamp(1rem, 0.6rem + 2vw, 2rem);
 
-  /* --- Duzen: mobilde kapsayici ekrani doldurur (en fazla 30rem = 480px);
-     48rem ve 64rem kirilimlarinda ortalanip 45rem ve 64rem'e genisler. --- */
-  --container-max-sm: 30rem;
-  --container-max-md: 45rem;
-  --container-max-lg: 64rem;
-
-  /* Genis kapsayici (karsilama ekrani, 90rem ve ustu; T11.6): giris karti ust
-     barin sag kenariyla hizali kalir ve afisin yazisindan uzak durur. T11.12'den
-     beri oturumlu sayfalar da (PageLayout) bunu kullanir: iki bar ayni hizada. */
-  --container-max-xl: 80rem;
-
-  /* Kategori kutucugu: ikon kutusunun kenari. */
-  --size-category-icon: clamp(3.5rem, 3rem + 2vw, 4.5rem);
-
-  /* Sepet dugmeleri ("Ekle", +, -) ve adet kutusunun en az genisligi. */
-  --size-cart-button-min: 2rem;
-  --size-cart-quantity-min: 1.5rem;
-
-  /* Sepet paneli (T16.3; referans getircarsi): sari cercevenin kalinligi, adet
-     kutusunun (-, adet, +) kare dugmeleri ve magaza ikonu. */
-  --border-width-cart-panel: 0.125rem;
-  --size-cart-stepper: 2rem;
-  --size-cart-store-icon: 1.5rem;
-
-  /* Satirdaki adin en az genisligi: panel bundan darsa dugmeler adin altina iner. */
-  --size-cart-item-text: 6.5rem;
-
-  /* Yuklenirken gorunen iskelet satiri: bir metin satiri yuksekliginde (em). */
-  --size-skeleton-line: 1em;
-
-  /* Kimlik formu (T8.5): alan kutusunun en az yuksekligi, alan ikonlari ve
-     telefon onekinin ("+90") kutusu; basliktaki hesap ikonu. */
-  --size-field-min-height: 3.5rem;
-  --size-field-icon: 1.25rem;
-  --size-field-prefix: 4rem;
-  --size-header-icon: 1.5rem;
-
-  /* Metin icindeki baglanti ikonu ("Kayit ol →"): yazi boyutunu izler (em). */
-  --size-link-icon: 1em;
-
-  /* Kimlik karti genis ekranda da tek sutun form genisliginde kalir. */
-  --container-max-auth: 26rem;
-
-  /* Giris ve kayit penceresi (T11.6): en fazla genislik ve kapat (X) dugmesi. */
-  --container-max-dialog: 30rem;
-  --size-dialog-close: 2.5rem;
-
-  /* Karsilama ekrani (T11.6): ulke secicisindeki bayrak (3:2) ve cok genis
-     ekranda banner'in en fazla yuksekligi (gorsel ustten ve alttan kirpilir,
-     afis ortada kalir). */
-  --size-country-flag: 1.5rem;
-  --size-welcome-hero-max: 36rem;
-
-  /* Tanitim bolumleri (T11.7): magaza rozetinin yuksekligi (rozet 160x48),
-     telefon gorselinin en fazla genisligi (dogal boyutu 634 px; buyutulse
-     bulaniklasirdi) ve tanitim kutusu gorseli. */
-  --size-store-badge: 3rem;
-  --size-landing-phones: 39.625rem;
-  --size-feature-image: clamp(7.5rem, 6rem + 4vw, 9.5rem);
-
-  /* Uygulamanin ust bari (T11.10): ortadaki arama kutusunun en fazla genisligi
-     (referans getircarsi: logo ile Profil arasinda, ortada), kutunun icindeki
-     adres adinin en fazla genisligi, Profil menusunun en az genisligi ve
-     menu maddesinin en az yuksekligi (T11.16: en az 44 px dokunma alani). */
-  --container-max-header-search: 40rem;
-  --size-header-search: 2.75rem;
-  --size-header-address-title: 8rem;
-  --size-header-menu-min: 12rem;
-  --size-header-menu-item: 2.75rem;
-
-  /* Ortak pencere kabugu (T11.8 adres ekleme; T11.17'de shared/ui/dialog):
-     harita icin giris penceresinden genis; 1. adimin haritasi ekran
-     yuksekligiyle olceklenir, 2. adimda kucuk onizleme. Pin haritanin
-     ortasindadir (harita altinda kayar). */
-  --container-max-modal: 36rem;
-  --size-address-map: clamp(15rem, 45dvh, 24rem);
-  --size-address-map-preview: 7.5rem;
-  --size-map-pin: 2.75rem;
-  --size-map-pin-icon: 1.25rem;
-
-  /* Market listesi (T11.12; referans getircarsi): sol menunun kucuk gorseli
-     ve oku, kart kapaginin orani, kapaktaki rozet ya da 2:1 logo (sol ortada,
-     soldan yuzde; 07.10), puan yildizi, Sepetim'in bos durum ikonu ve telefondaki
-     sepet cubugu. Sutunlar oranla (1:2:1) bolunur; sabit sutun genisligi yok. */
-  --size-store-menu-image: 2.5rem;
-  --size-store-menu-chevron: 1.25rem;
-  --ratio-market-cover: 16 / 9;
-  --size-market-badge: 2.75rem;
-  --inset-market-badge: 4%;
-  --size-market-logo: 40%;
-  --size-market-logo-narrow: 30%;
-  --ratio-market-logo: 2 / 1;
-  --size-rating-icon: 1em;
-  --size-cart-empty-icon: 2.5rem;
-  --size-cart-bar: 3.5rem;
-
-  /* Magaza sayfasi (T16.2; referans getircarsi): genis kapagin orani ve
-     uzerindeki bas harf rozeti, puanin yildizlari, kategori listesinin
-     gorseli, urun kartinin gorseli ve izgarada kartin en az genisligi. */
-  --ratio-market-hero: 8 / 3;
-  --size-market-hero-badge: 4rem;
-  --size-market-hero-logo: 22%;
-  --size-rating-star: 1rem;
-  --size-category-nav-icon: 2.25rem;
-  --size-product-visual: 6rem;
-  --size-product-card-min: 8.5rem;
-
-  /* Sepet sayfasi (T16.3): satirin gorseli. */
-  --size-cart-row-visual: 4rem;
-
-  /* Siparis takip cizgisi (F21): adim yuvarlagi. */
-  --size-track-dot: 1.5rem;
-
-  /* Form parcalari (T17.1; odeme sayfasi): en az dokunma yuksekligi (44 px),
-     onay kutusu, anahtarin rayi ve topu, cok satirli alanin en az yuksekligi. */
-  --size-touch-min: 2.75rem;
-  --size-checkbox: 1.25rem;
-  --size-switch-track: 2.75rem;
-  --size-switch-thumb: 1.5rem;
-  --size-text-area-min: 5.5rem;
-
-  /* Favori kalbi (T11.13): kapagin sag ust kosesindeki dugme ve ikonu. */
-  --size-favorite-button: 2.25rem;
-  --size-favorite-icon: 1.25rem;
-
-  /* Profil karti (T11.14; referans getircarsi): satir ikonu (e-posta,
-     telefon), dogrulama onayi ve kartin ust kenarina tasan kalem dugmesi. */
-  --size-profile-row-icon: 1rem;
-  --size-profile-verified-icon: 1.375rem;
-  --size-profile-edit: 2.25rem;
-
-  /* Hesap sayfalari (T11.14 PR 2; referans getircarsi profil sayfasi): solda
-     menu sutunu, sagda BUTUN sekmelerin ortak icerik kabi (Profil, Favori
-     Isletmeler, Adreslerim, Gecmis Siparislerim, Odeme Yontemlerim). Sekme
-     kendi genisligini vermez; kap sola yaslidir, sagi bos kalir. */
-  --size-account-side: 18.5rem;
-  --size-account-content: 38rem;
-
-  /* Adreslerim (T11.15): satir eylemleri (kalem, cop kutusu, ekleme) en az
-     44 px dokunma alani; ikonlari, satirin tur ikonu ve secili onayi. */
-  --size-address-action: 2.75rem;
-  --size-address-action-icon: 1.25rem;
-  --size-address-row-icon: 1.5rem;
-
-  /* Gecmis Siparislerim (T11.16): satir ve "Daha fazla göster" en az 44 px
-     dokunma alani; satirin sagindaki ok. */
-  --size-order-row: 2.75rem;
-  --size-order-arrow: 1.25rem;
-
-  /* Bildirim (toast, T11.13): en genis hali ve kapatma dugmesi. */
-  --container-max-toast: 24rem;
-  --size-toast-dismiss: 1.75rem;
-
-  /* Ekranda gorunmeyen, ekran okuyucunun okudugu metin (kartin puan adi). */
-  --size-visually-hidden: 0.0625rem;
-
   /* --- Kenar, yaricap, golge --- */
   --border-width-thin: 0.0625rem;
   --focus-ring-width: 0.1875rem;
@@ -274,9 +125,20 @@
   --opacity-disabled: 0.6;
 
   /* --- Hareket --- */
+
+  /* Yukleniyor yazisi (F18): dongunun suresi ve harflerin yazilma suresi.
+     Yazma dongunun %20'si (EN FAZLA %30: kelime %70'te birden silinir); kelime
+     ~0,5 sn'de tamamlanir, gostergenin en az 600 ms'si icinde tam gorunur. */
+  --duration-loader-cycle: 2.4s;
+  --duration-loader-typing: calc(var(--duration-loader-cycle) * 0.2);
+
+  /* Genel sureler ve egri. */
   --duration-fast: 150ms;
   --duration-pulse: 1.6s;
   --easing-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Tek seferlik gorunme (F17 onay isareti): daire buyur, isaret cizilir. */
+  --duration-reveal: 480ms;
 
   /* --- Katman sirasi --- */
   --z-header: 10;
@@ -287,6 +149,9 @@
 
   /* Bildirim alani (T11.13): sabit ust bar ve sepet cubugunun da ustunde. */
   --z-toast: 20;
+
+  /* Yukleniyor gostergesi (F18): bar, sepet cubugu ve bildirimin de ustunde. */
+  --z-app-loader: 30;
 
   /* Sayfanin ustune acilan liste (karsilama kartinin demo hesaplari, T11.6):
      alttaki icerigin ustunde, sabit ust barin (--z-header) ALTINDA kalir;

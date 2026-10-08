@@ -38,6 +38,24 @@ export function pendingChallenge(payment: Payment): ThreeDsChallenge | undefined
   return payment.status === PAYMENT_STATUS.REQUIRES_3DS ? payment.challenge : undefined;
 }
 
+/** Kapanmis dogrulama (FAILED: suresi doldu ya da hakki bitti); yoksa undefined. */
+export function closedChallenge(payment: Payment): ThreeDsChallenge | undefined {
+  return payment.status === PAYMENT_STATUS.FAILED && payment.challenge?.closedReason !== undefined
+    ? payment.challenge
+    : undefined;
+}
+
+/**
+ * Kalan yanlis kod hakki: en fazla hak - yanlis kod, en az 0. Hakki bitip
+ * kapanmis dogrulamada HER ZAMAN 0 (hak siniri ayari sonradan degisse de).
+ */
+export function remainingAttempts(challenge: ThreeDsChallenge, maxAttempts: number): number {
+  if (challenge.closedReason === THREEDS_CLOSE_REASON.ATTEMPTS_EXHAUSTED) {
+    return 0;
+  }
+  return Math.max(maxAttempts - challenge.failedAttempts, 0);
+}
+
 /** Sure siniri dahil degil: expiresAt aninda gelen deneme gec kalmistir. */
 export function isChallengeExpired(challenge: ThreeDsChallenge, clock: Clock): boolean {
   return clock.now() >= challenge.expiresAt.getTime();
@@ -124,11 +142,10 @@ export function replayOutcome(payment: Payment): ThreeDsOutcome | undefined {
   if (payment.status === PAYMENT_STATUS.SUCCEEDED) {
     return { kind: 'succeeded', payment };
   }
-  const closedReason = payment.challenge?.closedReason;
-  if (payment.status === PAYMENT_STATUS.FAILED && closedReason !== undefined) {
-    return { kind: 'rejected', payment, attemptsLeft: 0, closedReason };
-  }
-  return undefined;
+  const closedReason = closedChallenge(payment)?.closedReason;
+  return closedReason === undefined
+    ? undefined
+    : { kind: 'rejected', payment, attemptsLeft: 0, closedReason };
 }
 
 /** Her 3DS gecisi: surum +1, zaman, ve gecmise bir THREEDS denemesi. */

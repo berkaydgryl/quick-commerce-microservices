@@ -4,18 +4,20 @@
  * (gateway REST'e aynen tasir): rota boyunca HER ANDA kurallar tutar.
  */
 
-import { fixedClock } from '@getir/core';
+import { fixedClock, silentLogger } from '@getir/core';
 import { orderTrackingSchema } from '@getir/contracts';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import type { OrderTracking } from '../../src/application/get-tracking.js';
+import { createAdvanceRoute } from '../../src/application/advance-route.js';
 import { COURIER_FALLBACK_NAME, createGetTracking } from '../../src/application/get-tracking.js';
 import { COURIER_STATUS } from '../../src/domain/courier.js';
 import { ROUTE_STATE } from '../../src/domain/route.js';
 import type { Route } from '../../src/domain/route.js';
 import { planRoute } from '../../src/domain/route-planner.js';
-import { routeSchedule, TRACKING_PHASE } from '../../src/domain/route-progress.js';
+import type { MovementRule } from '../../src/domain/route-progress.js';
+import { milestonesMs, routeSchedule, TRACKING_PHASE } from '../../src/domain/route-progress.js';
 import { InMemoryCourierStore } from '../../src/infrastructure/memory/in-memory-courier-store.js';
+import { InMemoryLiveLocationStore } from '../../src/infrastructure/memory/in-memory-live-location.js';
 import { InMemoryRouteStore } from '../../src/infrastructure/memory/in-memory-route-store.js';
 import {
   courier,
@@ -28,37 +30,12 @@ import {
   orderId,
   ROUTE_RULE,
 } from '../support/couriers.js';
+import { RecordingRouteEvents } from '../support/recording-route-events.js';
+import { toRest } from '../support/tracking-rest.js';
 
 const RULE = { speedKmh: 36, prepSeconds: 30 };
 /** Onceki musterinin kapisi: kurye buradan atandi (sizmamali). */
 const PREVIOUS_DOOR = northOf(MARKET_LOCATION, 900);
-
-const ORDER_STATUS_OF = {
-  [TRACKING_PHASE.TO_MARKET]: 'PREPARING',
-  [TRACKING_PHASE.TO_CUSTOMER]: 'ON_THE_WAY',
-  [TRACKING_PHASE.DELIVERED]: 'DELIVERED',
-} as const;
-
-/** Gateway'in yapacagi REST cevirisi (alan adlari sozlesmede ayni). */
-function toRest(order: string, tracking: OrderTracking): unknown {
-  return {
-    orderId: order,
-    status: ORDER_STATUS_OF[tracking.phase],
-    phase: tracking.phase,
-    courier: { id: tracking.courierId, name: tracking.courierName },
-    ...(tracking.location === undefined ? {} : { location: tracking.location }),
-    at: tracking.at.toISOString(),
-    remainingMeters: tracking.remainingMeters,
-    etaSeconds: tracking.etaSeconds,
-    route: tracking.route,
-    marketLocation: tracking.marketLocation,
-    deliveryLocation: tracking.deliveryLocation,
-    ...(tracking.pickedUpAt === undefined ? {} : { pickedUpAt: tracking.pickedUpAt.toISOString() }),
-    ...(tracking.deliveredAt === undefined
-      ? {}
-      : { deliveredAt: tracking.deliveredAt.toISOString() }),
-  };
-}
 
 let clock: ReturnType<typeof fixedClock>;
 let couriers: InMemoryCourierStore;
@@ -66,7 +43,75 @@ let routes: InMemoryRouteStore;
 let order: string;
 let route: Route;
 
-const tracking = () => createGetTracking({ routes, couriers, rule: RULE, clock })(order);
+const trackingWith = (rule: MovementRule) =>
+  createGetTracking({ routes, couriers, rule, clock })(order);
+const tracking = () => trackingWith(RULE);
+
+/**
+ * Takibin okunacagi anlar (ms): saat geride (-30 sn) baslayip varistan sonraya
+ * 7 sn adimla, arti routeProgress'in asama sinirlari (alma ve varis ani, +-1 ms;
+ * sinirlar milisaniyeye yuvarlanir).
+ */
+function instants(rule: MovementRule): number[] {
+  // Sinirlar routeProgress'inkiyle AYNI kaynaktan: kayitli alma varsa ondan (#195).
+  const { pickupMs, arrivalMs } = milestonesMs(route, routeSchedule(route, rule));
+  const sweep: number[] = [];
+  for (let ms = -30_000; ms <= arrivalMs + 10_000; ms += 7_000) {
+    sweep.push(ms);
+  }
+  return [
+    ...sweep,
+    pickupMs - 1,
+    pickupMs,
+    pickupMs + 1,
+    arrivalMs - 1,
+    arrivalMs,
+    arrivalMs + 1,
+  ].sort((left, right) => left - right);
+}
+
+const PHASE_ORDER: readonly string[] = ['TO_MARKET', 'TO_CUSTOMER', 'DELIVERED'];
+
+/**
+ * Rota boyunca her anda cikti sozlesmeden (orderTrackingSchema +
+ * enforceTrackingPhase) gecer; DELIVERED her zaman alma ve teslim anli. Gorulen
+ * asamalari ilk gorulme sirasiyla doner.
+ */
+async function everyMoment(rule: MovementRule): Promise<string[]> {
+  const phases = new Set<string>();
+  let previous = 0;
+  for (const ms of instants(rule)) {
+    clock.set(NOW_MS + ms);
+    const result = await trackingWith(rule);
+    phases.add(result.phase);
+    // Asama TEK YONLU (#195): zaman ilerlerken geri donmez; kayitli almadan
+    // sonra TO_MARKET olmaz.
+    const rank = PHASE_ORDER.indexOf(result.phase);
+    expect(rank, `${ms} ms: ${result.phase}`).toBeGreaterThanOrEqual(previous);
+    previous = rank;
+    if (route.pickedUpAt !== undefined && NOW_MS + ms >= route.pickedUpAt.getTime()) {
+      expect(result.phase, `${ms} ms`).not.toBe(TRACKING_PHASE.TO_MARKET);
+    }
+    const parsed = orderTrackingSchema.safeParse(toRest(order, result));
+    expect(parsed.success, `${ms} ms: ${JSON.stringify(parsed.error?.issues)}`).toBe(true);
+    if (result.phase === TRACKING_PHASE.DELIVERED) {
+      // Alma <= teslim (#190): karisik kaynakta ve hiz ayari degisince de.
+      const pickedUpAt = result.pickedUpAt?.getTime() ?? Number.NaN;
+      const deliveredAt = result.deliveredAt?.getTime() ?? Number.NaN;
+      expect(pickedUpAt, `${ms} ms`).toBeLessThanOrEqual(deliveredAt);
+    }
+  }
+  return [...phases];
+}
+
+/** Rotaya kilometre tasi yazar; kosullu guncelleme tutmazsa test durur. */
+async function record(patch: Parameters<InMemoryRouteStore['update']>[1]): Promise<void> {
+  const updated = await routes.update(route, patch);
+  if (updated === null) {
+    throw new Error('rota guncellenmedi');
+  }
+  route = updated;
+}
 
 beforeEach(async () => {
   clock = fixedClock(NOW_MS);
@@ -86,18 +131,8 @@ beforeEach(async () => {
 });
 
 describe('createGetTracking', () => {
-  it('rota boyunca HER ANDA cikti sozlesmeden gecer (gizlilik ve tutarlilik)', async () => {
-    const end = Math.ceil(routeSchedule(route, RULE).arrivalSeconds) + 10;
-    const phases = new Set<string>();
-    for (let second = 0; second <= end; second += 5) {
-      clock.set(NOW_MS + second * 1_000);
-      const result = await tracking();
-      phases.add(result.phase);
-
-      const parsed = orderTrackingSchema.safeParse(toRest(order, result));
-      expect(parsed.success, `${second}. sn: ${JSON.stringify(parsed.error?.issues)}`).toBe(true);
-    }
-    expect([...phases]).toEqual(['TO_MARKET', 'TO_CUSTOMER', 'DELIVERED']);
+  it('rota boyunca HER ANDA (asama sinirlari dahil) cikti sozlesmeden gecer (gizlilik ve tutarlilik)', async () => {
+    expect(await everyMoment(RULE)).toEqual(['TO_MARKET', 'TO_CUSTOMER', 'DELIVERED']);
   });
 
   it('GIZLILIK: paket alinmadan konum yok, rota market -> adres, kalan yalniz 2. bacak; onceki kapi hicbir alanda yok', async () => {
@@ -131,10 +166,10 @@ describe('createGetTracking', () => {
     });
   });
 
-  it('kaydedilmis kilometre tasi asamayi GERI GOTURMEZ (hiz ayari degisse de)', async () => {
+  it('kaydedilmis kilometre tasi asamayi GERI GOTURMEZ (saat kayitli almanin gerisinde)', async () => {
     const pickedUpAt = new Date(NOW_MS + 5_000);
     await routes.update(route, { pickedUpAt });
-    clock.advance(6_000); // hesap henuz TO_MARKET
+    clock.advance(4_000); // saat kayitli almanin gerisinde: hesap TO_MARKET
 
     const result = await tracking();
 
@@ -143,6 +178,19 @@ describe('createGetTracking', () => {
     expect(result.location).toEqual(MARKET_LOCATION);
     // Hesap geride: tahmin ilk bacagin suresini tasir, o yuzden dakikaya yuvarli.
     expect(result.etaSeconds % 60).toBe(0);
+  });
+
+  it('kayitli almadan sonra ikinci bacak ONDAN baslar (#195): konum yolda, tahmin saniye hassasiyetinde', async () => {
+    const pickedUpAt = new Date(NOW_MS + 5_000);
+    await routes.update(route, { pickedUpAt });
+    clock.advance(6_000); // cizelgeye gore alma cok sonra; kayit 5. sn: 1 sn yol alindi
+
+    const result = await tracking();
+
+    const legTwoMs = Math.round(routeSchedule(route, RULE).legTwoSeconds * 1_000);
+    expect(result).toMatchObject({ phase: TRACKING_PHASE.TO_CUSTOMER, pickedUpAt });
+    expect(result.location).not.toEqual(MARKET_LOCATION);
+    expect(result.etaSeconds).toBe(Math.ceil((legTwoMs - 1_000) / 1_000));
   });
 
   it('NOT_FOUND: rota yok, rota ENDED, teslimattan once kurye birakildi', async () => {
@@ -272,5 +320,77 @@ describe('createGetTracking', () => {
     clock.set(NOW_MS + 61_000);
 
     await expect(tracking()).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+describe('teslim ani garantisi (#190): DELIVERED her zaman teslim ve alma anli', () => {
+  // Kenar: teslim ANI kaydedildi (deliveredAt; tick ardindan DONE yazar) ama
+  // zamandan hesap teslime ulasmadi (hiz ayari yavasladi, saat geride). Asama
+  // ve anlar kayittan. Kayitsiz DELIVERED yalniz hesaptan gelir, o da anlariyla.
+  // Asamayi belirleyen deliveredAt'tir, `state` DEGIL: teslim anisiz DONE
+  // (yazicisi yok) asamayi hesaba birakir; son test bunu sabitler.
+  const SLOW: MovementRule = { speedKmh: 6, prepSeconds: 600 };
+  const FAST: MovementRule = { speedKmh: 120, prepSeconds: 0 };
+
+  it('tick teslime geldigi TEK turda alma anini da yazar (alma <= teslim); hiz ayari sonra yavaslasa da kayitli anlarla DELIVERED', async () => {
+    const tick = createAdvanceRoute({
+      routes,
+      couriers,
+      events: new RecordingRouteEvents(),
+      live: new InMemoryLiveLocationStore(),
+      rule: RULE,
+      clock,
+    });
+    clock.set(NOW_MS + Math.ceil(routeSchedule(route, RULE).arrivalSeconds * 1_000) + 5_000);
+    await tick(route, await couriers.findById(route.courierId), silentLogger);
+    const recorded = await routes.findByOrder(order);
+    expect(recorded).toMatchObject({ state: ROUTE_STATE.DONE });
+    const pickedUpAt = recorded?.pickedUpAt?.getTime() ?? Number.NaN;
+    const deliveredAt = recorded?.deliveredAt?.getTime() ?? Number.NaN;
+    expect(pickedUpAt).toBeLessThanOrEqual(deliveredAt);
+
+    // Hesap SLOW kuraliyla hep teslimin gerisinde: asama ve anlar kayittan.
+    expect(await everyMoment(SLOW)).toEqual([TRACKING_PHASE.DELIVERED]);
+    clock.set(NOW_MS);
+    expect(await trackingWith(SLOW)).toMatchObject({
+      phase: TRACKING_PHASE.DELIVERED,
+      pickedUpAt: recorded?.pickedUpAt,
+      deliveredAt: recorded?.deliveredAt,
+      location: DELIVERY,
+      remainingMeters: 0,
+      etaSeconds: 0,
+    });
+  });
+
+  it.each([
+    ['kayit yok', {}],
+    ['alma kayitli', { pickedUpAt: new Date(NOW_MS + 40_000) }],
+    // Eski (yavas) ayarla kaydedilmis gec alma: yeni ayarla hesaplanan teslim
+    // ondan once duser; gosterilen teslim almadan once olmaz.
+    ['alma kayitli (eski yavas ayarla, gec)', { pickedUpAt: new Date(NOW_MS + 600_000) }],
+    [
+      'teslim kayitli (DONE)',
+      {
+        pickedUpAt: new Date(NOW_MS + 40_000),
+        deliveredAt: new Date(NOW_MS + 90_000),
+        deliveryPublished: true,
+        state: ROUTE_STATE.DONE,
+      },
+    ],
+  ] as const)(
+    '%s x hiz ayari (yavas, ayni, hizli) x her an: sozlesme tutar',
+    async (_case, recorded) => {
+      await record(recorded);
+
+      for (const rule of [SLOW, RULE, FAST]) {
+        await everyMoment(rule);
+      }
+    },
+  );
+
+  it('DONE ama teslim ani yok (yazicisi yok; savunma): DELIVERED kayittan GELMEZ, asama hesaptan; her an sozlesme', async () => {
+    await record({ state: ROUTE_STATE.DONE });
+
+    expect(await everyMoment(RULE)).toEqual(['TO_MARKET', 'TO_CUSTOMER', 'DELIVERED']);
   });
 });

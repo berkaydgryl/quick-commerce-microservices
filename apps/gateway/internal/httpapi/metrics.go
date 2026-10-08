@@ -23,6 +23,9 @@ type RequestMetrics interface {
 	// CountCardVerification, kart ekleme denemesinin sonucu (T11.17, K2):
 	// approved, declined, invalid, limited, other. Ret orani buradan.
 	CountCardVerification(result string)
+	// CountThreeDSAttempt, 3DS onay denemesinin sonucu (#163): succeeded,
+	// wrong_code, expired, limited, other. Yanlis kod orani buradan.
+	CountThreeDSAttempt(result string)
 }
 
 // noMetrics, metrik verilmediginde kullanilir: hicbir sey yazmaz.
@@ -33,6 +36,7 @@ func (noMetrics) CountReplay(string)                                   {}
 func (noMetrics) CountKeyRejection(string, string)                     {}
 func (noMetrics) CountRateLimited(string)                              {}
 func (noMetrics) CountCardVerification(string)                         {}
+func (noMetrics) CountThreeDSAttempt(string)                           {}
 
 // Anahtar reddinin sebepleri (idempotency_key_rejections_total{reason}).
 const (

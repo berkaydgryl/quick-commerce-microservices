@@ -3,6 +3,12 @@
  * okur, baglanti kuranlar (yakindaki marketler, genel arama) bunlarla yazar.
  */
 
+import { matchPath } from 'react-router-dom';
+
+/** Yakindaki marketler listesi (T11.12) ve market sayfasinin rota deseni. */
+export const MARKET_LIST_PATH = '/markets';
+export const MARKET_ROUTE = `${MARKET_LIST_PATH}/:marketId`;
+
 /** Market sayfasinin adreste duran secimleri: kategori ve arama (T9.5). */
 export const MARKET_PARAMS = {
   category: 'kategori',
@@ -26,4 +32,9 @@ export function marketPath(marketId: string, search?: string): string {
   return search === undefined
     ? path
     : `${path}?${new URLSearchParams({ [MARKET_PARAMS.search]: search }).toString()}`;
+}
+
+/** Adres bir market sayfasiysa marketin kimligi (F16: "Evet"ten sonra kalinacak mi). */
+export function marketIdInPath(pathname: string): string | undefined {
+  return matchPath(MARKET_ROUTE, pathname)?.params['marketId'];
 }

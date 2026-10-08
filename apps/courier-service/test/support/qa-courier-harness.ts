@@ -16,7 +16,7 @@ import type { CallResult, TestGrpcServer } from '@getir/service-kit/testing';
 import { buildCourierService } from '../../src/bootstrap.js';
 import type { CourierRepository } from '../../src/domain/courier-repository.js';
 import type { MarketLocator } from '../../src/domain/market-locator.js';
-import type { RouteRepository } from '../../src/domain/route-repository.js';
+import type { MovingRouteRepository, RouteRepository } from '../../src/domain/route-repository.js';
 
 export const COURIER_SERVICE = courierV1.CourierServiceService;
 
@@ -53,6 +53,8 @@ export async function startQaCourierServer(options: {
   readonly repository: CourierRepository;
   readonly markets?: MarketLocator;
   readonly routes?: RouteRepository;
+  /** Birakma ve tick'in rota deposu (uretimdeki main.ts gibi; #174 birakma rotayi okur). */
+  readonly movingRoutes?: RouteRepository & MovingRouteRepository;
   readonly speedKmh?: number;
   readonly clock: MutableClock;
   readonly logger?: Logger;
@@ -65,6 +67,7 @@ export async function startQaCourierServer(options: {
         couriers: options.repository,
         ...(options.markets === undefined ? {} : { markets: options.markets }),
         ...(options.routes === undefined ? {} : { routes: options.routes }),
+        ...(options.movingRoutes === undefined ? {} : { movingRoutes: options.movingRoutes }),
         ...(options.speedKmh === undefined ? {} : { speedKmh: options.speedKmh }),
         clock: options.clock,
         ...(options.logger === undefined ? {} : { logger: options.logger }),

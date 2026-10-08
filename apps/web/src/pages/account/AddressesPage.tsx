@@ -88,7 +88,7 @@ function AddressesSection({ userId }: { readonly userId: string }) {
           onRetry={() => void book.refetch()}
           selectedId={selectedAddress(addresses ?? [], delivery)?.id}
           actionsDisabled={content === undefined}
-          onSelect={(address) => choose(address.id)}
+          onSelect={(address) => void choose(address.id)}
           onEdit={(address) => setDialog({ mode: 'edit', address })}
           onDelete={(address) => setDialog({ mode: 'delete', address })}
           onAdd={(kind) => setDialog({ mode: 'add', kind })}

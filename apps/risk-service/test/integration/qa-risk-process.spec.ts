@@ -11,6 +11,10 @@
  *      uygulanmis goc (kod geri alinmis): migrate status 1, servis acilmaz.
  *   P6 SIGTERM, degerlendirmenin kaydi Mongo'nun kapisinda beklerken: sunucu yeni baglanti almaz,
  *      cagri cevaplanir, KAYIT YAZILIR (baglanti cagri bitmeden kapanmaz), kanca bitti, zorlanmadi.
+ *      #164: yapiskan bant okumasi (find) donuk vekilde ILK komut olabilir; sicak baglantiyi o tutar,
+ *      kayit (insert) yeni baglantinin el sikismasinda bekler ve baytlari cozulene kadar gitmez. Sonda
+ *      bu yuzden risk_events'e giden ILK komutun (find ya da insert) kapida olmasini, sonra
+ *      okumanin birakildigini (WARN) bekler: SIGTERM aninda kayit (insert) kapida bekliyordur.
  *   P7 LOG_LEVEL=debug gunlugu kisisel veri tasimaz: IP, cihaz, sehir ve koordinat yok (gecerli,
  *      gecersiz ve bulunamayan cagrilar).
  *
@@ -68,6 +72,8 @@ const PATIENT_SHUTDOWN_TIMEOUT_MS = '45000';
 const UNREACHABLE_PORT = 1;
 /** risk_events'e yazim komutu (OP_MSG govdesinde BSON anahtar ve koleksiyon adi). */
 const INSERT_COMMAND = [Buffer.from('insert\0'), Buffer.from(COLLECTIONS.RISK_EVENTS)];
+/** #164: yapiskan bant okumasi; donuk vekilde kayittan once kapiya gelebilir. */
+const FIND_COMMAND = [Buffer.from('find\0'), Buffer.from(COLLECTIONS.RISK_EVENTS)];
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const IP = '203.0.113.58';
 const PREVIOUS_IP = '198.51.100.61';
@@ -342,7 +348,7 @@ describe('QA RQ3b risk sureci: acilis, ortam, gocler, kapanis ve gunluk', () => 
   );
 
   it(
-    'P6 SIGTERM, kayit Mongo kapisinda beklerken: yeni baglanti yok, cagri cevaplanir, kayit yazilir, zarif',
+    'P6 SIGTERM, kayit Mongo kapisinda beklerken: yeni baglanti yok, cagri cevaplanir, kayit yazilir, zarif (#164: yapiskan okuma donuk vekilde ilk komut olabilir)',
     async () => {
       if (mongo === undefined) throw new Error('Mongo yok');
       // Donukken bekletilen baytlar birikir: parcalara bolunen komut da taninir.
@@ -356,7 +362,11 @@ describe('QA RQ3b risk sureci: acilis, ortam, gocler, kapanis ve gunluk', () => 
         },
       );
       closers.push(() => proxy.close());
-      const insertHeld = () => INSERT_COMMAND.every((part) => held.includes(part));
+      // #164: risk_events'e giden ILK komut kapida (yapiskan okuma find'i ya da kaydin insert'u).
+      const firstCommandHeld = () =>
+        [INSERT_COMMAND, FIND_COMMAND].some((command) =>
+          command.every((part) => held.includes(part)),
+        );
       const env = serviceEnv({
         LOG_LEVEL: 'debug',
         RISK_MONGO_URI: directUri(proxy.port),
@@ -371,7 +381,11 @@ describe('QA RQ3b risk sureci: acilis, ortam, gocler, kapanis ve gunluk', () => 
       proxy.freeze();
       const answer = evaluateOn(clientOf(running), context);
       try {
-        expect(await waitUntil(insertHeld, SEEN_WITHIN_MS)).toBe(true);
+        expect(await waitUntil(firstCommandHeld, SEEN_WITHIN_MS)).toBe(true);
+        // #164: okuma 150 ms'de birakilir (WARN); cagri kayda (insert) gecmis ve kapida bekliyor.
+        const readGaveUp = () =>
+          logLines(running.output(), 'yakin bant okunamadi, yapiskanlik uygulanmadi').length === 1;
+        expect(await waitUntil(readGaveUp, SEEN_WITHIN_MS)).toBe(true);
         running.child.kill('SIGTERM');
         const draining = () => logLines(running.output(), 'zarif kapanis basladi').length === 1;
         expect(await waitUntil(draining, SEEN_WITHIN_MS)).toBe(true);
