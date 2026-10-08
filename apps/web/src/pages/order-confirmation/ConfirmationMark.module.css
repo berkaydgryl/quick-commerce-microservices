@@ -1,0 +1,51 @@
+/*
+ * Onay isareti (F17): mor daire, beyaz onay; incelemede acik mor daire ve mor
+ * saat. Tek hareket: daire bir kez buyur, onay cizilir; hareket azaltmada sabit.
+ */
+.c-confirmation-mark {
+  display: grid;
+  place-items: center;
+  width: var(--size-confirmation-mark);
+  aspect-ratio: 1;
+  color: var(--text-on-brand);
+  background: var(--color-brand-primary);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-floating);
+  animation: c-confirmation-mark-in var(--duration-reveal) var(--easing-standard) both;
+}
+
+.c-confirmation-mark--review {
+  color: var(--color-brand-primary);
+  background: var(--color-brand-primary-subtle);
+}
+
+.c-confirmation-mark__icon {
+  width: 55%;
+}
+
+.c-confirmation-mark__check {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: c-confirmation-mark-draw var(--duration-reveal) var(--easing-standard) both;
+  animation-delay: calc(var(--duration-reveal) / 2);
+}
+
+@keyframes c-confirmation-mark-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+@keyframes c-confirmation-mark-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-confirmation-mark,
+  .c-confirmation-mark__check {
+    animation: none;
+  }
+}

@@ -11,6 +11,7 @@ import { CHECKOUT_FALLBACK } from './content/checkout-fallback.js';
 import { COURIER_TRACKING_FALLBACK } from './content/courier-tracking-fallback.js';
 import { ADDRESS_SETUP_FALLBACK, APP_HEADER_FALLBACK } from './content/header-fallback.js';
 import { MARKET_PAGE_FALLBACK } from './content/market-page-fallback.js';
+import { ORDER_CONFIRMATION_FALLBACK } from './content/order-confirmation-fallback.js';
 import { PAYMENT_METHODS_FALLBACK } from './content/payment-methods-fallback.js';
 
 /**
@@ -278,6 +279,8 @@ export const CONTENT_FALLBACK = {
   confirm: { yesLabel: 'Evet', noLabel: 'Hayır' },
   /** courierTracking: kurye penceresi ve bildirimi (F22). */
   courierTracking: COURIER_TRACKING_FALLBACK,
+  /** orderConfirmation: siparis onay ekrani (F17). */
+  orderConfirmation: ORDER_CONFIRMATION_FALLBACK,
 } as const;
 
 export type ContentFallback = typeof CONTENT_FALLBACK;
