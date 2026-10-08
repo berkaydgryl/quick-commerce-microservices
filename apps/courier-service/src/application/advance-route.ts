@@ -13,7 +13,12 @@
  *      bosa cikar, courier.delivered yayinlanir, rota DONE. Teslim ani kayitli
  *      alma anindan once yazilmaz (#190, deliveredNoEarlierThan). #195'ten beri
  *      ikinci bacak kayitli almadan hesaplandigi icin bu yalnizca savunmadir.
- *   4. Ilerliyorsa kuryenin canli konumu yazilir (kisa omurlu).
+ *   4. Ilerliyorsa kuryenin canli konumu yazilir (kisa omurlu); paket alinmisken
+ *      saat kaydin gerisindeyse (hesap TO_MARKET) birinci bacak konumu yerine
+ *      market noktasi yazilir (#197).
+ *
+ * Konum ve anlar rotanin KENDI hareket kuralindan (#197, route.movement); #197
+ * oncesi rotada o anki ayardan.
  *
  * Her adim kosulludur ve tekrar guvenlidir: yayin dustuyse sonraki tur ayni
  * adimi tekrarlar (isaret yayindan SONRA yazilir: en az bir kez). Rota bu
@@ -26,14 +31,14 @@
 import type { Clock, Logger } from '@getir/core';
 
 import { carriesOrder } from '../domain/courier.js';
-import type { Courier } from '../domain/courier.js';
+import type { Courier, GeoPoint } from '../domain/courier.js';
 import type { CourierRepository } from '../domain/courier-repository.js';
 import type { LiveLocationStore } from '../domain/live-location.js';
 import { deliveredNoEarlierThan, ROUTE_STATE } from '../domain/route.js';
 import type { Route, RoutePatch } from '../domain/route.js';
 import type { RouteEventPublisher } from '../domain/route-events.js';
 import type { MovementRule } from '../domain/route-progress.js';
-import { routeProgress } from '../domain/route-progress.js';
+import { routeLegs, routeProgress, TRACKING_PHASE } from '../domain/route-progress.js';
 import type { MovingRouteRepository } from '../domain/route-repository.js';
 
 /** Bir turun sonucu (ozet ve metrik). */
@@ -108,9 +113,20 @@ export function createAdvanceRoute(deps: AdvanceRouteDeps): AdvanceRoute {
     if (current === null) {
       return ADVANCE_OUTCOME.STALE;
     }
-    await deps.live.save(current.courierId, { location: progress.position, at: now });
+    // Saat kayitli almanin gerisindeyse hesap TO_MARKET der (#197): paket
+    // alinmisken birinci bacak konumu (onceki musterinin sokagi olabilir)
+    // YAZILMAZ; takip gibi market noktasi yazilir (canli konum dusmesin).
+    const behindPickup =
+      current.pickedUpAt !== undefined && progress.phase === TRACKING_PHASE.TO_MARKET;
+    const location = behindPickup ? marketPoint(current, progress.position) : progress.position;
+    await deps.live.save(current.courierId, { location, at: now });
     return outcome;
   };
+}
+
+/** Rotanin market noktasi (2. bacagin basi); yoksa verilen konum. */
+function marketPoint(route: Route, fallback: GeoPoint): GeoPoint {
+  return routeLegs(route).legTwo[0] ?? fallback;
 }
 
 async function publishPickup(
