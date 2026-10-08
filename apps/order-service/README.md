@@ -20,6 +20,16 @@ skor önerir.
 | `ListMyOrders`     | ✅ Yeniden eskiye, imleçle sayfalı; yalnızca geçmişte görünen siparişler (#101, aşağıda "Geçmiş kapsamı"); sipariş yoksa boş liste                     |
 | `CancelOrder`      | ✅ Kullanıcı iptali: yalnızca `DRAFT`, `RESERVED`, `AWAITING_PAYMENT` (B29); Idempotency-Key zorunlu (D4); kilit bırakılır; parası alınmışsa iptal yok |
 
+**Kapalı market (#154):** `CreateDraftOrder` catalog'dan marketin açık olup olmadığını ve
+kurallarını okur (`GetMarket`, `Market.is_open`; tek çağrı; kapalı marketin kuralları okunmaz).
+Kapalı market taslak açmaz: `NO_STORE` (gRPC `NOT_FOUND`, HTTP 404), ayrıntı yalnızca
+`{ reason: "STORE_CLOSED" }` (market kimliği ya da adı yankılanmaz). Kod ve sebep catalog.proto'daki
+kararla aynı; taşıma `x-app-error` ayrıntısı, mesafe anahtarı yok. Denetim yalnız market okumasını
+bekler: teklif ve geçmiş okumasının hatasından, `PRICE_CHANGED` ve `MIN_BASKET_NOT_MET`'ten ve stok
+kilidinden ÖNCE gelir; stoğa dokunulmaz, kullanıcının başka marketteki kilidi etkilenmez. Teslimat
+yarıçapı rezervasyonda HENÜZ denetlenmiyor (bekleyen iş). **KABUL:** `CreateOrder` marketi yeniden okumaz; kilit süresi içinde
+kapanan markette sipariş kabul edilir (stok zaten ayrılmış).
+
 RPC'lerin yanında iki işçi çalışır: kilidi dolan siparişleri kapatan süpürücü (T11.2 PR 2) ve
 ödenen siparişe courier-svc'den kurye isteyen kurye işçisi (T13.1 PR 2; sırası T13.2 PR 2'de ödeme
 anına göre, aşağıda "Kurye ataması"). Bir de olay tüketicisi: kuryenin paketi alması ve teslimi

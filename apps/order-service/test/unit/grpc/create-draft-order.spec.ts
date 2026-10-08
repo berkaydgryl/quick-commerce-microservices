@@ -7,7 +7,7 @@ import { AppError, ERROR_CODES, GRPC_STATUS } from '@getir/core';
 import { orderV1 } from '@getir/proto';
 import { describe, expect, it } from 'vitest';
 
-import { FakeCatalogPricing } from '../../support/fake-catalog-pricing.js';
+import { CLOSED_MARKET_ID, FakeCatalogPricing } from '../../support/fake-catalog-pricing.js';
 import { appErrorOf } from '@getir/service-kit/testing';
 import { DRAFT_TOTAL_MINOR, draftRequest } from '../../support/order-fixtures.js';
 import { useOrderGrpcServer } from '../../support/order-grpc-harness.js';
@@ -18,6 +18,11 @@ const call = useOrderGrpcServer();
 const unreachableCatalog = new FakeCatalogPricing();
 unreachableCatalog.failure = new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'catalog yok');
 const callWithoutCatalog = useOrderGrpcServer({ catalog: unreachableCatalog });
+
+// Ayri sunucu: kapali market taniyan catalog (#154).
+const closedCatalog = new FakeCatalogPricing();
+closedCatalog.closedMarketIds.add(CLOSED_MARKET_ID);
+const callWithClosedMarket = useOrderGrpcServer({ catalog: closedCatalog });
 
 describe('CreateDraftOrder', () => {
   it('onekli orderId ve DRAFT durumu doner', async () => {
@@ -100,5 +105,22 @@ describe('CreateDraftOrder: sunucu tarafi fiyat dogrulamasi (T7.2)', () => {
 
     expect(error?.code).toBe(GRPC_STATUS.UNAVAILABLE);
     expect(appErrorOf(error)?.code).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+  });
+});
+
+describe('CreateDraftOrder: kapali market (#154)', () => {
+  it('NOT_FOUND + NO_STORE; x-app-error ayrintisi YALNIZCA { reason: STORE_CLOSED }', async () => {
+    const { error, response } = await callWithClosedMarket(
+      orderV1.OrderServiceService.createDraftOrder,
+      { ...draftRequest, marketId: CLOSED_MARKET_ID },
+    );
+
+    expect(response).toBeUndefined();
+    expect(error?.code).toBe(GRPC_STATUS.NOT_FOUND);
+    expect(appErrorOf(error)).toMatchObject({
+      code: ERROR_CODES.NO_STORE,
+      details: { reason: 'STORE_CLOSED' },
+    });
+    expect(appErrorOf(error)?.details).toEqual({ reason: 'STORE_CLOSED' });
   });
 });

@@ -31,8 +31,11 @@ teslimat süresi ve puan. Market paneli kapsam dışıdır; değerler seed'dendi
 | `BatchGetProducts`     | ⛔ Deprecated (proto'da işaretli): `NOT_IMPLEMENTED` — kullanan yok; fiyat teklife ait olduğu için sepet doğrulaması `BatchGetOffers` ile         |
 
 T4.2'nin "yarıçap içinde ama kapalı → `STORE_CLOSED`, yarıçap dışı → `OUT_OF_RANGE`" kuralı
-kaybolmadı: tek market için `domain/market-coverage.ts` → `evaluateCoverage`'da duruyor ve
-rezervasyon (T11.4) seçilen marketin hâlâ hizmet verip vermediğini buna soracak.
+kaybolmadı: tek market için `domain/market-coverage.ts` → `evaluateCoverage`'da duruyor. Kapalı
+marketin sipariş almaması order-service'tedir (#154): `CreateDraftOrder` `GetMarket`'ın `is_open`'ını
+okur, kapalıysa `NO_STORE` + `reason: STORE_CLOSED`. `GetMarket` kapalı markette başarılı döner.
+Teslimat yarıçapı (`OUT_OF_RANGE`) rezervasyonda HENÜZ sorulmuyor: adres değişince seçili marketin
+hâlâ hizmet verip vermediği bu kurala sorulacak (bekleyen iş).
 
 ## İstek doğrulaması (D6)
 
