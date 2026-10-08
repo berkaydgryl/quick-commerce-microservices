@@ -11,11 +11,20 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
+	cardvaultv1 "github.com/berkaydgryl/quick-commerce-microservices/packages/proto/gen/go/getir/cardvault/v1"
+
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/auth"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/cards"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/idempotency"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/ratelimit"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/testkit"
 )
 
 // Kart uclarinin (T11.17) test duzenegi: sahte kasa, gercek jeton dogrulayici,
@@ -124,9 +133,10 @@ type cardsOptions struct {
 	logger *slog.Logger
 	// general, kullanici basina genel sinir (pencere 1 dk); sifirsa fiilen sinirsiz.
 	general int
-	// renamer, ad duzenlemenin kasasi; nil ise sahte kasa (gercek cards.Service
-	// verilirse hata gercek gRPC yolundan gecer).
+	// renamer ve deleter, ad duzenlemenin ve silmenin kasasi; nil ise sahte kasa
+	// (gercek cards.Service verilirse hata gercek gRPC yolundan gecer).
 	renamer CardRenamer
+	deleter CardDeleter
 }
 
 func newCardsHarness(t *testing.T, options cardsOptions) *cardsHarness {
@@ -149,9 +159,13 @@ func newCardsHarness(t *testing.T, options cardsOptions) *cardsHarness {
 	if options.renamer != nil {
 		renamer = options.renamer
 	}
+	var deleter CardDeleter = vault
+	if options.deleter != nil {
+		deleter = options.deleter
+	}
 	app := New(Deps{
 		Health:       fakeReporter{report: healthyReport()},
-		Cards:        CardRoutes{Lister: vault, Adder: vault, Deleter: vault, Renamer: renamer, Failures: counter, Inflight: counter},
+		Cards:        CardRoutes{Lister: vault, Adder: vault, Deleter: deleter, Renamer: renamer, Failures: counter, Inflight: counter},
 		AccessTokens: testTokens(),
 		Idempotency:  Idempotency{Store: store, FingerprintKey: testFingerprintKey, TTL: 24 * time.Hour},
 		RateLimit:    RateLimit{Limiter: counter, Window: time.Minute, General: general, Auth: 10000, Order: 10000},
@@ -270,4 +284,62 @@ func (s *recordingIdempotencyStore) remember(record idempotency.Record, ttl time
 	defer s.mu.Unlock()
 	s.saved = append(s.saved, record)
 	s.ttls = append(s.ttls, ttl)
+}
+
+// vaultRPC, uretilen kasa istemcisinin sahtesi. Gercek cards.Service onu
+// cagirir: hata gercek rpc.Invoke/FromGRPC yolundan (x-app-error, sebep) gecer.
+// Yalnizca UpdateCardNickname ve DeleteCard uygulanir; digerleri cagrilmaz.
+type vaultRPC struct {
+	cards.RPC
+	sent    []vaultCall
+	err     error
+	trailer metadata.MD
+}
+
+// vaultCall, kasaya giden cagri: yontem, kullanici ve kart.
+type vaultCall struct {
+	method, userID, cardID string
+}
+
+func (v *vaultRPC) UpdateCardNickname(_ context.Context, in *cardvaultv1.UpdateCardNicknameRequest, opts ...grpc.CallOption) (*cardvaultv1.UpdateCardNicknameResponse, error) {
+	v.sent = append(v.sent, vaultCall{"UpdateCardNickname", in.GetUserId(), in.GetCardId()})
+	testkit.SetTrailer(opts, v.trailer)
+	if v.err != nil {
+		return nil, v.err
+	}
+	return &cardvaultv1.UpdateCardNicknameResponse{Card: &cardvaultv1.SavedCard{
+		Id: testCardID, Brand: cardvaultv1.CardBrand_CARD_BRAND_AMEX, First4: "3782", Last4: "0005",
+		ExpiryMonth: 12, ExpiryYear: 2031, HolderName: "Zeynep Kılıçarslan", Nickname: in.GetNickname(),
+		CreatedAt: timestamppb.New(time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)),
+	}}, nil
+}
+
+func (v *vaultRPC) DeleteCard(_ context.Context, in *cardvaultv1.DeleteCardRequest, opts ...grpc.CallOption) (*cardvaultv1.DeleteCardResponse, error) {
+	v.sent = append(v.sent, vaultCall{"DeleteCard", in.GetUserId(), in.GetCardId()})
+	testkit.SetTrailer(opts, v.trailer)
+	if v.err != nil {
+		return nil, v.err
+	}
+	return &cardvaultv1.DeleteCardResponse{}, nil
+}
+
+// fail, sonraki cagrilarin kasa hatasi: gRPC durumu ve x-app-error yuku (bossa yok).
+func (v *vaultRPC) fail(code codes.Code, message, appError string) {
+	v.err = status.Error(code, message)
+	v.trailer = nil
+	if appError != "" {
+		v.trailer = metadata.Pairs(apperror.MetadataKey, appError)
+	}
+}
+
+// realCardVault, gercek servisin bu testlerde kullanilan yuzu: yalnizca ad
+// duzenleme ve silme (sahte gRPC istemcisi digerlerini uygulamaz).
+type realCardVault interface {
+	CardRenamer
+	CardDeleter
+}
+
+// realVault, sahte gRPC istemcili GERCEK kart servisi (ad duzenleme ve silme).
+func realVault(rpc *vaultRPC) realCardVault {
+	return cards.New(rpc, time.Second)
 }
