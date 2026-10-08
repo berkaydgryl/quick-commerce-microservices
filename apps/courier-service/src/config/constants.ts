@@ -92,6 +92,20 @@ export const COURIER_TICK_BUDGET_DIVISOR = 2;
 export const TICK_BATCH_SIZE = 200;
 
 /**
+ * BUSY kalan kurye uzlastirmasi (#205): tick en fazla bu aralikla (ms) siparisi
+ * tasiyan kuryeleri (en eski atama once, TICK_BATCH_SIZE kadar) ve rotalarini
+ * TOPLU okur. Normal yolda hicbir sey yazmaz; araligi tick'ten uzun tutmak
+ * okuma maliyetini sinirlar.
+ */
+export const CARRIER_RECONCILE_INTERVAL_MS = 30_000;
+
+/**
+ * Uzlastirmanin bekleme payi (ms): rota en az bu kadar once bitmis (ENDED ya da
+ * teslim) olmali. ReleaseCourier'in kendi birakmasiyla (ayni istek) yarismasin.
+ */
+export const CARRIER_RECONCILE_GRACE_MS = 30_000;
+
+/**
  * Canli konum kaydinin omru (ms; courier:{id}:last): max(30 sn, tick x 3).
  * Kurye durunca konum kendiliginden duser; tick araligindan hep uzun.
  */

@@ -129,6 +129,14 @@ describe('createReleaseCourier: rota (T13.3, M6 a)', () => {
     expect(await routes.findByOrder(order)).toEqual(before);
   });
 
+  it('rota OKUNAMAZSA HATA: kurye birakilmaz (QA K9 N1)', async () => {
+    const { order, couriers, routes, lines, release } = await setup();
+    routes.findByOrder = () => Promise.reject(new Error('mongo okunamadi'));
+
+    await expect(release(order, recordingLogger(lines))).rejects.toThrow('mongo okunamadi');
+    expect((await couriers.findById(courierId(1)))?.status).toBe(COURIER_STATUS.BUSY);
+  });
+
   it('rota yazilamazsa HATA: kurye kor birakilmaz (teslimle iki sonuc olmasin, #177); cagri tekrar guvenli', async () => {
     const { order, couriers, routes, lines, release } = await setup();
     const update = routes.update.bind(routes);

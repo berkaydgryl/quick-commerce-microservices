@@ -43,6 +43,20 @@ export class CouriersCollection extends MongoRepository<CourierDocument> {
     ];
   }
 
+  /**
+   * Siparis tasiyan kuryeler, siparis kimligine gore artan sayfa (#205):
+   * currentOrderId_unique (kismi) indeksinden; yeni indeks gerekmez.
+   */
+  async findCarrying(limit: number, afterOrderId?: string): Promise<CourierDocument[]> {
+    return this.run('findCarrying', () =>
+      this.collection
+        .find(carryingFilter(afterOrderId))
+        .sort({ currentOrderId: 1 })
+        .limit(limit)
+        .toArray(),
+    );
+  }
+
   async findByOrder(orderId: string): Promise<CourierDocument | null> {
     return this.findOne({ currentOrderId: orderId });
   }
@@ -164,4 +178,14 @@ export function releaseFilter(orderId: string, courierId?: string): Filter<Couri
   return courierId === undefined
     ? { currentOrderId: orderId }
     : { _id: courierId, currentOrderId: orderId };
+}
+
+/**
+ * Siparis tasiyan kuryelerin sayfasi: kismi indeksin ($exists) filtresiyle
+ * uyumlu, `afterOrderId`'den sonrakiler.
+ */
+export function carryingFilter(afterOrderId?: string): Filter<CourierDocument> {
+  return afterOrderId === undefined
+    ? { currentOrderId: { $exists: true } }
+    : { currentOrderId: { $exists: true, $gt: afterOrderId } };
 }

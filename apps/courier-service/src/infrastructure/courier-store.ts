@@ -9,10 +9,18 @@ import { applyMigrations, connectMongo } from '@getir/mongo-kit';
 import type { MongoEnv } from '@getir/mongo-kit';
 
 import { SERVICE_NAME } from '../config/constants.js';
-import type { CourierBatchReader, CourierRepository } from '../domain/courier-repository.js';
+import type {
+  CarrierReader,
+  CourierBatchReader,
+  CourierRepository,
+} from '../domain/courier-repository.js';
 import { courierFromSeed } from '../domain/courier-seed.js';
 import type { MarketLocator } from '../domain/market-locator.js';
-import type { MovingRouteRepository, RouteRepository } from '../domain/route-repository.js';
+import type {
+  MovingRouteRepository,
+  RouteBatchReader,
+  RouteRepository,
+} from '../domain/route-repository.js';
 import { MIGRATIONS } from '../migrations/index.js';
 import { COURIER_SEEDS, MARKET_LOCATION_SEEDS } from './fixtures/couriers.js';
 import { InMemoryCourierStore } from './memory/in-memory-courier-store.js';
@@ -25,11 +33,11 @@ import { RoutesCollection } from './mongo/routes-collection.js';
 
 export interface CourierStore {
   /** Kuryeler; tick toplu da okur (T13.3). */
-  readonly repository: CourierRepository & CourierBatchReader;
+  readonly repository: CourierRepository & CourierBatchReader & CarrierReader;
   /** Market konumu kopyasi (T13.2): havuzun merkezi. */
   readonly markets: MarketLocator;
   /** Siparislerin kurye rotalari (T13.2) ve ilerleyenler (T13.3 tick). */
-  readonly routes: RouteRepository & MovingRouteRepository;
+  readonly routes: RouteRepository & MovingRouteRepository & RouteBatchReader;
   readonly name: 'bellek (MOCK)' | 'mongo';
   /** Kapanista EN SON cagrilir (once cagrilar, sonra veritabani). */
   close(): Promise<void>;
