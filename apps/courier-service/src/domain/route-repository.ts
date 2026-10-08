@@ -18,6 +18,12 @@ export interface RouteRepository {
   replace(route: Route): Promise<void>;
 }
 
+/** Rotalari siparisleriyle TOPLU okur (#205 uzlastirma; N+1 yok). */
+export interface RouteBatchReader {
+  /** Bulunanlar; rotasi olmayan siparis atlanir, sira garanti degil. */
+  findByOrders(orderIds: readonly string[]): Promise<readonly Route[]>;
+}
+
 /**
  * Ilerleyen rotalarin portu (T13.3 tick ve birakma). Ayni depolar uygular;
  * atama tarafi (RouteRepository) bunlari bilmez.

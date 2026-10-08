@@ -26,6 +26,12 @@ import {
 const REFUSED_WITHIN_MS = 2_000;
 const SLOW_MARKET_ID = 'mkt_yavas';
 const MISSING_MARKET_ID = 'mkt_olmayan';
+/** Konumsuz acik market (#203): catalog verisi bozuk -> INTERNAL. */
+const UNLOCATED_MARKET_ID = 'mkt_konumsuz';
+const MARKET_LOCATION = { lat: 40.99, lng: 29.02 };
+const MARKET_RADIUS_METERS = 3_000;
+/** Yaricapi 0 (proto3 int32'de eksik alan): catalog verisi bozuk -> INTERNAL. */
+const ZERO_RADIUS_MARKET_ID = 'mkt_yaricapsiz';
 const scope = { requestId: 'req_iletim_1', logger: silentLogger };
 
 /** Sunucunun gordugu x-request-id degerleri. */
@@ -79,6 +85,13 @@ const implementation = {
             id: call.request.marketId,
             name: 'Migros Jet',
             isOpen: !closed,
+            ...(call.request.marketId === UNLOCATED_MARKET_ID
+              ? { deliveryRadiusMeters: MARKET_RADIUS_METERS }
+              : {
+                  location: MARKET_LOCATION,
+                  deliveryRadiusMeters:
+                    call.request.marketId === ZERO_RADIUS_MARKET_ID ? 0 : MARKET_RADIUS_METERS,
+                }),
           }),
           pricingRules: closed
             ? undefined
@@ -160,8 +173,19 @@ describe('GrpcCatalogPricing', () => {
     expect(terms).toEqual({
       rules: { minBasketMinor: 5_000, deliveryFeeMinor: 1_490, freeDeliveryThresholdMinor: 25_000 },
       isOpen: true,
+      location: MARKET_LOCATION,
+      deliveryRadiusMeters: MARKET_RADIUS_METERS,
     });
     expect(seenRequestIds.at(-1)).toBe(scope.requestId);
+  });
+
+  it('konumsuz ya da yaricapi 0 acik market (#203): INTERNAL ("yaricap disi" diye sessiz ret yok)', async () => {
+    const errors = [
+      await rejectionOf(catalog.marketRules(UNLOCATED_MARKET_ID, scope)),
+      await rejectionOf(catalog.marketRules(ZERO_RADIUS_MARKET_ID, scope)),
+    ];
+
+    expect(errors.map((error) => error.code)).toEqual([ERROR_CODES.INTERNAL, ERROR_CODES.INTERNAL]);
   });
 
   it('kapali market (#154): okuma basarili, isOpen false; kurallar okunmaz (eksik kural 500 yapmaz)', async () => {

@@ -8,3 +8,14 @@ export const ORDER_DETAIL_ROUTE = `${ORDERS_PATH}/:orderId`;
 export function orderPath(orderId: string): string {
   return `${ORDERS_PATH}/${encodeURIComponent(orderId)}`;
 }
+
+/**
+ * Siparis onay ekraninin rota deseni (F17): "Sipariş Ver"den sonra acilir.
+ * Adreste yalniz siparis kimligi (durum ya da tutar yok); yenilemede aynen.
+ */
+export const ORDER_CONFIRMATION_ROUTE = '/siparis/:orderId/onay';
+
+/** Onay ekraninin adresi: kimlik yolda (kodlanir). */
+export function orderConfirmationPath(orderId: string): string {
+  return `/siparis/${encodeURIComponent(orderId)}/onay`;
+}

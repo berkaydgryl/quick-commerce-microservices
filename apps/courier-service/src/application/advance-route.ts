@@ -38,7 +38,7 @@ import { deliveredNoEarlierThan, ROUTE_STATE } from '../domain/route.js';
 import type { Route, RoutePatch } from '../domain/route.js';
 import type { RouteEventPublisher } from '../domain/route-events.js';
 import type { MovementRule } from '../domain/route-progress.js';
-import { courierLocation, routeProgress } from '../domain/route-progress.js';
+import { courierLocation, dropoffOf, routeProgress } from '../domain/route-progress.js';
 import type { MovingRouteRepository } from '../domain/route-repository.js';
 
 /** Bir turun sonucu (ozet ve metrik). */
@@ -162,7 +162,7 @@ async function completeDelivery(
   if (confirmed === null) {
     return null;
   }
-  const dropoff = confirmed.points[confirmed.points.length - 1];
+  const dropoff = dropoffOf(confirmed);
   // Tekrar guvenli: kurye zaten birakildiysa (onceki turun yayini dustu) null
   // doner, konum degismez. Kurye kimligiyle: baska kurye BIRAKILMAZ.
   await deps.couriers.releaseByOrder(confirmed.orderId, deliveredAt, {

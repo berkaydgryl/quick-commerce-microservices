@@ -2415,6 +2415,14 @@ paths:
         `Idempotency-Key` ile saklanır: market yeniden açılınca aynı anahtar eski
         cevabı tekrar eder; yeniden denemede yeni anahtar üretilir.
 
+        Teslimat adresi (`address.location`) seçili marketin teslimat yarıçapı
+        dışındaysa (#203) taslak açılmaz: `404 NO_STORE`, ayrıntı yalnızca
+        `reason: OUT_OF_RANGE` (mesafe yankılanmaz). Sıra: kapalı market → yarıçap
+        → fiyat → stok. Kural market listesiyle aynı (sınır dahil); liste Mongo
+        `$geoNear`'dan geldiği için sınırda ±1 m fark olabilir. Bu 404 de
+        `Idempotency-Key` ile saklanır: adres düzeltilip yeniden denenirken yeni
+        anahtar üretilir (aynı anahtar + farklı gövde `409 CONFLICT`).
+
         Stok taslak açılırken kilitlenir (T11.2; inventory, Redis + Lua). Cevapta
         kilidin bitiş anı (`expiresAt`) ve sunucunun saatiyle kalan saniye
         (`ttlSeconds`, T11.4) döner: istemci geri sayımı bundan başlatır. Sepet tek
@@ -2493,8 +2501,9 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "404":
           description: |
-            Market bulunamadı (`NOT_FOUND`) ya da market kapalı (`NO_STORE`, ayrıntı
-            yalnızca `reason: STORE_CLOSED`; #154).
+            Market bulunamadı (`NOT_FOUND`), market kapalı (`NO_STORE`, ayrıntı yalnızca
+            `reason: STORE_CLOSED`; #154) ya da teslimat adresi yarıçap dışında
+            (`NO_STORE`, `reason: OUT_OF_RANGE`; #203).
           content:
             application/json:
               schema:
@@ -2509,6 +2518,16 @@ paths:
                       message: "Bu adrese şu anda teslimat yapamıyoruz."
                       details:
                         reason: STORE_CLOSED
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                outOfRange:
+                  summary: NO_STORE (teslimat adresi yarıçap dışında)
+                  value:
+                    success: false
+                    error:
+                      code: NO_STORE
+                      message: "Bu adrese şu anda teslimat yapamıyoruz."
+                      details:
+                        reason: OUT_OF_RANGE
                       requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "409":
           description: |
@@ -4099,6 +4118,7 @@ components:
           checkout,
           confirm,
           courierTracking,
+          orderConfirmation,
         ]
       properties:
         header:
@@ -4164,6 +4184,8 @@ components:
           $ref: "#/components/schemas/ConfirmContent"
         courierTracking:
           $ref: "#/components/schemas/CourierTrackingContent"
+        orderConfirmation:
+          $ref: "#/components/schemas/OrderConfirmationContent"
 
     ConfirmContent:
       type: object
@@ -4174,6 +4196,32 @@ components:
       properties:
         yesLabel: { $ref: "#/components/schemas/ContentText" }
         noLabel: { $ref: "#/components/schemas/ContentText" }
+
+    OrderConfirmationContent:
+      type: object
+      description: |
+        Sipariş onay ekranı (F17; /siparis/:id/onay): sipariş verildiyse "Siparişin alındı!",
+        risk incelemesindeyse "Siparişin inceleniyor" ve kısa not; özet ve teslimat ayrıntıları
+        başlıkları, "Siparişlerime git" ve "Alışverişe devam et". Diğer etiketler orders,
+        checkout, paymentMethods (kart markaları) ve cartPage (deliveryTimeLabel) bloklarından.
+      required:
+        [
+          placedTitle,
+          reviewTitle,
+          reviewNotice,
+          summaryTitle,
+          detailsTitle,
+          ordersLinkLabel,
+          continueLabel,
+        ]
+      properties:
+        placedTitle: { $ref: "#/components/schemas/ContentText" }
+        reviewTitle: { $ref: "#/components/schemas/ContentText" }
+        reviewNotice: { $ref: "#/components/schemas/ContentText" }
+        summaryTitle: { $ref: "#/components/schemas/ContentText" }
+        detailsTitle: { $ref: "#/components/schemas/ContentText" }
+        ordersLinkLabel: { $ref: "#/components/schemas/ContentText" }
+        continueLabel: { $ref: "#/components/schemas/ContentText" }
 
     CourierTrackingContent:
       type: object

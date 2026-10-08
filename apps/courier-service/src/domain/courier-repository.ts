@@ -43,6 +43,19 @@ export interface CourierRepository {
 }
 
 /**
+ * Siparis tasiyan kuryeleri TOPLU okur (#205 uzlastirma). Ayri port: yalnizca
+ * tick'in ihtiyaci.
+ */
+export interface CarrierReader {
+  /**
+   * Bir siparisi tasiyan (currentOrderId dolu) kuryeler, SIPARIS kimligine gore
+   * artan, `afterOrderId`'den sonrakiler, en fazla `limit` (sayfa). Cagiran
+   * sayfalari dolasir ve basa doner: atlanan kuryeler pencereyi kilitlemez.
+   */
+  listCarrying(limit: number, afterOrderId?: string): Promise<readonly Courier[]>;
+}
+
+/**
  * Kuryeleri kimlikleriyle TOPLU okur (T13.3 tick: rota basina okuma yok, N+1
  * yasak). Ayri port: yalnizca tick'in ihtiyaci; depo uygulamalari ikisini de
  * saglar.

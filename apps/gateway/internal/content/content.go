@@ -73,6 +73,8 @@ type Welcome struct {
 	Confirm Confirm `json:"confirm"`
 	// CourierTracking, kurye penceresi ve yaklasma bildirimi (F22).
 	CourierTracking CourierTracking `json:"courierTracking"`
+	// OrderConfirmation, siparis onay ekrani (F17).
+	OrderConfirmation OrderConfirmation `json:"orderConfirmation"`
 }
 
 // Header, ust bar: logonun iki parcasi ve iki dugme.

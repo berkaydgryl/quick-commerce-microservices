@@ -168,6 +168,7 @@ const WELCOME: WelcomeContent = {
   checkout: CONTENT_FALLBACK.checkout,
   confirm: CONTENT_FALLBACK.confirm,
   courierTracking: CONTENT_FALLBACK.courierTracking,
+  orderConfirmation: CONTENT_FALLBACK.orderConfirmation,
 };
 
 const withMarketList = (marketList: Partial<WelcomeContent['marketList']>) => ({

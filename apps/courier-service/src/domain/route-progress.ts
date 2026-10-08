@@ -132,6 +132,24 @@ export function courierLocation(
   return progress.position;
 }
 
+/**
+ * Kuryenin `at`'teki yazilacak konumu: rotanin kuraliyla (#197) hesaplanan
+ * konum, market kuraliyla (courierLocation). Iptalde birakma ve uzlastirma
+ * (#174, #205) ayni yerden alir.
+ */
+export function positionAt(
+  route: Pick<Route, 'points' | 'pickupIndex' | 'createdAt' | 'pickedUpAt' | 'movement'>,
+  at: Date,
+  current: MovementRule,
+): GeoPoint {
+  return courierLocation(route, routeProgress(route, at, current));
+}
+
+/** Rotanin teslimat noktasi (son nokta); teslimatta kurye burada bosa cikar. */
+export function dropoffOf(route: Pick<Route, 'points'>): GeoPoint | undefined {
+  return route.points[route.points.length - 1];
+}
+
 /** Rotanin iki bacagi: market noktasi ikisinde de var. */
 export function routeLegs(route: Pick<Route, 'points' | 'pickupIndex'>): {
   readonly legOne: readonly GeoPoint[];
