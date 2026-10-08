@@ -3,6 +3,8 @@ package cards
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,6 +24,7 @@ import (
 type fakeVault struct {
 	added   *cardvaultv1.AddCardRequest
 	deleted *cardvaultv1.DeleteCardRequest
+	renamed *cardvaultv1.UpdateCardNicknameRequest
 	card    *cardvaultv1.SavedCard
 	err     error
 	trailer metadata.MD
@@ -49,6 +52,15 @@ func (f *fakeVault) DeleteCard(_ context.Context, in *cardvaultv1.DeleteCardRequ
 	f.deleted = in
 	f.answer(opts)
 	return &cardvaultv1.DeleteCardResponse{}, f.err
+}
+
+func (f *fakeVault) UpdateCardNickname(_ context.Context, in *cardvaultv1.UpdateCardNicknameRequest, opts ...grpc.CallOption) (*cardvaultv1.UpdateCardNicknameResponse, error) {
+	f.renamed = in
+	f.answer(opts)
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &cardvaultv1.UpdateCardNicknameResponse{Card: f.card}, nil
 }
 
 func TestAddCardPassesInputAndUserFromCaller(t *testing.T) {
@@ -96,5 +108,89 @@ func TestDeleteCardSendsCallerAndCard(t *testing.T) {
 	}
 	if vault.deleted.GetUserId() != "usr_jeton" || vault.deleted.GetCardId() != "crd_0123456789abcdef0123456789abcdef" {
 		t.Errorf("kasaya giden istek: %+v", vault.deleted)
+	}
+}
+
+func TestUpdateCardNicknameSendsCallerCardAndNameAndMapsTheCard(t *testing.T) {
+	renamed := protoCard()
+	renamed.Nickname = "Maaş kartı"
+	vault := &fakeVault{card: renamed}
+	nickname := "Maaş kartı"
+
+	card, err := New(vault, time.Second).UpdateCardNickname(context.Background(), "usr_jeton", "crd_0123456789abcdef0123456789abcdef", &nickname)
+
+	if err != nil || card.ID != renamed.GetId() || card.Nickname != "Maaş kartı" || card.Last4 != "0005" {
+		t.Fatalf("duzenleme: %+v, %v", card, err)
+	}
+	got := vault.renamed
+	if got.GetUserId() != "usr_jeton" || got.GetCardId() != "crd_0123456789abcdef0123456789abcdef" || got.Nickname == nil || got.GetNickname() != "Maaş kartı" {
+		t.Errorf("kasaya giden istek: %+v", got)
+	}
+}
+
+func TestUpdateCardNicknameKeepsMissingAndEmptyApart(t *testing.T) {
+	// #148: eksik alan kasaya EKSIK gider (kasa "Kart adı gönderilmedi" der); bos
+	// metin alan olarak gider (adi kaldirir). Ikisi proto'da ayrilir.
+	missing := &fakeVault{card: protoCard()}
+	empty := &fakeVault{card: protoCard()}
+	blank := ""
+
+	_, missingErr := New(missing, time.Second).UpdateCardNickname(context.Background(), "usr_jeton", "crd_0123456789abcdef0123456789abcdef", nil)
+	_, emptyErr := New(empty, time.Second).UpdateCardNickname(context.Background(), "usr_jeton", "crd_0123456789abcdef0123456789abcdef", &blank)
+
+	if missingErr != nil || emptyErr != nil {
+		t.Fatalf("hatalar: %v, %v", missingErr, emptyErr)
+	}
+	if missing.renamed.Nickname != nil {
+		t.Error("eksik ad kasaya alan olarak gitmemeli")
+	}
+	if empty.renamed.Nickname == nil || empty.renamed.GetNickname() != "" {
+		t.Errorf("bos ad kasaya bos metin olarak gitmeli: %+v", empty.renamed)
+	}
+}
+
+func TestUpdateCardNicknameNotFoundHasNoDetails(t *testing.T) {
+	// Kart yok, baskasinin ya da silinmis: kasanin NOT_FOUND'u kart kimligini
+	// ayrintiya koyar; gateway'in bicimsiz kimlik 404'u koymaz. Ayrinti atilir,
+	// kasanin sebebi gunluk icin kalir.
+	vault := &fakeVault{
+		err:     status.Error(codes.NotFound, "Kart bulunamadi"),
+		trailer: metadata.Pairs(apperror.MetadataKey, `{"code":"NOT_FOUND","message":"Kart bulunamadi","details":{"cardId":"crd_0123456789abcdef0123456789abcdef"}}`),
+	}
+	nickname := "Yabanci"
+
+	_, err := New(vault, time.Second).UpdateCardNickname(context.Background(), "usr_jeton", "crd_0123456789abcdef0123456789abcdef", &nickname)
+
+	var appErr *apperror.Error
+	if !errors.As(err, &appErr) || appErr.Code != apperror.CodeNotFound {
+		t.Fatalf("NOT_FOUND bekleniyordu: %v", err)
+	}
+	if appErr.Details != nil {
+		t.Errorf("404 ayrintisiz olmali: %v", appErr.Details)
+	}
+	if !strings.Contains(err.Error(), "payment UpdateCardNickname") || strings.Count(err.Error(), "NOT_FOUND") != 1 {
+		t.Errorf("kasanin sebebi bir kez kalmali: %v", err)
+	}
+}
+
+func TestUpdateCardNicknameErrorChainHoldsNoNickname(t *testing.T) {
+	// QA: gunluge giden sebep (rpc.Invoke + FromGRPC zinciri) kart adini tasimaz;
+	// yalnizca servis ve yontem adi, gRPC durumu ve kasanin (degersiz) cumlesi.
+	nickname := "Gizli Yeni Ad"
+	for _, vault := range []*fakeVault{
+		{err: status.Error(codes.InvalidArgument, "Gecersiz istek"), trailer: metadata.Pairs(apperror.MetadataKey,
+			`{"code":"VALIDATION_FAILED","message":"Gecersiz istek","details":{"nickname":"Kart adı en fazla 30 karakter olabilir"}}`)},
+		{err: status.Error(codes.Internal, "kasa dustu")},
+		{err: status.Error(codes.DeadlineExceeded, "context deadline exceeded")},
+	} {
+		_, err := New(vault, time.Second).UpdateCardNickname(context.Background(), "usr_jeton", "crd_0123456789abcdef0123456789abcdef", &nickname)
+
+		chain := fmt.Sprintf("%v %+v", err, err)
+		if err == nil || !strings.Contains(chain, "UpdateCardNickname") {
+			t.Fatalf("hata zinciri bekleniyordu: %v", err)
+		}
+		if strings.Contains(chain, nickname) {
+			t.Errorf("hata zincirinde kart adi: %s", chain)
+		}
 	}
 }
