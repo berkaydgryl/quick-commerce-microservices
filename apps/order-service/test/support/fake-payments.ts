@@ -6,6 +6,7 @@
  * payment-svc gibi idempotent: ayni anahtarla ikinci cekim ilk sonucu doner.
  * Odeme kaydi (getPayment) cekimlerden kurulur: son sonuc ve yontem; iade
  * kaydi REFUNDED yapar. Test kaydi `payments` ile dogrudan da kurabilir.
+ * 3DS okumasi (getThreeDs, #163 B1) cekimlerden KURULMAZ: test `threeDs` ile verir.
  *
  * Kayitli kart (T12.4): `cards` kasadir (kimlik -> sahip ve jeton). payment-svc
  * gibi once tekrar (ayni anahtar) bakilir, sonra kart cozulur; kart yoksa ya da
@@ -23,6 +24,7 @@ import type {
 import { PAYMENT_METHOD, PAYMENT_STATUS } from '../../src/domain/checkout-payment.js';
 import type { PaymentResult } from '../../src/domain/checkout-payment.js';
 import type { PaymentSnapshot } from '../../src/domain/payment-standing.js';
+import type { PaymentThreeDs } from '../../src/domain/payment-three-ds.js';
 
 export const TEST_CARD = {
   APPROVED: 'tok_test_4242',
@@ -72,6 +74,11 @@ export class FakePayments implements Payments {
   getPaymentFailure: AppError | undefined;
   /** Kart kasasi (T12.4): kart kimligi -> sahip ve jeton. */
   readonly cards = new Map<string, FakeSavedCard>();
+  /** Siparis -> odeme kaydinin 3DS okumasi (#163 B1): sahip ve dogrulama. */
+  readonly threeDs = new Map<string, PaymentThreeDs>();
+  readonly threeDsLookups: string[] = [];
+  /** Doluysa 3DS okumasi bu hatayla basarisiz olur. */
+  getThreeDsFailure: Error | undefined;
 
   async charge(request: ChargeRequest): Promise<PaymentResult> {
     this.charges.push(request);
@@ -130,5 +137,13 @@ export class FakePayments implements Payments {
       return Promise.reject(this.getPaymentFailure);
     }
     return Promise.resolve(this.payments.get(orderId) ?? null);
+  }
+
+  getThreeDs(orderId: string): Promise<PaymentThreeDs | null> {
+    this.threeDsLookups.push(orderId);
+    if (this.getThreeDsFailure !== undefined) {
+      return Promise.reject(this.getThreeDsFailure);
+    }
+    return Promise.resolve(this.threeDs.get(orderId) ?? null);
   }
 }

@@ -11,6 +11,8 @@
  *   guvenli, T15.3); courier AssignCourier, ReleaseCourier (siparise gore tekrar guvenli,
  *   T13.1). Denenmeyenler: risk Evaluate (her cagri yeni bir degerlendirme
  *   kaydi yazar) ve payment Confirm3Ds (tekrar, 3DS hakkini bosa yakabilir).
+ * Ayrica GetOrder'in 3DS okumasi (payment GetPayment, #163 B1) ne denenir ne de
+ * devreye sayilir: en iyi cabadir, kendi kisa siniri vardir (grpc-payments.ts).
  */
 
 import type { Logger } from '@getir/core';

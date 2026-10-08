@@ -17,7 +17,7 @@ import type { CreateOrder } from '../../application/create-order.js';
 import type { GetOrder } from '../../application/get-order.js';
 import type { ListMyOrders } from '../../application/list-my-orders.js';
 import { createOrderRequestSchema } from './create-order-schema.js';
-import { toProtoOrder, toProtoOrderStatus } from './mappers.js';
+import { toProtoOrder, toProtoOrderStatus, toProtoThreeDs } from './mappers.js';
 import { encodePageToken } from './page-token.js';
 import {
   cancelOrderRequestSchema,
@@ -126,10 +126,18 @@ export function createOrderImplementation(deps: OrderHandlerDeps): UntypedServic
       name: 'GetOrder',
       schema: getOrderRequestSchema,
       ...(logger === undefined ? {} : { logger }),
-      handle: async (input): Promise<orderV1.GetOrderResponse> => ({
-        // Ayrinti yalnizca burada: tek siparis, sahibine (getOrder sahipligi denetler).
-        order: toProtoOrder(await deps.getOrder(input), { withDetails: true }),
-      }),
+      handle: async (input, ctx): Promise<orderV1.GetOrderResponse> => {
+        // payment cagrisi (3DS, #163 B1) bu requestId'yi AYNEN tasir.
+        const { order, threeDs } = await deps.getOrder(input, {
+          requestId: ctx.requestId,
+          logger: ctx.logger,
+        });
+        return {
+          // Ayrinti yalnizca burada: tek siparis, sahibine (getOrder sahipligi denetler).
+          order: toProtoOrder(order, { withDetails: true }),
+          ...(threeDs === undefined ? {} : { threeDs: toProtoThreeDs(threeDs) }),
+        };
+      },
     }),
 
     listMyOrders: unaryHandler({
