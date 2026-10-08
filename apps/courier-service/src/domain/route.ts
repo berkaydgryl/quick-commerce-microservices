@@ -101,6 +101,23 @@ export function isDelivered(route: Pick<Route, 'deliveredAt' | 'state'>): boolea
   return route.deliveredAt !== undefined || routeState(route) === ROUTE_STATE.DONE;
 }
 
+/**
+ * Yeniden okunan rota, ilk okunanin AYNISI (kurye + uretilme ani), birakilmamis
+ * ve teslimi bu arada kaydedilmis mi? Takip (teslim ani yarisi) ve iptal
+ * (#177) ayni kurali kullanir.
+ */
+export function deliveredMeanwhile(
+  first: Pick<Route, 'courierId' | 'createdAt'>,
+  again: Route | null,
+): again is Route {
+  return (
+    again !== null &&
+    sameRoute(again, first) &&
+    routeState(again) !== ROUTE_STATE.ENDED &&
+    isDelivered(again)
+  );
+}
+
 /** Ayni rota mi: siparis basina tek belge; kimlik kurye + uretilme ani (yeniden atamada yenilenir). */
 export function sameRoute(
   left: Pick<Route, 'courierId' | 'createdAt'>,

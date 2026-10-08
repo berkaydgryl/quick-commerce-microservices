@@ -54,14 +54,15 @@ export interface CourierBatchReader {
 
 export interface ReleaseOptions {
   /**
-   * Kuryenin bosa ciktigi yer (T13.3): teslimatta teslimat noktasi. Verilmezse
-   * konum KALIR: iptalde (ReleaseCourier) kurye bugun atandigi yerde kalir;
-   * yoldaki anlik konumda birakma bekleyen is #174.
+   * Kuryenin bosa ciktigi yer (T13.3): teslimatta teslimat noktasi, iptalde
+   * rotadaki hesaplanan anlik konum (#174). Verilmezse konum KALIR (rotasiz
+   * atama).
    */
   readonly location?: GeoPoint;
   /**
-   * Yalnizca siparisi BU kurye tasiyorsa birakir. Tick bunu verir: rota bu
-   * arada baska kuryeye yeniden atandiysa o kurye birakilmaz.
+   * Yalnizca siparisi BU kurye tasiyorsa birakir ({_id, currentOrderId}, _id
+   * indeksi; #174). Tick ve ReleaseCourier bunu verir: arada kurye degistiyse
+   * kimse birakilmaz.
    */
   readonly courierId?: string;
 }

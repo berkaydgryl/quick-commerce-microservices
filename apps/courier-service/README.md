@@ -16,7 +16,7 @@ aşama 1'de web siparişin takibini `GetTracking` ile gateway üzerinden yoklar 
 | `couriers` şeması         | ✅ `infrastructure/mongo/documents.ts` (konum GeoJSON), indeksler `couriers-collection.ts`  |
 | Havuz ataması (B7)        | ✅ `application/assign-courier.ts` + `nearest-available.ts`, kural `domain/courier-pool.ts` |
 | Market konumu kopyası     | ✅ `markets` koleksiyonu (seed ve göç 0001 yazar), MOCK'ta bellek                           |
-| Okuma, bırakma            | ✅ `GetCourier`, `ReleaseCourier` (kurye olduğu yerde boşa çıkar)                           |
+| Okuma, bırakma            | ✅ `GetCourier`, `ReleaseCourier` (kurye rotadaki anlık konumunda boşa çıkar, #174)         |
 | Demo kuryeleri            | ✅ `pnpm seed`: her marketin 40-150 m yakınına 3 kurye, 99 (Kadıköy 48, Beşiktaş 51)        |
 | Rota ve ETA, `StartRoute` | ✅ atamada kurye -> market -> adres, 20-40 eşit aralıklı nokta; `routes` (T13.2 PR 3)       |
 | Hareket, kilometre taşı   | ✅ tick (tek lider), `courier.picked_up` / `courier.delivered`, teslimde kurye `IDLE`       |
@@ -25,13 +25,13 @@ aşama 1'de web siparişin takibini `GetTracking` ile gateway üzerinden yoklar 
 
 ## RPC'ler
 
-| RPC              | Ne yapar                                                                                        |
-| ---------------- | ----------------------------------------------------------------------------------------------- |
-| `AssignCourier`  | Marketin çevresindeki boş kuryeyi bağlar, rotasını üretir, ETA döner; yoksa `NOT_FOUND`         |
-| `GetCourier`     | Kuryenin durumu ve son bilinen konumu; yoksa `NOT_FOUND`                                        |
-| `ReleaseCourier` | Siparişi taşıyan kuryeyi yerinde `IDLE` yapar; taşıyan yoksa hata değil `released=false`        |
-| `StartRoute`     | Atamanın rotasını döner (`already_started = true`); bu kuryeyle rotası yoksa `NOT_FOUND`        |
-| `GetTracking`    | Siparişin takibi: aşama, konum, kalan yol, ETA, rota; rota yoksa ya da bırakıldıysa `NOT_FOUND` |
+| RPC              | Ne yapar                                                                                                               |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `AssignCourier`  | Marketin çevresindeki boş kuryeyi bağlar, rotasını üretir, ETA döner; yoksa `NOT_FOUND`                                |
+| `GetCourier`     | Kuryenin durumu ve son bilinen konumu; yoksa `NOT_FOUND`                                                               |
+| `ReleaseCourier` | Siparişi taşıyan kuryeyi rotadaki anlık konumunda `IDLE` yapar; taşıyan yoksa ya da teslim kayıtlıysa `released=false` |
+| `StartRoute`     | Atamanın rotasını döner (`already_started = true`); bu kuryeyle rotası yoksa `NOT_FOUND`                               |
+| `GetTracking`    | Siparişin takibi: aşama, konum, kalan yol, ETA, rota; rota yoksa ya da bırakıldıysa `NOT_FOUND`                        |
 
 Girdi sözleşme biçimiyle denetlenir: sipariş `ord_<32 hex>`, market `mkt_…`, kurye `crr_<32 hex>`,
 teslimat konumu zorunlu. Kullanımdan kalkan `dark_store_id` okunmaz (ADR-15). Cevaptaki kuryenin
@@ -80,8 +80,18 @@ idleSince silinir)`. Aday o arada başka siparişe gittiyse koşul tutmaz, sıra
 - **Bırakma:** kurye olduğu yerde `IDLE` olur, `idleSince` bırakma anı; `lastAssignedAt` geçmiş
   bilgisi olarak kalır. Konum Mongo'da yalnızca durum değişiminde yazılır: teslimatta kurye
   **teslimat adresinde** boşa çıkar (T13.3). Yolda iptalde (`ReleaseCourier`) kuryenin ilerleyen
-  rotası hemen `ENDED` yazılır (karar M6 a); kurye bugün atandığı yerde kalır, yoldaki anlık
-  konumda bırakma bekleyen iş #174.
+  rotası önce koşullu olarak `ENDED` yazılır (karar M6 a), kurye bırakma anında rotadaki **hesaplanan
+  konumda** `IDLE` olur (#174; atandığı yere "ışınlanmaz"). Bırakma yazımı `{_id, currentOrderId}`
+  filtresi ve `_id` indeksiyle yapılır.
+- **İptal ile teslim yarışı (#177):** tek sonuç kalır, karar rota belgesindedir. `ENDED` yaması
+  teslim anı kayıtlı rotaya yazılmaz; teslim kayıtlıysa iptal kaybeder (kurye bırakılmaz, tick onu
+  teslimat noktasında bırakıp `courier.delivered` yayınlar). İptal `ENDED` yazdıysa tick'in teslim
+  yaması tutmaz, olay yayınlanmaz. Tick teslim olayını ancak rota hâlâ bu atamanın, bitmemiş ve
+  teslimi kayıtlıyken (koşullu yama) yayınlar. Rota okunamaz ya da yazılamazsa çağrı HATA döner,
+  kurye körlemesine bırakılmaz (teslimle iki sonuç olmasın); çağrı tekrar güvenlidir. Önceki deneme
+  `ENDED` yazıp bırakmada düştüyse tekrar çağrı kuryeyi bitiş anındaki konumda bırakır. Konum
+  kuralları: rota bu atamanın değilse konum değişmez; hesap teslimi geçtiyse adres; alma kayıtlı ama
+  saat kaydın gerisindeyse market noktası (`courierLocation`, tick'in canlı konumuyla aynı).
 
 ## Hareket ve takip (T13.3, aşama 1)
 

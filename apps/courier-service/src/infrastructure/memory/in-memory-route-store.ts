@@ -46,7 +46,8 @@ export class InMemoryRouteStore implements RouteRepository, MovingRouteRepositor
       stored === undefined ||
       stored.courierId !== route.courierId ||
       stored.createdAt.getTime() !== route.createdAt.getTime() ||
-      routeState(stored) !== ROUTE_STATE.MOVING
+      routeState(stored) !== ROUTE_STATE.MOVING ||
+      (patch.state === ROUTE_STATE.ENDED && stored.deliveredAt !== undefined)
     ) {
       return Promise.resolve(null);
     }
