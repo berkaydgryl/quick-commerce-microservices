@@ -62,6 +62,13 @@ async function stored(orderId: string): Promise<Order> {
   return order;
 }
 
+/** Siparisin kayitli iade komutlari (payment.refund_requested). */
+function refundCommands(orderId: string) {
+  return store.recordedEvents.filter(
+    (event) => event.orderId === orderId && event.topic === EVENTS.PAYMENT_REFUND_REQUESTED,
+  );
+}
+
 /** Odeme bekleyen siparisi baska yol (kullanici, supurucu) iptal etti. */
 async function cancelledElsewhere(): Promise<Order> {
   const awaiting = await insertAwaitingPayment(store, clock);
@@ -120,18 +127,88 @@ describe('capraz yol: iadeden sonra ayri yazim', () => {
     expect(store.recordedEvents).toHaveLength(eventsBefore);
   });
 
-  it('dogrudan iade olmadi, komut yazildi: yine isaret', async () => {
+  it('dogrudan iade olmadi: isaret ve iade komutu TEK yazimda (#185 N5), ayri append yok', async () => {
     const cancelled = await cancelledElsewhere();
     payments.refundFailure = new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'payment kapali');
+    const append = vi.spyOn(store, 'append');
 
     await refundCharge(deps(), cancelled, REFUND_REASON.ORDER_CHANGED_DURING_PAYMENT, scope);
 
+    expect(await stored(cancelled.id)).toMatchObject({
+      version: cancelled.version + 1,
+      refund: { reason: REFUND_REASON.ORDER_CHANGED_DURING_PAYMENT, requestedAt: clock.date() },
+    });
+    expect(append).not.toHaveBeenCalled();
+    expect(refundCommands(cancelled.id)).toHaveLength(1);
+  });
+
+  it('dogrudan iade olmadi, bir cakisma sonra basari: komut BIR KEZ, ayri append yok', async () => {
+    const cancelled = await cancelledElsewhere();
+    payments.refundFailure = new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'payment kapali');
+    const update = vi
+      .spyOn(store, 'update')
+      .mockRejectedValueOnce(orderVersionConflict(cancelled.id, cancelled.version));
+    const append = vi.spyOn(store, 'append');
+
+    await refundCharge(deps(), cancelled, REFUND_REASON.ORDER_CHANGED_DURING_PAYMENT, scope);
+
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(append).not.toHaveBeenCalled();
+    expect(refundCommands(cancelled.id)).toHaveLength(1);
     expect((await stored(cancelled.id)).refund).toBeDefined();
+  });
+
+  it('dogrudan iade olmadi, siparis hala acik: yalniz komut (once para), isaret YOK', async () => {
+    const awaiting = await insertAwaitingPayment(store, clock);
+    payments.refundFailure = new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'payment kapali');
+    const append = vi.spyOn(store, 'append');
+
+    await refundCharge(deps(), awaiting, REFUND_REASON.ORDER_CHANGED_DURING_PAYMENT, scope);
+
+    expect(await stored(awaiting.id)).toEqual(awaiting);
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(refundCommands(awaiting.id)).toHaveLength(1);
+  });
+
+  it('dogrudan iade olmadi, cakisma surerse: komut tek basina, WARN kimlik ve gerekce', async () => {
+    const cancelled = await cancelledElsewhere();
+    payments.refundFailure = new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'payment kapali');
+    const update = vi
+      .spyOn(store, 'update')
+      .mockRejectedValue(orderVersionConflict(cancelled.id, cancelled.version));
+    const append = vi.spyOn(store, 'append');
+
+    await refundCharge(deps(), cancelled, REFUND_REASON.ORDER_CHANGED_DURING_PAYMENT, scope);
+
+    expect(update).toHaveBeenCalledTimes(REFUND_RECORD_WRITE_ATTEMPTS);
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(refundCommands(cancelled.id)).toHaveLength(1);
+    const warning = lines.find((line) => line.message.includes('iade komutu tek basina'));
+    expect(warning).toMatchObject({
+      level: 'warn',
+      fields: { orderId: cancelled.id, reason: REFUND_REASON.ORDER_CHANGED_DURING_PAYMENT },
+    });
+    expect(JSON.stringify(lines)).not.toMatch(/amount|Minor|card|tok_/i);
+  });
+
+  it('dogrudan iade olmadi, isaretli yazim dustu: komut tek basina, isaret YOK', async () => {
+    const cancelled = await cancelledElsewhere();
+    payments.refundFailure = new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'payment kapali');
+    vi.spyOn(store, 'update').mockRejectedValue(new Error('mongo yazamadi'));
+    const append = vi.spyOn(store, 'append');
+
+    await refundCharge(deps(), cancelled, REFUND_REASON.ORDER_CHANGED_DURING_PAYMENT, scope);
+
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(refundCommands(cancelled.id)).toHaveLength(1);
+    expect(await stored(cancelled.id)).not.toHaveProperty('refund');
   });
 
   it('iade de komut da olmadi: isaret YOK (iade edilmemis para "iade edildi" gorunmez)', async () => {
     const cancelled = await cancelledElsewhere();
     payments.refundFailure = new AppError(ERROR_CODES.SERVICE_UNAVAILABLE, 'payment kapali');
+    // N5: isaretli komut tek yazimda gider; o da komut da yazilamaz.
+    vi.spyOn(store, 'update').mockRejectedValue(new Error('mongo kapali'));
     vi.spyOn(store, 'append').mockRejectedValue(new Error('mongo kapali'));
 
     await refundCharge(deps(), cancelled, REFUND_REASON.ORDER_CHANGED_DURING_PAYMENT, scope);

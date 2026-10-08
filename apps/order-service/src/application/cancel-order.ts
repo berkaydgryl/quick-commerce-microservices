@@ -17,12 +17,20 @@
  * (REQUEST_IN_PROGRESS): saga siparisi tamamlar ya da kilit dolunca supurucu
  * iade eder. Boylece parasi alinmis siparisle kullanici iptali yarismaz.
  * payment-svc'ye ulasilamazsa iptal yapilmaz (SERVICE_UNAVAILABLE).
+ *
+ * Odeme kaydi IADE EDILMIS ise (para alinmis, baska yolda geri verilmis; ornegin
+ * odeme cakismasinda dogrudan iade, siparis o an acikti) iptal kalici iade
+ * isaretini AYNI yazimda tasir (#185 N2; gerekce payment_refunded, komut yok):
+ * siparis Gecmis Siparislerim'de kalir. Para alinmamis odeme (kayit yok, 3DS
+ * bekleyen, reddedilmis, kapida odeme) isaret tasimaz.
  */
 
 import { AppError, ERROR_CODES, ORDER_STATUS } from '@getir/core';
 import type { Clock } from '@getir/core';
 
+import { PAYMENT_STATUS } from '../domain/checkout-payment.js';
 import { statusChangedEvents } from '../domain/order-events.js';
+import { REFUND_MARK_REASON, withRefund } from '../domain/order-refund.js';
 import type { OrderRepository } from '../domain/order-repository.js';
 import type { Order } from '../domain/order.js';
 import { TIMELINE_NOTE, transitionOrder } from '../domain/order.js';
@@ -32,6 +40,7 @@ import {
   paymentInProgress,
   paymentStandingOf,
 } from '../domain/payment-standing.js';
+import type { PaymentSnapshot } from '../domain/payment-standing.js';
 import { RELEASE_REASON } from '../domain/stock-reservation.js';
 import { findOwnOrder } from './own-order.js';
 import type { Payments } from './payments.js';
@@ -71,17 +80,25 @@ export function createCancelOrder(deps: CancelOrderDeps): CancelOrder {
       );
     }
 
-    if (order.status === ORDER_STATUS.AWAITING_PAYMENT) {
-      await assertNoPaymentTaken(deps, order, scope);
-    }
+    const payment =
+      order.status === ORDER_STATUS.AWAITING_PAYMENT
+        ? await assertNoPaymentTaken(deps, order, scope)
+        : null;
 
     const releasesDraft = order.status === ORDER_STATUS.DRAFT && reason === undefined;
-    const cancelled = transitionOrder(
+    const closed = transitionOrder(
       order,
       ORDER_STATUS.CANCELLED,
       deps.clock,
       reason ?? (releasesDraft ? TIMELINE_NOTE.CART_RELEASED : TIMELINE_NOTE.USER_CANCELLED),
     );
+    const cancelled =
+      payment?.status === PAYMENT_STATUS.REFUNDED
+        ? withRefund(closed, {
+            reason: REFUND_MARK_REASON.PAYMENT_ALREADY_REFUNDED,
+            requestedAt: deps.clock.date(),
+          })
+        : closed;
     await deps.repository.update(cancelled, order.version, statusChangedEvents(order, cancelled));
     await releaseStock(
       deps,
@@ -94,6 +111,7 @@ export function createCancelOrder(deps: CancelOrderDeps): CancelOrder {
 }
 
 /**
+ * @returns odeme kaydi (yoksa null); iade edilmisse iptal isaret tasir.
  * @throws AppError REQUEST_IN_PROGRESS - para alindi ya da kart cekimi suruyor.
  * @throws AppError SERVICE_UNAVAILABLE - payment-svc'ye ulasilamadi (iptal yapilmaz).
  */
@@ -101,10 +119,10 @@ async function assertNoPaymentTaken(
   deps: CancelOrderDeps,
   order: Order,
   scope: RequestScope,
-): Promise<void> {
+): Promise<PaymentSnapshot | null> {
   const payment = await deps.payments.getPayment(order.id, scope);
   if (payment === null || paymentStandingOf(payment) === PAYMENT_STANDING.NONE) {
-    return;
+    return payment;
   }
   throw paymentInProgress(order.id, payment.status);
 }

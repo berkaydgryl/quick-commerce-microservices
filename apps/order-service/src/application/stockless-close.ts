@@ -17,9 +17,10 @@
  * olsa da komut payment-svc'ye ulasir; sabit anahtar (refund-<orderId>) ve
  * odemenin durumu ikinci iadeyi onler ("zaten iade edilmis").
  *
- * Siparisi o arada baska bir yazim degistirdiyse (CONFLICT) dokunulmaz; tek
- * istisna para: alinmissa ve siparisi baska yol IPTAL ettiyse iade yine yapilir
- * (refund-step.ts refundIfCancelledElsewhere).
+ * Siparisi o arada baska bir yazim degistirdiyse (CONFLICT) dokunulmaz; istisna
+ * para: siparisi baska yol IPTAL ettiyse, alinmis para yine iade edilir
+ * (refund-step.ts refundIfCancelledElsewhere), zaten iade edilmis paranin
+ * isareti yine yazilir (refund-record.ts; #185 N4).
  */
 
 import { ERROR_CODES, ORDER_STATUS } from '@getir/core';
@@ -35,6 +36,7 @@ import { RELEASE_REASON } from '../domain/stock-reservation.js';
 import { tryWriteTransition } from './order-transition.js';
 import type { TransitionRepository, TransitionWrite } from './order-transition.js';
 import type { Payments } from './payments.js';
+import { recordRefund } from './refund-record.js';
 import { refundIfCancelledElsewhere } from './refund-step.js';
 import type { RefundStepDeps } from './refund-step.js';
 import type { RequestScope } from './request-scope.js';
@@ -80,15 +82,7 @@ export async function closeWithoutStock(
       : undefined;
   const write = await cancelLapsed(deps, order, refund, charge, scope);
   if (!write.written) {
-    if (refund !== undefined) {
-      await refundIfCancelledElsewhere(
-        deps,
-        order,
-        write.latest,
-        REFUND_REASON.RESERVATION_EXPIRED,
-        scope,
-      );
-    }
+    await settleConflict(deps, order, write.latest, charge, scope);
     return { kind: 'conflict' };
   }
   if (refund === undefined) {
@@ -96,6 +90,29 @@ export async function closeWithoutStock(
   }
   await refundNow(deps, order, refund, scope);
   return { kind: 'refunded' };
+}
+
+/**
+ * Kapatma cakisti: siparisi baska yol degistirdi. Para alinmissa iade, para
+ * zaten iade edilmisse isaret; ikisi de yalniz siparis baska yolda IPTAL
+ * edildiyse. Siparis hala aciksa dokunulmaz (karari o yol ya da supurucu verir).
+ */
+async function settleConflict(
+  deps: StocklessCloseDeps,
+  order: Order,
+  latest: Order | null,
+  charge: Charge,
+  scope: RequestScope,
+): Promise<void> {
+  if (charge === CHARGE.TAKEN) {
+    await refundIfCancelledElsewhere(deps, order, latest, REFUND_REASON.RESERVATION_EXPIRED, scope);
+    return;
+  }
+  if (charge === CHARGE.REFUNDED && latest?.status === ORDER_STATUS.CANCELLED) {
+    // Iade baska yolda yapildi; isareti yalniz siparisin iptalini yazan yol
+    // yazabilirdi. recordRefund yeniden okur: isaretliyse dokunmaz.
+    await recordRefund(deps, order.id, REFUND_MARK_REASON.PAYMENT_ALREADY_REFUNDED, scope);
+  }
 }
 
 /**

@@ -6,11 +6,13 @@
  * bunu tasir: Gecmis Siparislerim'de "Iptal edildi · Iade edildi" olarak kalir
  * (order-history-listing.ts). Iki yazim yolu:
  *
- *   ayni yazim  - siparisi KENDISI iptal eden yol (stockless-close.ts cancelLapsed):
- *                 CANCELLED ve iade komutu ile birlikte (withRefund)
+ *   ayni yazim  - siparisi KENDISI iptal eden yol (withRefund): kilitsiz kapatma
+ *                 (stockless-close.ts cancelLapsed; iade komutuyla) ve kullanici
+ *                 iptali (cancel-order.ts; odeme kaydi REFUNDED, komut yok)
  *   ayri yazim  - siparisi BASKA yol iptal etmis, para sonra iade edilmis
- *                 (refund-step.ts): durum disi guncelleme, surum +1, zaman
- *                 cizelgesine kayit ve olay yok (recordedRefund)
+ *                 (refund-step.ts, refund-record.ts; recordedRefund): dogrudan
+ *                 iade olduysa durum disi guncelleme, surum +1, zaman cizelgesine
+ *                 kayit ve olay yok; olmadiysa isaret ve iade komutu tek yazimda
  */
 
 import { ORDER_STATUS } from '@getir/core';
