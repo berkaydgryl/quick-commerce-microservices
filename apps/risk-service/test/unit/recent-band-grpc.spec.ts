@@ -11,6 +11,7 @@ import { startTestGrpcServer } from '@getir/service-kit/testing';
 import type { TestGrpcServer } from '@getir/service-kit/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { PendingRecords } from '../../src/application/pending-records.js';
 import { buildRiskService } from '../../src/bootstrap.js';
 import { RECENT_BAND_WINDOW_MS } from '../../src/config/constants.js';
 import { RECENT_BAND_RULE_ID } from '../../src/domain/recent-band.js';
@@ -40,7 +41,7 @@ async function evaluate(context: RiskContext) {
 beforeAll(async () => {
   server = await startTestGrpcServer({
     serviceName: 'risk-yapiskan-bant',
-    services: [buildRiskService({ clock })],
+    services: [buildRiskService({ clock, pendingRecords: new PendingRecords() })],
   });
 });
 

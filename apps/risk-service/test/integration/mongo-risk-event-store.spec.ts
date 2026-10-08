@@ -17,6 +17,7 @@ import { MongoDBContainer } from '@testcontainers/mongodb';
 import type { StartedMongoDBContainer } from '@testcontainers/mongodb';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { PendingRecords } from '../../src/application/pending-records.js';
 import { buildRiskService } from '../../src/bootstrap.js';
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
 import type { RiskEventDocument } from '../../src/infrastructure/mongo/documents.js';
@@ -31,6 +32,9 @@ import { describeRiskEventStoreContract } from '../support/risk-event-store-cont
 
 const MONGO_IMAGE = 'mongo:7';
 const DB_NAME = 'getir_risk_test';
+/** Kaydin beklenmesi (#167: Evaluate kaydi en fazla sinir kadar bekler): sinirli, sabit aralik. */
+const RECORD_WAIT_MS = 5_000;
+const POLL_INTERVAL_MS = 50;
 
 let container: StartedMongoDBContainer;
 let connection: MongoConnection;
@@ -96,7 +100,13 @@ describe('T6.3: Evaluate kaydi Mongo da gorulur ve sorgulanir', () => {
   beforeAll(async () => {
     server = await startTestGrpcServer({
       serviceName: 'risk-int',
-      services: [buildRiskService({ events: store, clock: fixedClock(PERSONA_NOW) })],
+      services: [
+        buildRiskService({
+          events: store,
+          clock: fixedClock(PERSONA_NOW),
+          pendingRecords: new PendingRecords(),
+        }),
+      ],
     });
   });
 
@@ -116,9 +126,16 @@ describe('T6.3: Evaluate kaydi Mongo da gorulur ve sorgulanir', () => {
       context: { ...toProtoContext(ali.context), orderId: 'ord_ali-1', deviceId: 'dev_gizli' },
     });
 
-    const raw = await connection.db
-      .collection<RiskEventDocument>(COLLECTIONS.RISK_EVENTS)
-      .findOne({ orderId: 'ord_ali-1' });
+    const collection = connection.db.collection<RiskEventDocument>(COLLECTIONS.RISK_EVENTS);
+    // Evaluate dondugunde kayit sinirdan sonra hala yaziliyor olabilir (#167): sinirli bekleme.
+    await expect
+      .poll(() => collection.countDocuments({ orderId: { $in: ['ord_can-1', 'ord_ali-1'] } }), {
+        timeout: RECORD_WAIT_MS,
+        interval: POLL_INTERVAL_MS,
+        message: 'iki degerlendirme kaydi yazilmadi',
+      })
+      .toBe(2);
+    const raw = await collection.findOne({ orderId: 'ord_ali-1' });
 
     expect(raw).toMatchObject({
       userId: ali.context.userId,

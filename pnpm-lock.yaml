@@ -305,6 +305,9 @@ importers:
       '@getir/mongo-kit':
         specifier: workspace:*
         version: link:../../packages/mongo-kit
+      '@getir/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@getir/proto':
         specifier: workspace:*
         version: link:../../packages/proto
