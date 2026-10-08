@@ -196,5 +196,71 @@ export function describeCardStoreContract(name: string, getStore: () => CardRepo
         details: { cards: expect.any(String) as unknown },
       });
     });
+
+    it('kart adi duzenleme (#148): ad yazilir, sonra kaldirilir; diger alanlar degismez', async () => {
+      const store = getStore();
+      const userId = newUser();
+      const saved = card(userId, { nickname: 'Eski ad' });
+      await store.add(saved, SAVED_CARDS_MAX);
+
+      const renamed = await store.updateNickname(userId, saved.id, 'Maaş kartı');
+      expect(renamed).toEqual({ ...saved, nickname: 'Maaş kartı' });
+      expect(await store.listActive(userId)).toEqual([renamed]);
+
+      const cleared = await store.updateNickname(userId, saved.id, null);
+      const { nickname: _removed, ...withoutNickname } = saved;
+      expect(cleared).toEqual(withoutNickname);
+      expect(cleared).not.toHaveProperty('nickname');
+      expect(await store.listActive(userId)).toEqual([withoutNickname]);
+    });
+
+    it('kart adi duzenleme: bos metin de KALDIRIR; depo bos ad yazmaz', async () => {
+      const store = getStore();
+      const userId = newUser();
+      const saved = card(userId, { nickname: 'Eski ad' });
+      await store.add(saved, SAVED_CARDS_MAX);
+
+      const cleared = await store.updateNickname(userId, saved.id, '');
+
+      expect(cleared).not.toHaveProperty('nickname');
+      expect(await store.listActive(userId)).toEqual([cleared]);
+    });
+
+    it('kart adi duzenleme: kart yok, baskasinin ya da silinmis -> null (ayirt edilemez); kayit degismez', async () => {
+      const store = getStore();
+      const owner = newUser();
+      const saved = card(owner);
+      const gone = card(owner, { expiryMonth: 2 });
+      await store.add(saved, SAVED_CARDS_MAX);
+      await store.add(gone, SAVED_CARDS_MAX);
+      await store.softDelete(owner, gone.id, new Date(START_MS));
+
+      expect(await store.updateNickname(newUser(), saved.id, 'Yabanci')).toBeNull();
+      expect(await store.updateNickname(owner, gone.id, 'Dirilt')).toBeNull();
+      expect(await store.updateNickname(owner, newId(ID_PREFIX.CARD), 'Yok')).toBeNull();
+      expect(await store.listActive(owner)).toEqual([saved]);
+      expect(await store.findActive(owner, gone.id)).toBeNull();
+    });
+
+    it('es zamanli silme + duzenleme: silinmis kart duzenlenmez, duzenleme silinmis karti DIRILTMEZ', async () => {
+      const store = getStore();
+      const userId = newUser();
+      const saved = card(userId);
+      await store.add(saved, SAVED_CARDS_MAX);
+
+      const [deleted, renamed] = await Promise.all([
+        store.softDelete(userId, saved.id, new Date(START_MS)),
+        store.updateNickname(userId, saved.id, 'Yaris'),
+      ]);
+
+      expect(deleted).toBe(true);
+      // Hangisi once islediyse: duzenleme ya silmeden once (guncel kart) ya sonra (null).
+      if (renamed !== null) {
+        expect(renamed.nickname).toBe('Yaris');
+      }
+      expect(await store.listActive(userId)).toEqual([]);
+      expect(await store.findActive(userId, saved.id)).toBeNull();
+      expect(await store.updateNickname(userId, saved.id, 'Sonra')).toBeNull();
+    });
   });
 }
