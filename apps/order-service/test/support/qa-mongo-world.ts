@@ -105,6 +105,8 @@ export async function orderOnMongo(options: {
   readonly clock: MutableClock;
   readonly lines?: LogLine[];
   readonly operationTimeoutMs?: number;
+  /** courier cagrisinin suresi (orderSide); verilmezse uretimdeki. */
+  readonly courierCallTimeoutMs?: number;
   readonly cleanups: Cleanups;
 }): Promise<QaOrderSide> {
   // Acilisin gunlugu (gocler) ve iscinin gunlugu ayni yere: servis tek surec.
@@ -125,6 +127,9 @@ export async function orderOnMongo(options: {
     courierAddress: options.courierAddress,
     clock: options.clock,
     logger,
+    ...(options.courierCallTimeoutMs === undefined
+      ? {}
+      : { courierCallTimeoutMs: options.courierCallTimeoutMs }),
   });
   options.cleanups.push(() => side.close());
   return side;

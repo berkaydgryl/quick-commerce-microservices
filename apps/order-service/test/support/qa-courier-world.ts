@@ -284,10 +284,12 @@ export function orderSide(options: {
   readonly courierAddress: string;
   readonly clock: MutableClock;
   readonly logger: Logger;
+  /** Verilmezse uretimdeki sure; zaman asimi sinamayan testte yuklu makine icin genis. */
+  readonly courierCallTimeoutMs?: number;
 }): QaOrderSide {
   const courier = new GrpcCourierAssignment(
     options.courierAddress,
-    COURIER_CALL_TIMEOUT_MS,
+    options.courierCallTimeoutMs ?? COURIER_CALL_TIMEOUT_MS,
     dependencyResilience(DEPENDENCY.COURIER, options.logger),
   );
   const dispatch = createDispatchCouriers({
