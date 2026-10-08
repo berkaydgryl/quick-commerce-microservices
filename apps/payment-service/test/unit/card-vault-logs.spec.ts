@@ -148,4 +148,72 @@ describe('kart kasasi gunlugu (QA P1)', () => {
       brand: 'AMEX',
     });
   });
+
+  it('kart adi duzenleme (#148): yeni ad, eski ad, gecersiz ve yabanci adlar gunlukte YOK', async () => {
+    lines.length = 0;
+    // Kendi kullanicilari: onceki testlerin kasada biraktigi kartlara bagli degil.
+    const owner = 'usr_gunluk-ad-sahip';
+    const userId = 'usr_gunluk-ad-yabanci';
+    const added = await unaryCall(vault.client, Vault.addCard, {
+      ...request({ number: '4242 4242 4242 4242', cvv: '987', nickname: 'Eski Gizli Ad' }),
+      userId: owner,
+    });
+    const other = await unaryCall(vault.client, Vault.addCard, {
+      ...request({ number: '5555 5555 5555 4444', cvv: '987', nickname: '' }),
+      userId,
+    });
+    expect([added.error, other.error]).toEqual([undefined, undefined]);
+    const own = added.response?.card?.id ?? '';
+    const otherId = other.response?.card?.id ?? '';
+    const secrets = {
+      renamed: 'Yeni Gizli Ad',
+      digits: 'Ad 87654321',
+      long: `Uzun Gizli ${'x'.repeat(25)}`,
+      foreign: 'Yabanci Gizli',
+    };
+
+    await unaryCall(vault.client, Vault.updateCardNickname, {
+      userId: owner,
+      cardId: own,
+      nickname: secrets.renamed,
+    });
+    for (const nickname of [secrets.digits, secrets.long]) {
+      await unaryCall(vault.client, Vault.updateCardNickname, {
+        userId: owner,
+        cardId: own,
+        nickname,
+      });
+    }
+    await unaryCall(vault.client, Vault.updateCardNickname, { userId: owner, cardId: own });
+    await unaryCall(vault.client, Vault.updateCardNickname, {
+      userId,
+      cardId: own,
+      nickname: secrets.foreign,
+    });
+    await unaryCall(vault.client, Vault.updateCardNickname, {
+      userId,
+      cardId: otherId,
+      nickname: '',
+    });
+
+    const text = serialized();
+    for (const secret of ['Eski Gizli Ad', ...Object.values(secrets), '87654321']) {
+      expect(text, `gunlukte: ${secret.length} karakter`).not.toContain(secret);
+    }
+    const updates = lines.filter((line) => line.message === 'kart adi guncellendi');
+    expect(updates.map((line) => line.fields)).toEqual([
+      expect.objectContaining({
+        rpc: 'UpdateCardNickname',
+        userId: owner,
+        cardId: own,
+        removed: false,
+      }),
+      expect.objectContaining({
+        rpc: 'UpdateCardNickname',
+        userId,
+        cardId: otherId,
+        removed: true,
+      }),
+    ]);
+  });
 });

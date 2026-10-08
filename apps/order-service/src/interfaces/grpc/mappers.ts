@@ -18,6 +18,7 @@ import type { DeliveryPaymentKind, OrderPayment } from '../../domain/order-payme
 import { ITEM_UNIT } from '../../domain/order-item.js';
 import type { ItemUnit, OrderItem } from '../../domain/order-item.js';
 import type { Order, TimelineEntry } from '../../domain/order.js';
+import type { ThreeDsStatus } from '../../domain/payment-three-ds.js';
 
 const STATUS_TO_PROTO: Readonly<Record<OrderStatus, orderV1.OrderStatus>> = {
   [ORDER_STATUS.DRAFT]: orderV1.OrderStatus.ORDER_STATUS_DRAFT,
@@ -52,6 +53,18 @@ const UNIT_TO_PROTO: Readonly<Record<ItemUnit, commonV1.Unit>> = {
 
 export function toProtoOrderStatus(status: OrderStatus): orderV1.OrderStatus {
   return STATUS_TO_PROTO[status];
+}
+
+/**
+ * Bekleyen 3DS dogrulamasi (#163 B1), payment'tan geldigi gibi: acik/kapali
+ * karari ve kalan sure gateway'dedir (tek saat, contracts order-three-ds.ts).
+ */
+export function toProtoThreeDs(threeDs: ThreeDsStatus): paymentV1.ThreeDsStatus {
+  return {
+    challengeId: threeDs.challengeId,
+    expiresAt: threeDs.expiresAt,
+    attemptsLeft: threeDs.attemptsLeft,
+  };
 }
 
 function money(amountMinor: number, currency: string): commonV1.Money {

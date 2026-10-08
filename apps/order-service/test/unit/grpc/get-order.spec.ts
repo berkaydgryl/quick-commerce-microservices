@@ -1,19 +1,23 @@
 /**
- * GetOrder kapi testi: siparis ayrintisi ve sahiplik.
+ * GetOrder kapi testi: siparis ayrintisi, sahiplik ve odeme bekleyen siparisin
+ * 3DS durumu (#163 B1; kurallarin tamami get-order-three-ds.spec.ts'te).
  */
 
 import { GRPC_STATUS } from '@getir/core';
 import { commonV1, orderV1 } from '@getir/proto';
 import { describe, expect, it } from 'vitest';
 
+import { FakePayments, TEST_CARD } from '../../support/fake-payments.js';
 import {
   cancelOrderRequest,
+  createOrderRequest,
   DRAFT_TOTAL_MINOR,
   draftRequest,
 } from '../../support/order-fixtures.js';
 import { newDraftId, useOrderGrpcServer } from '../../support/order-grpc-harness.js';
 
-const call = useOrderGrpcServer();
+const payments = new FakePayments();
+const call = useOrderGrpcServer({ payments });
 
 describe('GetOrder', () => {
   it('siparisi market, durum ve zaman cizelgesiyle doner', async () => {
@@ -81,5 +85,42 @@ describe('GetOrder', () => {
     });
 
     expect(error?.code).toBe(GRPC_STATUS.NOT_FOUND);
+  });
+
+  it('odeme bekleyen sipariste 3DS durumu telden AYNEN gelir; taslakta alan yok ve payment a gidilmez (#163 B1)', async () => {
+    const draft = { ...draftRequest, userId: 'usr_3ds' };
+    const awaitingId = await newDraftId(call, draft);
+    const placed = await call(
+      orderV1.OrderServiceService.createOrder,
+      createOrderRequest(awaitingId, { userId: 'usr_3ds', cardToken: TEST_CARD.CHALLENGE }),
+    );
+    expect(placed.response?.status).toBe(orderV1.OrderStatus.ORDER_STATUS_AWAITING_PAYMENT);
+    const threeDs = {
+      challengeId: 'tds_0009d7cd0e904b689aabcacf4458d520',
+      expiresAt: new Date('2026-10-08T09:00:42.000Z'),
+      attemptsLeft: 2,
+    };
+    payments.threeDs.set(awaitingId, { userId: 'usr_3ds', threeDs });
+
+    const awaiting = await call(orderV1.OrderServiceService.getOrder, {
+      orderId: awaitingId,
+      userId: 'usr_3ds',
+    });
+
+    expect(awaiting.error).toBeUndefined();
+    expect(awaiting.response?.threeDs).toEqual(threeDs);
+
+    // Taslak baska kullanicinin: kullanici basina tek aktif rezervasyon (T11.4).
+    const draftId = await newDraftId(call, { ...draftRequest, userId: 'usr_3ds_taslak' });
+    payments.threeDs.set(draftId, { userId: 'usr_3ds_taslak', threeDs });
+    const lookups = payments.threeDsLookups.length;
+    const { response } = await call(orderV1.OrderServiceService.getOrder, {
+      orderId: draftId,
+      userId: 'usr_3ds_taslak',
+    });
+
+    expect(response?.order?.status).toBe(orderV1.OrderStatus.ORDER_STATUS_DRAFT);
+    expect(response?.threeDs).toBeUndefined();
+    expect(payments.threeDsLookups).toHaveLength(lookups);
   });
 });
