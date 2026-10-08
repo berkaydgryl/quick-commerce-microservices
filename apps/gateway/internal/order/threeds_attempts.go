@@ -8,8 +8,8 @@ import (
 
 // 3DS yanlis kod siniri (#163, K4): siparisler arasi. Her siparisin 3DS'i kendi
 // icinde 3 hak tanir; iptal edip yeniden siparis veren kullanici her seferinde
-// yeni 3 hak alirdi (kaba kuvvet). Kullanici ve IP basina YANLIS KOD sayilir
-// (dogru kod, sure dolmasi ve saglayiciya ulasilamamasi sayilmaz).
+// yeni 3 hak alirdi (kaba kuvvet). Kullanici (ve acilirsa IP) basina YANLIS KOD
+// sayilir (dogru kod, sure dolmasi ve saglayiciya ulasilamamasi sayilmaz).
 const (
 	ThreeDSFailuresPerHour      = 5
 	ThreeDSFailuresPerDay       = 10

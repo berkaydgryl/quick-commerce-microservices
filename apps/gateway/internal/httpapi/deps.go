@@ -31,8 +31,10 @@ type Deps struct {
 	// ThreeDSFailures, 3DS yanlis kod sayaci (#163; kullanici ve IP pencereleri).
 	// nil ise 3DS siniri tumden kapali (hiz siniri kapaliyken).
 	ThreeDSFailures ratelimit.FailureCounter
-	OrderGetter     OrderGetter
-	OrderLister     OrderLister
+	// ThreeDSIPLimit, IP penceresi acik mi (THREEDS_IP_LIMIT_ENABLED; G1).
+	ThreeDSIPLimit bool
+	OrderGetter    OrderGetter
+	OrderLister    OrderLister
 	// OrderRoomTokens, siparis odasi jetonu (T12.2); bugun roomtoken.Service.
 	OrderRoomTokens OrderRoomTokenIssuer
 	// OrderTracking, kurye takibi (T14.2); bugun tracking.Service.

@@ -514,7 +514,13 @@ order-service'tedir.
   Kurallar ve openapi örnekleri `internal/order/three_ds_contract_test.go` ile karşılaştırılır.
 - **3DS deneme sınırı (siparişler arası, #163):** siparişin 3 hakkı kendi içindedir; siparişi bırakıp
   yeniden veren kullanıcı her seferinde yeni hak alırdı. YANLIŞ KOD sayılır: kullanıcı başına saatte 5,
-  günde 10; IP başına saatte 30 (çok hesapla deneme). Payment'ın `THREEDS_FAILED`'ı süre dolması
+  günde 10 (her zaman açık); IP başına saatte 30 (çok hesapla deneme; `THREEDS_IP_LIMIT_ENABLED`,
+  varsayılan KAPALI). IP soketin adresidir (`X-Forwarded-For`'a güvenilmez): yük dengeleyici, ingress
+  ya da Vite vekili arkasında herkes aynı IP olur ve IP penceresi 30 yanlış koddan sonra HERKESİN kart
+  ödemesini ve 3DS'ini bir saat kilitler (G1). Yalnız istemcinin gateway'e doğrudan bağlandığı kurulumda
+  açılır: güvenilir vekil desteği henüz yok (bekleyen iş #213(3)); ingress'te gerçek IP başlığı ayarlamak
+  yetmez. Açıkken bedeli (G2): CGNAT ya da ofis ağının arkasında birkaç hesabın 30 yanlış kodu o ağdaki
+  herkesin kartla ödemesini bir saat durdurur (kapıda ödeme açık kalır). Payment'ın `THREEDS_FAILED`'ı süre dolması
   (`expired`) dışında yanlış koddur (`wrong_code`, son hakta `attempts_exhausted`; bilinmeyen ya da eksik
   sebep de sayılır: sözleşme kayarsa sayaç susmaz; `internal/order/threeds_attempts.go`). Eşikte `/3ds`
   ve KARTLA `POST /v1/orders` order'a gidilmeden 429 + `Retry-After` (en uzun dolu pencere); kapıda ödeme
@@ -527,7 +533,7 @@ order-service'tedir.
   (kart uçlarındaki eşzamanlılık kilidi yok): kullanıcının aynı anda tek açık 3DS'i (3 hak) olduğu için
   eşzamanlı denemeler kullanıcı sınırını en fazla 2 aşar (saatte 7, günde 12); IP penceresini ise aynı
   anda açık 3DS'i olan K hesap tek patlamada K×3'e kadar aşabilir (her hesap yine kendi sınırında).
-  Anahtarlar `rate:{usr_…}:POST_/v1/orders/3ds/fail-1h|fail-1d` ve `rate:{ip}:POST_/v1/orders/3ds/ip-fail-1h`;
+  Anahtarlar `rate:{usr_…}:POST_/v1/orders/3ds/fail-1h|fail-1d` ve (bayrak açıksa) `rate:{ip}:POST_/v1/orders/3ds/ip-fail-1h`;
   sebep metinleri `payment.proto` ile karşılaştırılır (`TestThreeDSReasonsMatchPaymentContract`). Sayaca
   ulaşılamazsa istek geçer (fail-open, genel sınırla aynı uyarı; Redis tümden düşerse tekrar koruması
   zaten 503 döner); `RATE_LIMIT_ENABLED=false` sınırı da kapatır. Metrik `threeds_attempts_total{result}`
@@ -628,6 +634,7 @@ curl -s "localhost:8080/v1/search?lat=40.9885&lng=29.0262&q=s%C3%BCt" \
 | `RATE_LIMIT_MAX_REQUESTS`    | `120`             | Genel sınır: katalog, market, `/v1/me`, sipariş okuma (1-10000) |
 | `RATE_LIMIT_AUTH_MAX_REQUESTS` | `10`            | Kayıt ve giriş (IP başına); yenileme ve çıkış genel sınırda |
 | `RATE_LIMIT_ORDER_MAX_REQUESTS` | `20`           | Rezervasyon, sipariş, 3DS (kullanıcı başına) |
+| `THREEDS_IP_LIMIT_ENABLED`   | `false`           | 3DS yanlış kod sınırının IP penceresi (saatte 30, #163). Yalnız istemci doğrudan bağlanıyorsa açın: vekil arkasında herkes aynı IP olur (G1); güvenilir vekil desteği yok (#213(3)) |
 | `NODE_ENV`                   | `development`     | `development/test/production`                   |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | yok              | İzlerin OTLP/HTTP taban adresi (D15; yerelde `http://localhost:4318`, Jaeger). Boşsa izler oluşur ama gönderilmez |
 | `GEO_BASE_URL`               | `https://nominatim.openstreetmap.org` | Harita adres servisinin kökü (T11.8); kendi Nominatim'ini kuran ortam değiştirir |

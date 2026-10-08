@@ -19,9 +19,10 @@ import (
 )
 
 // 3DS yanlis kod siniri (#163): yanlis kod kullanici basina saatte 5 / gunde 10,
-// IP basina saatte 30. Esikte 3DS onayi ve kartla siparis order'a gitmeden 429 +
-// Retry-After; kapida odeme etkilenmez. Dogru kod, sure dolmasi, bicimsiz istek,
-// tekrar ve kesinti sayilmaz. Sayac deposu duserse istek gecer (fail-open).
+// IP basina saatte 30 (yalniz ipLimit ile; varsayilan kapali, G1). Esikte 3DS
+// onayi ve kartla siparis order'a gitmeden 429 + Retry-After; kapida odeme
+// etkilenmez. Dogru kod, sure dolmasi, bicimsiz istek, tekrar ve kesinti
+// sayilmaz. Sayac deposu duserse istek gecer (fail-open).
 
 const (
 	threeDSPath        = "/v1/orders/" + testOrderID + "/3ds"
@@ -77,8 +78,9 @@ type threeDSHarness struct {
 	keys     int
 }
 
-// newThreeDSHarness; failures nil ise bellek sayaci (hiz siniriyla ayni depo).
-func newThreeDSHarness(t *testing.T, failures ratelimit.FailureCounter) *threeDSHarness {
+// newThreeDSHarness; failures nil ise bellek sayaci (hiz siniriyla ayni depo);
+// ipLimit, IP penceresi (THREEDS_IP_LIMIT_ENABLED).
+func newThreeDSHarness(t *testing.T, failures ratelimit.FailureCounter, ipLimit bool) *threeDSHarness {
 	t.Helper()
 	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
 	clock := &now
@@ -94,6 +96,7 @@ func newThreeDSHarness(t *testing.T, failures ratelimit.FailureCounter) *threeDS
 		ThreeDSConfirmer: orders,
 		CheckoutSignals:  &fakeSignals{},
 		ThreeDSFailures:  failures,
+		ThreeDSIPLimit:   ipLimit,
 		AccessTokens:     testTokens(),
 		Idempotency:      Idempotency{Store: idempotency.NewMemory(time.Now), FingerprintKey: testFingerprintKey, TTL: 24 * time.Hour},
 		RateLimit:        RateLimit{Limiter: counter, Window: time.Minute, General: 10000, Auth: 10000, Order: 10000},
@@ -122,7 +125,7 @@ func (h *threeDSHarness) advance(d time.Duration) {
 }
 
 func TestThreeDSWrongCodesLimitTheUserAcrossOrders(t *testing.T) {
-	h := newThreeDSHarness(t, nil)
+	h := newThreeDSHarness(t, nil, false)
 	h.orders.fail(threeDSRejection("wrong_code"))
 	user := "usr_" + strings.Repeat("1", 32)
 
@@ -160,7 +163,7 @@ func TestThreeDSWrongCodesLimitTheUserAcrossOrders(t *testing.T) {
 }
 
 func TestThreeDSCountsExhaustedButNotExpiryOutageOrSuccess(t *testing.T) {
-	h := newThreeDSHarness(t, nil)
+	h := newThreeDSHarness(t, nil, false)
 	user := "usr_" + strings.Repeat("2", 32)
 	for _, err := range []error{
 		threeDSRejection("expired"),
@@ -188,7 +191,7 @@ func TestThreeDSCountsExhaustedButNotExpiryOutageOrSuccess(t *testing.T) {
 }
 
 func TestThreeDSHourAndDayWindows(t *testing.T) {
-	h := newThreeDSHarness(t, nil)
+	h := newThreeDSHarness(t, nil, false)
 	h.orders.fail(threeDSRejection("wrong_code"))
 	user := "usr_" + strings.Repeat("3", 32)
 	wrongCodes := func(n int) {
@@ -214,7 +217,7 @@ func TestThreeDSHourAndDayWindows(t *testing.T) {
 }
 
 func TestThreeDSIPCountsWrongCodesAcrossUsers(t *testing.T) {
-	h := newThreeDSHarness(t, nil)
+	h := newThreeDSHarness(t, nil, true)
 	user := func(n int) string { return fmt.Sprintf("usr_%032d", n) }
 
 	// Ayni NAT'in arkasinda dogru kod ve bicimsiz istek (bilinmeyen alan) IP hakkini tuketmez.
@@ -247,8 +250,39 @@ func TestThreeDSIPCountsWrongCodesAcrossUsers(t *testing.T) {
 	}
 }
 
+func TestThreeDSIPWindowIsOffByDefault(t *testing.T) {
+	// G1: IP soketin adresidir; vekil arkasinda herkes ayni IP. Kapaliyken IP
+	// sayilmaz, kullanici pencereleri yine acik.
+	h := newThreeDSHarness(t, nil, false)
+	h.orders.fail(threeDSRejection("wrong_code"))
+	users := order.ThreeDSFailuresPerIPPerHour + 10
+
+	for n := 0; n < users; n++ {
+		if status, _ := h.call(t, fmt.Sprintf("usr_%032d", n), threeDSPath, threeDSConfirmBody); status != http.StatusPaymentRequired {
+			t.Fatalf("IP penceresi kapali: %d. kullanicinin yanlis kodu order'a gitmeli (402): %d", n, status)
+		}
+	}
+	if confirms, _ := h.orders.counts(); confirms != users {
+		t.Errorf("order'a giden onay %d, beklenen %d", confirms, users)
+	}
+}
+
+func TestThreeDSUserWindowsStayWithIPLimit(t *testing.T) {
+	// IP penceresi acilinca kullanici pencereleri dusmez.
+	h := newThreeDSHarness(t, nil, true)
+	h.orders.fail(threeDSRejection("wrong_code"))
+	user := "usr_" + strings.Repeat("8", 32)
+	for attempt := 0; attempt < order.ThreeDSFailuresPerHour; attempt++ {
+		h.call(t, user, threeDSPath, threeDSConfirmBody)
+	}
+
+	if status, _ := h.call(t, user, threeDSPath, threeDSConfirmBody); status != http.StatusTooManyRequests {
+		t.Errorf("IP penceresi acikken de kullanicinin 6. yanlis kodu 429 olmali: %d", status)
+	}
+}
+
 func TestThreeDSRetryAfterIsTheLongestFullWindow(t *testing.T) {
-	h := newThreeDSHarness(t, nil)
+	h := newThreeDSHarness(t, nil, false)
 	h.orders.fail(threeDSRejection("wrong_code"))
 	user := "usr_" + strings.Repeat("6", 32)
 	wrongCodes := func() {
@@ -272,7 +306,7 @@ func TestThreeDSRetryAfterIsTheLongestFullWindow(t *testing.T) {
 }
 
 func TestThreeDSReplayedRequestIsNotCountedTwice(t *testing.T) {
-	h := newThreeDSHarness(t, nil)
+	h := newThreeDSHarness(t, nil, false)
 	h.orders.fail(threeDSRejection("wrong_code"))
 	user := "usr_" + strings.Repeat("4", 32)
 	headers := bearerFor(t, user)
@@ -311,7 +345,7 @@ func TestThreeDSReplayedRequestIsNotCountedTwice(t *testing.T) {
 }
 
 func TestThreeDSRejectionReleasesTheIdempotencyKey(t *testing.T) {
-	h := newThreeDSHarness(t, nil)
+	h := newThreeDSHarness(t, nil, false)
 	h.orders.fail(threeDSRejection("wrong_code"))
 	user := "usr_" + strings.Repeat("7", 32)
 	for attempt := 0; attempt < order.ThreeDSFailuresPerHour; attempt++ {
@@ -352,7 +386,7 @@ func (brokenFailures) Record(context.Context, string, time.Duration) error {
 }
 
 func TestThreeDSCounterOutageFailsOpen(t *testing.T) {
-	h := newThreeDSHarness(t, brokenFailures{})
+	h := newThreeDSHarness(t, brokenFailures{}, true)
 	h.orders.fail(threeDSRejection("wrong_code"))
 	user := "usr_" + strings.Repeat("5", 32)
 

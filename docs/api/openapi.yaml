@@ -2798,8 +2798,8 @@ paths:
         (T8.1). Oturum kapatılmışsa (çıkış) jeton süresi dolmamış olsa bile
         `401` döner.
 
-        3DS deneme sınırına (`/v1/orders/{id}/3ds`; kullanıcı ya da IP başına
-        yanlış kod) ulaşıldıysa KARTLA sipariş order'a gidilmeden
+        3DS deneme sınırına (`/v1/orders/{id}/3ds`; kullanıcı başına, açıksa IP
+        başına yanlış kod) ulaşıldıysa KARTLA sipariş order'a gidilmeden
         `429 RATE_LIMITED` ve `Retry-After` alır: siparişi bırakıp yeniden
         vermek yeni 3DS hakkı açmaz (#163). Kapıda ödeme bu sınırdan etkilenmez.
       security:
@@ -3000,7 +3000,9 @@ paths:
         Deneme sınırı (siparişler arası, #163): siparişin kendi hakkı bitince
         siparişi bırakıp yeniden vermek yeni hak açar; bu yüzden YANLIŞ KOD
         (`wrong_code`, `attempts_exhausted`) kullanıcı başına saatte 5 ve günde
-        10, IP başına saatte 30 sayılır. Eşikte order'a gidilmeden
+        10 sayılır; IP başına saatte 30 penceresi yapılandırmayla açılır
+        (`THREEDS_IP_LIMIT_ENABLED`, varsayılan kapalı: vekil arkasında herkes
+        aynı IP olur). Eşikte order'a gidilmeden
         `429 RATE_LIMITED` ve `Retry-After` (en uzun dolu pencere); aynı sınır
         kartla yeni siparişe de uygulanır. Doğru kod, süre dolması (`expired`),
         biçimi bozuk istek ve kesinti sayılmaz. Sınır tekrar korumasından sonra

@@ -4,8 +4,13 @@ package httpapi
 // siparisin 3DS'i kendi icinde 3 hak tanir; vazgecip yeniden siparis veren
 // kullanici her seferinde yeni 3 hak alirdi.
 //
-//	kullanici basina YANLIS KOD -> saatte 5, gunde 10
-//	IP basina YANLIS KOD        -> saatte 30 (cok hesapla deneme)
+//	kullanici basina YANLIS KOD -> saatte 5, gunde 10 (her zaman acik)
+//	IP basina YANLIS KOD        -> saatte 30 (cok hesapla deneme; varsayilan KAPALI)
+//
+// IP soketin adresidir (byClientIP): yuk dengeleyici, ingress ya da Vite vekili
+// arkasinda herkes ayni IP olur ve IP penceresi herkesin kart odemesini bir saat
+// kilitlerdi (G1). Guvenilir vekil destegi gelene kadar (#213(3))
+// THREEDS_IP_LIMIT_ENABLED ile yalniz dogrudan baglantida acilir.
 //
 // Dogru kod, sure dolmasi, bicimsiz istek, tekrar ve kesinti sayilmaz: ayni
 // NAT'in arkasindaki kullanicilar birbirinin hakkini cop istekle tuketemez.
@@ -21,6 +26,7 @@ package httpapi
 // threeds_attempts_total{result} metrigine yazilir.
 
 import (
+	"slices"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
@@ -36,11 +42,21 @@ const (
 	threeDSIPFailHourRoute = "POST_/v1/orders/3ds/ip-fail-1h"
 )
 
-// threeDSFailureWindows, yanlis kod pencereleri (kullanici ve IP basina).
-var threeDSFailureWindows = []attemptWindow{
+// threeDSUserWindows, kullanici basina yanlis kod pencereleri (her zaman acik).
+var threeDSUserWindows = []attemptWindow{
 	{route: threeDSFailHourRoute, limit: order.ThreeDSFailuresPerHour, length: time.Hour},
 	{route: threeDSFailDayRoute, limit: order.ThreeDSFailuresPerDay, length: day},
-	{route: threeDSIPFailHourRoute, limit: order.ThreeDSFailuresPerIPPerHour, length: time.Hour, perIP: true},
+}
+
+// threeDSIPWindow, IP basina yanlis kod penceresi (yalniz ipLimit ile).
+var threeDSIPWindow = attemptWindow{route: threeDSIPFailHourRoute, limit: order.ThreeDSFailuresPerIPPerHour, length: time.Hour, perIP: true}
+
+// threeDSWindows, acik pencereler; ortak dilim degistirilmez.
+func threeDSWindows(ipLimit bool) []attemptWindow {
+	if !ipLimit {
+		return threeDSUserWindows
+	}
+	return append(slices.Clip(threeDSUserWindows), threeDSIPWindow)
 }
 
 // threeDSAttempts, 3DS onayinin deneme siniri ve sonuc kaydi.
@@ -49,10 +65,11 @@ type threeDSAttempts struct {
 	recorder RequestMetrics
 }
 
-// newThreeDSAttempts, sayac nil ise sinir kapali (hiz siniri kapaliyken).
-func newThreeDSAttempts(failures ratelimit.FailureCounter, limits rateLimiter, recorder RequestMetrics) threeDSAttempts {
+// newThreeDSAttempts, sayac nil ise sinir kapali (hiz siniri kapaliyken);
+// ipLimit false ise yalniz kullanici pencereleri.
+func newThreeDSAttempts(failures ratelimit.FailureCounter, ipLimit bool, limits rateLimiter, recorder RequestMetrics) threeDSAttempts {
 	return threeDSAttempts{
-		gate:     attemptGate{windows: threeDSFailureWindows, failures: failures, warning: limits.warning},
+		gate:     attemptGate{windows: threeDSWindows(ipLimit), failures: failures, warning: limits.warning},
 		recorder: recorder,
 	}
 }
