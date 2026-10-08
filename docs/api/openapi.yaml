@@ -4118,6 +4118,7 @@ components:
           checkout,
           confirm,
           courierTracking,
+          orderConfirmation,
         ]
       properties:
         header:
@@ -4183,6 +4184,8 @@ components:
           $ref: "#/components/schemas/ConfirmContent"
         courierTracking:
           $ref: "#/components/schemas/CourierTrackingContent"
+        orderConfirmation:
+          $ref: "#/components/schemas/OrderConfirmationContent"
 
     ConfirmContent:
       type: object
@@ -4193,6 +4196,32 @@ components:
       properties:
         yesLabel: { $ref: "#/components/schemas/ContentText" }
         noLabel: { $ref: "#/components/schemas/ContentText" }
+
+    OrderConfirmationContent:
+      type: object
+      description: |
+        Sipariş onay ekranı (F17; /siparis/:id/onay): sipariş verildiyse "Siparişin alındı!",
+        risk incelemesindeyse "Siparişin inceleniyor" ve kısa not; özet ve teslimat ayrıntıları
+        başlıkları, "Siparişlerime git" ve "Alışverişe devam et". Diğer etiketler orders,
+        checkout, paymentMethods (kart markaları) ve cartPage (deliveryTimeLabel) bloklarından.
+      required:
+        [
+          placedTitle,
+          reviewTitle,
+          reviewNotice,
+          summaryTitle,
+          detailsTitle,
+          ordersLinkLabel,
+          continueLabel,
+        ]
+      properties:
+        placedTitle: { $ref: "#/components/schemas/ContentText" }
+        reviewTitle: { $ref: "#/components/schemas/ContentText" }
+        reviewNotice: { $ref: "#/components/schemas/ContentText" }
+        summaryTitle: { $ref: "#/components/schemas/ContentText" }
+        detailsTitle: { $ref: "#/components/schemas/ContentText" }
+        ordersLinkLabel: { $ref: "#/components/schemas/ContentText" }
+        continueLabel: { $ref: "#/components/schemas/ContentText" }
 
     CourierTrackingContent:
       type: object

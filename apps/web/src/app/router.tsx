@@ -7,7 +7,11 @@ import { CART_PATH } from '../features/cart/routes';
 import { CHECKOUT_PATH } from '../features/checkout/routes';
 import { FAVORITES_PATH } from '../features/favorites/routes';
 import { MARKET_LIST_PATH, MARKET_ROUTE } from '../features/markets/routes';
-import { ORDER_DETAIL_ROUTE, ORDERS_PATH } from '../features/orders/routes';
+import {
+  ORDER_CONFIRMATION_ROUTE,
+  ORDER_DETAIL_ROUTE,
+  ORDERS_PATH,
+} from '../features/orders/routes';
 import { AccountPage } from '../pages/account/AccountPage';
 import { AddCardPage } from '../pages/account/AddCardPage';
 import { AddressesPage } from '../pages/account/AddressesPage';
@@ -21,6 +25,7 @@ import { ForgotPasswordPage } from '../pages/forgot-password/ForgotPasswordPage'
 import { LoginPage } from '../pages/login/LoginPage';
 import { MarketPage } from '../pages/market/MarketPage';
 import { NearbyMarketsPage } from '../pages/markets/NearbyMarketsPage';
+import { OrderConfirmationPage } from '../pages/order-confirmation/OrderConfirmationPage';
 import { RegisterPage } from '../pages/register/RegisterPage';
 import { RootPage } from '../pages/root/RootPage';
 
@@ -50,6 +55,7 @@ export const router = createBrowserRouter([
       { path: FAVORITES_PATH, element: <FavoritesPage /> },
       { path: ORDERS_PATH, element: <OrdersPage /> },
       { path: ORDER_DETAIL_ROUTE, element: <OrderDetailPage /> },
+      { path: ORDER_CONFIRMATION_ROUTE, element: <OrderConfirmationPage /> },
       // Odeme Yontemlerim (T11.17): yalnizca gelistirme paketinde (__CARD_VAULT__, K1 (a)).
       ...(__CARD_VAULT__
         ? [

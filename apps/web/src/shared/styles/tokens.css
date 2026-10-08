@@ -126,6 +126,9 @@
   --duration-pulse: 1.6s;
   --easing-standard: cubic-bezier(0.2, 0, 0, 1);
 
+  /* Tek seferlik gorunme (F17 onay isareti): daire buyur, isaret cizilir. */
+  --duration-reveal: 480ms;
+
   /* --- Katman sirasi --- */
   --z-header: 10;
 
