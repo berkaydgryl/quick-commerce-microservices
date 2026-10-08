@@ -24,12 +24,13 @@ type recordedRequest struct {
 }
 
 type recordingMetrics struct {
-	mu            sync.Mutex
-	requests      []recordedRequest
-	replays       []string
-	keyRejections []string
-	rateLimited   []string
-	cardResults   []string
+	mu             sync.Mutex
+	requests       []recordedRequest
+	replays        []string
+	keyRejections  []string
+	rateLimited    []string
+	cardResults    []string
+	threeDSResults []string
 }
 
 func (m *recordingMetrics) ObserveRequest(route, method, code string, _ time.Duration) {
@@ -60,6 +61,18 @@ func (m *recordingMetrics) CountCardVerification(result string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.cardResults = append(m.cardResults, result)
+}
+
+func (m *recordingMetrics) CountThreeDSAttempt(result string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.threeDSResults = append(m.threeDSResults, result)
+}
+
+func (m *recordingMetrics) threeDSAttempts() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]string(nil), m.threeDSResults...)
 }
 
 func (m *recordingMetrics) cardVerifications() []string {

@@ -27,4 +27,11 @@ export interface CardRepository {
    * @returns silindi mi? (false: kart yok, baska kullanicinin ya da zaten silinmis)
    */
   softDelete(userId: string, cardId: string, at: Date): Promise<boolean>;
+  /**
+   * Kartin adini degistirir (#148): ad verilirse yazilir; null (ya da bos
+   * metin) ACIKCA KALDIRIR. TEK ATOMIK adim, kosul "bu kullanicinin ve ACTIVE": silme ile
+   * yarista silinmis kart duzenlenmez, duzenleme silinmis karti diriltmez.
+   * @returns guncel kart; kart yok, baskasinin ya da silinmisse null (uc durum ayni).
+   */
+  updateNickname(userId: string, cardId: string, nickname: string | null): Promise<Card | null>;
 }

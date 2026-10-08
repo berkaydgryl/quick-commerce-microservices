@@ -4,11 +4,16 @@
  */
 
 import type { RiskEvent } from '../../domain/risk-event.js';
-import type { LatestEventQuery, RiskEventRepository } from '../../domain/risk-event-repository.js';
+import type {
+  LatestEventQuery,
+  RecentEventsQuery,
+  RecentRiskEvents,
+  RiskEventRepository,
+} from '../../domain/risk-event-repository.js';
 import { fromRiskEventDocument, toRiskEventDocument } from './mappers.js';
 import type { RiskEventsCollection } from './risk-events-collection.js';
 
-export class RiskEventMongoStore implements RiskEventRepository {
+export class RiskEventMongoStore implements RiskEventRepository, RecentRiskEvents {
   constructor(private readonly events: RiskEventsCollection) {}
 
   async insert(event: RiskEvent): Promise<void> {
@@ -19,6 +24,15 @@ export class RiskEventMongoStore implements RiskEventRepository {
     const document = await this.events.findLatest(
       orderId === undefined ? { userId } : { userId, orderId },
     );
+    return document === null ? null : fromRiskEventDocument(document);
+  }
+
+  async findHighestRecent({
+    userId,
+    since,
+    timeoutMs,
+  }: RecentEventsQuery): Promise<RiskEvent | null> {
+    const document = await this.events.findHighestRecent(userId, since, timeoutMs);
     return document === null ? null : fromRiskEventDocument(document);
   }
 }

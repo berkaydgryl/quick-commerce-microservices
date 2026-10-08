@@ -1,7 +1,6 @@
 package tracking
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 
@@ -61,10 +60,12 @@ type Tracking struct {
 	Courier Courier `json:"courier"`
 	// Location, kuryenin konumu: TO_MARKET'ta YOK (gizlilik; onceki musterinin
 	// adresi sizmasin), sonra zorunlu.
-	Location         *rest.GeoPoint  `json:"location,omitempty"`
-	At               string          `json:"at"`
-	RemainingMeters  int32           `json:"remainingMeters"`
-	EtaSeconds       int32           `json:"etaSeconds"`
+	Location        *rest.GeoPoint `json:"location,omitempty"`
+	At              string         `json:"at"`
+	RemainingMeters int32          `json:"remainingMeters"`
+	// EtaSeconds int64: TO_MARKET'ta dakikaya yukari yuvarlama int32 sinirinda
+	// tasmasin (#179 N6); sozlesmede tamsayinin ust siniri yok.
+	EtaSeconds       int64           `json:"etaSeconds"`
 	Route            []rest.GeoPoint `json:"route"`
 	MarketLocation   rest.GeoPoint   `json:"marketLocation"`
 	DeliveryLocation rest.GeoPoint   `json:"deliveryLocation"`
@@ -75,22 +76,20 @@ type Tracking struct {
 // toTracking, courier'in cevabini sozlesmedeki bicime cevirir.
 //
 // Gizlilik kurallari son kez BURADA uygulanir (cevap istemciye buradan cikar):
-// TO_MARKET'ta courier konum gonderse bile cevaba girmez ve varis tahmini
+// TO_MARKET'ta courier konum gonderse bile cevaba girmez, varis tahmini
 // dakikaya yukari yuvarlanir (kalanin saniye saniye azalisi kuryenin markete
-// uzakligini ele vermesin). Sozlesmenin zorunlu alanlari (an, rota, market ve
-// adres konumu; paket alindiktan sonra kuryenin konumu) yoksa cevap
-// sozlesmeyi bozardi: INTERNAL. Asamalarin diger tutarlilik kurallari
-// courier'dedir.
+// uzakligini ele vermesin) ve kurye adi kisaltilir (ShortCourierName, #183).
+// Sozlesmeye aykiri cevap (invariants.go) istemciye gitmez: INTERNAL.
 func toTracking(orderID, status string, response *courierv1.GetTrackingResponse) (Tracking, error) {
 	phase, known := phaseNames[response.GetPhase()]
 	if !known {
 		return Tracking{}, internal(fmt.Errorf("bilinmeyen takip asamasi %v", response.GetPhase()))
 	}
-	if err := requiredFields(phase, response); err != nil {
+	if err := contractViolations(phase, response); err != nil {
 		return Tracking{}, internal(err)
 	}
 	var location *rest.GeoPoint
-	eta := response.GetEtaSeconds()
+	eta := int64(response.GetEtaSeconds())
 	if phase == PhaseToMarket {
 		eta = roundUpToStep(eta, EtaStepBeforePickupSeconds)
 	} else {
@@ -105,7 +104,7 @@ func toTracking(orderID, status string, response *courierv1.GetTrackingResponse)
 		OrderID:          orderID,
 		Status:           status,
 		Phase:            phase,
-		Courier:          Courier{ID: response.GetCourierId(), Name: response.GetCourierName()},
+		Courier:          Courier{ID: response.GetCourierId(), Name: ShortCourierName(response.GetCourierName())},
 		Location:         location,
 		At:               rest.TimeText(response.GetAt()),
 		RemainingMeters:  response.GetRemainingMeters(),
@@ -118,28 +117,9 @@ func toTracking(orderID, status string, response *courierv1.GetTrackingResponse)
 	}, nil
 }
 
-// requiredFields, sozlesmenin zorunlu alanlari: an, 1-40 noktali rota, market
-// ve adres konumu; paket alindiktan sonra kuryenin konumu. Hata yalnizca alan
-// ADINI tasir (konum degeri gunluge gitmez).
-func requiredFields(phase string, response *courierv1.GetTrackingResponse) error {
-	var missing []error
-	if response.GetAt() == nil {
-		missing = append(missing, errors.New("an yok"))
-	}
-	if points := len(response.GetRoute()); points == 0 || points > RouteMaxPoints {
-		missing = append(missing, fmt.Errorf("rota %d nokta", points))
-	}
-	if response.GetMarketLocation() == nil || response.GetDeliveryLocation() == nil {
-		missing = append(missing, errors.New("market ya da adres konumu yok"))
-	}
-	if phase != PhaseToMarket && response.GetLocation() == nil {
-		missing = append(missing, fmt.Errorf("%s asamasinda kurye konumu yok", phase))
-	}
-	return errors.Join(missing...)
-}
-
-// roundUpToStep, degeri adimin katina yukari yuvarlar (0 ve negatif oldugu gibi kalir).
-func roundUpToStep(value, step int32) int32 {
+// roundUpToStep, degeri adimin katina yukari yuvarlar (0 ve negatif oldugu gibi
+// kalir). int64: int32 sinirindaki tahmin tasip negatife donmez (#179 N6).
+func roundUpToStep(value, step int64) int64 {
 	if value <= 0 {
 		return value
 	}

@@ -1,0 +1,11 @@
+/*
+ * Ortak harita (F22): karo dikisi duzeltmesi. Pencere ortalaninca harita
+ * kesirli pikselde durur (ornek: ust 226.5); Leaflet'in Chrome duzeltmesi
+ * (mix-blend-mode: plus-lighter) yari piksel ust uste binen karo kenarini
+ * parlatir ve ince beyaz cizgi gorunur. Saydam cerceve karonun kenarini
+ * yumusatmadan cizdirir; canli olcumde 1440/390 ve DPR 1/2'de dikis 0.
+ * Haritada img yalniz karodur (isaretler div, kontrollerde gorsel yok).
+ */
+.c-base-map img {
+  outline: var(--border-width-thin) solid transparent;
+}

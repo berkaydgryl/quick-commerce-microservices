@@ -21,6 +21,7 @@ import (
 
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/order"
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/testkit"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/tracking"
 )
 
@@ -53,21 +54,42 @@ func (f *trackedOrders) Get(ctx context.Context, userID, orderID string) (order.
 	return order.Order{ID: orderID, Status: f.status}, nil
 }
 
-// trackingCourier, courier istemcisinin sahtesi.
+// trackingCourier, courier istemcisinin sahtesi: cagrinin baglamini ve
+// istegini saklar; hata, trailer (x-app-error) ve cevap verilebilir.
 type trackingCourier struct {
-	err   error
-	calls int
+	err      error
+	trailer  metadata.MD
+	response *courierv1.GetTrackingResponse
+	ctx      context.Context
+	request  *courierv1.GetTrackingRequest
+	// budget, cagri ANINDA son tarihe kalan sure (yoksa 0).
+	budget time.Duration
+	calls  int
 }
 
-func (f *trackingCourier) GetTracking(context.Context, *courierv1.GetTrackingRequest, ...grpc.CallOption) (*courierv1.GetTrackingResponse, error) {
+func (f *trackingCourier) GetTracking(ctx context.Context, in *courierv1.GetTrackingRequest, opts ...grpc.CallOption) (*courierv1.GetTrackingResponse, error) {
 	f.calls++
+	f.ctx, f.request = ctx, in
+	if deadline, has := ctx.Deadline(); has {
+		f.budget = time.Until(deadline)
+	}
+	testkit.SetTrailer(opts, f.trailer)
 	if f.err != nil {
 		return nil, f.err
 	}
+	if f.response != nil {
+		return f.response, nil
+	}
+	return onTheWay(), nil
+}
+
+// onTheWay, paket alinmis takibin courier cevabi. Kurye adi TAM gelir
+// (gateway kisaltir, #183); konum ayirt edici koordinatlarla.
+func onTheWay() *courierv1.GetTrackingResponse {
 	at := timestamppb.New(time.Date(2026, 10, 7, 20, 10, 0, 0, time.UTC))
 	return &courierv1.GetTrackingResponse{
 		CourierId:        "crr_0123456789abcdef0123456789abcdef",
-		CourierName:      "Mehmet K.",
+		CourierName:      "Mehmet Kaya",
 		Phase:            courierv1.TrackingPhase_TRACKING_PHASE_TO_CUSTOMER,
 		Location:         &commonv1.GeoPoint{Lat: trackingLat, Lng: trackingLng},
 		At:               at,
@@ -77,16 +99,20 @@ func (f *trackingCourier) GetTracking(context.Context, *courierv1.GetTrackingReq
 		MarketLocation:   &commonv1.GeoPoint{Lat: 40.99, Lng: 29.02},
 		DeliveryLocation: &commonv1.GeoPoint{Lat: 40.995, Lng: 29.03},
 		PickedUpAt:       at,
-	}, nil
+	}
 }
 
-func trackingApp(orders *trackedOrders, courier *trackingCourier, logger *slog.Logger) *fiber.App {
-	return New(Deps{
+func trackingApp(orders *trackedOrders, courier *trackingCourier, logger *slog.Logger, adjust ...func(*Deps)) *fiber.App {
+	deps := Deps{
 		Health:        fakeReporter{report: healthyReport()},
 		OrderTracking: tracking.New(orders, courier, time.Second),
 		AccessTokens:  testTokens(),
 		Logger:        logger,
-	})
+	}
+	for _, change := range adjust {
+		change(&deps)
+	}
+	return New(deps)
 }
 
 func trackingPath() string {
@@ -130,6 +156,9 @@ func TestOrderTrackingForOwner(t *testing.T) {
 	}
 	if _, hasLocation := data["location"].(map[string]any); !hasLocation {
 		t.Errorf("paket alindiktan sonra konum olmali: %+v", data)
+	}
+	if courier, _ := data["courier"].(map[string]any); courier["name"] != "Mehmet K." {
+		t.Errorf("kurye adi kisaltilmali (#183): %+v", data["courier"])
 	}
 }
 
@@ -212,7 +241,7 @@ func TestOrderTrackingLogsNoCoordinates(t *testing.T) {
 	if logs.Len() == 0 {
 		t.Fatal("istek gunlugu yazilmali (denetim bos gunlukte anlamsiz)")
 	}
-	for _, leak := range []string{"40.98765", "29.12345", `"lat"`, `"lng"`, "location"} {
+	for _, leak := range []string{"40.98765", "29.12345", `"lat"`, `"lng"`, "location", "Kaya"} {
 		if strings.Contains(logs.String(), leak) {
 			t.Errorf("gunlukte %q var:\n%s", leak, logs.String())
 		}

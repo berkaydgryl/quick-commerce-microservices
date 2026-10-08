@@ -31,8 +31,12 @@ teslimat süresi ve puan. Market paneli kapsam dışıdır; değerler seed'dendi
 | `BatchGetProducts`     | ⛔ Deprecated (proto'da işaretli): `NOT_IMPLEMENTED` — kullanan yok; fiyat teklife ait olduğu için sepet doğrulaması `BatchGetOffers` ile         |
 
 T4.2'nin "yarıçap içinde ama kapalı → `STORE_CLOSED`, yarıçap dışı → `OUT_OF_RANGE`" kuralı
-kaybolmadı: tek market için `domain/market-coverage.ts` → `evaluateCoverage`'da duruyor ve
-rezervasyon (T11.4) seçilen marketin hâlâ hizmet verip vermediğini buna soracak.
+kaybolmadı: tek market için `domain/market-coverage.ts` → `evaluateCoverage`'da duruyor. Kapalı
+marketin sipariş almaması order-service'tedir (#154): `CreateDraftOrder` `GetMarket`'ın `is_open`'ını
+okur, kapalıysa `NO_STORE` + `reason: STORE_CLOSED`. `GetMarket` kapalı markette başarılı döner.
+Teslimat yarıçapı (`OUT_OF_RANGE`) da rezervasyonda sorulur (#203): `CreateDraftOrder` aynı mesafe ve
+eşitsizliği `@getir/core`'dan kullanır (`distanceMeters`, `isWithinDeliveryRadius`; sınır dahil).
+Liste `$geoNear`'dan, rezervasyon haversine'den: sınırda ±1 m fark (KABUL).
 
 ## İstek doğrulaması (D6)
 
@@ -96,8 +100,8 @@ alanıdır; iki arama aynı eşleşme kuralını kullanır (T9.4: harf ve Türk�
 | Ad eşleşmesi             | "MİGROS", "migros moda", "abbasaga" → ilgili market; ürünü eşleşmese de listelenir, teklif listesi boş                                                                       |
 | Market yok / eşleşme yok | Boş liste, hata değil                                                                                                                                                        |
 
-- **İki sorgu, market sayısından bağımsız (N+1 yok):** `listMarketsByDistance` (en fazla
-  `MARKET_CANDIDATE_LIMIT`) ve `OfferReader.searchActiveOffers`. Mongo'da ikincisi tek toplama sorgusudur:
+- **İki sorgu, market sayısından bağımsız (N+1 yok):** `listCoveringMarkets` (konumu kapsayan en
+  fazla `MARKET_CANDIDATE_LIMIT` market; sınır kapsamadan SONRA uygulanır, #175) ve `OfferReader.searchActiveOffers`. Mongo'da ikincisi tek toplama sorgusudur:
   `$match { marketId: $in, isActive, kelimeler }` → `$sort { _id }` → `$group` (`$sum` + `$firstN`,
   Mongo 5.2+). Boru hattı `searchActiveOffersPipeline`'da; depo ve plan testi aynı fonksiyonu kullanır.
 - **Yeni indeks yok:** `marketId` ile başlayan bir indeksten yalnızca kapsayan marketlerin teklifleri
@@ -131,7 +135,7 @@ değişmez. Güncel verinin bütünlüğü `test/unit/catalog-fixtures.spec.ts`'
 | Port             | Metotlar                                                                                  | Kullanan use-case                                                        |
 | ---------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | `CategoryReader` | `listCategories(limit)`                                                                   | `ListCategories`, `ListMarketCategories`                                 |
-| `MarketReader`   | `getMarket`, `marketExists`, `listMarketsByDistance`                                      | `ListNearbyMarkets`, `GetMarket`, `SearchNearby`, varlık kontrolleri     |
+| `MarketReader`   | `getMarket`, `marketExists`, `listCoveringMarkets`                                        | `ListNearbyMarkets`, `GetMarket`, `SearchNearby`, varlık kontrolleri     |
 | `OfferReader`    | `listOffers`, `listCategoryIdsWithOffers`, `findOffersByProductIds`, `searchActiveOffers` | `ListProducts`, `ListMarketCategories`, `BatchGetOffers`, `SearchNearby` |
 
 ### Belge şekli ve indeksler
@@ -140,7 +144,7 @@ değişmez. Güncel verinin bütünlüğü `test/unit/catalog-fixtures.spec.ts`'
 | ------------ | -------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | `categories` | —                                                        | `slug` unique                                                                |
 | `products`   | — (fiyat yok)                                            | `sku` unique                                                                 |
-| `markets`    | `location` GeoJSON `[boylam, enlem]`                     | `location` 2dsphere (`$geoNear`)                                             |
+| `markets`    | `location` GeoJSON `[boylam, enlem]`                     | `location` 2dsphere (`$geoNear` + yarıçap `$match` + `$limit`, #175)         |
 | `offers`     | `product` kopyası, `categoryId` kopyası, `searchTerms[]` | `{marketId,productId}` unique, `{marketId,categoryId,_id}`, `{marketId,_id}` |
 
 - **Kopyalar:** teklif, listeleme alanlarını üründen kopyalar; market sayfası tek sorguda,

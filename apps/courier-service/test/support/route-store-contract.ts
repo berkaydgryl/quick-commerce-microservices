@@ -7,11 +7,12 @@ import { describe, expect, it } from 'vitest';
 
 import type { Route } from '../../src/domain/route.js';
 import { planRoute } from '../../src/domain/route-planner.js';
-import type { RouteRepository } from '../../src/domain/route-repository.js';
+import type { RouteBatchReader, RouteRepository } from '../../src/domain/route-repository.js';
 import {
   courierId,
   DELIVERY,
   MARKET_LOCATION,
+  MOVEMENT_RULE,
   northOf,
   NOW_MS,
   orderId,
@@ -31,8 +32,26 @@ function routeFor(order: string, courier: number, meters: number, atMs = NOW_MS)
   };
 }
 
-export function describeRouteStoreContract(name: string, getStore: () => RouteRepository): void {
+export function describeRouteStoreContract(
+  name: string,
+  getStore: () => RouteRepository & RouteBatchReader,
+): void {
   describe(`RouteRepository sozlesmesi: ${name}`, () => {
+    it('findByOrders (#205): bulunan siparislerin rotalari tek okumada; olmayan atlanir, bos liste bos', async () => {
+      const store = getStore();
+      const first = routeFor(orderId(), 1, 640);
+      const second = routeFor(orderId(), 2, 300);
+      await store.insertOnce(first);
+      await store.insertOnce(second);
+
+      const found = await store.findByOrders([second.orderId, orderId(), first.orderId]);
+
+      expect([...found].sort((left, right) => (left.orderId < right.orderId ? -1 : 1))).toEqual(
+        [first, second].sort((left, right) => (left.orderId < right.orderId ? -1 : 1)),
+      );
+      expect(await store.findByOrders([])).toEqual([]);
+    });
+
     it('rota ALAN KAYBI olmadan yazilir ve okunur (noktalar ondalik kaybetmez); olmayan siparis null', async () => {
       const store = getStore();
       const route = routeFor(orderId(), 1, 640);
@@ -40,6 +59,20 @@ export function describeRouteStoreContract(name: string, getStore: () => RouteRe
       expect(await store.insertOnce(route)).toEqual(route);
       expect(await store.findByOrder(route.orderId)).toEqual(route);
       expect(await store.findByOrder(orderId())).toBeNull();
+    });
+
+    it('hareket kurali (#197) insertOnce ve replace ile yazilir, aynen okunur', async () => {
+      const store = getStore();
+      const route = { ...routeFor(orderId(), 1, 640), movement: MOVEMENT_RULE };
+
+      expect(await store.insertOnce(route)).toEqual(route);
+      expect(await store.findByOrder(route.orderId)).toEqual(route);
+      const renewed = {
+        ...routeFor(route.orderId, 2, 300, NOW_MS + 60_000),
+        movement: { speedKmh: 15, prepSeconds: 90 },
+      };
+      await store.replace(renewed);
+      expect(await store.findByOrder(route.orderId)).toEqual(renewed);
     });
 
     it('insertOnce BIR KEZ yazar: ikinci rota (baska an, baska konum) yazilmaz, ilki doner', async () => {

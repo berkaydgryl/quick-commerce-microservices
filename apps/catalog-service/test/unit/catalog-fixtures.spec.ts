@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
+import { distanceMeters } from '@getir/core';
 import { describe, expect, it } from 'vitest';
 
 import type { StoreType } from '../../src/domain/catalog.js';
@@ -19,7 +20,6 @@ import {
   BRAND_PRICE_INDEX,
 } from '../../src/infrastructure/fixtures/offers/base-prices.js';
 import { MARKET_CANDIDATE_LIMIT } from '../../src/config/constants.js';
-import { distanceMeters } from '../../src/domain/geo.js';
 import { coveringMarkets } from '../../src/domain/market-coverage.js';
 import { CATALOG_SNAPSHOT } from '../../src/infrastructure/fixtures.js';
 import { CLASSIC_SNAPSHOT } from '../support/classic-catalog.js';

@@ -90,7 +90,7 @@ const validJSON = `{
     "cart": {
       "title": "Sepetim", "emptyTitle": "Sepetin şu an boş", "emptyHint": "Sepetine ürün ekle", "itemCountLabel": "ürün",
       "subtotalLabel": "Ara toplam", "deliveryLabel": "Teslimat Ücreti", "freeDeliveryLabel": "Ücretsiz", "totalLabel": "Toplam",
-      "minBasketRemainingLabel": "Minimum sepet tutarına kalan", "closedNotice": "Market şu an kapalı", "goToCartLabel": "Sepete git", "clearLabel": "Sepeti boşalt", "clearConfirmQuestion": "Sepeti boşaltmak istediğinden emin misin?", "switchConfirmPrefix": "Sepeti boşaltıp", "switchConfirmSuffix": "ile devam edilsin mi?", "decreaseSuffix": "adedini azalt", "increaseSuffix": "adedini artır", "removeSuffix": "sepetten çıkar", "quantitySuffix": "adedi"
+      "minBasketRemainingLabel": "Minimum sepet tutarına kalan", "closedNotice": "Market şu an kapalı", "goToCartLabel": "Sepete git", "clearLabel": "Sepeti boşalt", "clearConfirmQuestion": "Sepeti boşaltmak istediğinden emin misin?", "switchConfirmPrefix": "Sepeti boşaltıp", "switchConfirmSuffix": "ile devam edilsin mi?", "addressChangePrefix": "Sepetindeki", "addressChangeSuffix": "teslim etmiyor.", "cartClearedToast": "Sepetin boşaltıldı.", "decreaseSuffix": "adedini azalt", "increaseSuffix": "adedini artır", "removeSuffix": "sepetten çıkar", "quantitySuffix": "adedi"
     }
   },
   "favorites": {
@@ -152,7 +152,10 @@ const validJSON = `{
     "trackDeliveredLabel": "Teslim edildi", "whereIsCourierLabel": "Kuryem nerede",
     "whereIsCourierHint": "Kurye yola çıkınca konumunu izleyebilirsin."
   },
-  "confirm": {"yesLabel": "Evet", "noLabel": "Hayır"}
+  "confirm": {"yesLabel": "Evet", "noLabel": "Hayır"},
+  "appLoading": {"label": "Yükleniyor..."},
+  "courierTracking": {"title": "Kuryem nerede", "closeLabel": "Kapat", "courierLabel": "Kuryen", "mapLabel": "Kuryenin ve teslimat adresinin haritası", "etaLabel": "Tahmini varış", "etaPrefix": "~", "minuteSuffix": "dk", "distanceLabel": "Kalan mesafe", "kilometerSuffix": "km", "meterSuffix": "m", "addressLabel": "Teslimat adresi", "loadingLabel": "Kuryenin konumu yükleniyor…", "pickupNotice": "Kuryen siparişini marketten alıyor; yola çıkınca konumu burada görünür.", "deliveredNotice": "Siparişin teslim edildi.", "unavailableNotice": "Kuryenin konumu şu an alınamıyor.", "retryLabel": "Tekrar dene", "approachTitle": "Kuryen konumuna yaklaştı!", "approachActionLabel": "Konumu gör", "approachCloseLabel": "Bildirimi kapat"},
+  "orderConfirmation": {"placedTitle": "Siparişin alındı!", "reviewTitle": "Siparişin inceleniyor", "reviewNotice": "İnceleme bitince durumunu buradan izleyebilirsin.", "summaryTitle": "Sipariş özeti", "detailsTitle": "Teslimat ayrıntıları", "ordersLinkLabel": "Siparişlerime git", "continueLabel": "Alışverişe devam et"}
 }`
 
 func TestEmbeddedWelcomeLoads(t *testing.T) {

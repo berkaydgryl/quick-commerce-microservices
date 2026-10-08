@@ -15,6 +15,19 @@ func TestRateLimitDefaults(t *testing.T) {
 		cfg.RateLimitGeneral != 120 || cfg.RateLimitAuth != 10 || cfg.RateLimitOrder != 20 {
 		t.Errorf(".env.example varsayilanlari bekleniyordu: %+v", cfg)
 	}
+	if cfg.ThreeDSIPLimitEnabled {
+		t.Error("3DS IP penceresi varsayilan KAPALI olmali (G1: vekil arkasinda kuresel kilit)")
+	}
+}
+
+func TestThreeDSIPLimitIsRead(t *testing.T) {
+	cfg, err := Load(minimalEnv(map[string]string{"THREEDS_IP_LIMIT_ENABLED": "true"}))
+	if err != nil {
+		t.Fatalf("hata beklenmiyordu: %v", err)
+	}
+	if !cfg.ThreeDSIPLimitEnabled {
+		t.Error("THREEDS_IP_LIMIT_ENABLED=true okunmadi")
+	}
 }
 
 func TestRateLimitValuesAreRead(t *testing.T) {
@@ -37,11 +50,12 @@ func TestInvalidRateLimitsAreReportedTogether(t *testing.T) {
 	_, err := Load(minimalEnv(map[string]string{
 		"RATE_LIMIT_ENABLED": "belki", "RATE_LIMIT_WINDOW_SECONDS": "0",
 		"RATE_LIMIT_MAX_REQUESTS": "0", "RATE_LIMIT_AUTH_MAX_REQUESTS": "-1", "RATE_LIMIT_ORDER_MAX_REQUESTS": "10001",
+		"THREEDS_IP_LIMIT_ENABLED": "belki",
 	}))
 	if err == nil {
 		t.Fatal("gecersiz degerler reddedilmeliydi")
 	}
-	for _, name := range []string{"RATE_LIMIT_ENABLED", "RATE_LIMIT_WINDOW_SECONDS", "RATE_LIMIT_MAX_REQUESTS", "RATE_LIMIT_AUTH_MAX_REQUESTS", "RATE_LIMIT_ORDER_MAX_REQUESTS"} {
+	for _, name := range []string{"RATE_LIMIT_ENABLED", "RATE_LIMIT_WINDOW_SECONDS", "RATE_LIMIT_MAX_REQUESTS", "RATE_LIMIT_AUTH_MAX_REQUESTS", "RATE_LIMIT_ORDER_MAX_REQUESTS", "THREEDS_IP_LIMIT_ENABLED"} {
 		if !strings.Contains(err.Error(), name) {
 			t.Errorf("%s hatada yok: %v", name, err)
 		}

@@ -1,6 +1,7 @@
 import type { SavedAddress } from '@getir/contracts';
 import { useEffect } from 'react';
 
+import { KEEP_CART, useAddressChangeGuard } from '../../../shared/address-change/guard';
 import { useSessionStore } from '../../../shared/session/session-store';
 import { upgradeSelection } from '../services/address-selection';
 import { addressBookState, resolveDeliveryAddress } from '../services/delivery-address';
@@ -17,8 +18,13 @@ export interface AddressBook {
   /** Defterin hatasi; yeniden denerken null. */
   readonly error: Error | null;
   readonly retry: () => void;
-  /** Adresi (kimligiyle) oturumdaki kullanici adina secer (secim kullaniciya baglidir). */
-  readonly choose: (addressId: string) => void;
+  /**
+   * Adresi (kimligiyle) oturumdaki kullanici adina secer (secim kullaniciya
+   * baglidir). Once adres degisiminin bekcisi sorulur (F16: sepetin marketi
+   * yeni adrese teslim etmiyorsa onay); gecerli adres yeniden secilirse
+   * sorulmaz. true: adres secildi.
+   */
+  readonly choose: (addressId: string) => Promise<boolean>;
 }
 
 /**
@@ -33,6 +39,7 @@ export function useAddressBook(): AddressBook {
   const book = useSavedAddresses(userId);
   const selection = useAddressStore((state) => state.selection);
   const select = useAddressStore((state) => state.select);
+  const guard = useAddressChangeGuard();
 
   // Surum 1'den tasinmis adla secim: defter gelince kimlige cevrilir (K3 (a)).
   // Etki ilkel degerlere baglidir: her cizimde yeni nesne etkiyi yeniden kosturmasin.
@@ -45,20 +52,32 @@ export function useAddressBook(): AddressBook {
     }
   }, [upgradeUserId, upgradeAddressId, select]);
 
+  const delivery = resolveDeliveryAddress({
+    session,
+    userId,
+    addresses: addressBookState(book),
+    selection,
+  });
+  const currentId =
+    delivery.status === 'ready' && delivery.source === 'account' ? delivery.addressId : undefined;
+
   return {
-    delivery: resolveDeliveryAddress({
-      session,
-      userId,
-      addresses: addressBookState(book),
-      selection,
-    }),
+    delivery,
     addresses: book.data ?? [],
     error: book.error,
     retry: () => void book.refetch(),
-    choose: (addressId) => {
-      if (userId !== null) {
-        select({ userId, addressId });
+    choose: async (addressId) => {
+      const address = book.data?.find((item) => item.id === addressId);
+      if (userId === null || address === undefined) {
+        return false;
       }
+      const approval = addressId === currentId ? KEEP_CART : await guard(address.location);
+      if (approval === null) {
+        return false;
+      }
+      select({ userId, addressId });
+      approval.commit();
+      return true;
     },
   };
 }

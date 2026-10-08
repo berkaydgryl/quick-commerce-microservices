@@ -5,7 +5,8 @@
  * kurali yok; hata cevirisi ve gunlukleme service-kit'in ara katmanindadir.
  *
  * Charge (T5.1), Confirm3Ds (T5.2), Refund (T7.1, siparis saga'sinin
- * telafisi) ve GetPayment (T11.2 PR 2: order'in iptal ve supurucu kontrolu).
+ * telafisi) ve GetPayment (T11.2 PR 2: order'in iptal ve supurucu kontrolu;
+ * #163 B1: 3DS durumu, siparis ayrintisi icin).
  */
 
 import type { Logger } from '@getir/core';
@@ -17,7 +18,7 @@ import type { Charge } from '../../application/charge.js';
 import type { Confirm3Ds } from '../../application/confirm-3ds.js';
 import type { GetPayment } from '../../application/get-payment.js';
 import type { Refund } from '../../application/refund.js';
-import { toProtoChargeResponse, toProtoPayment } from './mappers.js';
+import { toProtoChargeResponse, toProtoGetPaymentResponse, toProtoPayment } from './mappers.js';
 import {
   chargeRequestSchema,
   confirm3DsRequestSchema,
@@ -73,9 +74,8 @@ export function createPaymentImplementation(
       name: 'GetPayment',
       schema: getPaymentRequestSchema,
       ...(logger === undefined ? {} : { logger }),
-      handle: async (input): Promise<paymentV1.GetPaymentResponse> => ({
-        payment: toProtoPayment(await deps.getPayment(input.orderId)),
-      }),
+      handle: async (input): Promise<paymentV1.GetPaymentResponse> =>
+        toProtoGetPaymentResponse(await deps.getPayment(input.orderId)),
     }),
   };
 }

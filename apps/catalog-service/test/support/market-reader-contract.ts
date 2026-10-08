@@ -13,8 +13,8 @@ const ALL = 20;
 
 export function describeMarketReaderContract(name: string, getReader: () => MarketReader): void {
   describe(`MarketReader sozlesmesi: ${name}`, () => {
-    it('Ev: en yakindan uzaga siralanir, ilk uc Kadikoy marketi (+-1 m)', async () => {
-      const ranked = await getReader().listMarketsByDistance(demoLocation('Ev'), ALL);
+    it('Ev: kapsayanlar en yakindan uzaga siralanir, ilk uc Kadikoy marketi (+-1 m)', async () => {
+      const ranked = await getReader().listCoveringMarkets(demoLocation('Ev'), ALL);
 
       expect(ranked.slice(0, 3).map((entry) => entry.market.id)).toEqual([
         'mkt_a101-caferaga',
@@ -26,8 +26,8 @@ export function describeMarketReaderContract(name: string, getReader: () => Mark
       expect(distances).toEqual([...distances].sort((left, right) => left - right));
     });
 
-    it('kapali marketi de dondurur: acik/kapali karari domain in', async () => {
-      const ranked = await getReader().listMarketsByDistance(demoLocation('İş'), ALL);
+    it('kapsayan kapali marketi de dondurur: acik/kapali karari domain in', async () => {
+      const ranked = await getReader().listCoveringMarkets(demoLocation('İş'), ALL);
 
       expect(ranked.find((entry) => entry.market.id === 'mkt_a101-abbasaga')?.market.isOpen).toBe(
         false,
@@ -35,7 +35,7 @@ export function describeMarketReaderContract(name: string, getReader: () => Mark
     });
 
     it('limit uygulanir', async () => {
-      expect(await getReader().listMarketsByDistance(demoLocation('Ev'), 2)).toHaveLength(2);
+      expect(await getReader().listCoveringMarkets(demoLocation('Ev'), 2)).toHaveLength(2);
     });
 
     it('getMarket: kurallari ve puani tasir; yoksa null', async () => {

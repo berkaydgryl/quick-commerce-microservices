@@ -18,6 +18,8 @@ import { describe, expect, it } from 'vitest';
 import { AccountLayoutView } from '../../src/pages/account/AccountLayoutView';
 import type { AccountLayoutVariant } from '../../src/pages/account/AccountLayoutView';
 
+import { tokens as allTokens } from './css-test-support';
+
 const render = (element: ReactElement) =>
   renderToStaticMarkup(createElement(MemoryRouter, null, element));
 
@@ -78,10 +80,7 @@ describe('AccountLayoutView', () => {
       fileURLToPath(new URL('../../src/pages/account/AccountLayout.module.css', import.meta.url)),
       'utf8',
     );
-    const tokens = readFileSync(
-      fileURLToPath(new URL('../../src/shared/styles/tokens.css', import.meta.url)),
-      'utf8',
-    );
+    const tokens = allTokens();
 
     expect(css).toContain(
       'grid-template-columns: var(--size-account-side) minmax(0, var(--size-account-content));',

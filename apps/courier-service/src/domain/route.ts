@@ -14,6 +14,16 @@
 
 import type { Courier, GeoPoint } from './courier.js';
 
+/**
+ * Rotanin hareket kurali (#197): uretildigi andaki kurye hizi ve markette
+ * hazirlik suresi (config COURIER_SPEED_KMH, ORDER_PREP_SECONDS).
+ */
+export interface RouteMovement {
+  readonly speedKmh: number;
+  /** Siparisin markette hazirlanma suresi, saniye: kurye erken varirsa bekler. */
+  readonly prepSeconds: number;
+}
+
 export interface Route {
   /** Rota siparis basina tektir: kimligi siparisin kimligi. */
   readonly orderId: string;
@@ -32,6 +42,12 @@ export interface Route {
   readonly etaSeconds: number;
   /** Rotanin uretildigi an (atama). StartRoute'un "baslama ani". */
   readonly createdAt: Date;
+  /**
+   * Uretildigi andaki hareket kurali (#197). Ayar sonradan degisse de rota
+   * bununla ilerler: gecmis anlar kaymaz, alma ve teslim ayni turda yazilmaz.
+   * #197 oncesi rotada yok: o anki ayar kullanilir (goc yok).
+   */
+  readonly movement?: RouteMovement;
   /** Paketin alinacagi market (T13.3); T13.3 oncesi rotada yok. */
   readonly marketId?: string;
   /** Ilerleme durumu (T13.3); yoksa MOVING (T13.3 oncesi rota). */
@@ -69,9 +85,37 @@ export function routeState(route: Pick<Route, 'state'>): RouteState {
   return route.state ?? ROUTE_STATE.MOVING;
 }
 
+/**
+ * Teslim ani alma anindan ONCE olamaz (#190): olursa teslim = alma. Tick
+ * (yazarken) ve takip (gosterirken) ayni kurali kullanir. #195'ten beri ikinci
+ * bacak kayitli almadan hesaplanir; bu kural savunmadir (kayit disi kaynak).
+ */
+export function deliveredNoEarlierThan(deliveredAt: Date, pickedUpAt: Date | undefined): Date {
+  return pickedUpAt !== undefined && pickedUpAt.getTime() > deliveredAt.getTime()
+    ? pickedUpAt
+    : deliveredAt;
+}
+
 /** Teslim kaydedildi mi (an yazildi ya da rota DONE). Tick, iptal ve takip ayni kurali kullanir. */
 export function isDelivered(route: Pick<Route, 'deliveredAt' | 'state'>): boolean {
   return route.deliveredAt !== undefined || routeState(route) === ROUTE_STATE.DONE;
+}
+
+/**
+ * Yeniden okunan rota, ilk okunanin AYNISI (kurye + uretilme ani), birakilmamis
+ * ve teslimi bu arada kaydedilmis mi? Takip (teslim ani yarisi) ve iptal
+ * (#177) ayni kurali kullanir.
+ */
+export function deliveredMeanwhile(
+  first: Pick<Route, 'courierId' | 'createdAt'>,
+  again: Route | null,
+): again is Route {
+  return (
+    again !== null &&
+    sameRoute(again, first) &&
+    routeState(again) !== ROUTE_STATE.ENDED &&
+    isDelivered(again)
+  );
 }
 
 /** Ayni rota mi: siparis basina tek belge; kimlik kurye + uretilme ani (yeniden atamada yenilenir). */

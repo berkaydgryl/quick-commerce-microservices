@@ -189,6 +189,9 @@
       "clearConfirmQuestion": "Sepeti boşaltmak istediğinden emin misin?",
       "switchConfirmPrefix": "Sepetinde başka bir marketin ürünleri var. Sepeti boşaltıp",
       "switchConfirmSuffix": "ile devam etmek istediğinden emin misin?",
+      "addressChangePrefix": "Sepetindeki",
+      "addressChangeSuffix": "bu adrese teslimat yapmıyor. Adresi değiştirirsen sepetin boşaltılacak. Devam edilsin mi?",
+      "cartClearedToast": "Sepetin boşaltıldı.",
       "decreaseSuffix": "adedini azalt",
       "increaseSuffix": "adedini artır",
       "removeSuffix": "sepetten çıkar",
@@ -525,5 +528,38 @@
   "confirm": {
     "yesLabel": "Evet",
     "noLabel": "Hayır"
+  },
+  "appLoading": {
+    "label": "Yükleniyor..."
+  },
+  "courierTracking": {
+    "title": "Kuryem nerede",
+    "closeLabel": "Kapat",
+    "courierLabel": "Kuryen",
+    "mapLabel": "Kuryenin ve teslimat adresinin haritası",
+    "etaLabel": "Tahmini varış",
+    "etaPrefix": "~",
+    "minuteSuffix": "dk",
+    "distanceLabel": "Kalan mesafe",
+    "kilometerSuffix": "km",
+    "meterSuffix": "m",
+    "addressLabel": "Teslimat adresi",
+    "loadingLabel": "Kuryenin konumu yükleniyor…",
+    "pickupNotice": "Kuryen siparişini marketten alıyor; yola çıkınca konumu burada görünür.",
+    "deliveredNotice": "Siparişin teslim edildi.",
+    "unavailableNotice": "Kuryenin konumu şu an alınamıyor.",
+    "retryLabel": "Tekrar dene",
+    "approachTitle": "Kuryen konumuna yaklaştı!",
+    "approachActionLabel": "Konumu gör",
+    "approachCloseLabel": "Bildirimi kapat"
+  },
+  "orderConfirmation": {
+    "placedTitle": "Siparişin alındı!",
+    "reviewTitle": "Siparişin inceleniyor",
+    "reviewNotice": "İnceleme bitince durumunu buradan izleyebilirsin.",
+    "summaryTitle": "Sipariş özeti",
+    "detailsTitle": "Teslimat ayrıntıları",
+    "ordersLinkLabel": "Siparişlerime git",
+    "continueLabel": "Alışverişe devam et"
   }
 }

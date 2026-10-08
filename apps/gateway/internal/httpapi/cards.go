@@ -1,12 +1,12 @@
 package httpapi
 
-// Kart kasasi uclari (T11.17): GET ve POST /v1/me/cards, DELETE
-// /v1/me/cards/{cardId}. Kasa payment-svc'dedir (CardVaultService). Ayri
+// Kart kasasi uclari (T11.17): GET ve POST /v1/me/cards, DELETE ve PATCH (#148,
+// kart adi) /v1/me/cards/{cardId}. Kasa payment-svc'dedir (CardVaultService). Ayri
 // dosyadadir: routes.go (registerMeRoutes) yalnizca registerCardRoutes'u
 // cagirir (dosya boyutu kurali).
 //
-// Kart numarasi ve CVV yalnizca POST govdesinde gecer; gateway onlari kasaya
-// iletir ve hicbir yere yazmaz: istek satiri yalnizca yontem, yol ve durum
+// Kart numarasi ve CVV yalnizca POST govdesinde, kart adi POST ve PATCH
+// govdesinde gecer; gateway onlari kasaya iletir ve hicbir yere yazmaz: istek satiri yalnizca yontem, yol ve durum
 // tasir, tekrar korumasi kaydi maskeli parmak izi tasir (K3). Kullanici YALNIZCA
 // erisim jetonundan gelir (QA G6): govde ve sorgu kullanici alani tasimaz,
 // bilinmeyen alan 400'dur. Cevaplar onbelleklenmez (QA G7: no-store, hata
@@ -44,12 +44,18 @@ type CardDeleter interface {
 	DeleteCard(ctx context.Context, userID, cardID string) (cards.SavedCardList, error)
 }
 
+// CardRenamer, PATCH /v1/me/cards/{cardId} (#148): yalnizca kart adi.
+type CardRenamer interface {
+	UpdateCardNickname(ctx context.Context, userID, cardID string, nickname *string) (cards.SavedCard, error)
+}
+
 // CardRoutes, kart uclarinin bagimliliklari. Biri nil ise uclar HIC baglanmaz
 // (production, K1: saglayici bugun mock'tur); bugun ucunu cards.Service karsilar.
 type CardRoutes struct {
 	Lister  CardLister
 	Adder   CardAdder
 	Deleter CardDeleter
+	Renamer CardRenamer
 	// Failures, basarisiz dogrulama sayaci (K2). nil ise kullanici siniri kapali
 	// (hiz siniri kapaliyken, RATE_LIMIT_ENABLED=false).
 	Failures ratelimit.FailureCounter
@@ -62,9 +68,11 @@ type CardRoutes struct {
 // izi maskeli govdeden, kayit kisa omurlu.
 var cardAddPolicy = idempotencyPolicy{replay: true, fingerprintBody: cards.FingerprintBody, ttl: cards.IdempotencyTTL}
 
-// cardDeletePolicy, kart silmenin tekrar kurali (QA L3): saklanan cevap maskeli
-// kart listesidir (ad, ilk 4, son 4); kayit eklemeyle ayni kisa omurlu.
-var cardDeletePolicy = idempotencyPolicy{replay: true, ttl: cards.IdempotencyTTL}
+// cardChangePolicy, kart silme (QA L3) ve kart adi duzenlemenin (#148) tekrar
+// kurali: saklanan cevap maskeli kart listesi ya da guncel maskeli karttir; ikisi
+// de kart adini ve kart uzerindeki adi ACIK tasir (eklemenin cevabi gibi), bu
+// yuzden kayit eklemeyle ayni kisa omurludur. Parmak izi govdenin HMAC'idir.
+var cardChangePolicy = idempotencyPolicy{replay: true, ttl: cards.IdempotencyTTL}
 
 // cardRouteDeps, kart rotalarinin yonlendiriciden aldigi ara katmanlar.
 type cardRouteDeps struct {
@@ -77,29 +85,18 @@ type cardRouteDeps struct {
 
 // registerCardRoutes, kart uclarini baglar; uclar kapaliysa hicbir sey yapmaz.
 func registerCardRoutes(v1 fiber.Router, routes CardRoutes, deps cardRouteDeps) {
-	if routes.Lister == nil || routes.Adder == nil || routes.Deleter == nil {
+	if routes.Lister == nil || routes.Adder == nil || routes.Deleter == nil || routes.Renamer == nil {
 		return
 	}
-	attempts := cardAttempts{
-		failures: routes.Failures,
-		inflight: routes.Inflight,
-		limiter:  deps.limits.settings.Limiter,
-		warning:  deps.limits.warning,
-		recorder: deps.recorder,
-	}
+	attempts := newCardAttempts(routes, deps)
 	add := idempotent(deps.idempotency, cardAddPolicy, deps.logger, deps.recorder)
-	remove := idempotent(deps.idempotency, cardDeletePolicy, deps.logger, deps.recorder)
-	v1.Get("/me/cards", noStoreCards, deps.user, deps.general, listCardsHandler(routes.Lister))
+	change := idempotent(deps.idempotency, cardChangePolicy, deps.logger, deps.recorder)
+	v1.Get("/me/cards", noStoreRoute, deps.user, deps.general, listCardsHandler(routes.Lister))
 	// Sira: deneme siniri (bakma, IP) -> tekrar korumasi (tekrar istek kasaya
 	// gitmez) -> tek dogrulama kilidi -> uc (sonucu sayaca yazar, sonra kilit birakilir).
-	v1.Post("/me/cards", noStoreCards, deps.user, deps.general, attempts.admit, add, attempts.single, addCardHandler(routes.Adder, attempts))
-	v1.Delete("/me/cards/:"+cardIDParam, noStoreCards, deps.user, deps.general, remove, deleteCardHandler(routes.Deleter))
-}
-
-// noStoreCards, kart uclarinin HER cevabina (hata dahil) no-store yazar (QA G7).
-func noStoreCards(c fiber.Ctx) error {
-	c.Set(fiber.HeaderCacheControl, noStore)
-	return c.Next()
+	v1.Post("/me/cards", noStoreRoute, deps.user, deps.general, attempts.admit, add, attempts.single, addCardHandler(routes.Adder, attempts))
+	v1.Delete("/me/cards/:"+cardIDParam, noStoreRoute, deps.user, deps.general, change, deleteCardHandler(routes.Deleter))
+	v1.Patch("/me/cards/:"+cardIDParam, noStoreRoute, deps.user, deps.general, change, updateCardNicknameHandler(routes.Renamer))
 }
 
 // addCardBody, POST /v1/me/cards govdesi (@getir/contracts addCardRequestSchema).
@@ -167,20 +164,16 @@ func addCardHandler(adder CardAdder, attempts cardAttempts) fiber.Handler {
 
 // deleteCardHandler, DELETE /v1/me/cards/{cardId}: cevap guncel liste.
 // Bicimsiz kimlik kasaya gitmeden 404 (QA G6); baskasinin, olmayan ya da
-// silinmis kart da kasadan 404 doner, uc durum ayirt edilemez.
+// silinmis kart kasadan 404 doner. Dort durum AYNI zarfla doner (ayrintisiz;
+// kasanin 404 ayrintisini cards.Service atar, #194).
 func deleteCardHandler(deleter CardDeleter) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		if err := rejectUnknownQuery(c); err != nil {
 			return err
 		}
-		errs := fieldErrors{}
-		idempotencyKeyOf(c, errs)
-		if len(errs) > 0 {
-			return apperror.New(apperror.CodeValidationFailed, errs)
-		}
-		cardID := cardIDOf(c)
-		if !ids.Valid(ids.Card, cardID) {
-			return apperror.New(apperror.CodeNotFound, nil)
+		cardID, err := targetCardID(c)
+		if err != nil {
+			return err
 		}
 
 		list, err := deleter.DeleteCard(outgoingContext(c), userIDOf(c), cardID)
@@ -189,6 +182,56 @@ func deleteCardHandler(deleter CardDeleter) fiber.Handler {
 		}
 		return private(c, http.StatusOK, list)
 	}
+}
+
+// updateCardNicknameBody, PATCH /v1/me/cards/{cardId} govdesi (@getir/contracts
+// updateCardNicknameRequestSchema, SIKI: bilinmeyen alan 400). Alan yoksa ya da
+// null ise isaretci nil kalir ve kasaya EKSIK gider: kasa "Kart adı
+// gönderilmedi" ile reddeder (bos govde adi silmez). Bos metin adi kaldirir.
+// Kurallar ve cumleler kasadadir.
+type updateCardNicknameBody struct {
+	Nickname *string `json:"nickname"`
+}
+
+// updateCardNicknameHandler, PATCH /v1/me/cards/{cardId} (#148): cevap guncel
+// maskeli kart. Bicimsiz kimlik kasaya gitmeden 404; baskasinin, olmayan ya da
+// silinmis kart kasadan 404 doner. Dort durum AYNI zarfla doner (ayrintisiz;
+// kasanin 404 ayrintisini cards.Service atar).
+func updateCardNicknameHandler(renamer CardRenamer) fiber.Handler {
+	return func(c fiber.Ctx) error {
+		if err := rejectUnknownQuery(c); err != nil {
+			return err
+		}
+		var body updateCardNicknameBody
+		if err := decodeJSONBody(c, &body); err != nil {
+			return err
+		}
+		cardID, err := targetCardID(c)
+		if err != nil {
+			return err
+		}
+
+		card, err := renamer.UpdateCardNickname(outgoingContext(c), userIDOf(c), cardID, body.Nickname)
+		if err != nil {
+			return err
+		}
+		return private(c, http.StatusOK, card)
+	}
+}
+
+// targetCardID, silme ve ad duzenlemenin hedef karti: Idempotency-Key yoksa
+// 400; yoldaki kimlik bicimsizse kasaya gitmeden 404 (QA G6).
+func targetCardID(c fiber.Ctx) (string, error) {
+	errs := fieldErrors{}
+	idempotencyKeyOf(c, errs)
+	if len(errs) > 0 {
+		return "", apperror.New(apperror.CodeValidationFailed, errs)
+	}
+	cardID := cardIDOf(c)
+	if !ids.Valid(ids.Card, cardID) {
+		return "", apperror.New(apperror.CodeNotFound, nil)
+	}
+	return cardID, nil
 }
 
 // cardIDOf, yol parametresinin KOPYASI (addressIDOf ile ayni gerekce, #87).

@@ -10,8 +10,15 @@
  *      "yayinlandi" isaretlenir. T13.3 oncesi rotada (market yok) olay atlanir:
  *      courier.delivered tek basina iki gecisi yaptirir (contracts events.ts).
  *   3. Varis ani geldiyse deliveredAt kaydedilir; kurye TESLIMAT NOKTASINDA
- *      bosa cikar, courier.delivered yayinlanir, rota DONE.
- *   4. Ilerliyorsa kuryenin canli konumu yazilir (kisa omurlu).
+ *      bosa cikar, courier.delivered yayinlanir, rota DONE. Teslim ani kayitli
+ *      alma anindan once yazilmaz (#190, deliveredNoEarlierThan). #195'ten beri
+ *      ikinci bacak kayitli almadan hesaplandigi icin bu yalnizca savunmadir.
+ *   4. Ilerliyorsa kuryenin canli konumu yazilir (kisa omurlu); paket alinmisken
+ *      saat kaydin gerisindeyse (hesap TO_MARKET) birinci bacak konumu yerine
+ *      market noktasi yazilir (#197).
+ *
+ * Konum ve anlar rotanin KENDI hareket kuralindan (#197, route.movement); #197
+ * oncesi rotada o anki ayardan.
  *
  * Her adim kosulludur ve tekrar guvenlidir: yayin dustuyse sonraki tur ayni
  * adimi tekrarlar (isaret yayindan SONRA yazilir: en az bir kez). Rota bu
@@ -27,11 +34,11 @@ import { carriesOrder } from '../domain/courier.js';
 import type { Courier } from '../domain/courier.js';
 import type { CourierRepository } from '../domain/courier-repository.js';
 import type { LiveLocationStore } from '../domain/live-location.js';
-import { ROUTE_STATE } from '../domain/route.js';
+import { deliveredNoEarlierThan, ROUTE_STATE } from '../domain/route.js';
 import type { Route, RoutePatch } from '../domain/route.js';
 import type { RouteEventPublisher } from '../domain/route-events.js';
 import type { MovementRule } from '../domain/route-progress.js';
-import { routeProgress } from '../domain/route-progress.js';
+import { courierLocation, dropoffOf, routeProgress } from '../domain/route-progress.js';
 import type { MovingRouteRepository } from '../domain/route-repository.js';
 
 /** Bir turun sonucu (ozet ve metrik). */
@@ -89,22 +96,34 @@ export function createAdvanceRoute(deps: AdvanceRouteDeps): AdvanceRoute {
     if (current?.pickedUpAt !== undefined && current.pickupPublished !== true) {
       current = await publishPickup(deps, patch, current, current.pickedUpAt, logger);
     }
+    // Teslim bu turda kosullu yamayla kaydedildiyse rota zaten dogrulanmistir;
+    // onceki turda kaydedildiyse (yayin dustu) yayindan once yeniden dogrulanir.
+    let recordedNow = false;
     if (
       current !== null &&
       progress.deliveredAt !== undefined &&
       current.deliveredAt === undefined
     ) {
-      current = await patch(current, { deliveredAt: progress.deliveredAt });
+      current = await patch(current, {
+        deliveredAt: deliveredNoEarlierThan(progress.deliveredAt, current.pickedUpAt),
+      });
+      recordedNow = current !== null;
     }
     if (current?.deliveredAt !== undefined) {
-      return (await completeDelivery(deps, patch, current, current.deliveredAt, logger)) === null
-        ? ADVANCE_OUTCOME.STALE
-        : ADVANCE_OUTCOME.DELIVERED;
+      const done = await completeDelivery(deps, patch, current, current.deliveredAt, {
+        confirm: !recordedNow,
+        logger,
+      });
+      return done === null ? ADVANCE_OUTCOME.STALE : ADVANCE_OUTCOME.DELIVERED;
     }
     if (current === null) {
       return ADVANCE_OUTCOME.STALE;
     }
-    await deps.live.save(current.courierId, { location: progress.position, at: now });
+    // Paket alinmisken saat kaydin gerisindeyse market noktasi (#197, courierLocation).
+    await deps.live.save(current.courierId, {
+      location: courierLocation(current, progress),
+      at: now,
+    });
     return outcome;
   };
 }
@@ -132,17 +151,26 @@ async function completeDelivery(
   patch: Patch,
   route: Route,
   deliveredAt: Date,
-  logger: Logger,
+  options: { readonly confirm: boolean; readonly logger: Logger },
 ): Promise<Route | null> {
-  const dropoff = route.points[route.points.length - 1];
-  // Tekrar guvenli: kurye zaten birakildiysa null doner, konum degismez. Kurye
-  // kimligiyle: rota bu arada baska kuryeye gectiyse o kurye BIRAKILMAZ.
-  await deps.couriers.releaseByOrder(route.orderId, deliveredAt, {
-    courierId: route.courierId,
+  const { logger } = options;
+  // Yayin KOSULLU durum gecisine bagli (#177): rota hala bu atamanin, bitmemis
+  // ve teslimi kayitliysa (kosullu yama tutar) teslim kesindir. Iptal rotayi
+  // ENDED yazdiysa ya da rota yenilendiyse yama tutmaz: kurye birakilmaz,
+  // olay yayinlanmaz (iptal ile teslim yarisinda tek sonuc).
+  const confirmed = options.confirm ? await patch(route, { deliveredAt }) : route;
+  if (confirmed === null) {
+    return null;
+  }
+  const dropoff = dropoffOf(confirmed);
+  // Tekrar guvenli: kurye zaten birakildiysa (onceki turun yayini dustu) null
+  // doner, konum degismez. Kurye kimligiyle: baska kurye BIRAKILMAZ.
+  await deps.couriers.releaseByOrder(confirmed.orderId, deliveredAt, {
+    courierId: confirmed.courierId,
     ...(dropoff === undefined ? {} : { location: dropoff }),
   });
-  await deps.events.delivered(route, deliveredAt);
-  const done = await patch(route, { deliveryPublished: true, state: ROUTE_STATE.DONE });
+  await deps.events.delivered(confirmed, deliveredAt);
+  const done = await patch(confirmed, { deliveryPublished: true, state: ROUTE_STATE.DONE });
   if (done !== null) {
     logger.info(
       { orderId: route.orderId, courierId: route.courierId },

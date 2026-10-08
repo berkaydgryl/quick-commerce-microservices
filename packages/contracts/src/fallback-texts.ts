@@ -8,8 +8,10 @@ import type {
 } from './content.js';
 import { CART_PAGE_FALLBACK, FOOTER_FALLBACK } from './content/cart-page-fallback.js';
 import { CHECKOUT_FALLBACK } from './content/checkout-fallback.js';
+import { COURIER_TRACKING_FALLBACK } from './content/courier-tracking-fallback.js';
 import { ADDRESS_SETUP_FALLBACK, APP_HEADER_FALLBACK } from './content/header-fallback.js';
 import { MARKET_PAGE_FALLBACK } from './content/market-page-fallback.js';
+import { ORDER_CONFIRMATION_FALLBACK } from './content/order-confirmation-fallback.js';
 import { PAYMENT_METHODS_FALLBACK } from './content/payment-methods-fallback.js';
 
 /**
@@ -65,6 +67,10 @@ const MARKET_LIST_FALLBACK: MarketListContent = {
     clearConfirmQuestion: 'Sepeti boşaltmak istediğinden emin misin?',
     switchConfirmPrefix: 'Sepetinde başka bir marketin ürünleri var. Sepeti boşaltıp',
     switchConfirmSuffix: 'ile devam etmek istediğinden emin misin?',
+    addressChangePrefix: 'Sepetindeki',
+    addressChangeSuffix:
+      'bu adrese teslimat yapmıyor. Adresi değiştirirsen sepetin boşaltılacak. Devam edilsin mi?',
+    cartClearedToast: 'Sepetin boşaltıldı.',
     decreaseSuffix: 'adedini azalt',
     increaseSuffix: 'adedini artır',
     removeSuffix: 'sepetten çıkar',
@@ -271,6 +277,12 @@ export const CONTENT_FALLBACK = {
   checkout: CHECKOUT_FALLBACK,
   /** confirm: ortak onay penceresinin dugmeleri (F13). */
   confirm: { yesLabel: 'Evet', noLabel: 'Hayır' },
+  /** appLoading: Yukleniyor gostergesi (F18); icerik gelmeden gosterilir. */
+  appLoading: { label: 'Yükleniyor...' },
+  /** courierTracking: kurye penceresi ve bildirimi (F22). */
+  courierTracking: COURIER_TRACKING_FALLBACK,
+  /** orderConfirmation: siparis onay ekrani (F17). */
+  orderConfirmation: ORDER_CONFIRMATION_FALLBACK,
 } as const;
 
 export type ContentFallback = typeof CONTENT_FALLBACK;

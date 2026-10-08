@@ -4,6 +4,10 @@
  * Tasima isi service-kit callUnary'dedir; burasi yalnizca domain <-> proto
  * cevirisini yapar. payment-svc'nin is hatalari (THREEDS_FAILED ve kalan hak)
  * fromServiceError ile KODU ve AYRINTISI korunarak AppError'a doner.
+ *
+ * 3DS jetonu (challengeId) yetenek jetonudur: bu dosyanin urettigi hicbir hata
+ * mesajina ya da ayrintisina girmez (#163 B1). GetOrder'in 3DS okumasi kritik
+ * odeme yolundan ayridir: kendi kisa siniri, yeniden deneme ve devre YOK.
  */
 
 import { AppError, ERROR_CODES, isAppError, isErrorCode } from '@getir/core';
@@ -20,9 +24,11 @@ import type {
   RefundRequest,
 } from '../../application/payments.js';
 import type { RequestScope } from '../../application/request-scope.js';
+import { THREE_DS_READ_TIMEOUT_MS } from '../../config/constants.js';
 import { PAYMENT_METHOD, PAYMENT_STATUS } from '../../domain/checkout-payment.js';
 import type { PaymentMethod, PaymentResult, PaymentStatus } from '../../domain/checkout-payment.js';
 import type { PaymentSnapshot } from '../../domain/payment-standing.js';
+import type { PaymentThreeDs } from '../../domain/payment-three-ds.js';
 import { IDEMPOTENT, NOT_IDEMPOTENT, outgoingOptions } from '../grpc-resilience.js';
 import type { ClientResilience } from '../grpc-resilience.js';
 
@@ -58,6 +64,8 @@ export class GrpcPayments implements Payments {
     address: string,
     private readonly timeoutMs: number,
     private readonly resilience: ClientResilience = {},
+    /** 3DS okumasinin kendi siniri (getThreeDs); testte kisalir. */
+    private readonly threeDsReadTimeoutMs: number = THREE_DS_READ_TIMEOUT_MS,
   ) {
     this.client = new paymentV1.PaymentServiceClient(address, credentials.createInsecure());
   }
@@ -117,13 +125,34 @@ export class GrpcPayments implements Payments {
    * o siparis icin hic cekim istenmemistir (null).
    */
   async getPayment(orderId: string, scope: RequestScope): Promise<PaymentSnapshot | null> {
-    let response: paymentV1.GetPaymentResponse;
+    const response = await this.readPayment(orderId, this.options(scope, IDEMPOTENT));
+    return response === null ? null : toSnapshot(orderId, response.payment);
+  }
+
+  /**
+   * Odeme kaydinin sahibi ve bekleyen 3DS dogrulamasi (#163 B1, GetOrder). Ayni
+   * GetPayment cagrisi ama kritik yoldan AYRI: kendi kisa siniri
+   * (THREE_DS_READ_TIMEOUT_MS), yeniden deneme yok, devre yok (hatasi Charge ve
+   * Confirm3Ds'in devresine sayilmaz). Payment devresi acikken de denenir: en
+   * fazla bu siniri oder, sonucu en iyi cabadir.
+   */
+  async getThreeDs(orderId: string, scope: RequestScope): Promise<PaymentThreeDs | null> {
+    const options = outgoingOptions(scope, this.threeDsReadTimeoutMs, {}, NOT_IDEMPOTENT);
+    const response = await this.readPayment(orderId, options);
+    return response === null ? null : toPaymentThreeDs(orderId, response);
+  }
+
+  /** GetPayment; kayit yoksa (NOT_FOUND) null. */
+  private async readPayment(
+    orderId: string,
+    options: OutgoingCallOptions,
+  ): Promise<paymentV1.GetPaymentResponse | null> {
     try {
-      response = await callUnary<paymentV1.GetPaymentRequest, paymentV1.GetPaymentResponse>(
-        (message, metadata, options, callback) =>
-          this.client.getPayment(message, metadata, options, callback),
+      return await callUnary<paymentV1.GetPaymentRequest, paymentV1.GetPaymentResponse>(
+        (message, metadata, callOptions, callback) =>
+          this.client.getPayment(message, metadata, callOptions, callback),
         { orderId },
-        this.options(scope, IDEMPOTENT),
+        options,
       );
     } catch (error: unknown) {
       if (isAppError(error) && error.code === ERROR_CODES.NOT_FOUND) {
@@ -131,7 +160,6 @@ export class GrpcPayments implements Payments {
       }
       throw error;
     }
-    return toSnapshot(orderId, response.payment);
   }
 
   /** Kapanista cagrilir: acik HTTP/2 baglantisi process'i ayakta tutmasin. */
@@ -170,6 +198,34 @@ function toSnapshot(orderId: string, payment: paymentV1.Payment | undefined): Pa
     });
   }
   return { status, method };
+}
+
+/**
+ * 3DS okumasi. Kaydi olmayan cevap ya da bitisi olmayan dogrulama payment'in
+ * sozlesmeyi bozdugu demektir (dogrulama varsa bitis HER ZAMAN dolu): INTERNAL,
+ * ayrintida yalnizca siparis kimligi (jeton YAZILMAZ). Sahip uyusmazligiyla
+ * karismasin diye kayitsiz cevap '' sahibe cevrilmez.
+ */
+function toPaymentThreeDs(orderId: string, response: paymentV1.GetPaymentResponse): PaymentThreeDs {
+  if (response.payment === undefined) {
+    throw AppError.internal('Odeme servisi kayitsiz cevap dondu', { details: { orderId } });
+  }
+  const userId = response.payment.userId;
+  const status = response.threeDs;
+  if (status === undefined) {
+    return { userId };
+  }
+  if (status.expiresAt === undefined) {
+    throw AppError.internal('Odeme servisi bitissiz 3DS durumu dondu', { details: { orderId } });
+  }
+  return {
+    userId,
+    threeDs: {
+      challengeId: status.challengeId,
+      expiresAt: status.expiresAt,
+      attemptsLeft: status.attemptsLeft,
+    },
+  };
 }
 
 /** Sozlukte olmayan ya da bos neden: kart reddi sayilir (para cekilmedi). */

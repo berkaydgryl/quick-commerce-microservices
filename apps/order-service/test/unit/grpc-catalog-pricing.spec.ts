@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { ITEM_UNIT } from '../../src/domain/order-item.js';
 import { GrpcCatalogPricing } from '../../src/infrastructure/catalog/grpc-catalog-pricing.js';
+import { CLOSED_MARKET_ID } from '../support/fake-catalog-pricing.js';
 import {
   cutAfterReach,
   DEADLINE_TIMEOUT_MS,
@@ -25,6 +26,12 @@ import {
 const REFUSED_WITHIN_MS = 2_000;
 const SLOW_MARKET_ID = 'mkt_yavas';
 const MISSING_MARKET_ID = 'mkt_olmayan';
+/** Konumsuz acik market (#203): catalog verisi bozuk -> INTERNAL. */
+const UNLOCATED_MARKET_ID = 'mkt_konumsuz';
+const MARKET_LOCATION = { lat: 40.99, lng: 29.02 };
+const MARKET_RADIUS_METERS = 3_000;
+/** Yaricapi 0 (proto3 int32'de eksik alan): catalog verisi bozuk -> INTERNAL. */
+const ZERO_RADIUS_MARKET_ID = 'mkt_yaricapsiz';
 const scope = { requestId: 'req_iletim_1', logger: silentLogger };
 
 /** Sunucunun gordugu x-request-id degerleri. */
@@ -69,15 +76,30 @@ const implementation = {
       callback(toServiceError(AppError.notFound('Market bulunamadi')));
       return;
     }
+    // Kapali market (#154): kural verisi YOK; istemci yine de NO_STORE'a gider, 500'e degil.
+    const closed = call.request.marketId === CLOSED_MARKET_ID;
     const respond = () =>
       callback(null, {
         market: {
-          ...catalogV1.Market.fromPartial({ id: call.request.marketId, name: 'Migros Jet' }),
-          pricingRules: {
-            minBasket: tryMoney(5_000),
-            deliveryFee: tryMoney(1_490),
-            freeDeliveryThreshold: tryMoney(25_000),
-          },
+          ...catalogV1.Market.fromPartial({
+            id: call.request.marketId,
+            name: 'Migros Jet',
+            isOpen: !closed,
+            ...(call.request.marketId === UNLOCATED_MARKET_ID
+              ? { deliveryRadiusMeters: MARKET_RADIUS_METERS }
+              : {
+                  location: MARKET_LOCATION,
+                  deliveryRadiusMeters:
+                    call.request.marketId === ZERO_RADIUS_MARKET_ID ? 0 : MARKET_RADIUS_METERS,
+                }),
+          }),
+          pricingRules: closed
+            ? undefined
+            : {
+                minBasket: tryMoney(5_000),
+                deliveryFee: tryMoney(1_490),
+                freeDeliveryThreshold: tryMoney(25_000),
+              },
         },
       });
     // Yavas market: cevap bekletilir (istemcinin sure siniri keser).
@@ -146,14 +168,30 @@ async function rejectionOf(promise: Promise<unknown>): Promise<AppError> {
 
 describe('GrpcCatalogPricing', () => {
   it('market kurallarini kurusa cevirir; requestId AYNEN iletilir', async () => {
-    const rules = await catalog.marketRules('mkt_migros-jet-moda', scope);
+    const terms = await catalog.marketRules('mkt_migros-jet-moda', scope);
 
-    expect(rules).toEqual({
-      minBasketMinor: 5_000,
-      deliveryFeeMinor: 1_490,
-      freeDeliveryThresholdMinor: 25_000,
+    expect(terms).toEqual({
+      rules: { minBasketMinor: 5_000, deliveryFeeMinor: 1_490, freeDeliveryThresholdMinor: 25_000 },
+      isOpen: true,
+      location: MARKET_LOCATION,
+      deliveryRadiusMeters: MARKET_RADIUS_METERS,
     });
     expect(seenRequestIds.at(-1)).toBe(scope.requestId);
+  });
+
+  it('konumsuz ya da yaricapi 0 acik market (#203): INTERNAL ("yaricap disi" diye sessiz ret yok)', async () => {
+    const errors = [
+      await rejectionOf(catalog.marketRules(UNLOCATED_MARKET_ID, scope)),
+      await rejectionOf(catalog.marketRules(ZERO_RADIUS_MARKET_ID, scope)),
+    ];
+
+    expect(errors.map((error) => error.code)).toEqual([ERROR_CODES.INTERNAL, ERROR_CODES.INTERNAL]);
+  });
+
+  it('kapali market (#154): okuma basarili, isOpen false; kurallar okunmaz (eksik kural 500 yapmaz)', async () => {
+    const terms = await catalog.marketRules(CLOSED_MARKET_ID, scope);
+
+    expect(terms).toEqual({ isOpen: false });
   });
 
   it('yalnizca aktif teklifleri doner; birim ve bos para birimi cevrilir', async () => {

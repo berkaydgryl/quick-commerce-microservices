@@ -14,7 +14,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { RECORD_EVENT } from '../../src/application/evaluate-and-record.js';
 import { PendingRecords } from '../../src/application/pending-records.js';
 import { buildRiskService } from '../../src/bootstrap.js';
-import type { RiskEventRepository } from '../../src/domain/risk-event-repository.js';
+import type {
+  RecentRiskEvents,
+  RiskEventRepository,
+} from '../../src/domain/risk-event-repository.js';
 import { InMemoryRiskEventStore } from '../../src/infrastructure/memory/in-memory-risk-event-store.js';
 import { RISK_EVENT_METRICS } from '../../src/infrastructure/metrics/risk-event-metrics.js';
 import { PERSONA_NOW, PERSONAS } from '../support/personas.js';
@@ -27,7 +30,13 @@ beforeEach(() => {
   metricsRegistry.resetMetrics();
 });
 
-async function evaluateOnce(events: RiskEventRepository, pending = new PendingRecords()) {
+/** Sahte depolarda yakin kayit yok: yapiskan bant (#164) devreye girmez. */
+const noRecentEvents = { findHighestRecent: () => Promise.resolve(null) };
+
+async function evaluateOnce(
+  events: RiskEventRepository & RecentRiskEvents,
+  pending = new PendingRecords(),
+) {
   const persona = PERSONAS[0];
   if (persona === undefined) throw new Error('persona yok');
   const server = await startTestGrpcServer({
@@ -79,6 +88,7 @@ describe('risk_event_records_total ve risk_event_record_timeouts_total', () => {
     await evaluateOnce({
       insert: () => Promise.reject(new Error('mongo yok')),
       findLatest: () => Promise.resolve(null),
+      ...noRecentEvents,
     });
 
     expect(await outcome(RECORD_EVENT.FAILED)).toBe(1);
@@ -93,6 +103,7 @@ describe('risk_event_records_total ve risk_event_record_timeouts_total', () => {
           finish = resolve;
         }),
       findLatest: () => Promise.resolve(null),
+      ...noRecentEvents,
     });
     expect(await timeouts()).toBe(1);
     expect(await outcome(RECORD_EVENT.LATE)).toBe(0);
@@ -107,7 +118,11 @@ describe('risk_event_records_total ve risk_event_record_timeouts_total', () => {
   it('kapanista yarim kalan kayit: timeouts 1, sonuc failed (bir kez)', async () => {
     const pending = new PendingRecords();
     await evaluateOnce(
-      { insert: () => new Promise<void>(() => undefined), findLatest: () => Promise.resolve(null) },
+      {
+        insert: () => new Promise<void>(() => undefined),
+        findLatest: () => Promise.resolve(null),
+        ...noRecentEvents,
+      },
       pending,
     );
 

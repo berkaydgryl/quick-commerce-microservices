@@ -13,6 +13,7 @@ import type { Courier, GeoPoint } from '../../domain/courier.js';
 import { comparePoolCandidates, isWithinPool } from '../../domain/courier-pool.js';
 import type { PoolCandidate } from '../../domain/courier-pool.js';
 import type {
+  CarrierReader,
   CourierBatchReader,
   CourierRepository,
   CourierSeedWriter,
@@ -23,7 +24,7 @@ import { distanceMeters } from '../../domain/geo.js';
 import type { MarketLocation, MarketLocator } from '../../domain/market-locator.js';
 
 export class InMemoryCourierStore
-  implements CourierRepository, CourierBatchReader, CourierSeedWriter, MarketLocator
+  implements CourierRepository, CourierBatchReader, CarrierReader, CourierSeedWriter, MarketLocator
 {
   private readonly couriers = new Map<string, Courier>();
   private readonly markets = new Map<string, GeoPoint>();
@@ -43,6 +44,17 @@ export class InMemoryCourierStore
 
   findByOrder(orderId: string): Promise<Courier | null> {
     return Promise.resolve(this.carrierOf(orderId));
+  }
+
+  listCarrying(limit: number, afterOrderId?: string): Promise<readonly Courier[]> {
+    const carrying = [...this.couriers.values()]
+      .filter(
+        (courier) =>
+          courier.currentOrderId !== undefined &&
+          (afterOrderId === undefined || courier.currentOrderId > afterOrderId),
+      )
+      .sort((left, right) => ((left.currentOrderId ?? '') < (right.currentOrderId ?? '') ? -1 : 1));
+    return Promise.resolve(carrying.slice(0, limit));
   }
 
   findByIds(ids: readonly string[]): Promise<readonly Courier[]> {

@@ -193,6 +193,33 @@ message GetPaymentRequest {
 // Odeme okuma cevabi. Kayit yoksa NOT_FOUND doner.
 message GetPaymentResponse {
   Payment payment = 1;
+
+  // 3DS dogrulamasinin durumu (#163 B1): odeme 3DS bekliyorsa (acik ya da
+  // suresi dolmus) ya da dogrulamasi kapanip FAILED olduysa (suresi doldu, hakki
+  // bitti) dolu; dogrulama yoksa ya da odeme 3DS disinda sonuclandiysa
+  // (basarili, iade, iptal, kart reddi) bos.
+  ThreeDsStatus three_ds = 2;
+}
+
+// 3DS dogrulamasinin durumu (#163 B1). order GetOrder bunu siparis ayrintisina
+// tasir (sayfa yenilense de dogrulama surdurulur). Kod (OTP) hicbir zaman
+// tasinmaz.
+//
+// REST'e cevirme (gateway, TEK SAAT): ttlSeconds = expires_at'a kalan sure,
+// gateway'in saatiyle, en az 0. challengeId yalnizca ttlSeconds > 0 VE
+// attempts_left > 0 ise konur; aksi halde dogrulama kapalidir (hak bittiyse
+// "hakki bitti", yoksa "suresi doldu"). Ayrinti: contracts order-three-ds.ts.
+message ThreeDsStatus {
+  // Confirm3Ds jetonu. Payment dogrulama acikken doldurur; gateway yine de
+  // kendi hesabina gore (yukarida) kullanir.
+  string challenge_id = 1;
+
+  // Kodun gecerlilik bitisi; dogrulama varsa HER ZAMAN dolu.
+  google.protobuf.Timestamp expires_at = 2;
+
+  // Kalan yanlis kod hakki: en fazla hak - yanlis kod sayisi, dogrulama hangi
+  // sebeple kapanmis olursa olsun (suresi dolanda da). 0 = hakki bitti.
+  int32 attempts_left = 3;
 }
 
 message RefundRequest {

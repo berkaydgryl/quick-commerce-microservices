@@ -1,0 +1,25 @@
+/* Siparisin tutar dokumu (T11.16; F17'de ortak): ad solda, tutar sagda; toplam kalin ve ustu cizgili. */
+.c-order-totals__row {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+}
+
+.c-order-totals__row dt {
+  color: var(--text-muted);
+}
+
+.c-order-totals__row dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.c-order-totals__row--total {
+  padding-block-start: var(--space-3);
+  font-weight: var(--font-weight-bold);
+  border-block-start: var(--border-width-thin) solid var(--border-faint);
+}
+
+.c-order-totals__row--total dt {
+  color: var(--text-default);
+}

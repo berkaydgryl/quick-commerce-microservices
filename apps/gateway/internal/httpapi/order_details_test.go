@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -186,14 +185,9 @@ func TestCheckoutIdempotencyRecordHoldsNoPersonalData(t *testing.T) {
 	if first != http.StatusCreated || replayed != http.StatusCreated {
 		t.Fatalf("ilk istek ve tekrari 201 olmali: %d %d", first, replayed)
 	}
-	records, err := json.Marshal(store.saved)
-	if err != nil {
-		t.Fatalf("kayitlar: %v", err)
-	}
-	if len(store.saved) == 0 {
-		t.Fatal("kayit yazilmadi")
-	}
-	assertNoPersonalData(t, "tekrar kaydi", string(records))
+	// Govde COZULMUS aranir (kayit JSON'unda base64); parmak izi anahtarli HMAC (#194).
+	assertRecordSecrets(t, store.saved, expectedFingerprint(http.MethodPost, "/v1/orders", []byte(body)))
+	assertNoPersonalData(t, "tekrar kaydi", searchableRecords(t, store.saved))
 	assertNoPersonalData(t, "tekrar cevabi", raw)
 	assertNoPersonalData(t, "gunluk", output.String())
 }

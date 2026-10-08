@@ -2,7 +2,7 @@ import type { CheckoutContent, CreateOrderRequest, ReserveCartRequest } from '@g
 import { errorMessage } from '@getir/contracts';
 import { AppError, ERROR_CODES } from '@getir/core';
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 
@@ -13,7 +13,9 @@ import { useCartStore } from '../../cart/stores/useCartStore';
 import { cardKeys } from '../../cards/api/query-keys';
 import { createAttemptKeys } from '../../cards/services/attempt-key';
 import { marketKeys } from '../../markets/api/query-keys';
-import { orderPath } from '../../orders/routes';
+import { orderConfirmationPath } from '../../orders/routes';
+import { confirmationState } from '../../orders/services/order-confirmation';
+import type { ConfirmationHeading } from '../../orders/services/order-confirmation';
 import { isUnknownOutcome } from '../../cards/services/attempt-key';
 import { orderBodyFingerprint } from '../services/held-order';
 import type { HeldOrder } from '../services/held-order';
@@ -39,12 +41,7 @@ export type OrderFlowState =
 
 type FlowTexts = Pick<
   CheckoutContent,
-  | 'orderPlacedToast'
-  | 'orderInReviewToast'
-  | 'threeDsExpiredToast'
-  | 'threeDsCancelledToast'
-  | 'cardMissingNotice'
-  | 'reservationRenewedToast'
+  'threeDsExpiredToast' | 'threeDsCancelledToast' | 'cardMissingNotice' | 'reservationRenewedToast'
 >;
 
 interface OrderFlowOptions {
@@ -67,7 +64,8 @@ const userMessage = (error: unknown) =>
 
 /**
  * Siparis akisinin durumu (T12.4): rezervasyon + siparis, 3DS penceresi,
- * basari (sepet bosalir, siparis detayina gidilir, bildirim), hata bildirimi.
+ * basari (sepet bosalir, onay ekranina gidilir; F17: ekran onayi soyler,
+ * bildirim yok), hata bildirimi.
  * useMutation DEGIL: mutasyon onbellegi degiskenleri (kisisel veri, 3DS kodu)
  * saklardi. Istek surerken ikinci basis yok (busy). PRICE_CHANGED'de marketin
  * kurallari yeniden cekilir: toplam tazelenir.
@@ -100,6 +98,8 @@ export function useOrderFlow(
   const show = useToastStore((toast) => toast.show);
   const [state, setState] = useState<OrderFlowState>({ kind: 'idle' });
   const [refusal, setRefusal] = useState<{ orderId: string; message: string } | undefined>();
+  // Siparisin odendigi kart (F17 S4): onay ekrani kart listesinden "Visa •••• 4242" yazar.
+  const paidCard = useRef<string | undefined>(undefined);
   const [deps] = useState<OrderFlowDeps>(() => ({
     client: authorizedClient,
     now: monotonicNow,
@@ -114,14 +114,16 @@ export function useOrderFlow(
     onRenewed: () => show(texts.reservationRenewedToast),
   });
 
-  const finish = (orderId: string, message: string) => {
+  const finish = (orderId: string, heading: ConfirmationHeading) => {
     // 'done' sepet bosalmadan ISLENMELI: sepet deposu (useSyncExternalStore) senkron
     // seritte cizilir; durum ondan once islenmezse ekran bos sepeti gorup /sepet'e
-    // donerdi (siparis detayindan sonra; canli testte bulundu).
+    // donerdi (canli testte bulundu). Adreste yalniz siparis kimligi; kart durumda.
     flushSync(() => setState({ kind: 'done' }));
-    navigate(orderPath(orderId), { replace: true });
+    navigate(orderConfirmationPath(orderId), {
+      replace: true,
+      state: confirmationState(heading, paidCard.current),
+    });
     clear();
-    show(message);
   };
 
   const fail = (error: unknown, used: HeldOrder | undefined) => {
@@ -146,7 +148,7 @@ export function useOrderFlow(
     setState({ kind: 'busy' });
     const outcome = await releaseSafely(deps, orderId);
     if (outcome === 'paid') {
-      finish(orderId, texts.orderPlacedToast);
+      finish(orderId, 'placed');
       return;
     }
     reservation.forget();
@@ -162,9 +164,12 @@ export function useOrderFlow(
   const place = async (
     request: ReserveCartRequest,
     orderBody: (orderId: string) => CreateOrderRequest,
+    /** Kartla odenecekse kartin kimligi (F17: onay ekrani "Visa •••• 4242" yazar). */
+    paidCardId?: string,
   ) => {
     if (state.kind !== 'idle') return;
     setState({ kind: 'busy' });
+    paidCard.current = paidCardId;
     let used: HeldOrder | undefined;
     try {
       // Rezervasyon siparis isteginden ONCE belli olur ve 'placing'e alinir:
@@ -203,10 +208,7 @@ export function useOrderFlow(
         setState({ ...outcome, verifying: false });
         return;
       }
-      finish(
-        outcome.orderId,
-        outcome.kind === 'paid' ? texts.orderPlacedToast : texts.orderInReviewToast,
-      );
+      finish(outcome.orderId, outcome.kind === 'paid' ? 'placed' : 'review');
     } catch (error) {
       fail(error, used);
     }
@@ -230,7 +232,7 @@ export function useOrderFlow(
         );
         return;
       }
-      finish(orderId, outcome.kind === 'paid' ? texts.orderPlacedToast : texts.orderInReviewToast);
+      finish(orderId, outcome.kind === 'paid' ? 'placed' : 'review');
     } catch (error) {
       await abandon(orderId, userMessage(error));
     }

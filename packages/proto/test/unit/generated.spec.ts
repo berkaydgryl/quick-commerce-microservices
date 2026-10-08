@@ -7,6 +7,7 @@ import {
   courierV1,
   inventoryV1,
   orderV1,
+  paymentV1,
 } from '../../gen/ts/index.js';
 
 /**
@@ -313,5 +314,48 @@ describe('kurye takibi sozlesmesi (T13.3)', () => {
 
     expect(decoded).toEqual(tracking);
     expect(decoded.deliveredAt).toBeUndefined();
+  });
+});
+
+describe('3DS surdurme sozlesmesi (#163 B1)', () => {
+  const expiresAt = new Date('2026-10-08T01:00:00.000Z');
+
+  it('ThreeDsStatus payment ve order cevabinda AYNI mesaj; telden bozulmadan gelir; kod alani YOK', () => {
+    const open = { challengeId: `tds_${'a'.repeat(32)}`, expiresAt, attemptsLeft: 2 };
+
+    const payment = paymentV1.GetPaymentResponse.decode(
+      paymentV1.GetPaymentResponse.encode({ threeDs: open }).finish(),
+    );
+    const order = orderV1.GetOrderResponse.decode(
+      orderV1.GetOrderResponse.encode({ threeDs: open }).finish(),
+    );
+
+    expect(payment.threeDs).toEqual(open);
+    expect(order.threeDs).toEqual(open);
+    expect(Object.keys(paymentV1.ThreeDsStatus.fromPartial({})).sort()).toEqual([
+      'attemptsLeft',
+      'challengeId',
+      'expiresAt',
+    ]);
+  });
+
+  it('kapali dogrulama: jeton bos metin, bitis dolu, hak 0 telden ayni gelir (gateway jetonu REST e koymaz)', () => {
+    const closed = { challengeId: '', expiresAt, attemptsLeft: 0 };
+
+    const order = orderV1.GetOrderResponse.decode(
+      orderV1.GetOrderResponse.encode({ threeDs: closed }).finish(),
+    );
+
+    expect(order.threeDs).toEqual(closed);
+  });
+
+  it('dogrulama yoksa alan undefined (bos nesne degil): yokluk "bilinmiyor ya da yok" demektir', () => {
+    const order = orderV1.GetOrderResponse.decode(orderV1.GetOrderResponse.encode({}).finish());
+    const payment = paymentV1.GetPaymentResponse.decode(
+      paymentV1.GetPaymentResponse.encode({}).finish(),
+    );
+
+    expect(order.threeDs).toBeUndefined();
+    expect(payment.threeDs).toBeUndefined();
   });
 });

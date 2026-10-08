@@ -9,6 +9,7 @@ import type { GrpcServiceRegistration } from '@getir/service-kit';
 
 import { createAdvanceRoute } from './application/advance-route.js';
 import { createAdvanceRoutes } from './application/advance-routes.js';
+import { createReconcileCarriers } from './application/reconcile-carriers.js';
 import type { AdvanceRoutes } from './application/advance-routes.js';
 import { createAssignCourier } from './application/assign-courier.js';
 import { createAssignmentRoute } from './application/assignment-route.js';
@@ -18,6 +19,8 @@ import { createNearestAvailableStrategy } from './application/nearest-available.
 import { createReleaseCourier } from './application/release-courier.js';
 import { createStartRoute } from './application/start-route.js';
 import {
+  CARRIER_RECONCILE_GRACE_MS,
+  CARRIER_RECONCILE_INTERVAL_MS,
   COURIER_POOL_RADIUS_METERS,
   COURIER_PROXIMITY_BAND_METERS,
   COURIER_SERVICE_FULL_NAME,
@@ -28,11 +31,20 @@ import {
   ROUTE_POINT_SPACING_METERS,
   TICK_BATCH_SIZE,
 } from './config/constants.js';
-import type { CourierBatchReader, CourierRepository } from './domain/courier-repository.js';
+import type {
+  CarrierReader,
+  CourierBatchReader,
+  CourierRepository,
+} from './domain/courier-repository.js';
 import type { LiveLocationStore } from './domain/live-location.js';
 import type { MarketLocator } from './domain/market-locator.js';
 import type { RouteEventPublisher } from './domain/route-events.js';
-import type { MovingRouteRepository, RouteRepository } from './domain/route-repository.js';
+import type { MovementRule } from './domain/route-progress.js';
+import type {
+  MovingRouteRepository,
+  RouteBatchReader,
+  RouteRepository,
+} from './domain/route-repository.js';
 import { MARKET_LOCATION_SEEDS } from './infrastructure/fixtures/couriers.js';
 import { InMemoryCourierStore } from './infrastructure/memory/in-memory-courier-store.js';
 import { InMemoryRouteStore } from './infrastructure/memory/in-memory-route-store.js';
@@ -72,7 +84,9 @@ export function buildCourierService(options: BootstrapOptions = {}): GrpcService
   const routes = options.routes ?? memoryRoutes;
   const movingRoutes =
     options.movingRoutes ?? (options.routes === undefined ? memoryRoutes : undefined);
-  const speedKmh = options.speedKmh ?? DEFAULT_COURIER_SPEED_KMH;
+  // Rotaya yazilan (#197) ve eski rotanin takibinde kullanilan hareket kurali.
+  const movement = movementRule(options);
+  const { speedKmh } = movement;
 
   // Use-case'ler gunlukcuyu bagimlilik olarak ALMAZ: her cagrida handler'in
   // requestId bagli gunlukcusu gecer (ctx.logger).
@@ -96,6 +110,7 @@ export function buildCourierService(options: BootstrapOptions = {}): GrpcService
             maxPoints: ROUTE_MAX_POINTS,
             speedKmh,
           },
+          movement,
           clock,
         }),
         clock,
@@ -104,13 +119,14 @@ export function buildCourierService(options: BootstrapOptions = {}): GrpcService
       releaseCourier: createReleaseCourier({
         couriers: repository,
         ...(movingRoutes === undefined ? {} : { routes: movingRoutes }),
+        rule: movement,
         clock,
       }),
       startRoute: createStartRoute(routes, repository),
       getTracking: createGetTracking({
         routes,
         couriers: repository,
-        rule: { speedKmh, prepSeconds: options.prepSeconds ?? DEFAULT_ORDER_PREP_SECONDS },
+        rule: movement,
         clock,
       }),
       ...(logger === undefined ? {} : { logger }),
@@ -118,9 +134,23 @@ export function buildCourierService(options: BootstrapOptions = {}): GrpcService
   };
 }
 
+/**
+ * Ortamdan (main.ts) gelen hareket kurali; verilmeyen varsayilan. Atama (rotaya
+ * yazar, #197), takip ve tick AYNI fonksiyondan alir: eski rotada ayni kural.
+ */
+function movementRule(options: {
+  readonly speedKmh?: number;
+  readonly prepSeconds?: number;
+}): MovementRule {
+  return {
+    speedKmh: options.speedKmh ?? DEFAULT_COURIER_SPEED_KMH,
+    prepSeconds: options.prepSeconds ?? DEFAULT_ORDER_PREP_SECONDS,
+  };
+}
+
 export interface AdvanceRoutesOptions {
-  readonly routes: MovingRouteRepository;
-  readonly couriers: Pick<CourierRepository, 'releaseByOrder'> & CourierBatchReader;
+  readonly routes: MovingRouteRepository & RouteBatchReader;
+  readonly couriers: Pick<CourierRepository, 'releaseByOrder'> & CourierBatchReader & CarrierReader;
   readonly events: RouteEventPublisher;
   readonly live: LiveLocationStore;
   /** GetTracking ile AYNI kural: tick ve takip ayni ani gorur. */
@@ -129,8 +159,13 @@ export interface AdvanceRoutesOptions {
   readonly clock?: Clock;
 }
 
-/** Tick turu (T13.3): ilerleyen rotalari bu ana getirir; isci main.ts'te baslar. */
+/**
+ * Tick turu (T13.3): ilerleyen rotalari bu ana getirir ve seyrek olarak BUSY
+ * kalan kuryeleri uzlastirir (#205); isci main.ts'te baslar.
+ */
 export function buildAdvanceRoutes(options: AdvanceRoutesOptions): AdvanceRoutes {
+  const clock = options.clock ?? systemClock;
+  const rule = movementRule(options);
   return createAdvanceRoutes({
     routes: options.routes,
     couriers: options.couriers,
@@ -139,12 +174,21 @@ export function buildAdvanceRoutes(options: AdvanceRoutesOptions): AdvanceRoutes
       couriers: options.couriers,
       events: options.events,
       live: options.live,
-      rule: {
-        speedKmh: options.speedKmh ?? DEFAULT_COURIER_SPEED_KMH,
-        prepSeconds: options.prepSeconds ?? DEFAULT_ORDER_PREP_SECONDS,
-      },
-      clock: options.clock ?? systemClock,
+      rule,
+      clock,
     }),
     batchSize: TICK_BATCH_SIZE,
+    reconcile: {
+      run: createReconcileCarriers({
+        couriers: options.couriers,
+        routes: options.routes,
+        rule,
+        batchSize: TICK_BATCH_SIZE,
+        graceMs: CARRIER_RECONCILE_GRACE_MS,
+        clock,
+      }),
+      intervalMs: CARRIER_RECONCILE_INTERVAL_MS,
+      clock,
+    },
   });
 }

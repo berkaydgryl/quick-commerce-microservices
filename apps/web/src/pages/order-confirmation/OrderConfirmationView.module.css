@@ -1,0 +1,128 @@
+/*
+ * Siparis onay ekrani (F17): ortada tek sutun (fis gibi). Ust kisim ortalanir
+ * (isaret, baslik, not); kartlar siparis detayinin kartlari (OrderCard), icleri
+ * sola yasli. Dugmeler ortak onay penceresinin dili (F13): mor dolu ve mor
+ * cerceveli; telefonda alt alta, genis ekranda yan yana.
+ */
+.c-order-confirmation {
+  display: grid;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: var(--container-max-confirmation);
+  padding-block: var(--space-5) var(--space-6);
+  margin-inline: auto;
+}
+
+.c-order-confirmation__head {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: center;
+  padding-block: var(--space-2) var(--space-3);
+  text-align: center;
+}
+
+.c-order-confirmation__title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-extrabold);
+  color: var(--color-brand-primary);
+}
+
+.c-order-confirmation__notice {
+  color: var(--text-muted);
+}
+
+.c-order-confirmation__subtitle {
+  font-size: var(--font-size-md);
+}
+
+.c-order-confirmation__market {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.c-order-confirmation__market-name {
+  font-weight: var(--font-weight-bold);
+  overflow-wrap: anywhere;
+}
+
+.c-order-confirmation__date {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.c-order-confirmation__facts {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.c-order-confirmation__fact {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.c-order-confirmation__fact dt {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.c-order-confirmation__fact dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+
+  /* Hediye notu ve siparis notu cok satirli alandan: satir sonlari korunur. */
+  white-space: pre-line;
+}
+
+.c-order-confirmation__bell {
+  font-weight: var(--font-weight-semibold);
+}
+
+.c-order-confirmation__actions {
+  display: grid;
+  gap: var(--space-3);
+  padding-block-start: var(--space-2);
+}
+
+.c-order-confirmation__action {
+  display: grid;
+  place-items: center;
+  min-height: var(--size-field-min-height);
+  padding: var(--space-3) var(--space-4);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-brand-primary);
+  text-align: center;
+  text-decoration: none;
+  background: var(--bg-surface);
+  border: var(--border-width-thin) solid var(--color-brand-primary);
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast) var(--easing-standard);
+}
+
+.c-order-confirmation__action:hover {
+  background: var(--color-brand-primary-subtle);
+}
+
+.c-order-confirmation__action--primary {
+  color: var(--text-on-brand);
+  background: var(--color-brand-primary);
+}
+
+.c-order-confirmation__action--primary:hover {
+  background: var(--color-brand-primary-strong);
+}
+
+@media (--bp-md) {
+  .c-order-confirmation__actions {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .c-order-confirmation__action {
+    transition: none;
+  }
+}

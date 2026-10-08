@@ -151,6 +151,12 @@ func Load(getenv Getenv) (Config, error) {
 		problems = append(problems, err)
 	}
 
+	// 3DS IP penceresi (#163, G1): guvenilir vekil ayari gelene kadar KAPALI.
+	threeDSIPLimitEnabled, err := readBool(getenv, "THREEDS_IP_LIMIT_ENABLED", false)
+	if err != nil {
+		problems = append(problems, err)
+	}
+
 	// Harita adres servisi (T11.8): varsayilan OpenStreetMap'in genel sunucusu.
 	geoBaseURL, err := readGeoBaseURL(getenv)
 	if err != nil {
@@ -219,6 +225,7 @@ func Load(getenv Getenv) (Config, error) {
 		RateLimitGeneral:            rateLimitGeneral,
 		RateLimitAuth:               rateLimitAuth,
 		RateLimitOrder:              rateLimitOrder,
+		ThreeDSIPLimitEnabled:       threeDSIPLimitEnabled,
 		GeoBaseURL:                  geoBaseURL,
 		GeoUserAgent:                readString(getenv, "GEO_USER_AGENT", defaultGeoUserAgent),
 		GeoTimeout:                  geoTimeout,

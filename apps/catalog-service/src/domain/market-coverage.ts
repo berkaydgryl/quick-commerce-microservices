@@ -6,9 +6,12 @@
  * (istemci "Kapali" rozeti gosterir); siparis kapisi rezervasyondadir.
  *
  * T4.2'nin "yaricap icinde ama kapali -> STORE_CLOSED / yaricap disi ->
- * OUT_OF_RANGE" ayrimi TEK market icin burada yasar (evaluateCoverage);
- * rezervasyon (T11.4) secilen marketin hala hizmet verip vermedigini buna sorar.
+ * OUT_OF_RANGE" ayrimi TEK market icin burada yasar (evaluateCoverage). Kapali
+ * market kapisi order-service'tedir (#154, GetMarket.is_open). Mesafe ve yaricap
+ * esitsizligi @getir/core'dadir (distanceMeters, isOutsideDeliveryRadius).
  */
+
+import { isOutsideDeliveryRadius } from '@getir/core';
 
 import type { Market } from './catalog.js';
 
@@ -25,10 +28,11 @@ export type CoverageStatus = 'serves' | 'closed' | 'out-of-range';
 /**
  * @param candidate Market ve konuma uzakligi.
  *
- * Yaricap SINIRI dahildir (mesafe == yaricap hizmet verir).
+ * Yaricap SINIRI dahildir (mesafe == yaricap hizmet verir); esitsizlik
+ * @getir/core isOutsideDeliveryRadius'tadir (paylasilan kural).
  */
 export function evaluateCoverage(candidate: MarketDistance): CoverageStatus {
-  if (candidate.distanceMeters > candidate.market.deliveryRadiusMeters) {
+  if (isOutsideDeliveryRadius(candidate.distanceMeters, candidate.market.deliveryRadiusMeters)) {
     return 'out-of-range';
   }
   return candidate.market.isOpen ? 'serves' : 'closed';

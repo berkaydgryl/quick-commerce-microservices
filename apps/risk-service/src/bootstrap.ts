@@ -9,15 +9,19 @@ import type { GrpcServiceRegistration } from '@getir/service-kit';
 
 import { createEvaluateAndRecord } from './application/evaluate-and-record.js';
 import { createEvaluateRisk } from './application/evaluate-risk.js';
+import { createEvaluateWithRecentBand } from './application/evaluate-with-recent-band.js';
+import { createReadRecentBand } from './application/read-recent-band.js';
 import { createGetLastEvaluation } from './application/get-last-evaluation.js';
 import type { PendingRecords } from './application/pending-records.js';
 import {
+  RECENT_BAND_READ_TIMEOUT_MS,
+  RECENT_BAND_WINDOW_MS,
   RISK_EVENT_RECORD_TIMEOUT_MS,
   RISK_SERVICE_FULL_NAME,
   RULE_TIMEOUT_MS,
 } from './config/constants.js';
 import { riskRulesConfig } from './config/risk-rules.js';
-import type { RiskEventRepository } from './domain/risk-event-repository.js';
+import type { RecentRiskEvents, RiskEventRepository } from './domain/risk-event-repository.js';
 import { InMemoryRiskEventStore } from './infrastructure/memory/in-memory-risk-event-store.js';
 import {
   initRiskEventMetrics,
@@ -29,8 +33,11 @@ import { createRuleRegistry } from './rules/registry.js';
 
 export interface BootstrapOptions {
   readonly logger?: Logger;
-  /** risk_events deposu; main.ts openRiskEventStore'dan verir. Verilmezse bellek (testler). */
-  readonly events?: RiskEventRepository;
+  /**
+   * risk_events deposu (kayit + yakin okuma, #164); main.ts openRiskEventStore'dan
+   * verir. Verilmezse bellek (testler).
+   */
+  readonly events?: RiskEventRepository & RecentRiskEvents;
   /** Saat; testte sabitlenebilsin diye disaridan verilebilir. */
   readonly clock?: Clock;
   /** Kaydin sure siniri (ms); verilmezse RISK_EVENT_RECORD_TIMEOUT_MS (testte kisaltilir). */
@@ -52,7 +59,16 @@ export function buildRiskService(options: BootstrapOptions): GrpcServiceRegistra
   const rules = createRuleRegistry(createCoreRules(clock), riskRulesConfig);
   // Use-case'ler gunlukcuyu bagimlilik olarak ALMAZ: her cagrida handler'in
   // requestId bagli gunlukcusu gecer (ctx.logger).
-  const evaluateRisk = createEvaluateRisk({ rules, clock, ruleTimeoutMs: RULE_TIMEOUT_MS });
+  // Yapiskan bant (#164) motoru sarar; kayit yolu (evaluate-and-record) degismez.
+  const evaluateRisk = createEvaluateWithRecentBand({
+    evaluateRisk: createEvaluateRisk({ rules, clock, ruleTimeoutMs: RULE_TIMEOUT_MS }),
+    readRecentBand: createReadRecentBand({
+      events,
+      clock,
+      windowMs: RECENT_BAND_WINDOW_MS,
+      readTimeoutMs: RECENT_BAND_READ_TIMEOUT_MS,
+    }),
+  });
   initRiskEventMetrics();
 
   return {

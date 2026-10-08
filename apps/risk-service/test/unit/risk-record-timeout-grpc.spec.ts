@@ -17,14 +17,18 @@ import { RISK_CALL_TIMEOUT_MS } from '../../../order-service/src/config/constant
 import { PendingRecords } from '../../src/application/pending-records.js';
 import { buildRiskService } from '../../src/bootstrap.js';
 import { RISK_EVENT_RECORD_TIMEOUT_MS, RULE_TIMEOUT_MS } from '../../src/config/constants.js';
-import type { RiskEventRepository } from '../../src/domain/risk-event-repository.js';
+import type {
+  RecentRiskEvents,
+  RiskEventRepository,
+} from '../../src/domain/risk-event-repository.js';
 import { PERSONA_NOW, PERSONAS } from '../support/personas.js';
 import { toProtoContext } from '../support/proto-context.js';
 
-/** Kaydi hic bitmeyen depo: donmus Mongo. */
-const frozen: RiskEventRepository = {
+/** Kaydi hic bitmeyen depo: donmus Mongo. Yakin kayit yok (yapiskan bant #164 devreye girmez). */
+const frozen: RiskEventRepository & RecentRiskEvents = {
   insert: () => new Promise<void>(() => undefined),
   findLatest: () => Promise.resolve(null),
+  findHighestRecent: () => Promise.resolve(null),
 };
 
 type EvaluateHandler = handleUnaryCall<riskV1.EvaluateRequest, riskV1.EvaluateResponse>;

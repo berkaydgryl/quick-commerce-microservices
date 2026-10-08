@@ -26,8 +26,11 @@ option go_package = "github.com/berkaydgryl/quick-commerce-microservices/package
 
 // Risk degerlendirme servisi.
 service RiskService {
-  // Baglami puanlar. Checkout saga'sinda IKI KEZ cagrilir: rezervasyon
-  // oncesi (bant -> TTL) ve siparis oncesi (dwell suresi + odeme sinyali).
+  // Baglami puanlar. Checkout saga'sinda siparis basina BIR KEZ cagrilir
+  // (CreateOrder risk adimi: dwell suresi + odeme sinyalleri). Bant, kullanicinin
+  // son RECENT_BAND_WINDOW_MS (risk sabiti) icindeki degerlendirmelerinin skordan
+  // ya da vetodan gelen en yuksek bandinin altina inmez (#164, yapiskan bant;
+  // vetolu CRITICAL da yapisir); yukselirse hits'te puansiz "recent-band" durur.
   rpc Evaluate(EvaluateRequest) returns (EvaluateResponse);
 
   // Son degerlendirmeyi okur. Demo sirasinda "bu siparis neden engellendi"
@@ -60,7 +63,9 @@ enum RiskBand {
 // "kural kosmadi" ile "kural kostu ama tetiklenmedi" ayrimi yapilabilir; bu
 // ayrim olmadan bir kuralin hata verip sessizce atlandigi fark edilmezdi.
 message RuleHit {
-  // Kural dosyasinin kimligi (ornegin "account-age").
+  // Kural dosyasinin kimligi (ornegin "account-age"). Istisna "recent-band"
+  // (#164): kural dosyasi degil, yapiskan bantin aciklamasi; agirlik ve puan 0,
+  // gerekcede kaynak degerlendirmenin kimligi.
   string rule_id = 1;
 
   bool hit = 2;
@@ -84,7 +89,9 @@ message RuleHit {
 //
 // Alanlarin tamamini CAGIRAN TARAF doldurur; risk-svc baska servislere sorgu
 // atmaz. Gerekce hiz: bu RPC checkout'un kritik yolundadir ve buradan
-// acilacak ek cagrilar siparis gecikmesine dogrudan eklenirdi.
+// acilacak ek cagrilar siparis gecikmesine dogrudan eklenirdi. Tek istisna
+// kendi risk_events'idir (#164 yapiskan bant): kurallarla PARALEL,
+// RECENT_BAND_READ_TIMEOUT_MS ile sinirli; asilirsa yapiskanlik uygulanmaz.
 //
 // Eksik birakilan alanlar ilgili kurali TETIKLEMEZ (hata degildir); kural
 // motoru eksik sinyali 0 puan olarak isler.
@@ -158,7 +165,9 @@ message RiskEvaluation {
   google.protobuf.Timestamp evaluated_at = 4;
 
   // Bandi veto ile CRITICAL yapan kuralin kimligi; bos ise veto yoktur ve
-  // bant skordan gelir. "Skor 45 ama neden kritik?" sorusunun cevabi budur.
+  // bant skordan gelir YA DA yapiskandir (#164): o durumda hits'te
+  // "recent-band" vardir ve bant skordan yuksek olabilir. "Skor 45 ama neden
+  // kritik?" sorusunun cevabi budur.
   string vetoed_by_rule_id = 5;
 }
 

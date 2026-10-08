@@ -6,7 +6,7 @@
 
 import { ERROR_CODES, isAppError } from '@getir/core';
 import { MongoRepository } from '@getir/mongo-kit';
-import type { Db, IndexDescription, UpdateFilter } from 'mongodb';
+import type { Db, Filter, IndexDescription, UpdateFilter } from 'mongodb';
 
 import type { RouteDocument } from './documents.js';
 import { COLLECTIONS } from './documents.js';
@@ -44,22 +44,26 @@ export class RoutesCollection extends MongoRepository<RouteDocument> {
     );
   }
 
+  /** Siparislerin rotalari, toplu (#205; _id = siparis, birincil anahtardan). */
+  async findByOrders(orderIds: readonly string[]): Promise<RouteDocument[]> {
+    return this.run('findByOrders', () =>
+      this.collection.find({ _id: { $in: [...orderIds] } }).toArray(),
+    );
+  }
+
   /**
    * Yamayi yazar: yalnizca belge hala ayni rota (kurye ve uretilme ani) ve
-   * bitmemisse. @returns guncel belge; kosul tutmadiysa null.
+   * bitmemisse; `requireUndelivered` ise ayrica teslim ani KAYITLI degilse
+   * (#177: iptalin ENDED yamasi). @returns guncel belge; kosul tutmadiysa null.
    */
   async updateCurrent(
     current: Pick<RouteDocument, '_id' | 'courierId' | 'createdAt'>,
     patch: UpdateFilter<RouteDocument>['$set'],
+    options: { readonly requireUndelivered?: boolean } = {},
   ): Promise<RouteDocument | null> {
     return this.run('updateCurrent', () =>
       this.collection.findOneAndUpdate(
-        {
-          _id: current._id,
-          courierId: current.courierId,
-          createdAt: current.createdAt,
-          state: { $nin: [...FINISHED] },
-        },
+        currentRouteFilter(current, options.requireUndelivered === true),
         { $set: patch ?? {} },
         { returnDocument: 'after' },
       ),
@@ -92,4 +96,21 @@ export class RoutesCollection extends MongoRepository<RouteDocument> {
       this.collection.replaceOne({ _id: document._id }, document, { upsert: true }),
     );
   }
+}
+
+/**
+ * Kosullu yamanin filtresi: ayni rota (kurye ve uretilme ani), bitmemis;
+ * `requireUndelivered` ise teslim ani KAYITLI degil (#177: iptalin ENDED'i).
+ */
+export function currentRouteFilter(
+  current: Pick<RouteDocument, '_id' | 'courierId' | 'createdAt'>,
+  requireUndelivered: boolean,
+): Filter<RouteDocument> {
+  return {
+    _id: current._id,
+    courierId: current.courierId,
+    createdAt: current.createdAt,
+    state: { $nin: [...FINISHED] },
+    ...(requireUndelivered ? { deliveredAt: { $exists: false } } : {}),
+  };
 }

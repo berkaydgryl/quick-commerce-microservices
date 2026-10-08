@@ -5,6 +5,8 @@ import (
 
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/ratelimit"
 )
 
 // Deps, yonlendiricinin disaridan aldigi her sey.
@@ -26,8 +28,13 @@ type Deps struct {
 	ReservationReleaser ReservationReleaser
 	OrderPlacer         OrderPlacer
 	ThreeDSConfirmer    ThreeDSConfirmer
-	OrderGetter         OrderGetter
-	OrderLister         OrderLister
+	// ThreeDSFailures, 3DS yanlis kod sayaci (#163; kullanici ve IP pencereleri).
+	// nil ise 3DS siniri tumden kapali (hiz siniri kapaliyken).
+	ThreeDSFailures ratelimit.FailureCounter
+	// ThreeDSIPLimit, IP penceresi acik mi (THREEDS_IP_LIMIT_ENABLED; G1).
+	ThreeDSIPLimit bool
+	OrderGetter    OrderGetter
+	OrderLister    OrderLister
 	// OrderRoomTokens, siparis odasi jetonu (T12.2); bugun roomtoken.Service.
 	OrderRoomTokens OrderRoomTokenIssuer
 	// OrderTracking, kurye takibi (T14.2); bugun tracking.Service.

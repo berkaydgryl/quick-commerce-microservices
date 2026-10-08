@@ -16,16 +16,20 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { PendingRecords } from '../../src/application/pending-records.js';
 import { buildRiskService } from '../../src/bootstrap.js';
-import type { RiskEventRepository } from '../../src/domain/risk-event-repository.js';
+import type {
+  RecentRiskEvents,
+  RiskEventRepository,
+} from '../../src/domain/risk-event-repository.js';
 import { PERSONA_NOW, PERSONAS } from '../support/personas.js';
 import { toProtoContext } from '../support/proto-context.js';
 
 const REQUEST_ID = 'req_log_baglami_risk';
 
 const lines: LogLine[] = [];
-const brokenEvents: RiskEventRepository = {
+const brokenEvents: RiskEventRepository & RecentRiskEvents = {
   insert: () => Promise.reject(new Error('mongo yok')),
   findLatest: () => Promise.resolve(null),
+  findHighestRecent: () => Promise.resolve(null),
 };
 
 let server: TestGrpcServer;

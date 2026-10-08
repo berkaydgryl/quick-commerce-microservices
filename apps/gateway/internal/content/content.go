@@ -71,6 +71,12 @@ type Welcome struct {
 	Checkout Checkout `json:"checkout"`
 	// Confirm, ortak onay penceresinin dugmeleri (F13).
 	Confirm Confirm `json:"confirm"`
+	// AppLoading, tam ekran Yukleniyor gostergesi (F18).
+	AppLoading AppLoading `json:"appLoading"`
+	// CourierTracking, kurye penceresi ve yaklasma bildirimi (F22).
+	CourierTracking CourierTracking `json:"courierTracking"`
+	// OrderConfirmation, siparis onay ekrani (F17).
+	OrderConfirmation OrderConfirmation `json:"orderConfirmation"`
 }
 
 // Header, ust bar: logonun iki parcasi ve iki dugme.

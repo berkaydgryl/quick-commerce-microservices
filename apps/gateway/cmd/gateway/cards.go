@@ -25,7 +25,7 @@ func buildCardRoutes(cfg config.Config, pool *clients.Pool, rateLimit httpapi.Ra
 		return httpapi.CardRoutes{}, fmt.Errorf("%s baglantisi havuzda yok", config.PaymentService)
 	}
 	vault := cards.New(cardvaultv1.NewCardVaultServiceClient(conn), cfg.RequestTimeout)
-	routes := httpapi.CardRoutes{Lister: vault, Adder: vault, Deleter: vault}
+	routes := httpapi.CardRoutes{Lister: vault, Adder: vault, Deleter: vault, Renamer: vault}
 	if failures, counts := rateLimit.Limiter.(ratelimit.FailureCounter); counts {
 		routes.Failures = failures
 	}
@@ -33,4 +33,14 @@ func buildCardRoutes(cfg config.Config, pool *clients.Pool, rateLimit httpapi.Ra
 		routes.Inflight = inflight
 	}
 	return routes, nil
+}
+
+// threeDSFailures, 3DS yanlis kod sayaci (#163): hiz siniriyla ayni depo (Redis
+// ya da MOCK'ta bellek). Hiz siniri kapaliysa nil: kullanici siniri da kapali.
+func threeDSFailures(rateLimit httpapi.RateLimit) ratelimit.FailureCounter {
+	failures, counts := rateLimit.Limiter.(ratelimit.FailureCounter)
+	if !counts {
+		return nil
+	}
+	return failures
 }
