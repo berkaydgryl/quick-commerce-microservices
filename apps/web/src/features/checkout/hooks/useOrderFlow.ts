@@ -1,5 +1,4 @@
 import type { CheckoutContent, CreateOrderRequest, ReserveCartRequest } from '@getir/contracts';
-import { errorMessage } from '@getir/contracts';
 import { AppError, ERROR_CODES } from '@getir/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
@@ -11,21 +10,26 @@ import { authorizedClient } from '../../../shared/session/session';
 import { useToastStore } from '../../../shared/toast/toast-store';
 import { useCartStore } from '../../cart/stores/useCartStore';
 import { cardKeys } from '../../cards/api/query-keys';
-import { createAttemptKeys } from '../../cards/services/attempt-key';
+import { createAttemptKeys, isUnknownOutcome } from '../../cards/services/attempt-key';
 import { marketKeys } from '../../markets/api/query-keys';
 import { orderConfirmationPath } from '../../orders/routes';
 import { confirmationState } from '../../orders/services/order-confirmation';
 import type { ConfirmationHeading } from '../../orders/services/order-confirmation';
-import { isUnknownOutcome } from '../../cards/services/attempt-key';
 import { orderBodyFingerprint } from '../services/held-order';
+import { clearPendingThreeDs, savePendingThreeDs } from '../services/pending-three-ds';
 import type { HeldOrder } from '../services/held-order';
 import { monotonicNow } from '../services/monotonic-clock';
-import type { ReservationPhase } from '../services/reservation-plan';
+import { heldOrderId } from '../services/reservation-plan';
 import { placeReserved, releaseSafely, reserveOrder, submitCode } from '../services/place-order';
 import type { OrderFlowDeps } from '../services/place-order';
 import { createReserveIntent } from '../services/reserve-intent';
+import { closedThreeDsNotice } from '../services/resume-three-ds';
+import { codeFailureNotice } from '../services/three-ds-code';
+import { userMessage } from '../services/user-message';
 
 import { useEarlyReservation } from './useEarlyReservation';
+import { useRetryWait } from './useRetryWait';
+import { useForgetPendingOnLeave, useThreeDsResume } from './useThreeDsResume';
 
 export type OrderFlowState =
   | { readonly kind: 'idle' | 'busy' | 'done' }
@@ -37,11 +41,17 @@ export type OrderFlowState =
       readonly verifying: boolean;
       /** Son yanlis kodun cumlesi ve kalan hak. */
       readonly failure?: { readonly message: string; readonly attemptsLeft: number } | undefined;
+      /** Yenilemede surdurulen 3DS'te sunucunun kalan hakki (F15b; istemci uydurmaz). */
+      readonly attemptsLeft?: number | undefined;
     };
 
 type FlowTexts = Pick<
   CheckoutContent,
-  'threeDsExpiredToast' | 'threeDsCancelledToast' | 'cardMissingNotice' | 'reservationRenewedToast'
+  | 'threeDsExpiredToast'
+  | 'threeDsExhaustedToast'
+  | 'threeDsCancelledToast'
+  | 'cardMissingNotice'
+  | 'reservationRenewedToast'
 >;
 
 interface OrderFlowOptions {
@@ -53,14 +63,6 @@ interface OrderFlowOptions {
    */
   readonly cardFallback?: boolean | undefined;
 }
-
-/** Tutulan ya da ucustaki siparisin kimligi (rezervasyon fazindan). */
-const heldOrderId = (phase: ReservationPhase): string | undefined =>
-  phase.kind === 'held' || phase.kind === 'placing' ? phase.held.orderId : undefined;
-
-/** Kullaniciya gosterilecek cumle: gateway'in cumlesi (ERROR_MESSAGES) ya da genel hata. */
-const userMessage = (error: unknown) =>
-  error instanceof AppError ? error.message : errorMessage(ERROR_CODES.INTERNAL);
 
 /**
  * Siparis akisinin durumu (T12.4): rezervasyon + siparis, 3DS penceresi,
@@ -96,7 +98,7 @@ export function useOrderFlow(
   const queryClient = useQueryClient();
   const clear = useCartStore((cart) => cart.clear);
   const show = useToastStore((toast) => toast.show);
-  const [state, setState] = useState<OrderFlowState>({ kind: 'idle' });
+  const [ownState, setState] = useState<OrderFlowState>({ kind: 'idle' });
   const [refusal, setRefusal] = useState<{ orderId: string; message: string } | undefined>();
   // Siparisin odendigi kart (F17 S4): onay ekrani kart listesinden "Visa •••• 4242" yazar.
   const paidCard = useRef<string | undefined>(undefined);
@@ -107,18 +109,35 @@ export function useOrderFlow(
     orderAttempts: createAttemptKeys(),
     newKey: createIdempotencyKey,
   }));
+  // Yenilemede bekleyen 3DS okunurken akis mesgul: yeni rezervasyon alinmaz (F15b).
+  const resume = useThreeDsResume(deps, (decision) => {
+    if (decision.kind === 'challenge') {
+      reservation.ordered(decision.orderId);
+      setState({ ...decision, verifying: false });
+    } else if (decision.kind === 'closed') {
+      void abandon(decision.orderId, closedThreeDsNotice(decision.reason, texts));
+    } else {
+      finish(decision.orderId, decision.kind === 'paid' ? 'placed' : 'review');
+    }
+  });
+  // 429 (F15b): bekleme bitene kadar kod ve KARTLA "Sipariş Ver" kapali; kapida odeme serbest.
+  const lock = useRetryWait();
+  const blocked = resume.resuming || resume.failed;
+  const state: OrderFlowState = blocked && ownState.kind === 'idle' ? { kind: 'busy' } : ownState;
   const reservation = useEarlyReservation({
     deps,
     request: reservationRequest,
     active: state.kind === 'idle',
     onRenewed: () => show(texts.reservationRenewedToast),
   });
+  useForgetPendingOnLeave(state.kind === 'challenge');
 
   const finish = (orderId: string, heading: ConfirmationHeading) => {
     // 'done' sepet bosalmadan ISLENMELI: sepet deposu (useSyncExternalStore) senkron
     // seritte cizilir; durum ondan once islenmezse ekran bos sepeti gorup /sepet'e
     // donerdi (canli testte bulundu). Adreste yalniz siparis kimligi; kart durumda.
     flushSync(() => setState({ kind: 'done' }));
+    clearPendingThreeDs();
     navigate(orderConfirmationPath(orderId), {
       replace: true,
       state: confirmationState(heading, paidCard.current),
@@ -133,6 +152,7 @@ export function useOrderFlow(
       reservation.forget();
     }
     setState({ kind: 'idle' });
+    if (paidCard.current !== undefined && lock.start(error)) return;
     show(userMessage(error));
     if (
       error instanceof AppError &&
@@ -151,6 +171,8 @@ export function useOrderFlow(
       finish(orderId, 'placed');
       return;
     }
+    // Birakma sonucu belirsizse kayit KALIR: yenileme siparisi okuyup dogru sonuca gider.
+    if (outcome === 'released') clearPendingThreeDs();
     reservation.forget();
     setState({ kind: 'idle' });
     show(message);
@@ -167,7 +189,7 @@ export function useOrderFlow(
     /** Kartla odenecekse kartin kimligi (F17: onay ekrani "Visa •••• 4242" yazar). */
     paidCardId?: string,
   ) => {
-    if (state.kind !== 'idle') return;
+    if (state.kind !== 'idle' || (paidCardId !== undefined && lock.waitSeconds > 0)) return;
     setState({ kind: 'busy' });
     paidCard.current = paidCardId;
     let used: HeldOrder | undefined;
@@ -205,6 +227,8 @@ export function useOrderFlow(
       }
       reservation.ordered(outcome.orderId);
       if (outcome.kind === 'challenge') {
+        // Yenilemede surdurmek icin yalniz siparis kimligi (F15b; kod ve challengeId yazilmaz).
+        savePendingThreeDs(outcome.orderId);
         setState({ ...outcome, verifying: false });
         return;
       }
@@ -234,7 +258,14 @@ export function useOrderFlow(
       }
       finish(orderId, outcome.kind === 'paid' ? 'placed' : 'review');
     } catch (error) {
-      await abandon(orderId, userMessage(error));
+      if (lock.start(error)) {
+        // Kapi siparise gitmeden reddetti: dogrulama acik kalir, bekleme bitince kod girilir.
+        setState((current) =>
+          current.kind === 'challenge' ? { ...current, verifying: false } : current,
+        );
+        return;
+      }
+      await abandon(orderId, codeFailureNotice(error, texts));
     }
   };
 
@@ -253,6 +284,10 @@ export function useOrderFlow(
     cancel,
     expire,
     reservation: { phase: reservation.phase, retry: reservation.retry },
+    /** Yenilemede bekleyen 3DS okunamadi (F15b): uyari ve "Tekrar dene". */
+    resume: { failed: resume.failed, retry: resume.retry },
+    /** Cok fazla hatali kod (429): tekrar denemeye kalan saniye; yoksa 0. */
+    waitSeconds: lock.waitSeconds,
     /**
      * Bu siparis icin kapida odeme reddedildiyse (422; F12) sunucunun cumlesi:
      * pencerede secenekler pasif ve not. Siparis degisince (yeni rezervasyon) kalkar.

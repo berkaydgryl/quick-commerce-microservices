@@ -2,11 +2,11 @@ import type { CheckoutContent } from '@getir/contracts';
 import { useId, useState } from 'react';
 
 import { Dialog } from '../../../shared/ui/dialog/Dialog';
+import { FormAlert } from '../../cards/ui/FormAlert';
 import { formatCountdown, isCountdownWarning } from '../services/countdown';
+import { canSubmitCode, OTP_LENGTH } from '../services/three-ds-code';
 
 import styles from './ThreeDsDialog.module.css';
-
-const OTP_LENGTH = 6;
 
 export type ThreeDsTexts = Pick<
   CheckoutContent,
@@ -19,6 +19,8 @@ export type ThreeDsTexts = Pick<
   | 'threeDsRemainingLabel'
   | 'threeDsLastSecondsNotice'
   | 'threeDsAttemptsLeftSuffix'
+  | 'threeDsRateLimitedNotice'
+  | 'retryWaitLabel'
 >;
 
 interface ThreeDsDialogProps {
@@ -27,6 +29,13 @@ interface ThreeDsDialogProps {
   readonly remaining: number | undefined;
   readonly verifying: boolean;
   readonly failure: { readonly message: string; readonly attemptsLeft: number } | undefined;
+  /**
+   * Yenilemede surdurulen 3DS'te sunucunun kalan hakki (F15b, #163): yanlis kod
+   * cumlesi yokken gosterilir. Istemci sayi uydurmaz; sunucu vermediyse yok.
+   */
+  readonly attemptsLeft?: number | undefined;
+  /** Cok fazla hatali kod (429; F15b): tekrar denemeye kalan saniye; 0 ise yok. */
+  readonly waitSeconds?: number | undefined;
   readonly onSubmit: (otp: string) => void;
   /** "Vazgeç", sag ustteki X ve Esc AYNI yol (rezervasyon birakilir). */
   readonly onCancel: () => void;
@@ -35,7 +44,8 @@ interface ThreeDsDialogProps {
 /**
  * 3DS penceresi (T12.4; T17.1 geri sayim): bankanin 6 haneli kodu, kalan
  * sure (son 30 saniyede uyari rengi; ekran okuyucu "Son 30 saniye"yi BIR kez
- * okur), yanlis kodda sunucunun cumlesi ve kalan hak. Kod SIRDIR: yalnizca
+ * okur), yanlis kodda sunucunun cumlesi ve kalan hak (yenilemede surdurulende
+ * sunucunun kalan hakki, F15b). Kod SIRDIR: yalnizca
  * bu alanin durumunda yasar, her denemeden sonra silinir, pencere kapaninca
  * kaybolur; gunluge, depoya ve adrese yazilmaz. Ortak pencere: odak icinde
  * (showModal), Esc "Vazgeç" ile ayni.
@@ -45,6 +55,8 @@ export function ThreeDsDialog({
   remaining,
   verifying,
   failure,
+  attemptsLeft,
+  waitSeconds = 0,
   onSubmit,
   onCancel,
 }: ThreeDsDialogProps) {
@@ -52,6 +64,7 @@ export function ThreeDsDialog({
   const [otp, setOtp] = useState('');
   const warning = remaining !== undefined && isCountdownWarning(remaining);
   const failureId = `${id}-hata`;
+  const ready = canSubmitCode(otp, verifying, waitSeconds);
 
   return (
     <Dialog
@@ -62,7 +75,7 @@ export function ThreeDsDialog({
         className={styles['c-three-ds']}
         onSubmit={(event) => {
           event.preventDefault();
-          if (otp.length === OTP_LENGTH && !verifying) {
+          if (ready) {
             onSubmit(otp);
             setOtp('');
           }
@@ -106,15 +119,23 @@ export function ThreeDsDialog({
             {failure.message} {failure.attemptsLeft} {texts.threeDsAttemptsLeftSuffix}
           </p>
         )}
+        {failure === undefined && attemptsLeft !== undefined && (
+          <p className={styles['c-three-ds__attempts']}>
+            {attemptsLeft} {texts.threeDsAttemptsLeftSuffix}
+          </p>
+        )}
+        {waitSeconds > 0 && (
+          <FormAlert
+            message={texts.threeDsRateLimitedNotice}
+            waitLabel={texts.retryWaitLabel}
+            waitSeconds={waitSeconds}
+          />
+        )}
         <div className={styles['c-three-ds__actions']}>
           <button type="button" className={styles['c-three-ds__cancel']} onClick={onCancel}>
             {texts.threeDsCancelLabel}
           </button>
-          <button
-            type="submit"
-            className={styles['c-three-ds__submit']}
-            disabled={otp.length !== OTP_LENGTH || verifying}
-          >
+          <button type="submit" className={styles['c-three-ds__submit']} disabled={!ready}>
             {verifying ? texts.threeDsSubmittingLabel : texts.threeDsSubmitLabel}
           </button>
         </div>

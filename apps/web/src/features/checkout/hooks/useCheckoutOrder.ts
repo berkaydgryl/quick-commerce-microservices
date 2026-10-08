@@ -87,6 +87,8 @@ export function useCheckoutOrder({
 
   return {
     blockerText: blocker === undefined ? undefined : String(texts[BLOCKER_TEXT[blocker]]),
+    /** Secili odeme kartla mi (429 beklemesi yalniz kartli siparisi durdurur; F15b). */
+    byCard: payment?.kind === 'card',
     flow,
     place,
   };

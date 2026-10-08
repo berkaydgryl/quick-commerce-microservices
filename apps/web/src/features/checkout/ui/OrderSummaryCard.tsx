@@ -5,6 +5,8 @@ import { useId } from 'react';
 import type { ReactNode } from 'react';
 
 import { formatMoney } from '../../../shared/services/format';
+import { formatCountdown } from '../../profile/services/code-window';
+import type { RetryWait } from '../services/retry-wait';
 
 import { AgreementField } from './AgreementField';
 import styles from './OrderSummaryCard.module.css';
@@ -18,6 +20,11 @@ interface OrderSummaryCardProps {
   readonly texts: CheckoutContent;
   /** Ilk eksik kosulun cumlesi (N1); varken dugme pasif ve cumle altinda. */
   readonly blocker: string | undefined;
+  /**
+   * Cok fazla hatali kod (429; F15b): dugme pasif; cumle BIR kez okunur
+   * (role="alert"), geri sayim bolgenin DISINDA (kart formu FormAlert deseni).
+   */
+  readonly wait?: RetryWait | undefined;
   /** Istek suruyor: dugme "Sipariş veriliyor…" ve pasif. */
   readonly busy: boolean;
   /** Ozet kartinin altindaki durum satiri (erken rezervasyon: kalan sure ya da hata). */
@@ -38,13 +45,15 @@ export function OrderSummaryCard({
   onAgreementsChange,
   texts,
   blocker,
+  wait,
   busy,
   status,
   onPlace,
 }: OrderSummaryCardProps) {
   const titleId = useId();
   const hintId = useId();
-  const disabled = blocker !== undefined || busy;
+  const hinted = blocker !== undefined || wait !== undefined;
+  const disabled = hinted || busy;
   return (
     <section className={styles['c-order-summary']} aria-labelledby={titleId}>
       <h2 id={titleId} className={styles['c-order-summary__title']}>
@@ -82,7 +91,7 @@ export function OrderSummaryCard({
         type="button"
         className={styles['c-order-summary__place']}
         aria-disabled={disabled}
-        aria-describedby={blocker === undefined ? undefined : hintId}
+        aria-describedby={hinted ? hintId : undefined}
         onClick={() => {
           if (!disabled) onPlace();
         }}
@@ -96,7 +105,13 @@ export function OrderSummaryCard({
           </span>
         )}
       </button>
-      {blocker !== undefined && (
+      {wait !== undefined && (
+        <p id={hintId} className={styles['c-order-summary__hint']}>
+          <span role="alert">{wait.notice}</span> {wait.label}{' '}
+          <time>{formatCountdown(wait.seconds)}</time>
+        </p>
+      )}
+      {wait === undefined && blocker !== undefined && (
         <p id={hintId} className={styles['c-order-summary__hint']}>
           {blocker}
         </p>

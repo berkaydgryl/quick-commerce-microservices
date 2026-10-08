@@ -60,6 +60,12 @@
   color: var(--text-danger);
 }
 
+/* Yenilemede surdurulende sunucunun kalan hakki (F15b): uyari degil, bilgi. */
+.c-three-ds__attempts {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
 .c-three-ds__actions {
   display: flex;
   gap: var(--space-3);

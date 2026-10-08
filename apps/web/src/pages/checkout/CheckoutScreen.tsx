@@ -31,6 +31,7 @@ import { PaymentMethodDialog } from '../../features/checkout/ui/PaymentMethodDia
 import { PaymentMethodView } from '../../features/checkout/ui/PaymentMethodView';
 import { ReservationStatus } from '../../features/checkout/ui/ReservationStatus';
 import { ThreeDsStep } from '../../features/checkout/ui/ThreeDsStep';
+import { placeHints } from '../../features/checkout/services/retry-wait';
 import { useSessionStore } from '../../shared/session/session-store';
 import { QueryError } from '../../shared/ui/query-status/QueryStatus';
 
@@ -158,13 +159,22 @@ export function CheckoutScreen({
           agreementsAccepted={checkout.form.agreementsAccepted}
           onAgreementsChange={checkout.setAgreementsAccepted}
           texts={texts}
-          blocker={order.blockerText}
+          {...placeHints(
+            {
+              idle: state.kind === 'idle',
+              byCard: order.byCard,
+              waitSeconds: order.flow.waitSeconds,
+            },
+            order.blockerText,
+            texts,
+          )}
           busy={state.kind !== 'idle'}
           status={
             <ReservationStatus
               phase={order.flow.reservation.phase}
               texts={texts}
               onRetry={order.flow.reservation.retry}
+              onPaymentStatusRetry={order.flow.resume.failed ? order.flow.resume.retry : undefined}
             />
           }
           onPlace={order.place}
@@ -196,6 +206,8 @@ export function CheckoutScreen({
           deadline={state.deadline}
           verifying={state.verifying}
           failure={state.failure}
+          attemptsLeft={state.attemptsLeft}
+          waitSeconds={order.flow.waitSeconds}
           texts={texts}
           onSubmit={(otp) => void order.flow.submit(otp)}
           onCancel={order.flow.cancel}

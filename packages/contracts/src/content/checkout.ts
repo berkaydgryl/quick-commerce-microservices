@@ -95,6 +95,13 @@ export const checkoutContentSchema = z.object({
   threeDsAttemptsLeftSuffix: contentTextSchema,
   threeDsExpiredToast: contentTextSchema,
   threeDsCancelledToast: contentTextSchema,
+  /** Dogrulama hakki bitti (F15b; kapali dogrulamada hak 0). */
+  threeDsExhaustedToast: contentTextSchema,
+  /** Cok fazla hatali kod (429; F15b): 3DS penceresinde ve "Sipariş Ver"de, geri sayimla. */
+  threeDsRateLimitedNotice: contentTextSchema,
+  retryWaitLabel: contentTextSchema,
+  /** Yenilemede bekleyen 3DS'in durumu okunamadi (F15b): siparis birakilmaz, yeniden denenir. */
+  paymentStatusUnavailableNotice: contentTextSchema,
   /**
    * "Ödeme Yöntemi Seç" penceresi (T17.1; F5): baslik, kart listesinin
    * basligi ("Online Ödeme"), secili kartin yanindaki "Kartı Sil", "Seç" ve
