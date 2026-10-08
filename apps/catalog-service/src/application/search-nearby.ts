@@ -7,8 +7,9 @@
  * Dahil etme ve siralama kurali domain'de (buildNearbySearchResults).
  */
 
+import type { GeoPoint } from '@getir/core';
+
 import { MARKET_CANDIDATE_LIMIT, MAX_SEARCH_OFFERS_PER_MARKET } from '../config/constants.js';
-import type { GeoPoint } from '../domain/geo.js';
 import { coveringMarkets } from '../domain/market-coverage.js';
 import type { MarketReader } from '../domain/market-reader.js';
 import { buildNearbySearchResults } from '../domain/nearby-search.js';

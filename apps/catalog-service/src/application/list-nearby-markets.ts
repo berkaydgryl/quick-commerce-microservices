@@ -9,8 +9,9 @@
  * sigdirmaktir, yani tasima kaygisidir ve interfaces/grpc/mappers.ts'tedir.
  */
 
+import type { GeoPoint } from '@getir/core';
+
 import { MARKET_CANDIDATE_LIMIT } from '../config/constants.js';
-import type { GeoPoint } from '../domain/geo.js';
 import { coveringMarkets } from '../domain/market-coverage.js';
 import type { MarketDistance } from '../domain/market-coverage.js';
 import type { MarketReader } from '../domain/market-reader.js';

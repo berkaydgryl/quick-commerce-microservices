@@ -2,8 +2,9 @@
  * Market okuma portu (ADR-15). Uygulamalari infrastructure'dadir.
  */
 
+import type { GeoPoint } from '@getir/core';
+
 import type { Market } from './catalog.js';
-import type { GeoPoint } from './geo.js';
 import type { MarketDistance } from './market-coverage.js';
 
 export interface MarketReader {

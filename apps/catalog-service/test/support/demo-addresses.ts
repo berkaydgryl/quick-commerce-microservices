@@ -13,10 +13,9 @@ import { fileURLToPath } from 'node:url';
 
 import { savedAddressSchema } from '@getir/contracts';
 import type { SavedAddress } from '@getir/contracts';
+import type { GeoPoint } from '@getir/core';
 import { expect } from 'vitest';
 import { z } from 'zod';
-
-import type { GeoPoint } from '../../src/domain/geo.js';
 
 const ADDRESSES_PATH = fileURLToPath(
   new URL('../../../gateway/internal/persona/addresses.json', import.meta.url),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { distanceMeters } from '../../src/domain/geo.js';
+import { distanceMeters, isOutsideDeliveryRadius } from '../../src/geo.js';
 
 const KADIKOY = { lat: 40.9903, lng: 29.0275 };
 const BESIKTAS = { lat: 41.0422, lng: 29.0093 };
@@ -22,5 +22,18 @@ describe('distanceMeters', () => {
   it('Kadikoy - Besiktas deposu ~5,9 km', () => {
     expect(distanceMeters(KADIKOY, BESIKTAS)).toBeGreaterThan(5_800);
     expect(distanceMeters(KADIKOY, BESIKTAS)).toBeLessThan(6_000);
+  });
+});
+
+describe('isOutsideDeliveryRadius', () => {
+  it('sinir DAHIL: mesafe == yaricap disarida degil; 1 m fazlasi disarida', () => {
+    expect(isOutsideDeliveryRadius(3_000, 3_000)).toBe(false);
+    expect(isOutsideDeliveryRadius(2_999.9, 3_000)).toBe(false);
+    expect(isOutsideDeliveryRadius(3_001, 3_000)).toBe(true);
+  });
+
+  it('NaN disarida SAYILMAZ (catalog\'un ilk yazimiyla ayni; veriyi cagiran dogrular)', () => {
+    expect(isOutsideDeliveryRadius(Number.NaN, 3_000)).toBe(false);
+    expect(isOutsideDeliveryRadius(3_001, Number.NaN)).toBe(false);
   });
 });
