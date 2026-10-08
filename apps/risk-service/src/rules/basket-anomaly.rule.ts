@@ -1,5 +1,5 @@
 /**
- * basket-anomaly: sepet, kullanicinin ortalamasinin 3 katindan buyuk.
+ * basket-anomaly: sepet, kullanicinin ortalamasinin 4 katindan buyuk.
  * Ortalama bilinmiyorsa (ilk siparis) karsilastirilacak bir sey yoktur.
  */
 

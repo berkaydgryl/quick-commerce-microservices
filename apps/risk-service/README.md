@@ -105,7 +105,7 @@ sonuçta `vetoedByRuleId` durur: "skor 45, ama cihazda 3+ hesap".
 | ---------------- | --------------------------------------------------------------- | ------- |
 | `account-age`    | Hesap 24 saatten genç                                           | 20      |
 | `order-history`  | Hiç teslimat yok **ya da** iptal oranı %50'nin üstünde          | 15      |
-| `basket-anomaly` | Sepet ortalamanın 3 katından büyük (ortalama yoksa tetiklenmez) | 20      |
+| `basket-anomaly` | Sepet ortalamanın 4 katından büyük (ortalama yoksa tetiklenmez) | 20      |
 | `checkout-dwell` | Rezervasyondan siparişe 3 sn'den kısa (sunucuda ölçülür)        | 15      |
 | `geofence`       | Teslimat ile oturum konumu arası 50 km'den fazla                | 15      |
 | `ip-device`      | Cihazda 3+ hesap (**veto**) ya da IP önceki oturumdan farklı    | 15      |

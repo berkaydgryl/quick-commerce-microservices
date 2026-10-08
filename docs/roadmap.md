@@ -565,7 +565,7 @@ Her kural aynı imzayı uygular: evaluate(ctx): Promise<{ hit: boolean, score: n
 | -------------- | ------------------------------------------------------------------------------------------------------------ | ------- |
 | account-age    | Hesap 24 saatten yeni                                                                                        | 20      |
 | order-history  | İptal oranı %50 üzeri veya hiç teslimat yok                                                                  | 15      |
-| basket-anomaly | Sepet, kullanıcı ortalamasının 3 katı üstü                                                                   | 20      |
+| basket-anomaly | Sepet, kullanıcı ortalamasının 4 katı üstü                                                                   | 20      |
 | checkout-dwell | Rezervasyon ile sipariş arası 3 sn'den kısa (sunucuda ölçülür)                                               | 15      |
 | geofence       | Teslimat konumu ile oturum konumu arası 50 km'den fazla (T6.2; bağlamda şehir adı yok, koordinat var)        | 15      |
 | ip-device      | Aynı cihazda 3+ hesap (**veto**) veya IP önceki oturumdan farklı (`previous_ip_address`, T6.2); puan bir kez | 15      |

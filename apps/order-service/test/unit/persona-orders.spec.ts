@@ -58,12 +58,12 @@ describe('persona siparis gecmisi', () => {
     }
   });
 
-  it('Can icin 360 TL ustu sepet ortalamanin uc katini asar (basket-anomaly)', async () => {
+  it('Can icin 480 TL ustu sepet ortalamanin dort katini asar (basket-anomaly)', async () => {
     const store = await storeWith(buildPersonaOrders(NOW));
     const can = PERSONA_HISTORIES.find((history) => history.persona === 'Can');
     const history = await store.riskHistory(can?.userId ?? '');
 
-    expect((history.averageBasketMinor ?? 0) * 3).toBe(36_000);
+    expect((history.averageBasketMinor ?? 0) * 4).toBe(48_000);
   });
 
   it('kimlikler gecerli, tekil ve belirlenimci (seed tekrari kopya uretmez)', () => {
