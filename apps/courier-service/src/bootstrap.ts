@@ -32,6 +32,7 @@ import type { CourierBatchReader, CourierRepository } from './domain/courier-rep
 import type { LiveLocationStore } from './domain/live-location.js';
 import type { MarketLocator } from './domain/market-locator.js';
 import type { RouteEventPublisher } from './domain/route-events.js';
+import type { MovementRule } from './domain/route-progress.js';
 import type { MovingRouteRepository, RouteRepository } from './domain/route-repository.js';
 import { MARKET_LOCATION_SEEDS } from './infrastructure/fixtures/couriers.js';
 import { InMemoryCourierStore } from './infrastructure/memory/in-memory-courier-store.js';
@@ -72,7 +73,9 @@ export function buildCourierService(options: BootstrapOptions = {}): GrpcService
   const routes = options.routes ?? memoryRoutes;
   const movingRoutes =
     options.movingRoutes ?? (options.routes === undefined ? memoryRoutes : undefined);
-  const speedKmh = options.speedKmh ?? DEFAULT_COURIER_SPEED_KMH;
+  // Rotaya yazilan (#197) ve eski rotanin takibinde kullanilan hareket kurali.
+  const movement = movementRule(options);
+  const { speedKmh } = movement;
 
   // Use-case'ler gunlukcuyu bagimlilik olarak ALMAZ: her cagrida handler'in
   // requestId bagli gunlukcusu gecer (ctx.logger).
@@ -96,6 +99,7 @@ export function buildCourierService(options: BootstrapOptions = {}): GrpcService
             maxPoints: ROUTE_MAX_POINTS,
             speedKmh,
           },
+          movement,
           clock,
         }),
         clock,
@@ -110,11 +114,25 @@ export function buildCourierService(options: BootstrapOptions = {}): GrpcService
       getTracking: createGetTracking({
         routes,
         couriers: repository,
-        rule: { speedKmh, prepSeconds: options.prepSeconds ?? DEFAULT_ORDER_PREP_SECONDS },
+        rule: movement,
         clock,
       }),
       ...(logger === undefined ? {} : { logger }),
     }),
+  };
+}
+
+/**
+ * Ortamdan (main.ts) gelen hareket kurali; verilmeyen varsayilan. Atama (rotaya
+ * yazar, #197), takip ve tick AYNI fonksiyondan alir: eski rotada ayni kural.
+ */
+function movementRule(options: {
+  readonly speedKmh?: number;
+  readonly prepSeconds?: number;
+}): MovementRule {
+  return {
+    speedKmh: options.speedKmh ?? DEFAULT_COURIER_SPEED_KMH,
+    prepSeconds: options.prepSeconds ?? DEFAULT_ORDER_PREP_SECONDS,
   };
 }
 
@@ -139,10 +157,7 @@ export function buildAdvanceRoutes(options: AdvanceRoutesOptions): AdvanceRoutes
       couriers: options.couriers,
       events: options.events,
       live: options.live,
-      rule: {
-        speedKmh: options.speedKmh ?? DEFAULT_COURIER_SPEED_KMH,
-        prepSeconds: options.prepSeconds ?? DEFAULT_ORDER_PREP_SECONDS,
-      },
+      rule: movementRule(options),
       clock: options.clock ?? systemClock,
     }),
     batchSize: TICK_BATCH_SIZE,

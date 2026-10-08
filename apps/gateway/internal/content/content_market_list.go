@@ -56,6 +56,10 @@ type MarketListCart struct {
 	// SwitchConfirmPrefix, Baska marketten ekleme: sepet bosaltilir (F13); onek + hedef market + sonek.
 	SwitchConfirmPrefix string `json:"switchConfirmPrefix"`
 	SwitchConfirmSuffix string `json:"switchConfirmSuffix"`
+	// AddressChangePrefix, Adres degisince sepetin marketi teslim etmiyorsa (F16); onek + market + sonek, tost.
+	AddressChangePrefix string `json:"addressChangePrefix"`
+	AddressChangeSuffix string `json:"addressChangeSuffix"`
+	CartClearedToast    string `json:"cartClearedToast"`
 	// DecreaseSuffix, Adet dugmelerinin adi, urun adinin arkasina: "Saksıda Küçük Ağaç adedini azalt" (T16.3).
 	DecreaseSuffix string `json:"decreaseSuffix"`
 	IncreaseSuffix string `json:"increaseSuffix"`

@@ -176,6 +176,75 @@ describe('createAdvanceRoute', () => {
     expect((await couriers.findById(courierId(1)))?.idleSince).toEqual(deliveredAt);
   });
 
+  it('birinci bacakta ayar degisse de rota KENDI kuraliyla ilerler (#197): alma ve teslim ayni turda yazilmaz', async () => {
+    const slow = { speedKmh: 6, prepSeconds: 600 };
+    const fast = { speedKmh: 120, prepSeconds: 0 };
+    const stepWith = async (rule: typeof RULE) => {
+      const current = await stored();
+      return createAdvanceRoute({ routes, couriers, events, live, rule, clock })(
+        current,
+        await couriers.findById(current.courierId),
+        recordingLogger(lines),
+      );
+    };
+    await routes.replace({ ...route, movement: slow });
+    // On kosul: yeni (hizli) ayarla 300. sn'de hem alma hem varis gecmis olurdu.
+    expect(routeSchedule(route, fast).arrivalSeconds).toBeLessThan(300);
+    const legTwoMs = Math.round(routeSchedule(route, slow).legTwoSeconds * 1_000);
+
+    clock.set(NOW_MS + 300_000);
+    expect(await stepWith(fast)).toBe(ADVANCE_OUTCOME.MOVING);
+    expect(await stored()).not.toHaveProperty('pickedUpAt');
+
+    clock.set(NOW_MS + 600_000);
+    expect(await stepWith(fast)).toBe(ADVANCE_OUTCOME.PICKED_UP);
+    expect((await stored()).deliveredAt).toBeUndefined();
+
+    clock.set(NOW_MS + 600_000 + legTwoMs);
+    expect(await stepWith(fast)).toBe(ADVANCE_OUTCOME.DELIVERED);
+    expect(await stored()).toMatchObject({
+      pickedUpAt: new Date(NOW_MS + 600_000),
+      deliveredAt: new Date(NOW_MS + 600_000 + legTwoMs),
+    });
+    expect(events.published.map((event) => event.type)).toEqual(['picked_up', 'delivered']);
+  });
+
+  it('kurali olmayan eski rota (#197 oncesi) o anki ayarla ilerler: geriye uyumlu, goc yok', async () => {
+    const fast = { speedKmh: 120, prepSeconds: 0 };
+    clock.set(NOW_MS + 300_000);
+    const current = await stored();
+    expect(current).not.toHaveProperty('movement');
+
+    const outcome = await createAdvanceRoute({ routes, couriers, events, live, rule: fast, clock })(
+      current,
+      await couriers.findById(current.courierId),
+      recordingLogger(lines),
+    );
+
+    // Eski davranis: hizli ayara gore iki an da gecmis; ikisi de yazilir.
+    expect(outcome).toBe(ADVANCE_OUTCOME.DELIVERED);
+    expect((await stored()).pickedUpAt).toBeDefined();
+  });
+
+  it('paket alinmisken saat kaydin gerisindeyse canli konuma birinci bacak konumu YAZILMAZ, market noktasi yazilir (#197)', async () => {
+    // Kayitli alma cizelgeden ONCE (eski hizli ayar): saat kaydin gerisindeyken
+    // hesap kuryeyi hala birinci bacakta (marketten once) koyar.
+    const pickedUpAt = new Date(
+      NOW_MS + Math.round(routeSchedule(route, RULE).pickupSeconds * 1_000) - 30_000,
+    );
+    await routes.update(route, { pickedUpAt, pickupPublished: true });
+    clock.set(pickedUpAt.getTime() - 10_000); // tick'in saati kaydin gerisinde: hesap TO_MARKET
+
+    expect(await step()).toBe(ADVANCE_OUTCOME.MOVING);
+    expect((await live.find(courierId(1)))?.location).toEqual(MARKET_LOCATION);
+
+    clock.set(pickedUpAt.getTime() + 1_000); // kayittan sonra: yolda, 2. bacakta konum
+    expect(await step()).toBe(ADVANCE_OUTCOME.MOVING);
+    const onTheWay = (await live.find(courierId(1)))?.location;
+    expect(onTheWay).toBeDefined();
+    expect(onTheWay).not.toEqual(MARKET_LOCATION);
+  });
+
   it('EN AZ BIR KEZ: teslimat yayini duserse sonraki tur yayinlar; kurye bir kez birakilir', async () => {
     clock.advance(3_600_000);
     events.failNext('picked_up');

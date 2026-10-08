@@ -6,6 +6,7 @@ import { COURIER_STATUS } from '../../src/domain/courier.js';
 import type { Courier, GeoPoint } from '../../src/domain/courier.js';
 import type { PoolRule } from '../../src/domain/courier-pool.js';
 import type { RouteRule } from '../../src/domain/route-planner.js';
+import type { MovementRule } from '../../src/domain/route-progress.js';
 import type { MarketLocation } from '../../src/domain/market-locator.js';
 
 /** Kadikoy'de iki market (aralari ~570 m) ve Besiktas'ta bir market (6,6 km uzakta). */
@@ -32,6 +33,9 @@ export const ROUTE_RULE: RouteRule = {
   maxPoints: 40,
   speedKmh: 20,
 };
+
+/** Rotaya yazilan hareket kurali (#197): rota kuraliyla ayni hiz, 30 sn hazirlik. */
+export const MOVEMENT_RULE: MovementRule = { speedKmh: ROUTE_RULE.speedKmh, prepSeconds: 30 };
 
 export const SEEDED_AT = new Date('2026-10-04T08:00:00.000Z');
 export const NOW_MS = Date.parse('2026-10-04T09:00:00.000Z');

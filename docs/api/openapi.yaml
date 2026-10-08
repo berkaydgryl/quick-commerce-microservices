@@ -1249,13 +1249,7 @@ paths:
                 $ref: "#/components/schemas/ApiErrorResponse"
               examples:
                 notFound:
-                  summary: NOT_FOUND (ayrıntısız)
-                  value:
-                    success: false
-                    error:
-                      code: NOT_FOUND
-                      message: "Aradığın kaydı bulamadık."
-                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                  $ref: "#/components/examples/CardNotFound"
         "409":
           description: |
             Aynı `Idempotency-Key` ile ilk istek hâlâ işleniyor
@@ -1315,11 +1309,16 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
-          description: Kart bu hesabın kasasında yok (NOT_FOUND; ayrıntısız).
+          description: |
+            Kart bu hesabın kasasında yok (NOT_FOUND; ayrıntısız). Biçimsiz kimlik,
+            olmayan, başkasının ve silinmiş kart AYNI zarfla döner.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                notFound:
+                  $ref: "#/components/examples/CardNotFound"
         "409":
           description: |
             Aynı `Idempotency-Key` ile ilk istek hâlâ işleniyor
@@ -3474,6 +3473,17 @@ components:
         default: 20
 
   examples:
+    CardNotFound:
+      summary: NOT_FOUND (kart; ayrıntısız)
+      description: |
+        Kayıtlı kart silme ve ad düzenlemenin TEK 404'ü: biçimsiz kimlik, olmayan,
+        başkasının ve silinmiş kart aynı zarfla döner.
+      value:
+        success: false
+        error:
+          code: NOT_FOUND
+          message: "Aradığın kaydı bulamadık."
+          requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
     IdempotencyKeyInvalid:
       summary: VALIDATION_FAILED (anahtar biçimi)
       value:
@@ -5040,6 +5050,9 @@ components:
               clearConfirmQuestion,
               switchConfirmPrefix,
               switchConfirmSuffix,
+              addressChangePrefix,
+              addressChangeSuffix,
+              cartClearedToast,
               decreaseSuffix,
               increaseSuffix,
               removeSuffix,
@@ -5065,6 +5078,11 @@ components:
               $ref: "#/components/schemas/ContentText"
               description: Başka marketten eklerken sepeti boşaltma sorusu (F13); önek + hedef market + sonek.
             switchConfirmSuffix: { $ref: "#/components/schemas/ContentText" }
+            addressChangePrefix:
+              $ref: "#/components/schemas/ContentText"
+              description: Adres değişince sepetin marketi yeni adrese teslim etmiyorsa sorulur (F16); önek + market + sonek.
+            addressChangeSuffix: { $ref: "#/components/schemas/ContentText" }
+            cartClearedToast: { $ref: "#/components/schemas/ContentText" }
             decreaseSuffix: { $ref: "#/components/schemas/ContentText" }
             increaseSuffix: { $ref: "#/components/schemas/ContentText" }
             removeSuffix: { $ref: "#/components/schemas/ContentText" }

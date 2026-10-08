@@ -18,6 +18,7 @@ import {
   DELIVERY,
   MARKET,
   MARKET_LOCATION,
+  MOVEMENT_RULE,
   northOf,
   NOW_MS,
   orderId,
@@ -39,6 +40,7 @@ beforeEach(() => {
     routes,
     markets: new InMemoryCourierStore([], TEST_MARKETS),
     rule: ROUTE_RULE,
+    movement: MOVEMENT_RULE,
     clock: { now: () => clockMs, date: () => new Date(clockMs) },
   });
 });
@@ -56,7 +58,7 @@ const request = (
 });
 
 describe('createAssignmentRoute', () => {
-  it('uretir ve yazar: kurye -> market -> adres, siparis, kurye ve market kimligiyle, atama aninda; ilerliyor (T13.3)', async () => {
+  it('uretir ve yazar: kurye -> market -> adres, siparis, kurye ve market kimligiyle, atama aninda; ilerliyor (T13.3); hareket kurali rotada (#197)', async () => {
     const order = orderId();
 
     const route = await routeOf(request(order), recordingLogger(lines));
@@ -66,11 +68,34 @@ describe('createAssignmentRoute', () => {
       courierId: courierId(1),
       ...planRoute({ from: away, pickup: MARKET_LOCATION, dropoff: DELIVERY }, ROUTE_RULE),
       createdAt: new Date(NOW_MS),
+      movement: MOVEMENT_RULE,
       marketId: MARKET,
       state: ROUTE_STATE.MOVING,
     });
     expect(await routes.findByOrder(order)).toEqual(route);
     expect(lines).toEqual([]);
+  });
+
+  it('varis tahmini rotanin KENDI hizindan (#197): rota kurali ile hareket kurali ayrismaz', async () => {
+    const fast = { speedKmh: ROUTE_RULE.speedKmh * 2, prepSeconds: 30 };
+    const fastRoutes = createAssignmentRoute({
+      routes: new InMemoryRouteStore(),
+      markets: new InMemoryCourierStore([], TEST_MARKETS),
+      rule: ROUTE_RULE,
+      movement: fast,
+      clock: { now: () => clockMs, date: () => new Date(clockMs) },
+    });
+
+    const route = await fastRoutes(request(orderId()), recordingLogger(lines));
+
+    const planned = planRoute(
+      { from: away, pickup: MARKET_LOCATION, dropoff: DELIVERY },
+      { ...ROUTE_RULE, speedKmh: fast.speedKmh },
+    );
+    expect(route).toMatchObject({ etaSeconds: planned.etaSeconds, movement: fast });
+    expect(route?.etaSeconds).toBeLessThan(
+      planRoute({ from: away, pickup: MARKET_LOCATION, dropoff: DELIVERY }, ROUTE_RULE).etaSeconds,
+    );
   });
 
   it('tekrar istek saklanan rotayi doner: kurye o arada yer degistirse de ayni nokta ve ETA', async () => {

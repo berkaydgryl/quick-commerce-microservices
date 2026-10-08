@@ -22,6 +22,7 @@ import { belongsToAssignment, ROUTE_STATE } from '../domain/route.js';
 import type { Route } from '../domain/route.js';
 import { planRoute } from '../domain/route-planner.js';
 import type { RouteRule } from '../domain/route-planner.js';
+import type { MovementRule } from '../domain/route-progress.js';
 import type { RouteRepository } from '../domain/route-repository.js';
 
 export interface AssignmentRouteRequest {
@@ -43,6 +44,8 @@ export interface AssignmentRouteDeps {
   readonly routes: RouteRepository;
   readonly markets: MarketLocator;
   readonly rule: RouteRule;
+  /** Rotaya yazilan hareket kurali (#197): rota omru boyunca bununla ilerler. */
+  readonly movement: MovementRule;
   readonly clock: Clock;
 }
 
@@ -63,11 +66,14 @@ export function createAssignmentRoute(deps: AssignmentRouteDeps): AssignmentRout
     const route: Route = {
       orderId: request.orderId,
       courierId: request.courier.id,
+      // Varis tahmini rotanin KENDI hizindan (#197): rota ve kurali ayrismasin.
       ...planRoute(
         { from: request.courier.lastLocation, pickup, dropoff: request.deliveryLocation },
-        deps.rule,
+        { ...deps.rule, speedKmh: deps.movement.speedKmh },
       ),
       createdAt: deps.clock.date(),
+      // #197: ayar sonradan degisse de rota bu kuralla ilerler.
+      movement: deps.movement,
       // T13.3: tick paketi bu marketten alir (courier.picked_up) ve rotayi ilerletir.
       marketId: request.marketId,
       state: ROUTE_STATE.MOVING,

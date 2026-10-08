@@ -194,3 +194,25 @@ func TestUpdateCardNicknameErrorChainHoldsNoNickname(t *testing.T) {
 		}
 	}
 }
+
+func TestDeleteCardNotFoundHasNoDetails(t *testing.T) {
+	// #194: silmede de kasanin 404'u (yok, baskasinin, silinmis) kart kimligini
+	// ayrintiya koyar; ayrinti atilir, sebep kalir (ad duzenlemeyle ayni).
+	vault := &fakeVault{
+		err:     status.Error(codes.NotFound, "Kart bulunamadi"),
+		trailer: metadata.Pairs(apperror.MetadataKey, `{"code":"NOT_FOUND","message":"Kart bulunamadi","details":{"cardId":"crd_0123456789abcdef0123456789abcdef"}}`),
+	}
+
+	_, err := New(vault, time.Second).DeleteCard(context.Background(), "usr_jeton", "crd_0123456789abcdef0123456789abcdef")
+
+	var appErr *apperror.Error
+	if !errors.As(err, &appErr) || appErr.Code != apperror.CodeNotFound {
+		t.Fatalf("NOT_FOUND bekleniyordu: %v", err)
+	}
+	if appErr.Details != nil {
+		t.Errorf("404 ayrintisiz olmali: %v", appErr.Details)
+	}
+	if !strings.Contains(err.Error(), "payment DeleteCard") || strings.Count(err.Error(), "NOT_FOUND") != 1 {
+		t.Errorf("kasanin sebebi bir kez kalmali: %v", err)
+	}
+}
