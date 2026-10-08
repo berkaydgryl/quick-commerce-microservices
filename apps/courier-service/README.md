@@ -88,7 +88,10 @@ idleSince silinir)`. Aday o arada başka siparişe gittiyse koşul tutmaz, sıra
 - **Zamandan konum:** konum her tick'te Mongo'ya yazılmaz; rotanın üretildiği andan geçen süreden
   her an yeniden hesaplanır (`domain/route-progress.ts`). 1. bacak kurye → market, kurye
   hazırlık bitmeden varırsa markette bekler (`ORDER_PREP_SECONDS`), 2. bacak market → adres.
-  Alma anı `max(1. bacak / hız, hazırlık)`, varış anı `alma + 2. bacak / hız`. İlerleme nokta
+  Alma anı `max(1. bacak / hız, hazırlık)`, varış anı `alma + 2. bacak / hız`. Tick alma anını
+  kaydettiyse alma anı **o kayıttır** ve 2. bacak ondan başlar (#195): hız ayarı yol ortasında
+  değişse de 2. bacak sıfır saniye sürmez, kayıtlı almadan sonra aşama `TO_MARKET`'a dönmez (saat
+  kaydın gerisindeyse hesap `TO_MARKET` der, gösterim aşamayı kayıttan alır). İlerleme nokta
   başına değil **mesafeyle** (QA B3); sınırlar milisaniyede.
 - **Tick (`interfaces/workers/route-ticker.ts`, karar M5 a):** her `COURIER_TICK_MS`'de lider
   kilidi alınır ya da yenilenir (`lock:courier-tick`, `lua/leader.lua` = inventory'nin kopyası,
@@ -102,8 +105,9 @@ idleSince silinir)`. Aday o arada başka siparişe gittiyse koşul tutmaz, sıra
      `pickupPublished`;
   3. varış anı geldiyse `deliveredAt` yazılır, kurye adreste `IDLE` olur (yalnızca siparişi hâlâ
      **bu kurye** taşıyorsa), `courier.delivered` yayınlanır, rota `DONE`. Teslim anı kayıtlı alma
-     anından önce yazılmaz (#190, `deliveredNoEarlierThan`): hız ayarı yol ortasında hızlanırsa
-     yeni hesap eski almanın gerisinde kalır, o zaman teslim = alma;
+     anından önce yazılmaz (#190, `deliveredNoEarlierThan`). #195'ten beri 2. bacak kayıtlı
+     almadan hesaplandığı için bu kıstırma yalnızca savunmadır (hesap teslimi almadan önce
+     koyamaz);
   4. aksi halde canlı konum `courier:{id}:last`'a yazılır (okuyan aşama 2). Yazım hatası günlüğe
      konum taşımaz (ioredis hatası komut argümanlarını taşır; argümansız hataya çevrilir).
 
