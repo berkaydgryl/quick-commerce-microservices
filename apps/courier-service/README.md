@@ -88,7 +88,11 @@ idleSince silinir)`. Aday o arada başka siparişe gittiyse koşul tutmaz, sıra
 - **Zamandan konum:** konum her tick'te Mongo'ya yazılmaz; rotanın üretildiği andan geçen süreden
   her an yeniden hesaplanır (`domain/route-progress.ts`). 1. bacak kurye → market, kurye
   hazırlık bitmeden varırsa markette bekler (`ORDER_PREP_SECONDS`), 2. bacak market → adres.
-  Alma anı `max(1. bacak / hız, hazırlık)`, varış anı `alma + 2. bacak / hız`. Tick alma anını
+  Alma anı `max(1. bacak / hız, hazırlık)`, varış anı `alma + 2. bacak / hız`. Hız ve hazırlık
+  süresi rota üretilirken **rotaya yazılır** (#197, `movement`): ayar sonradan değişse de rota kendi
+  kuralıyla ilerler, geçmiş anlar kaymaz, alma ve teslim aynı turda yazılmaz (alanı olmayan eski rota
+  o anki ayarla, göç yok). Paket alınmışken tick'in saati kaydın gerisindeyse canlı konuma birinci
+  bacak konumu yazılmaz. Tick alma anını
   kaydettiyse alma anı **o kayıttır** ve 2. bacak ondan başlar (#195): hız ayarı yol ortasında
   değişse de 2. bacak sıfır saniye sürmez, kayıtlı almadan sonra aşama `TO_MARKET`'a dönmez (saat
   kaydın gerisindeyse hesap `TO_MARKET` der, gösterim aşamayı kayıttan alır). İlerleme nokta
@@ -158,6 +162,8 @@ marketten). Transaction'sız ve yeniden çalıştırılabilir (indeks düşürme
 (hepsi isteğe bağlı): `marketId`, `state` (`MOVING | DONE | ENDED`), `pickedUpAt`, `pickupPublished`,
 `deliveredAt`, `deliveryPublished`, `endedAt`. `state` alanı olmayan eski rota `MOVING` sayılır
 (sorgu `state: { $nin: [DONE, ENDED] }`), göç gerekmez. İndeks: `state_createdAt_id` (tick).
+#197 alanı (isteğe bağlı): `movement` (`{speedKmh, prepSeconds}`, rota üretildiği andaki hareket
+kuralı); alanı olmayan eski rota o anki ayarla ilerler, göç yok.
 
 Kuryenin adı istemcide görünür, **günlüğe yazılmaz**; günlükte kimlik yeter.
 

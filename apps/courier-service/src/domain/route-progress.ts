@@ -25,7 +25,7 @@
 
 import type { GeoPoint } from './courier.js';
 import { distanceMeters } from './geo.js';
-import type { Route } from './route.js';
+import type { Route, RouteMovement } from './route.js';
 
 /** Takibin asamasi (proto TrackingPhase, contracts trackingPhaseSchema). */
 export const TRACKING_PHASE = {
@@ -36,11 +36,15 @@ export const TRACKING_PHASE = {
 
 export type TrackingPhase = (typeof TRACKING_PHASE)[keyof typeof TRACKING_PHASE];
 
-/** Hareket kurali (config: COURIER_SPEED_KMH, ORDER_PREP_SECONDS). */
-export interface MovementRule {
-  readonly speedKmh: number;
-  /** Siparisin markette hazirlanma suresi, saniye: kurye erken varirsa bekler. */
-  readonly prepSeconds: number;
+/** Hareket kurali (config: COURIER_SPEED_KMH, ORDER_PREP_SECONDS); rotaya da yazilir (#197). */
+export type MovementRule = RouteMovement;
+
+/**
+ * Rotanin ilerledigi kural: rotanin kendi kaydi (#197; uretildigi andaki ayar),
+ * yoksa (#197 oncesi rota) verilen o anki ayar.
+ */
+export function movementOf(route: Pick<Route, 'movement'>, current: MovementRule): MovementRule {
+  return route.movement ?? current;
 }
 
 /** Rotanin zaman cizelgesi: saniye, rotanin uretildigi andan itibaren. */
@@ -171,10 +175,11 @@ export function milestonesMs(
  * Kayitli alma varsa ikinci bacak ondan baslar (#195, milestonesMs).
  */
 export function routeProgress(
-  route: Pick<Route, 'points' | 'pickupIndex' | 'createdAt' | 'pickedUpAt'>,
+  route: Pick<Route, 'points' | 'pickupIndex' | 'createdAt' | 'pickedUpAt' | 'movement'>,
   at: Date,
-  rule: MovementRule,
+  current: MovementRule,
 ): RouteProgress {
+  const rule = movementOf(route, current);
   const speed = rule.speedKmh * METERS_PER_SECOND_PER_KMH;
   const schedule = routeSchedule(route, rule);
   const { legOne, legTwo } = routeLegs(route);

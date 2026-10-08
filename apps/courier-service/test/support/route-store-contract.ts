@@ -12,6 +12,7 @@ import {
   courierId,
   DELIVERY,
   MARKET_LOCATION,
+  MOVEMENT_RULE,
   northOf,
   NOW_MS,
   orderId,
@@ -40,6 +41,20 @@ export function describeRouteStoreContract(name: string, getStore: () => RouteRe
       expect(await store.insertOnce(route)).toEqual(route);
       expect(await store.findByOrder(route.orderId)).toEqual(route);
       expect(await store.findByOrder(orderId())).toBeNull();
+    });
+
+    it('hareket kurali (#197) insertOnce ve replace ile yazilir, aynen okunur', async () => {
+      const store = getStore();
+      const route = { ...routeFor(orderId(), 1, 640), movement: MOVEMENT_RULE };
+
+      expect(await store.insertOnce(route)).toEqual(route);
+      expect(await store.findByOrder(route.orderId)).toEqual(route);
+      const renewed = {
+        ...routeFor(route.orderId, 2, 300, NOW_MS + 60_000),
+        movement: { speedKmh: 15, prepSeconds: 90 },
+      };
+      await store.replace(renewed);
+      expect(await store.findByOrder(route.orderId)).toEqual(renewed);
     });
 
     it('insertOnce BIR KEZ yazar: ikinci rota (baska an, baska konum) yazilmaz, ilki doner', async () => {

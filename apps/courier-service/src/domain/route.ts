@@ -14,6 +14,16 @@
 
 import type { Courier, GeoPoint } from './courier.js';
 
+/**
+ * Rotanin hareket kurali (#197): uretildigi andaki kurye hizi ve markette
+ * hazirlik suresi (config COURIER_SPEED_KMH, ORDER_PREP_SECONDS).
+ */
+export interface RouteMovement {
+  readonly speedKmh: number;
+  /** Siparisin markette hazirlanma suresi, saniye: kurye erken varirsa bekler. */
+  readonly prepSeconds: number;
+}
+
 export interface Route {
   /** Rota siparis basina tektir: kimligi siparisin kimligi. */
   readonly orderId: string;
@@ -32,6 +42,12 @@ export interface Route {
   readonly etaSeconds: number;
   /** Rotanin uretildigi an (atama). StartRoute'un "baslama ani". */
   readonly createdAt: Date;
+  /**
+   * Uretildigi andaki hareket kurali (#197). Ayar sonradan degisse de rota
+   * bununla ilerler: gecmis anlar kaymaz, alma ve teslim ayni turda yazilmaz.
+   * #197 oncesi rotada yok: o anki ayar kullanilir (goc yok).
+   */
+  readonly movement?: RouteMovement;
   /** Paketin alinacagi market (T13.3); T13.3 oncesi rotada yok. */
   readonly marketId?: string;
   /** Ilerleme durumu (T13.3); yoksa MOVING (T13.3 oncesi rota). */
