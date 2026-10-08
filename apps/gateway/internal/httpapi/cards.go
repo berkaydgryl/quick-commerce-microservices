@@ -88,13 +88,7 @@ func registerCardRoutes(v1 fiber.Router, routes CardRoutes, deps cardRouteDeps) 
 	if routes.Lister == nil || routes.Adder == nil || routes.Deleter == nil || routes.Renamer == nil {
 		return
 	}
-	attempts := cardAttempts{
-		failures: routes.Failures,
-		inflight: routes.Inflight,
-		limiter:  deps.limits.settings.Limiter,
-		warning:  deps.limits.warning,
-		recorder: deps.recorder,
-	}
+	attempts := newCardAttempts(routes, deps)
 	add := idempotent(deps.idempotency, cardAddPolicy, deps.logger, deps.recorder)
 	change := idempotent(deps.idempotency, cardChangePolicy, deps.logger, deps.recorder)
 	v1.Get("/me/cards", noStoreRoute, deps.user, deps.general, listCardsHandler(routes.Lister))

@@ -13,12 +13,10 @@ package httpapi
 
 import (
 	"context"
-	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v3"
 
-	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/apperror"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/cards"
 	"github.com/berkaydgryl/quick-commerce-microservices/apps/gateway/internal/ratelimit"
 )
@@ -37,51 +35,41 @@ const (
 // uzun; gateway cokerse kilit bu surede kendiliginden duser.
 const cardInflightTTL = idempotencyInProgressTTL
 
-const day = 24 * time.Hour
-
 // cardFailureWindows, kullanici basina basarisizlik pencereleri.
-var cardFailureWindows = []struct {
-	route  string
-	limit  int
-	length time.Duration
-}{
-	{cardFailHourRoute, cards.FailuresPerHour, time.Hour},
-	{cardFailDayRoute, cards.FailuresPerDay, day},
+var cardFailureWindows = []attemptWindow{
+	{route: cardFailHourRoute, limit: cards.FailuresPerHour, length: time.Hour},
+	{route: cardFailDayRoute, limit: cards.FailuresPerDay, length: day},
 }
 
 // cardAttempts, kart eklemenin deneme siniri ve sonuc kaydi.
 type cardAttempts struct {
-	// failures nil ise kullanici siniri kapali; limiter nil ise IP siniri kapali.
-	failures ratelimit.FailureCounter
+	gate     attemptGate
 	inflight ratelimit.InflightLock
-	limiter  ratelimit.Limiter
 	warning  *failOpenWarning
 	recorder RequestMetrics
 }
 
-// admit, kasaya gitmeden once: esikteyse 429. IP sayaci her denemeyi yazar;
-// kullanici esikteyse IP sayacina yazilmaz (reddedilen istek sayilmaz).
-func (a cardAttempts) admit(c fiber.Ctx) error {
-	ctx, cancel := context.WithTimeout(c.Context(), rateLimitCallTimeout)
-	defer cancel()
+// newCardAttempts, kart rotalarinin deneme kapisi; sayaclar nil ise ilgili sinir kapali.
+func newCardAttempts(routes CardRoutes, deps cardRouteDeps) cardAttempts {
+	return cardAttempts{
+		gate: attemptGate{
+			windows:  cardFailureWindows,
+			ipRoute:  cardIPHourRoute,
+			ipLimit:  cards.AttemptsPerIPPerHour,
+			failures: routes.Failures,
+			limiter:  deps.limits.settings.Limiter,
+			warning:  deps.limits.warning,
+		},
+		inflight: routes.Inflight,
+		warning:  deps.limits.warning,
+		recorder: deps.recorder,
+	}
+}
 
-	if wait, limited := a.userLimited(ctx, c); limited {
+// admit, kasaya gitmeden once: kullanici ya da IP esikteyse 429.
+func (a cardAttempts) admit(c fiber.Ctx) error {
+	if wait, limited := a.gate.check(c); limited {
 		return a.reject(c, wait)
-	}
-	if a.limiter == nil {
-		return c.Next()
-	}
-	ip := byClientIP(c)
-	if ip == "" {
-		return c.Next()
-	}
-	decision, err := a.limiter.Allow(ctx, ratelimit.Key(ip, cardIPHourRoute), cards.AttemptsPerIPPerHour, time.Hour)
-	if err != nil {
-		a.warning.warn(c, err)
-		return c.Next()
-	}
-	if !decision.Allowed {
-		return a.reject(c, decision.RetryAfter)
 	}
 	return c.Next()
 }
@@ -119,51 +107,17 @@ func (a cardAttempts) release(c fiber.Ctx, key, token string) {
 	}
 }
 
-// userLimited, kullanicinin basarisizlik pencerelerinden biri dolu mu? Bekleme
-// en uzun olanidir: kisa pencere bossa da gunluk sinir kalkmadan istek gecmez.
-func (a cardAttempts) userLimited(ctx context.Context, c fiber.Ctx) (time.Duration, bool) {
-	if a.failures == nil {
-		return 0, false
-	}
-	user := userIDOf(c)
-	var wait time.Duration
-	limited := false
-	for _, window := range cardFailureWindows {
-		decision, err := a.failures.Peek(ctx, ratelimit.Key(user, window.route), window.limit, window.length)
-		if err != nil {
-			a.warning.warn(c, err)
-			continue
-		}
-		if !decision.Allowed {
-			limited = true
-			wait = max(wait, decision.RetryAfter)
-		}
-	}
-	return wait, limited
-}
-
-// reject, 429 RATE_LIMITED + Retry-After (genel hiz siniriyla ayni bicim).
+// reject, 429 RATE_LIMITED + Retry-After; sonuc metrige "limited" yazilir.
 func (a cardAttempts) reject(c fiber.Ctx, wait time.Duration) error {
 	a.recorder.CountCardVerification(string(cards.OutcomeLimited))
-	a.recorder.CountRateLimited(metricRoute(c))
-	seconds := retryAfterSeconds(wait)
-	c.Set(fiber.HeaderRetryAfter, strconv.Itoa(seconds))
-	return &apperror.Error{Code: apperror.CodeRateLimited, Details: map[string]any{apperror.RetryAfterDetail: seconds}}
+	return rejectAttempt(c, a.recorder, wait)
 }
 
 // observe, kasanin cevabini metrige ve (basarisizsa) kullanicinin sayacina yazar.
 func (a cardAttempts) observe(c fiber.Ctx, err error) {
 	outcome := cards.Classify(err)
 	a.recorder.CountCardVerification(string(outcome))
-	if !outcome.CountsAsFailure() || a.failures == nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(c.Context(), rateLimitCallTimeout)
-	defer cancel()
-	user := userIDOf(c)
-	for _, window := range cardFailureWindows {
-		if recordErr := a.failures.Record(ctx, ratelimit.Key(user, window.route), window.length); recordErr != nil {
-			a.warning.warn(c, recordErr)
-		}
+	if outcome.CountsAsFailure() {
+		a.gate.recordFailure(c)
 	}
 }
