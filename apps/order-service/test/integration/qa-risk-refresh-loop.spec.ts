@@ -13,8 +13,12 @@
  * Satir: "puan BANT [tetiklenen kurallar] 3ds:<kalan haklar>|yok durum"; f5 satiri bekleme.
  *
  *   Y1 kullanicinin dizisi (hesap 1 sa, 1 teslim): hizli tur 35 MEDIUM (hesap yasi + dwell), 3DS,
- *      iki yanlis kod, vazgec; bekleyen tur 20 LOW (yalniz hesap yasi), 3DS YOK, PAID; para bir kez,
- *      vazgecilen siparisin odemesi kapanir (sonradan cekilemez).
+ *      iki yanlis kod, vazgec; bekleyen tur 20 puan ama bant YAPISKAN (#164): son 15 dk'nin en yuksek
+ *      bandi MEDIUM [account-age,recent-band], 3DS VAR, odeme 3DS'te bekler (para alinmaz);
+ *      vazgecilen siparisin odemesi kapanir (sonradan cekilemez). #164 oncesi bu tur 20 LOW, 3DS'siz
+ *      PAID idi: bant tekrar denemeyle dusuyordu.
+ *   Y1b karsi kol (#164): yapiskanlik 15 dk; vazgecten 15 dk 1 sn sonra bekleyen tur 20 LOW, 3DS YOK,
+ *      PAID, para bir kez.
  *   Y2 "iki yanlis + vazgec" alti tur: her sipariste 3 hak bastan; iptal sayisi teslimi gecince
  *      order-history (+15) 50, HIGH (55) gelmez: dongunun sayi siniri yok (yalniz hiz siniri, RQ0c).
  *   Y3 "uc yanlis (hak biter)" alti tur: PAYMENT_FAILED gecmise SAYILMAZ, puan hep 35.
@@ -30,6 +34,7 @@ import { appErrorOf } from '@getir/service-kit/testing';
 import { describe, expect, it } from 'vitest';
 
 import { PAYMENT_STATUS } from '../../../payment-service/src/domain/payment.js';
+import { RECENT_BAND_WINDOW_MS } from '../../../risk-service/src/config/constants.js';
 import { moneyOf } from '../support/qa-money-checks.js';
 import { nextUser, WRONG_CODE } from '../support/qa-order-calls.js';
 import { useInventoryWorld } from '../support/qa-payment-world.js';
@@ -49,6 +54,8 @@ const CYCLES = 6;
 const RETRY_STEP_MS = 10_000;
 /** F5 beklemesinin ust siniri: taslak kilidinin en uzun omru (15 dk). */
 const F5_WAIT_LIMIT_MS = 15 * 60 * 1_000;
+/** Yapiskan bant penceresi (#164): risk-service'in tek sabiti (iki yonde de esit kalir). */
+const STICKY_WINDOW_MS = RECENT_BAND_WINDOW_MS;
 /** Teslimat konumundan (Istanbul) 50 km'den uzak oturum: Ankara. */
 const FAR_AWAY = { lat: 39.93, lng: 32.85 };
 
@@ -59,6 +66,8 @@ interface Profile {
 }
 
 interface Turn {
+  /** Turdan once sahte saatte bekleme (sayfa acilmadan); yoksa beklenmez. */
+  readonly pauseBeforeMs?: number;
   readonly dwellMs: number;
   /** 3DS istenirse girilen yanlis kod sayisi. */
   readonly wrongCodes: number;
@@ -80,6 +89,7 @@ async function play(shop: RiskShop, profile: Profile, turns: readonly Turn[]): P
   );
   const played: Played = { rows: [], orderIds: [] };
   for (const turn of turns) {
+    if (turn.pauseBeforeMs !== undefined) world.clock.advance(turn.pauseBeforeMs);
     const orderId = await openDraft(shop, userId, played);
     world.clock.advance(turn.dwellMs);
     const created = await shop.order(orderId, userId, signals);
@@ -148,7 +158,7 @@ const MEDIUM = '35 MEDIUM [account-age,checkout-dwell]';
 const WITH_HISTORY = '50 MEDIUM [account-age,checkout-dwell,order-history]';
 
 describe('QA RQ0 3DS beklerken donup yeniden siparis (gercek risk kurallari)', () => {
-  it('Y1 kullanicinin dizisi: hizli tur MEDIUM ve 3DS, vazgec, bekleyen tur LOW, 3DS yok, PAID; para bir kez', async () => {
+  it('Y1 kullanicinin dizisi (#164 yapiskan bant): hizli tur MEDIUM ve 3DS, vazgec, bekleyen tur 15 dk icinde yine MEDIUM ve 3DS', async () => {
     const shop = await openShop();
 
     const { rows, orderIds } = await play(shop, NEW_ACCOUNT_ONE_DELIVERY, [
@@ -158,9 +168,9 @@ describe('QA RQ0 3DS beklerken donup yeniden siparis (gercek risk kurallari)', (
 
     expect(rows).toEqual([
       `${MEDIUM} 3ds:2,1 AWAITING_PAYMENT`,
-      '20 LOW [account-age] 3ds:yok PAID',
+      '20 MEDIUM [account-age,recent-band] 3ds:var AWAITING_PAYMENT',
     ]);
-    const [abandoned = '', paid = ''] = orderIds;
+    const [abandoned = '', pending = ''] = orderIds;
     const first = await shop.orders.findById(abandoned);
     expect([first?.status, first?.timeline.at(-1)?.note]).toEqual([
       ORDER_STATUS.CANCELLED,
@@ -170,6 +180,23 @@ describe('QA RQ0 3DS beklerken donup yeniden siparis (gercek risk kurallari)', (
     await shop.deliverPaymentCommands();
     expect((await shop.payments.findByOrderId(abandoned))?.status).toBe(PAYMENT_STATUS.CANCELLED);
     expect(await moneyOf(shop, abandoned)).toEqual({ charged: 0, refunded: 0 });
+    // Yapiskan bantta tekrar 3DS ister: kod girilene kadar para alinmaz.
+    expect(await moneyOf(shop, pending)).toEqual({ charged: 0, refunded: 0 });
+  });
+
+  it('Y1b karsi kol (#164): yapiskanlik 15 dk; vazgecten 15 dk 1 sn sonra tur LOW, 3DS yok, PAID', async () => {
+    const shop = await openShop();
+
+    const { rows, orderIds } = await play(shop, NEW_ACCOUNT_ONE_DELIVERY, [
+      { dwellMs: FAST_MS, wrongCodes: 2, end: 'vazgec' },
+      { pauseBeforeMs: STICKY_WINDOW_MS + 1_000, dwellMs: SLOW_MS, wrongCodes: 0, end: 'yok' },
+    ]);
+
+    expect(rows).toEqual([
+      `${MEDIUM} 3ds:2,1 AWAITING_PAYMENT`,
+      '20 LOW [account-age] 3ds:yok PAID',
+    ]);
+    const [, paid = ''] = orderIds;
     expect(await moneyOf(shop, paid)).toEqual({ charged: 1, refunded: 0 });
   });
 
