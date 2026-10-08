@@ -69,6 +69,18 @@ export function routeState(route: Pick<Route, 'state'>): RouteState {
   return route.state ?? ROUTE_STATE.MOVING;
 }
 
+/**
+ * Teslim ani alma anindan ONCE olamaz (#190): hiz ayari yol ortasinda degisirse
+ * yeni kuralla hesaplanan teslim, eski kuralla kaydedilmis almanin gerisinde
+ * kalabilir. O zaman teslim = alma. Tick (yazarken) ve takip (gosterirken) ayni
+ * kurali kullanir.
+ */
+export function deliveredNoEarlierThan(deliveredAt: Date, pickedUpAt: Date | undefined): Date {
+  return pickedUpAt !== undefined && pickedUpAt.getTime() > deliveredAt.getTime()
+    ? pickedUpAt
+    : deliveredAt;
+}
+
 /** Teslim kaydedildi mi (an yazildi ya da rota DONE). Tick, iptal ve takip ayni kurali kullanir. */
 export function isDelivered(route: Pick<Route, 'deliveredAt' | 'state'>): boolean {
   return route.deliveredAt !== undefined || routeState(route) === ROUTE_STATE.DONE;

@@ -10,7 +10,9 @@
  *      "yayinlandi" isaretlenir. T13.3 oncesi rotada (market yok) olay atlanir:
  *      courier.delivered tek basina iki gecisi yaptirir (contracts events.ts).
  *   3. Varis ani geldiyse deliveredAt kaydedilir; kurye TESLIMAT NOKTASINDA
- *      bosa cikar, courier.delivered yayinlanir, rota DONE.
+ *      bosa cikar, courier.delivered yayinlanir, rota DONE. Teslim ani kayitli
+ *      alma anindan once yazilmaz (#190: hiz ayari yol ortasinda degisirse
+ *      hesap almanin gerisinde kalabilir; deliveredNoEarlierThan).
  *   4. Ilerliyorsa kuryenin canli konumu yazilir (kisa omurlu).
  *
  * Her adim kosulludur ve tekrar guvenlidir: yayin dustuyse sonraki tur ayni
@@ -27,7 +29,7 @@ import { carriesOrder } from '../domain/courier.js';
 import type { Courier } from '../domain/courier.js';
 import type { CourierRepository } from '../domain/courier-repository.js';
 import type { LiveLocationStore } from '../domain/live-location.js';
-import { ROUTE_STATE } from '../domain/route.js';
+import { deliveredNoEarlierThan, ROUTE_STATE } from '../domain/route.js';
 import type { Route, RoutePatch } from '../domain/route.js';
 import type { RouteEventPublisher } from '../domain/route-events.js';
 import type { MovementRule } from '../domain/route-progress.js';
@@ -94,7 +96,9 @@ export function createAdvanceRoute(deps: AdvanceRouteDeps): AdvanceRoute {
       progress.deliveredAt !== undefined &&
       current.deliveredAt === undefined
     ) {
-      current = await patch(current, { deliveredAt: progress.deliveredAt });
+      current = await patch(current, {
+        deliveredAt: deliveredNoEarlierThan(progress.deliveredAt, current.pickedUpAt),
+      });
     }
     if (current?.deliveredAt !== undefined) {
       return (await completeDelivery(deps, patch, current, current.deliveredAt, logger)) === null
