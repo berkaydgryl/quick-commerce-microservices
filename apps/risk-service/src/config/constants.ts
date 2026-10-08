@@ -68,7 +68,7 @@ export const NEW_ACCOUNT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 export const MAX_CANCEL_RATIO = 0.5;
 
 /** basket-anomaly: sepet, ortalamanin bu katinin USTUNDEYSE tetikler. */
-export const BASKET_ANOMALY_MULTIPLIER = 3;
+export const BASKET_ANOMALY_MULTIPLIER = 4;
 
 /** checkout-dwell: rezervasyondan siparise bundan KISA sure tetikler (bot hizi). */
 export const MIN_CHECKOUT_DWELL_MS = 3000;

@@ -4,7 +4,7 @@
  * nesnesi olarak kurulur ve telden gider (proto-context.ts).
  *
  *   K1 her kuralin IKI yani: hesap yasi tam 24 sa, iptal orani tam %50 ve hemen ustu (%50,02), sepet
- *      tam 3 kat ve 1 kurus ustu, dwell tam 3000 ms ve 2999, cihazda 2 ve 3 hesap. Geofence 49,93 ve
+ *      tam 4 kat ve 1 kurus ustu, dwell tam 3000 ms ve 2999, cihazda 2 ve 3 hesap. Geofence 49,93 ve
  *      50,09 km (tam 50 km koordinatla kayan noktada temsil edilemez).
  *   K2 alti puan kuralinin 64 kombinasyonu TAM taranir: puan = tetiklenenlerin agirlik toplami (100
  *      tavan), bant testin kendi esikleriyle (T6.1: 30 MEDIUM, 55 HIGH, 80 CRITICAL). Bugunku
@@ -25,6 +25,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { PendingRecords } from '../../src/application/pending-records.js';
 import { buildRiskService } from '../../src/bootstrap.js';
+import { BASKET_ANOMALY_MULTIPLIER } from '../../src/config/constants.js';
 import { riskRulesConfig } from '../../src/config/risk-rules.js';
 import type { RiskContext } from '../../src/domain/risk-context.js';
 import { InMemoryRiskEventStore } from '../../src/infrastructure/memory/in-memory-risk-event-store.js';
@@ -101,7 +102,8 @@ function cleanContext(): RiskContext {
 const TRIGGER: Readonly<Record<ScoreRule, Partial<RiskContext>>> = {
   'account-age': { accountCreatedAt: new Date(NOW - HOUR_MS) },
   'order-history': { deliveredOrderCount: 1, cancelledOrderCount: 2 },
-  'basket-anomaly': { basketTotalMinor: 40_000 },
+  // Temiz baglamin ortalamasi 10_000: carpanin bir kat otesi (sinirin acikca otesinde).
+  'basket-anomaly': { basketTotalMinor: 10_000 * (BASKET_ANOMALY_MULTIPLIER + 1) },
   'checkout-dwell': { checkoutDwellMs: 1_000 },
   geofence: { sessionLocation: FAR },
   'ip-device': { ipAddress: OTHER_IP },
@@ -135,8 +137,16 @@ describe('QA RQ1 risk kurallari ve bantlar (gercek gRPC, gercek agirliklar)', ()
         { deliveredOrderCount: 1_000, cancelledOrderCount: 1_001 },
         ['order-history'],
       ],
-      ['sepet tam 3 kat', { basketTotalMinor: 30_000 }, []],
-      ['sepet 3 kat + 1 kurus', { basketTotalMinor: 30_001 }, ['basket-anomaly']],
+      [
+        `sepet tam ${BASKET_ANOMALY_MULTIPLIER} kat`,
+        { basketTotalMinor: 10_000 * BASKET_ANOMALY_MULTIPLIER },
+        [],
+      ],
+      [
+        `sepet ${BASKET_ANOMALY_MULTIPLIER} kat + 1 kurus`,
+        { basketTotalMinor: 10_000 * BASKET_ANOMALY_MULTIPLIER + 1 },
+        ['basket-anomaly'],
+      ],
       ['dwell tam 3000 ms', { checkoutDwellMs: 3_000 }, []],
       ['dwell 2999 ms', { checkoutDwellMs: 2_999 }, ['checkout-dwell']],
       ['oturum 49,93 km', { sessionLocation: NEAR }, []],

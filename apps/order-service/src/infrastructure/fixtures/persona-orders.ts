@@ -8,8 +8,8 @@
  *
  *   Ayse   5 teslim, 0 iptal, ortalama 200 TL -> temiz
  *   Zeynep hic siparis yok                   -> "hic teslimat yok"
- *   Can    1 teslim, 3 iptal, ortalama 120 TL -> iptal orani %75; 360 TL ustu
- *                                              sepet "3 kat" anomalisidir
+ *   Can    1 teslim, 3 iptal, ortalama 120 TL -> iptal orani %75; 480 TL ustu
+ *                                              sepet "4 kat" anomalisidir
  *   Ali    3 teslim, 1 iptal, ortalama 180 TL -> temiz (vetosu cihazdan)
  *   Komsu 12 teslim, 1 iptal, ortalama 280 TL -> temiz
  *

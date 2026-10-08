@@ -451,7 +451,7 @@ order-service'te (ADR-05); iki taraf aynı kimlikleri kullanır ve bir test kar�
 | ------- | ------- | ------------- | ----- |
 | Ayşe | `+905550000001` | LOW → kart | 30 günlük hesap, 5 teslimat |
 | Zeynep | `+905550000002` | MEDIUM → 3DS | 1 saatlik hesap, teslimat yok |
-| Can | `+905550000003` | HIGH → inceleme | 10 saatlik, %75 iptal, Ankara'dan oturum; **sepet 360 TL'yi geçerse** sepet anomalisi |
+| Can | `+905550000003` | HIGH → inceleme | 10 saatlik, %75 iptal, Ankara'dan oturum; **sepet 480 TL'yi geçerse** sepet anomalisi |
 | Ali | `+905550000004` | CRITICAL → 403 | Hesabının açıldığı cihazdan 4 hesap (veto), İzmir'den oturum |
 | Komşu | `+905550000005` | LOW → kart | 90 günlük, 12 teslimat; stok yarışında ikinci tarayıcı |
 
