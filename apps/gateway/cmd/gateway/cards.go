@@ -34,3 +34,13 @@ func buildCardRoutes(cfg config.Config, pool *clients.Pool, rateLimit httpapi.Ra
 	}
 	return routes, nil
 }
+
+// threeDSFailures, 3DS yanlis kod sayaci (#163): hiz siniriyla ayni depo (Redis
+// ya da MOCK'ta bellek). Hiz siniri kapaliysa nil: kullanici siniri da kapali.
+func threeDSFailures(rateLimit httpapi.RateLimit) ratelimit.FailureCounter {
+	failures, counts := rateLimit.Limiter.(ratelimit.FailureCounter)
+	if !counts {
+		return nil
+	}
+	return failures
+}

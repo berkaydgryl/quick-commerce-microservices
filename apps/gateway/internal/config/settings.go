@@ -69,6 +69,12 @@ type Config struct {
 	RateLimitGeneral int
 	RateLimitAuth    int
 	RateLimitOrder   int
+	// ThreeDSIPLimitEnabled, 3DS yanlis kod sinirinin IP penceresi (#163). IP
+	// soketin adresidir: yuk dengeleyici, ingress ya da Vite vekili arkasinda
+	// herkes ayni IP olur ve pencere fiilen kuresel kilit olur. Yalniz istemci
+	// dogrudan baglaniyorsa acilir (guvenilir vekil destegi yok, #213(3));
+	// varsayilan kapali.
+	ThreeDSIPLimitEnabled bool
 
 	// GeoBaseURL, harita adres servisinin (Nominatim) kok adresi (T11.8).
 	// Sonunda "/" yoktur.

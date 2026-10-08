@@ -116,7 +116,7 @@ func New(deps Deps) *fiber.App {
 	registerIdentityRoutes(v1, deps, mw)
 	registerMeRoutes(v1, deps, mw, cardRouteDeps{user: mw.user, general: mw.generalByUser,
 		idempotency: deps.Idempotency, limits: limits, logger: deps.Logger, recorder: recorder})
-	registerOrderRoutes(v1, deps, mw)
+	registerOrderRoutes(v1, deps, mw, newThreeDSAttempts(deps.ThreeDSFailures, deps.ThreeDSIPLimit, limits, recorder))
 
 	return app
 }
