@@ -24,8 +24,17 @@ export function assessRisk(results: readonly RuleResult[]): RiskAssessment {
   const total = results.reduce((sum, result) => sum + result.score, 0);
   const score = Math.min(Math.max(total, MIN_SCORE), MAX_SCORE);
   const vetoer = results.find((result) => result.hit && result.veto);
+  const band = bandOf(score, vetoer !== undefined);
 
   return vetoer === undefined
-    ? { score, band: bandForScore(score), hits: results }
-    : { score, band: RISK_BANDS.CRITICAL, hits: results, vetoedByRuleId: vetoer.ruleId };
+    ? { score, band, hits: results }
+    : { score, band, hits: results, vetoedByRuleId: vetoer.ruleId };
+}
+
+/**
+ * Skor ve vetodan bant: veto varsa CRITICAL, yoksa skorun bandi. TEK kural:
+ * degerlendirme ve yapiskan bant (#164, gecmis kaydin skor bandi) ayni yerden.
+ */
+export function bandOf(score: number, vetoed: boolean): RiskBand {
+  return vetoed ? RISK_BANDS.CRITICAL : bandForScore(score);
 }

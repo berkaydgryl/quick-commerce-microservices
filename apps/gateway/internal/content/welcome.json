@@ -529,6 +529,9 @@
     "yesLabel": "Evet",
     "noLabel": "Hayır"
   },
+  "appLoading": {
+    "label": "Yükleniyor..."
+  },
   "courierTracking": {
     "title": "Kuryem nerede",
     "closeLabel": "Kapat",

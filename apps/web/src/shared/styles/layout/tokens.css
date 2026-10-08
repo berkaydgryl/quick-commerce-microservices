@@ -54,6 +54,9 @@
   --container-max-dialog: 30rem;
   --size-dialog-close: 2.5rem;
 
+  /* Yukleniyor gostergesinin dairesi (F18): logo iki satir sigar. */
+  --size-app-loader-disc: 7rem;
+
   /* Karsilama ekrani (T11.6): ulke secicisindeki bayrak (3:2) ve cok genis
      ekranda banner'in en fazla yuksekligi (gorsel ustten ve alttan kirpilir,
      afis ortada kalir). */

@@ -32,5 +32,6 @@ export * from './content/market-page.js';
 export * from './content/cart-page.js';
 export * from './content/checkout.js';
 export * from './content/confirm.js';
+export * from './content/app-loading.js';
 export * from './content/courier-tracking.js';
 export * from './content/order-confirmation.js';

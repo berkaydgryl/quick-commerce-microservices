@@ -21,3 +21,10 @@
 .c-logo--inverse .c-logo__service {
   color: var(--text-on-brand);
 }
+
+/* Ust uste (F18 Yukleniyor dairesi): marka ustte, servis altta, ortali. */
+.c-logo--stacked {
+  flex-direction: column;
+  align-items: center;
+  line-height: var(--line-height-tight);
+}

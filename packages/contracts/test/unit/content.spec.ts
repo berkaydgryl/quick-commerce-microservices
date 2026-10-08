@@ -167,6 +167,7 @@ const WELCOME: WelcomeContent = {
   footer: CONTENT_FALLBACK.footer,
   checkout: CONTENT_FALLBACK.checkout,
   confirm: CONTENT_FALLBACK.confirm,
+  appLoading: CONTENT_FALLBACK.appLoading,
   courierTracking: CONTENT_FALLBACK.courierTracking,
   orderConfirmation: CONTENT_FALLBACK.orderConfirmation,
 };
