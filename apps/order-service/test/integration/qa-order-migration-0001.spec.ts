@@ -12,6 +12,12 @@
  *     `status`u uygulandi der, `up` bos gecer,
  *   - gocten sonra bosalan kurye EN ESKI odeyene gider: deneme ani gelmemis
  *     olsa da (goc olmasa bekleyen sorgusu onu hic bulmaz, kurye yeniye gider).
+ *
+ * Goc listesi servisin kaydindan (MIGRATIONS): sonraki gocler eklendikce `down`
+ * sayisi ve durum listeleri kendiliginden uyar (N10). courier cagrisinin suresi
+ * genis: test zaman asimini degil sirayi sinar; yuklu makinede yeni kopyanin
+ * soguk kanaldaki ilk cagrisi uretimdeki 1 sn'yi asinca courier ulasilamaz
+ * sayilip tur kesiliyordu, eski siparis kuryesiz kaliyordu (#202).
  */
 
 import { fixedClock, ID_PREFIX, newId, ORDER_STATUS } from '@getir/core';
@@ -21,8 +27,10 @@ import type { StartedMongoDBContainer } from '@testcontainers/mongodb';
 import { MongoClient } from 'mongodb';
 import type { Document } from 'mongodb';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import { COLLECTIONS } from '../../src/infrastructure/mongo/documents.js';
+import { MIGRATIONS } from '../../src/migrations/index.js';
 import { placeCouriers, QA_NOW_MS } from '../support/qa-courier-world.js';
 import {
   assertOrderBuilt,
@@ -30,15 +38,17 @@ import {
   logLine,
   orderOnMongo,
   runOrderMigrate,
+  STORE_TIMEOUT_MS,
 } from '../support/qa-mongo-world.js';
-import type { Cleanups } from '../support/qa-mongo-world.js';
+import type { Cleanups, CliRun } from '../support/qa-mongo-world.js';
 
 const MONGO_IMAGE = 'mongo:7';
 const QUEUE_INDEX = 'status_courierQueuedAt_id';
 const MIGRATION = '1 kurye-sirasi';
-/** Sonraki gocler (#101, #166): `down` en son gocu geri aldigi icin once onlar geri alinir. */
-const LATER_MIGRATION = '2 gecmis-gorunurlugu';
-const LATEST_MIGRATION = '3 iade-isareti';
+/** Komut gunlugundeki gibi `surum ad`; ilki bu testin gocu, sonrakiler (#101, #166, ...) onun ustunde. */
+const LABELS = MIGRATIONS.map(({ version, name }) => `${version} ${name}`);
+/** courier cagrisinin suresi: Mongo'nunki kadar genis (#202; zaman asimi baska testlerde). */
+const WIDE_COURIER_CALL_MS = STORE_TIMEOUT_MS;
 const SECOND = 1_000;
 
 let container: StartedMongoDBContainer;
@@ -84,6 +94,7 @@ describe('QA goc 0001 kurye-sirasi: acilista ve komutla, gercek isci + courier',
     const old = await orderOnMongo({
       ...mongo,
       courierAddress: courier.service.address,
+      courierCallTimeoutMs: WIDE_COURIER_CALL_MS,
       clock,
       cleanups,
     });
@@ -101,23 +112,20 @@ describe('QA goc 0001 kurye-sirasi: acilista ve komutla, gercek isci + courier',
 
     // Alan oncesine don (komutla) ve T13.1 iscisinin izini birak: eski bekleyen
     // sonradan yeniden denenmis, deneme ani yenisinden gec. `down` en son gocu
-    // geri alir: once 0003 (#166), sonra 0002 (#101), sonra 0001.
-    const downLatest = await runOrderMigrate('down', mongo);
-    const downLater = await runOrderMigrate('down', mongo);
-    const down = await runOrderMigrate('down', mongo);
+    // geri alir: once sonrakiler (en yeniden eskiye), en son 0001.
+    const downs: CliRun[] = [];
+    for (let index = 0; index < MIGRATIONS.length; index += 1) {
+      downs.push(await runOrderMigrate('down', mongo));
+    }
     await orders.updateOne({ _id: older.id } as Document, { $set: { courierRetryAt: at(100) } });
     const pending = await runOrderMigrate('status', mongo);
 
-    expect(downLatest.code).toBe(0);
-    expect(logLine(downLatest.output, 'goc down bitti')?.['reverted']).toBe(LATEST_MIGRATION);
-    expect(downLater.code).toBe(0);
-    expect(logLine(downLater.output, 'goc down bitti')?.['reverted']).toBe(LATER_MIGRATION);
-    expect(down.code).toBe(0);
-    expect(logLine(down.output, 'goc down bitti')?.['reverted']).toBe(MIGRATION);
-    expect(logLine(pending.output, 'goc durumu')).toMatchObject({
-      applied: [],
-      pending: [MIGRATION, LATER_MIGRATION, LATEST_MIGRATION],
-    });
+    expect(LABELS[0]).toBe(MIGRATION);
+    expect(downs.map(({ code }) => code)).toEqual(LABELS.map(() => 0));
+    expect(downs.map(({ output }) => logLine(output, 'goc down bitti')?.['reverted'])).toEqual(
+      [...LABELS].reverse(),
+    );
+    expect(logLine(pending.output, 'goc durumu')).toMatchObject({ applied: [], pending: LABELS });
     expect(await orders.countDocuments({ courierQueuedAt: { $exists: true } })).toBe(0);
     expect((await orders.indexes()).map((index) => index.name)).not.toContain(QUEUE_INDEX);
 
@@ -126,6 +134,7 @@ describe('QA goc 0001 kurye-sirasi: acilista ve komutla, gercek isci + courier',
     const side = await orderOnMongo({
       ...mongo,
       courierAddress: courier.service.address,
+      courierCallTimeoutMs: WIDE_COURIER_CALL_MS,
       clock,
       lines: startupLines,
       cleanups,
@@ -137,7 +146,9 @@ describe('QA goc 0001 kurye-sirasi: acilista ve komutla, gercek isci + courier',
     const status = await runOrderMigrate('status', mongo);
     const up = await runOrderMigrate('up', mongo);
 
-    expect(startupLines.filter((line) => line.message === 'goc uygulandi')).toHaveLength(3);
+    expect(startupLines.filter((line) => line.message === 'goc uygulandi')).toHaveLength(
+      MIGRATIONS.length,
+    );
     expect(
       startupLines.find((line) => line.message === 'kurye kuyrugu goc edildi')?.fields['queued'],
     ).toBe(3);
@@ -150,18 +161,28 @@ describe('QA goc 0001 kurye-sirasi: acilista ve komutla, gercek isci + courier',
     expect((await orders.indexes()).map((index) => index.name)).toContain(QUEUE_INDEX);
     expect(status.code).toBe(0);
     expect(logLine(status.output, 'goc durumu')?.['pending']).toEqual([]);
-    expect(logLine(status.output, 'goc durumu')?.['applied']).toEqual([
-      expect.stringMatching(/^1 kurye-sirasi /),
-      expect.stringMatching(/^2 gecmis-gorunurlugu /),
-      expect.stringMatching(/^3 iade-isareti /),
-    ]);
+    // Uygulananlar `surum ad an`: an haric ayni liste, ayni sirayla.
+    const applied = z.array(z.string()).parse(logLine(status.output, 'goc durumu')?.['applied']);
+    expect(applied.map((entry) => /^(.+) \d{4}-\d{2}-\d{2}T[\d:.]+Z$/.exec(entry)?.[1])).toEqual(
+      LABELS,
+    );
     expect(up.code).toBe(0);
     expect(logLine(up.output, 'goc up bitti')?.['applied']).toEqual([]);
 
     // t+50: yeninin deneme ani gecti, eskininki (t+100) gelmedi; kurye bosalir.
     clock.advance(47 * SECOND);
     expect((await courier.service.release(holder.id))?.released).toBe(true);
-    await side.tour();
+    // Tur sonucu once: en eskiye kurye, digerleri kuryesiz; tur kesildiyse (courier ulasilamaz)
+    // ya da geri cekildiyse turun tamami ve sebebi iletide gorunur.
+    const round = await side.tour();
+    const cause = round.cause instanceof Error ? round.cause.message : round.cause;
+    expect(round, `tur: ${JSON.stringify({ ...round, cause })}`).toMatchObject({
+      assigned: 1,
+      noCourier: 2,
+      failed: 0,
+      deferred: 0,
+      backedOff: 0,
+    });
     const [olderNow, newerNow, freshNow] = await Promise.all(
       [older.id, newer.id, fresh.id].map((id) => side.order(id)),
     );
