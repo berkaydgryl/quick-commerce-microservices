@@ -1144,6 +1144,15 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/UpdateCardNicknameRequest"
+            examples:
+              rename:
+                summary: Kart adını değiştir
+                value:
+                  nickname: "İş kartım"
+              remove:
+                summary: Kart adını kaldır (boş metin)
+                value:
+                  nickname: ""
       responses:
         "200":
           description: Kart adı güncellendi; güncel kart (maskeli)
@@ -1158,6 +1167,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SavedCardResponse"
+              examples:
+                renamed:
+                  summary: Ad değişti
+                  value:
+                    success: true
+                    data:
+                      id: "crd_0123456789abcdef0123456789abcdef"
+                      brand: VISA
+                      first4: "4242"
+                      last4: "4242"
+                      expiryMonth: 12
+                      expiryYear: 2031
+                      holderName: "Ayşe Yılmaz"
+                      nickname: "İş kartım"
+                      expired: false
+                      createdAt: "2026-10-05T12:00:00Z"
+                removed:
+                  summary: Ad kaldırıldı (alan yok)
+                  value:
+                    success: true
+                    data:
+                      id: "crd_0123456789abcdef0123456789abcdef"
+                      brand: VISA
+                      first4: "4242"
+                      last4: "4242"
+                      expiryMonth: 12
+                      expiryYear: 2031
+                      holderName: "Ayşe Yılmaz"
+                      expired: false
+                      createdAt: "2026-10-05T12:00:00Z"
         "400":
           description: |
             Kart adı kurala uymuyor ya da gönderilmedi, bilinmeyen alan ya da
@@ -1167,14 +1206,56 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                nicknameMissing:
+                  summary: VALIDATION_FAILED (alan yok ya da null)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        nickname: "Kart adı gönderilmedi"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                nicknameDigits:
+                  summary: VALIDATION_FAILED (kart adında kart numarası)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        nickname: "Kart adında 8 ya da daha fazla rakam yan yana olamaz"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
+                unknownField:
+                  summary: VALIDATION_FAILED (bilinmeyen alan, ör. CVV)
+                  value:
+                    success: false
+                    error:
+                      code: VALIDATION_FAILED
+                      message: "Girdiğin bilgilerde bir sorun var, kontrol eder misin?"
+                      details:
+                        cvv: "bu uc bu alani kabul etmiyor"
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
-          description: Kart bu hesabın kasasında yok (NOT_FOUND; ayrıntısız).
+          description: |
+            Kart bu hesabın kasasında yok (NOT_FOUND; ayrıntısız). Biçimsiz kimlik,
+            olmayan, başkasının ve silinmiş kart AYNI zarfla döner.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+              examples:
+                notFound:
+                  summary: NOT_FOUND (ayrıntısız)
+                  value:
+                    success: false
+                    error:
+                      code: NOT_FOUND
+                      message: "Aradığın kaydı bulamadık."
+                      requestId: "req_7f3c9a1e5b2d4c6f8a0b1c2d3e4f5a6b"
         "409":
           description: |
             Aynı `Idempotency-Key` ile ilk istek hâlâ işleniyor

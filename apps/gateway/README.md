@@ -43,7 +43,7 @@ kapsamaz; kapısı CI'daki **`gateway`** işidir (gofmt, vet, golangci-lint, `go
 | `GET /v1/me/addresses` | ✅ Adres defteri (T9.5): kayıtlı adresler, kayıt sırasında; en fazla 10 (sınırlı liste); önbelleğe alınmaz |
 | `POST /v1/me/addresses` | ✅ Adres ekleme (T11.8): tür, bina/kat/daire, tarif; aynı ad ve 11. adres tek atomik Mongo yazımında reddedilir; `Idempotency-Key` ister, cevap güncel defter |
 | `PUT`, `DELETE /v1/me/addresses/{addressId}` | ✅ Adres düzenleme ve silme (T11.15): kalıcı kimlik `adr_…` (eski adreslere göç 0001); düzenleme tam gövde, aynı ad başka adreste olamaz (birebir karşılaştırma: "Ev" ile "ev" farklı), tek atomik Mongo yazımı; yok olan adres 404; `Idempotency-Key` ister, cevap güncel defter |
-| `GET`, `POST /v1/me/cards`, `DELETE /v1/me/cards/{cardId}` | ✅ Kart kasası (T11.17, `internal/cards`, `httpapi/cards.go`): kasa payment'ta (`CardVaultService`); gateway numarayı ve CVV'yi yalnızca iletir. Production'da KAPALI (404; sağlayıcı mock). Ayrıntı: "Kart uçları" bölümü |
+| `GET`, `POST /v1/me/cards`, `DELETE` ve `PATCH /v1/me/cards/{cardId}` | ✅ Kart kasası (T11.17, `internal/cards`, `httpapi/cards.go`): kasa payment'ta (`CardVaultService`); gateway numarayı ve CVV'yi yalnızca iletir. `PATCH` yalnızca kart adını değiştirir (#148). Production'da KAPALI (404; sağlayıcı mock). Ayrıntı: "Kart uçları" bölümü |
 | `GET /v1/geo/reverse?lat&lng`, `GET /v1/geo/search?q` | ✅ Harita adres servisi (T11.8, `internal/geo`): OpenStreetMap Nominatim'e **tek sıra** (saniyede en fazla bir istek, kullanım koşulu) ve 24 saat önbellekle; sıra `GEO_TIMEOUT_MS` içinde ilerlemezse 503, adres yoksa 404. Oturum ister |
 | Kullanıcı kimliği    | ✅ `Authorization: Bearer` JWT (HS256); `X-User-Id` kalktı (T8.1) |
 | Kimlik deposu        | ✅ Mongo `users` + `sessions` (TTL indeksi); MOCK'ta bellek |
@@ -393,6 +393,13 @@ Kasa payment-svc'dedir (`getir/cardvault/v1`, `CardVaultService`); kart kurallar
   sağlayıcı gelince açılır (bekleyen iş).
 - **Kimlik yalnızca jetondan (QA G6):** gövdede ya da sorguda kullanıcı alanı yoktur; bilinmeyen alan 400.
   Biçimsiz `cardId` kasaya gitmeden 404; başkasının, olmayan ve silinmiş kart kasadan 404.
+- **Kart adı düzenleme (#148, `PATCH /v1/me/cards/{cardId}`):** gövde SIKI, yalnızca `nickname`
+  (bilinmeyen alan 400). Alan yoksa ya da `null` ise kasaya EKSİK gider ve kasa "Kart adı gönderilmedi"
+  der (boş gövde adı silmez); boş metin adı kaldırır. Kurallar ve cümleler kasada. Kasanın 404'ü
+  ayrıntısız döner: biçimsiz kimlik, olmayan, başkasının ve silinmiş kart AYNI zarf. Hız sınırı diğer
+  kart uçlarıyla aynı (kullanıcı başına, rota kalıbıyla: kart başına değil). Tekrar kaydı 15 dk ve
+  silmeyle aynı kural (`cardChangePolicy`): parmak izi gövdenin HMAC'i; saklanan cevap güncel maskeli
+  karttır ve kart adını AÇIK taşır (ekleme ve silme cevapları gibi; numara, CVV ve jeton yok).
 - **Deneme sınırı (K2, QA S1):** kullanıcı başına BAŞARISIZ doğrulama (`PAYMENT_DECLINED`; numara, CVV
   ya da son kullanma hatası) saatte 5, günde 20 (`ratelimit.FailureCounter`: bakmak yazmaz, yalnızca
   sonuç yazılır); IP başına her deneme saatte 30. Eşikte kasaya gidilmeden 429 + `Retry-After`.

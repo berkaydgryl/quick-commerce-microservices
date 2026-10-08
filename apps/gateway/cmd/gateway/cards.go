@@ -25,7 +25,7 @@ func buildCardRoutes(cfg config.Config, pool *clients.Pool, rateLimit httpapi.Ra
 		return httpapi.CardRoutes{}, fmt.Errorf("%s baglantisi havuzda yok", config.PaymentService)
 	}
 	vault := cards.New(cardvaultv1.NewCardVaultServiceClient(conn), cfg.RequestTimeout)
-	routes := httpapi.CardRoutes{Lister: vault, Adder: vault, Deleter: vault}
+	routes := httpapi.CardRoutes{Lister: vault, Adder: vault, Deleter: vault, Renamer: vault}
 	if failures, counts := rateLimit.Limiter.(ratelimit.FailureCounter); counts {
 		routes.Failures = failures
 	}
