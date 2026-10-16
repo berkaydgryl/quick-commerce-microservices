@@ -1,0 +1,124 @@
+name: Ekran goruntuleri
+
+# README'deki ekran goruntulerini (docs/screenshots/) uretir (T20.1).
+# Yigin MOCK=true ile kalkar: Mongo ve Redis gerekmez, demo hesaplari ve siparis
+# gecmisi servislerin acilisinda bellege yuklenir. Goruntuler is akisinin
+# "screenshots" eserine (artifact) yazilir; depoya commit ATILMAZ, elle eklenir.
+#
+# Elle: Actions > Ekran goruntuleri > Run workflow. PR'da yalnizca betik ya da
+# bu dosya degisince kosar (her web PR'inda kosmasi runner dakikasi yakar).
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - scripts/screenshots.mjs
+      - .github/workflows/screenshots.yml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    name: Butun ekranlari cek
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+
+      - name: pnpm kur
+        uses: pnpm/action-setup@v4
+
+      - name: Node kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Go kur
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/gateway/go.mod
+          cache-dependency-path: |
+            apps/gateway/go.sum
+            packages/proto/go.sum
+
+      - name: buf kur
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          version: 1.73.0
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bagimliliklari kur
+        run: pnpm install --frozen-lockfile
+
+      - name: protoc eklentilerini kur
+        working-directory: packages/proto
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Sozlesme kodunu uret (TS + Go)
+        run: pnpm proto:gen
+
+      - name: Derle
+        run: |
+          pnpm build
+          (cd apps/gateway && go build -o "$RUNNER_TEMP/gateway" ./cmd/gateway)
+
+      # Gateway ortami yalnizca surecin ortamindan okur (.env'i kendisi okumaz);
+      # Node servisleri ise --env-file-if-exists ile okur. Ikisi ayni degerleri
+      # gorsun diye .env.example (MOCK=true) is akisinin ortamina aktarilir.
+      # Kabukta "source" yerine util.parseEnv: Mongo adreslerindeki "&" kabukta
+      # komutu arka plana atardi.
+      - name: Ortami hazirla (MOCK=true)
+        run: |
+          cp .env.example .env
+          node -e "const { parseEnv } = require('node:util'); const fs = require('node:fs'); const env = parseEnv(fs.readFileSync('.env', 'utf8')); fs.appendFileSync(process.env.GITHUB_ENV, Object.entries(env).map(([k, v]) => k + '=' + v).join('\n') + '\n');"
+          echo "MOCK=true" >> "$GITHUB_ENV"
+
+      - name: Yigini baslat
+        run: |
+          mkdir -p "$RUNNER_TEMP/logs"
+          for svc in catalog inventory risk payment courier order realtime; do
+            nohup pnpm --filter "@getir/${svc}-service" start > "$RUNNER_TEMP/logs/${svc}.log" 2>&1 &
+          done
+          nohup "$RUNNER_TEMP/gateway" > "$RUNNER_TEMP/logs/gateway.log" 2>&1 &
+          nohup pnpm --filter @getir/web dev > "$RUNNER_TEMP/logs/web.log" 2>&1 &
+
+      - name: Yigin saglikli olana kadar bekle
+        run: |
+          for i in $(seq 1 90); do
+            if curl -fsS localhost:8080/healthz > /dev/null && curl -fsS localhost:5173/ > /dev/null; then
+              echo "yigin hazir"; exit 0
+            fi
+            sleep 2
+          done
+          curl -sS localhost:8080/healthz || true
+          exit 1
+
+      - name: Ekranlari cek
+        env:
+          SCREENSHOT_BROWSER: chrome
+        run: pnpm screenshots
+
+      - name: Goruntuleri yukle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: docs/screenshots/
+          if-no-files-found: warn
+
+      - name: Gunlukleri yukle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs
+          path: ${{ runner.temp }}/logs/
+          if-no-files-found: ignore
