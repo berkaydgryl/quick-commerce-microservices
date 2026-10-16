@@ -13,9 +13,9 @@
 // Her ekran bagimsiz bir adimdir; biri duserse `_hata-<ad>.png` yazilir, digerleri
 // devam eder ve betik sonunda sifirdan farkli kodla cikar.
 
-/* global document -- page.evaluate govdeleri tarayicida kosar. */
+/* global document, window -- page.evaluate govdeleri tarayicida kosar. */
 
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { chromium } from 'playwright-core';
@@ -38,11 +38,15 @@ const MOBILE = { width: 390, height: 844 };
 const STEP_TIMEOUT_MS = 20_000;
 /** Kurye ancak hazirlik suresinden (ORDER_PREP_SECONDS) sonra yola cikar. */
 const COURIER_TIMEOUT_MS = 180_000;
+/** Tek ekranin ust siniri (kurye beklemesi dahil); asilirsa adim hata sayilir. */
+const STEP_LIMIT_MS = COURIER_TIMEOUT_MS + 60_000;
+const IMAGE_WAIT_MS = 5_000;
 
 const failures = [];
 
 /** @param {import('playwright-core').Page} page @param {string} name */
 async function shot(page, name, fullPage = false) {
+  if (fullPage) await scrollThrough(page);
   await settle(page);
   await page.screenshot({ path: `${OUT_DIR}${name}.png`, fullPage });
   console.log(`✓ ${name}`);
@@ -55,9 +59,10 @@ async function settle(page) {
     .getByText('Yükleniyor...')
     .waitFor({ state: 'hidden', timeout: 10_000 })
     .catch(() => undefined);
-  await page.evaluate(async () => {
+  // Tembel (loading=lazy) gorsel ekrana girmedikce hic inmez; beklemenin ust siniri var.
+  await page.evaluate(async (limitMs) => {
     const pending = [...document.images].filter((img) => !img.complete);
-    await Promise.all(
+    const loaded = Promise.all(
       pending.map(
         (img) =>
           new Promise((resolve) => {
@@ -66,9 +71,21 @@ async function settle(page) {
           }),
       ),
     );
-  });
+    await Promise.race([loaded, new Promise((resolve) => setTimeout(resolve, limitMs))]);
+  }, IMAGE_WAIT_MS);
   await dismissToasts(page);
   await page.waitForTimeout(400);
+}
+
+/** Tam sayfa goruntuden once sayfayi asagi kaydirir: tembel gorseller insin. */
+async function scrollThrough(page) {
+  await page.evaluate(async () => {
+    for (let y = 0; y < document.body.scrollHeight; y += window.innerHeight / 2) {
+      window.scrollTo(0, y);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    window.scrollTo(0, 0);
+  });
 }
 
 async function dismissToasts(page) {
@@ -81,7 +98,12 @@ async function dismissToasts(page) {
 /** Bir ekrani bagimsiz adim olarak kosar; hata digerlerini durdurmaz. */
 async function step(page, name, run) {
   try {
-    await run();
+    await Promise.race([
+      run(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`${STEP_LIMIT_MS} ms icinde bitmedi`)), STEP_LIMIT_MS),
+      ),
+    ]);
   } catch (error) {
     failures.push(name);
     console.error(`✗ ${name}: ${error instanceof Error ? error.message : String(error)}`);
@@ -363,6 +385,10 @@ async function captureMobileScreens(browser) {
 
 async function main() {
   mkdirSync(OUT_DIR, { recursive: true });
+  // Onceki kosunun hata goruntuleri ve gunlugu kalmasin.
+  for (const file of readdirSync(OUT_DIR)) {
+    if (file.startsWith('_')) rmSync(`${OUT_DIR}${file}`);
+  }
   const browser = await chromium.launch({
     channel: BROWSER_CHANNEL === 'chromium' ? undefined : BROWSER_CHANNEL,
   });

@@ -3,7 +3,8 @@ name: Ekran goruntuleri
 # README'deki ekran goruntulerini (docs/screenshots/) uretir (T20.1).
 # Yigin MOCK=true ile kalkar: Mongo ve Redis gerekmez, demo hesaplari ve siparis
 # gecmisi servislerin acilisinda bellege yuklenir. Goruntuler is akisinin
-# "screenshots" eserine (artifact) yazilir; depoya commit ATILMAZ, elle eklenir.
+# "screenshots" eserine (artifact) yazilir; PR'da ayrica PR'in dalina commit
+# edilir (README goruntuleri dogrudan dalda guncellenir). main'e asla yazilmaz.
 #
 # Elle: Actions > Ekran goruntuleri > Run workflow. PR'da yalnizca betik ya da
 # bu dosya degisince kosar (her web PR'inda kosmasi runner dakikasi yakar).
@@ -18,8 +19,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Goruntuleri PR dalina commit etmek icin yazma hakki gerekir.
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   capture:
@@ -27,8 +29,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # PR'da birlesim commit'i degil dalin kendisi alinir: goruntuler oraya yazilir.
       - name: Depoyu al
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref }}
 
       - name: pnpm kur
         uses: pnpm/action-setup@v4
@@ -102,10 +107,35 @@ jobs:
           curl -sS localhost:8080/healthz || true
           exit 1
 
+      # Cikti docs/screenshots/_kosu.log'a da yazilir: basarisiz kosuda dala
+      # gecen gunluk, hatanin nerede oldugunu Actions arayuzu acilmadan gosterir.
       - name: Ekranlari cek
+        timeout-minutes: 15
         env:
           SCREENSHOT_BROWSER: chrome
-        run: pnpm screenshots
+        run: |
+          set -o pipefail
+          mkdir -p docs/screenshots
+          pnpm screenshots 2>&1 | tee "$RUNNER_TEMP/kosu.log"
+
+      - name: Basarisiz kosunun gunlugunu ekle
+        if: failure()
+        run: |
+          cp "$RUNNER_TEMP/kosu.log" docs/screenshots/_kosu.log || true
+          for svc in "$RUNNER_TEMP"/logs/*.log; do tail -n 40 "$svc" >> docs/screenshots/_kosu.log; done
+
+      # Dal adi ortam degiskeniyle gecer (komuta gomulmez; kabuk enjeksiyonu).
+      - name: Goruntuleri PR dalina yaz
+        if: always() && github.event_name == 'pull_request'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots
+          if git diff --cached --quiet; then echo "degisiklik yok"; exit 0; fi
+          git commit -m "docs(platform): ekran goruntuleri yenilendi (T20.1)"
+          git push origin "HEAD:$HEAD_REF"
 
       - name: Goruntuleri yukle
         if: always()
