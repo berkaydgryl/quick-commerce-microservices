@@ -1,0 +1,162 @@
+name: Ekran goruntuleri
+
+# README'deki ekran goruntulerini (docs/screenshots/) uretir (T20.1).
+# Yigin gercek altyapiyla (Mongo + Redis, MOCK=false) kalkar: MOCK'ta olay hatti
+# kapali oldugundan siparis "kurye yolda"ya gecmez ve canli takip ekrani cekilemez.
+# Katalog, stok, kuryeler ve demo hesaplari seed ile yazilir. Goruntuler is akisinin
+# "screenshots" eserine (artifact) yazilir; PR'da ayrica PR'in dalina commit
+# edilir (README goruntuleri dogrudan dalda guncellenir). main'e asla yazilmaz.
+#
+# Elle: Actions > Ekran goruntuleri > Run workflow. PR'da yalnizca betik ya da
+# bu dosya degisince kosar (her web PR'inda kosmasi runner dakikasi yakar).
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - scripts/screenshots.mjs
+      - .github/workflows/screenshots.yml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Goruntuleri PR dalina commit etmek icin yazma hakki gerekir.
+permissions:
+  contents: write
+
+jobs:
+  capture:
+    name: Butun ekranlari cek
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # PR'da birlesim commit'i degil dalin kendisi alinir: goruntuler oraya yazilir.
+      - name: Depoyu al
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref }}
+
+      - name: pnpm kur
+        uses: pnpm/action-setup@v4
+
+      - name: Node kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Go kur
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/gateway/go.mod
+          cache-dependency-path: |
+            apps/gateway/go.sum
+            packages/proto/go.sum
+
+      - name: buf kur
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          version: 1.73.0
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bagimliliklari kur
+        run: pnpm install --frozen-lockfile
+
+      - name: protoc eklentilerini kur
+        working-directory: packages/proto
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Sozlesme kodunu uret (TS + Go)
+        run: pnpm proto:gen
+
+      - name: Derle
+        run: |
+          pnpm build
+          (cd apps/gateway && go build -o "$RUNNER_TEMP/gateway" ./cmd/gateway)
+
+      # Gateway ortami yalnizca surecin ortamindan okur (.env'i kendisi okumaz);
+      # Node servisleri ise --env-file-if-exists ile okur. Ikisi ayni degerleri
+      # gorsun diye .env (MOCK=false) is akisinin ortamina aktarilir.
+      # Kabukta "source" yerine util.parseEnv: Mongo adreslerindeki "&" kabukta
+      # komutu arka plana atardi.
+      - name: Ortami hazirla (MOCK=false)
+        run: |
+          sed 's/^MOCK=true$/MOCK=false/' .env.example > .env
+          node -e "const { parseEnv } = require('node:util'); const fs = require('node:fs'); const env = parseEnv(fs.readFileSync('.env', 'utf8')); fs.appendFileSync(process.env.GITHUB_ENV, Object.entries(env).map(([k, v]) => k + '=' + v).join('\n') + '\n');"
+
+      # Mongo (replica set) + Redis + Jaeger + Mailpit; --wait saglikli olana kadar bekler.
+      - name: Altyapiyi kaldir ve seed et
+        run: |
+          pnpm infra:up
+          pnpm seed
+          pnpm seed:personas
+
+      - name: Yigini baslat
+        run: |
+          mkdir -p "$RUNNER_TEMP/logs"
+          for svc in catalog inventory risk payment courier order realtime; do
+            nohup pnpm --filter "@getir/${svc}-service" start > "$RUNNER_TEMP/logs/${svc}.log" 2>&1 &
+          done
+          nohup "$RUNNER_TEMP/gateway" > "$RUNNER_TEMP/logs/gateway.log" 2>&1 &
+          nohup pnpm --filter @getir/web dev > "$RUNNER_TEMP/logs/web.log" 2>&1 &
+
+      - name: Yigin saglikli olana kadar bekle
+        run: |
+          for i in $(seq 1 90); do
+            if curl -fsS localhost:8080/healthz > /dev/null && curl -fsS localhost:5173/ > /dev/null; then
+              echo "yigin hazir"; exit 0
+            fi
+            sleep 2
+          done
+          curl -sS localhost:8080/healthz || true
+          exit 1
+
+      # Cikti docs/screenshots/_kosu.txt'a da yazilir: basarisiz kosuda dala
+      # gecen gunluk, hatanin nerede oldugunu Actions arayuzu acilmadan gosterir.
+      - name: Ekranlari cek
+        timeout-minutes: 15
+        env:
+          SCREENSHOT_BROWSER: chrome
+        run: |
+          set -o pipefail
+          mkdir -p docs/screenshots
+          pnpm screenshots 2>&1 | tee "$RUNNER_TEMP/kosu.log"
+
+      - name: Basarisiz kosunun gunlugunu ekle
+        if: failure()
+        run: |
+          cp "$RUNNER_TEMP/kosu.log" docs/screenshots/_kosu.txt || true
+          for svc in "$RUNNER_TEMP"/logs/*.log; do tail -n 40 "$svc" >> docs/screenshots/_kosu.txt; done
+
+      # Dal adi ortam degiskeniyle gecer (komuta gomulmez; kabuk enjeksiyonu).
+      - name: Goruntuleri PR dalina yaz
+        if: always() && github.event_name == 'pull_request'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/screenshots
+          if git diff --cached --quiet; then echo "degisiklik yok"; exit 0; fi
+          # [skip ci]: botun commit'i is akislarini yeniden tetiklemesin.
+          git commit -m "docs(platform): ekran goruntuleri yenilendi (T20.1)" -m "[skip ci]"
+          git push origin "HEAD:$HEAD_REF"
+
+      - name: Goruntuleri yukle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: docs/screenshots/
+          if-no-files-found: warn
+
+      - name: Gunlukleri yukle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs
+          path: ${{ runner.temp }}/logs/
+          if-no-files-found: ignore

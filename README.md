@@ -141,6 +141,86 @@ flowchart TD
   X --> E
 ```
 
+## Ekranlar
+
+Aşağıdaki görüntüler uygulamanın kendisinden, demo hesabı **Ayşe** (düşük risk) ile uçtan uca bir
+siparişin her adımında çekildi. Hepsi tek komutla yeniden üretilir: `pnpm screenshots`
+([`scripts/screenshots.mjs`](scripts/screenshots.mjs)) çalışan uygulamayı Playwright ile gezer ve
+`docs/screenshots/` altına yazar; [Ekran görüntüleri](.github/workflows/screenshots.yml) iş akışı
+aynı şeyi yığını Mongo ve Redis'le kaldırıp seed ederek GitHub Actions'ta yapar.
+
+### Karşılama ve giriş
+
+<img src="docs/screenshots/01-karsilama.png" alt="Karşılama ekranı">
+
+**Karşılama** — oturumsuz ziyaretçinin ana sayfası: banner, telefonla giriş kartı, kategoriler,
+uygulama indirme bandı ve tanıtım kutuları. Ekrandaki bütün metin ve görseller içerik ucundan
+(`GET /v1/content/welcome`) gelir.
+
+| **Giriş**                                                                                                          | **Adres ekleme**                                                            |
+| ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| <img src="docs/screenshots/02-giris.png" alt="Giriş">                                                              | <img src="docs/screenshots/22-adres-ekle.png" alt="Adres ekleme">           |
+| demo hesap seçici formu doldurur; giriş, kayıt ve şifre yenileme karşılama ekranının üstünde pencere olarak açılır | adresi olmayan hesapta iki adımlı pencere: haritada pin, sonra adres detayı |
+
+| **Kayıt**                                             | **Şifre yenileme**                                                    |
+| ----------------------------------------------------- | --------------------------------------------------------------------- |
+| <img src="docs/screenshots/03-kayit.png" alt="Kayıt"> | <img src="docs/screenshots/04-sifre-yenile.png" alt="Şifre yenileme"> |
+| ad soyad, telefon ve şifre; SMS/OTP yok (ADR-12)      | yalnızca geliştirme paketinde, kodsuz                                 |
+
+### Marketler ve alışveriş
+
+| **Yakındaki işletmeler**                                                                                  | **Genel arama**                                                     |
+| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| <img src="docs/screenshots/05-ana-sayfa.png" alt="Yakındaki işletmeler">                                  | <img src="docs/screenshots/06-arama.png" alt="Genel arama">         |
+| seçili adrese teslim eden marketler; her biri kendi minimum tutarı ve ücretsiz teslimat eşiğiyle (ADR-15) | ürün ya da market adı; sonuçlar yakındaki marketlere göre gruplanır |
+
+| **Market sayfası**                                                                       | **Sepet**                                                                           |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| <img src="docs/screenshots/07-market.png" alt="Market sayfası">                          | <img src="docs/screenshots/08-sepet.png" alt="Sepet">                               |
+| kategoriler, ürün kartları, "Son N adet" ve "Satışta değil" rozetleri; sağda canlı sepet | tutar, teslimat ücreti, minimum sepete kalan tutar; sepet tarayıcıda yaşar (ADR-13) |
+
+### Ödeme, rezervasyon ve 3D Secure
+
+| **Ödeme**                                                                                    | **Ödeme yöntemi**                                                             |
+| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| <img src="docs/screenshots/09-odeme.png" alt="Ödeme">                                        | <img src="docs/screenshots/10-odeme-yontemi.png" alt="Ödeme yöntemi">         |
+| stok bu ekranda atomik olarak ayrılır; geri sayım süresi risk bandına göre 10 ya da 2 dakika | kayıtlı kart, yeni kart ya da kapıda ödeme (orta riskte kapıda ödeme kapanır) |
+
+| **Kart ekleme**                                                 | **3D Secure**                                                 |
+| --------------------------------------------------------------- | ------------------------------------------------------------- |
+| <img src="docs/screenshots/11-kart-ekle.png" alt="Kart ekleme"> | <img src="docs/screenshots/12-3ds.png" alt="3D Secure">       |
+| sahte kart sağlayıcısı; 3DS isteyen test kartı                  | 6 haneli kod, süre sınırı ve deneme hakkı; demo kodu `123456` |
+
+### Sipariş ve canlı kurye takibi
+
+| **Sipariş onayı**                                                    | **Canlı kurye takibi**                                                      | **Sipariş detayı**                                                     |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| <img src="docs/screenshots/13-siparis-onay.png" alt="Sipariş onayı"> | <img src="docs/screenshots/14-kurye-haritasi.png" alt="Canlı kurye takibi"> | <img src="docs/screenshots/15-siparis-detay.png" alt="Sipariş detayı"> |
+| hazırlanıyor → kurye yolda → teslim edildi zaman çizelgesi           | WebSocket konum akışı, tahmini varış ve kalan mesafe                        | ürünler, tutarlar, ödeme ve teslimat bilgisi                           |
+
+### Hesabım
+
+| **Hesabım**                                               | **Adreslerim**                                                  |
+| --------------------------------------------------------- | --------------------------------------------------------------- |
+| <img src="docs/screenshots/16-hesabim.png" alt="Hesabım"> | <img src="docs/screenshots/17-adreslerim.png" alt="Adreslerim"> |
+| profil, telefon ve e-posta doğrulama                      | kayıtlı adresler; seçili adres marketleri ve aramayı belirler   |
+
+| **Favori işletmeler**                                                 | **Geçmiş siparişler**                                                    |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| <img src="docs/screenshots/18-favoriler.png" alt="Favori işletmeler"> | <img src="docs/screenshots/19-siparislerim.png" alt="Geçmiş siparişler"> |
+| işletme kartındaki kalple eklenir                                     | imleçle sayfalanan sipariş geçmişi                                       |
+
+| **Ödeme yöntemleri**                                                         | **Kart ekle**                                                         |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| <img src="docs/screenshots/20-odeme-yontemlerim.png" alt="Ödeme yöntemleri"> | <img src="docs/screenshots/21-kart-ekle-sayfasi.png" alt="Kart ekle"> |
+| kayıtlı kartlar (yalnızca geliştirme paketinde)                              | hesap altından kart kaydı                                             |
+
+### Mobil
+
+| Karşılama                                                           | İşletmeler                                                           | Market                                                        | Sepet                                                       |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------- |
+| <img src="docs/screenshots/23-mobil-karsilama.png" alt="Karşılama"> | <img src="docs/screenshots/24-mobil-ana-sayfa.png" alt="İşletmeler"> | <img src="docs/screenshots/25-mobil-market.png" alt="Market"> | <img src="docs/screenshots/26-mobil-sepet.png" alt="Sepet"> |
+
 ---
 
 ## Kurulum
@@ -299,35 +379,36 @@ Ayrıntı: [`infra/seed/README.md`](infra/seed/README.md).
 Hepsi depo kökünden `pnpm <komut>` ile çalışır. `make` bu projede zorunlu değildir; Windows'ta
 `make` kurulu olmadığı için Makefile hedeflerinin karşılığı pnpm script'i olarak tanımlanmıştır.
 
-| Komut           | Arkasındaki iş                                                                                        | Ne yapar                                                               | Durum                                   |
-| --------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------- |
-| `dev`           | `turbo run dev`                                                                                       | Tüm uygulamaları izleme modunda paralel başlatır                       | Çalışıyor (T3.1: catalog; önce `build`) |
-| `build`         | `turbo run build`                                                                                     | Tüm paketleri derler                                                   | Çalışıyor                               |
-| `typecheck`     | `turbo run typecheck`                                                                                 | Çıktı üretmeden tip denetimi                                           | Çalışıyor                               |
-| `lint`          | `eslint .`                                                                                            | ESLint 9 flat config ile tüm depo                                      | Çalışıyor                               |
-| `lint:fix`      | `eslint . --fix`                                                                                      | Otomatik düzeltilebilen lint hatalarını giderir                        | Çalışıyor                               |
-| `lint:style`    | `stylelint "apps/web/**/*.css"`                                                                       | CSS denetimi; `--allow-empty-input` ile dosya yokken de yeşil          | Çalışıyor                               |
-| `lint:proto`    | `buf lint` + `buf format --diff --exit-code`                                                          | gRPC sözleşmesinin kural ve biçim kapısı (`buf` kurulu olmalı)         | Çalışıyor                               |
-| `format`        | `prettier --write .`                                                                                  | Tüm depoyu biçimlendirir                                               | Çalışıyor                               |
-| `format:check`  | `prettier --check .`                                                                                  | Biçim farkı varsa hata verir                                           | Çalışıyor                               |
-| `test`          | `pnpm run test:unit`                                                                                  | Birim testleri (tek koşucu: kökteki vitest yapılandırması)             | Çalışıyor                               |
-| `test:unit`     | `vitest run`                                                                                          | Birim testleri; altyapı gerektirmez                                    | Çalışıyor (`--passWithNoTests`)         |
-| `test:int`      | `vitest run --config vitest.integration.config.ts`                                                    | Testcontainers ile Mongo/Redis entegrasyon testleri                    | Çalışıyor (T2.5)                        |
-| `race`          | `vitest run` (`apps/inventory-service/test/integration/race.spec.ts`)                                 | 100 eş zamanlı rezervasyon, stok 1: tam 1 başarı (Docker)              | Çalışıyor (T11.1)                       |
-| `demo`          | `node -e "..."`                                                                                       | Uçtan uca demo: sipariş → ödeme → kurye akışı                          | **Placeholder — Gün 15 (T15.1)**        |
-| `seed`          | `turbo run build` (catalog + inventory + courier) `&& … seed` (üçü)                                   | Katalogu, stoğu ve kuryeleri Mongo'ya baştan yazar; sayaçlar Redis'te  | Çalışıyor (T4.1, T9.1, T13.1)           |
-| `migrate`       | `node scripts/migrate.mjs up\|status`                                                                 | Servislerin bekleyen göçleri (ADR-19); `down` servis bazında           | Çalışıyor (T10.4)                       |
-| `proto:gen`     | `pnpm --filter @getir/proto generate`                                                                 | `.proto` dosyalarından **TS ve Go** kodu üretir (Go kurulu olmalı)     | Çalışıyor (T2.3)                        |
-| `proto:gen:ts`  | `pnpm --filter @getir/proto generate:ts`                                                              | Yalnızca TypeScript çıktısı; Go gerektirmez                            | Çalışıyor (T2.3)                        |
-| `proto:check`   | `generate:ts && typecheck && check:go`                                                                | Üretilen kodun **iki dilde de** derlendiğini doğrular                  | Çalışıyor (T2.3)                        |
-| `verify`        | `proto:gen:ts && lint && lint:style && lint:proto && format:check && typecheck && build && test:unit` | CI'daki `quality` işinin birebir aynısı                                | Çalışıyor                               |
-| `infra:up`      | `docker compose -f infra/docker/… up -d --wait`                                                       | Mongo, Redis, Jaeger ve Mailpit'i başlatır, tümü sağlıklı olunca döner | Çalışıyor                               |
-| `infra:ps`      | `docker compose … ps`                                                                                 | Konteyner ve sağlık durumu                                             | Çalışıyor                               |
-| `infra:logs`    | `docker compose … logs -f`                                                                            | Altyapı günlüklerini izler                                             | Çalışıyor                               |
-| `infra:down`    | `docker compose … down`                                                                               | Konteynerleri durdurur (veri kalır)                                    | Çalışıyor                               |
-| `infra:reset`   | `docker compose … down -v`                                                                            | Konteyner **ve** veriyi siler, sıfırdan kurar                          | Çalışıyor                               |
-| `infra:mongosh` | `docker exec -it getir-mongo … mongosh`                                                               | Kök kullanıcıyla `mongosh` (parola konteynerin ortamından, D14)        | Çalışıyor                               |
-| `clean`         | `turbo run clean`                                                                                     | Derleme çıktılarını ve önbellekleri siler                              | Çalışıyor                               |
+| Komut           | Arkasındaki iş                                                                                        | Ne yapar                                                               | Durum                                                        |
+| --------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `dev`           | `turbo run dev`                                                                                       | Tüm uygulamaları izleme modunda paralel başlatır                       | Çalışıyor (Node servisleri + web; gateway `go run`, aşağıda) |
+| `build`         | `turbo run build`                                                                                     | Tüm paketleri derler                                                   | Çalışıyor                                                    |
+| `typecheck`     | `turbo run typecheck`                                                                                 | Çıktı üretmeden tip denetimi                                           | Çalışıyor                                                    |
+| `lint`          | `eslint .`                                                                                            | ESLint 9 flat config ile tüm depo                                      | Çalışıyor                                                    |
+| `lint:fix`      | `eslint . --fix`                                                                                      | Otomatik düzeltilebilen lint hatalarını giderir                        | Çalışıyor                                                    |
+| `lint:style`    | `stylelint "apps/web/**/*.css"`                                                                       | CSS denetimi; `--allow-empty-input` ile dosya yokken de yeşil          | Çalışıyor                                                    |
+| `lint:proto`    | `buf lint` + `buf format --diff --exit-code`                                                          | gRPC sözleşmesinin kural ve biçim kapısı (`buf` kurulu olmalı)         | Çalışıyor                                                    |
+| `format`        | `prettier --write .`                                                                                  | Tüm depoyu biçimlendirir                                               | Çalışıyor                                                    |
+| `format:check`  | `prettier --check .`                                                                                  | Biçim farkı varsa hata verir                                           | Çalışıyor                                                    |
+| `test`          | `pnpm run test:unit`                                                                                  | Birim testleri (tek koşucu: kökteki vitest yapılandırması)             | Çalışıyor                                                    |
+| `test:unit`     | `vitest run`                                                                                          | Birim testleri; altyapı gerektirmez                                    | Çalışıyor (`--passWithNoTests`)                              |
+| `test:int`      | `vitest run --config vitest.integration.config.ts`                                                    | Testcontainers ile Mongo/Redis entegrasyon testleri                    | Çalışıyor (T2.5)                                             |
+| `race`          | `vitest run` (`apps/inventory-service/test/integration/race.spec.ts`)                                 | 100 eş zamanlı rezervasyon, stok 1: tam 1 başarı (Docker)              | Çalışıyor (T11.1)                                            |
+| `demo`          | `node -e "..."`                                                                                       | Uçtan uca demo: sipariş → ödeme → kurye akışı                          | **Placeholder — Gün 15 (T15.1)**                             |
+| `screenshots`   | `node scripts/screenshots.mjs`                                                                        | README ekran görüntülerini `docs/screenshots/` altına yeniden çeker    | Çalışıyor (T20.1; yığın ayakta olmalı)                       |
+| `seed`          | `turbo run build` (catalog + inventory + courier) `&& … seed` (üçü)                                   | Katalogu, stoğu ve kuryeleri Mongo'ya baştan yazar; sayaçlar Redis'te  | Çalışıyor (T4.1, T9.1, T13.1)                                |
+| `migrate`       | `node scripts/migrate.mjs up\|status`                                                                 | Servislerin bekleyen göçleri (ADR-19); `down` servis bazında           | Çalışıyor (T10.4)                                            |
+| `proto:gen`     | `pnpm --filter @getir/proto generate`                                                                 | `.proto` dosyalarından **TS ve Go** kodu üretir (Go kurulu olmalı)     | Çalışıyor (T2.3)                                             |
+| `proto:gen:ts`  | `pnpm --filter @getir/proto generate:ts`                                                              | Yalnızca TypeScript çıktısı; Go gerektirmez                            | Çalışıyor (T2.3)                                             |
+| `proto:check`   | `generate:ts && typecheck && check:go`                                                                | Üretilen kodun **iki dilde de** derlendiğini doğrular                  | Çalışıyor (T2.3)                                             |
+| `verify`        | `proto:gen:ts && lint && lint:style && lint:proto && format:check && typecheck && build && test:unit` | CI'daki `quality` işinin birebir aynısı                                | Çalışıyor                                                    |
+| `infra:up`      | `docker compose -f infra/docker/… up -d --wait`                                                       | Mongo, Redis, Jaeger ve Mailpit'i başlatır, tümü sağlıklı olunca döner | Çalışıyor                                                    |
+| `infra:ps`      | `docker compose … ps`                                                                                 | Konteyner ve sağlık durumu                                             | Çalışıyor                                                    |
+| `infra:logs`    | `docker compose … logs -f`                                                                            | Altyapı günlüklerini izler                                             | Çalışıyor                                                    |
+| `infra:down`    | `docker compose … down`                                                                               | Konteynerleri durdurur (veri kalır)                                    | Çalışıyor                                                    |
+| `infra:reset`   | `docker compose … down -v`                                                                            | Konteyner **ve** veriyi siler, sıfırdan kurar                          | Çalışıyor                                                    |
+| `infra:mongosh` | `docker exec -it getir-mongo … mongosh`                                                               | Kök kullanıcıyla `mongosh` (parola konteynerin ortamından, D14)        | Çalışıyor                                                    |
+| `clean`         | `turbo run clean`                                                                                     | Derleme çıktılarını ve önbellekleri siler                              | Çalışıyor                                                    |
 
 ### Servisleri çalıştırma
 
@@ -354,7 +435,7 @@ grpcurl -plaintext -import-path packages/proto/proto -proto getir/catalog/v1/cat
 | Servis                                                     | Port  | Bugün ne yapıyor                                                                                                      |
 | ---------------------------------------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------- |
 | [`catalog-service`](apps/catalog-service/README.md) (T4.8) | 50051 | Pazaryeri: yakındaki marketler, market sayfası, teklifler — Mongo ya da `MOCK`                                        |
-| [`inventory-service`](apps/inventory-service/README.md)    | 50052 | (T9.1) `CheckAvailability`: toplu stok; Mongo `stock` + Redis sayacı ya da `MOCK`; rezervasyon T10                    |
+| [`inventory-service`](apps/inventory-service/README.md)    | 50052 | (T9-T11) Toplu stok, atomik rezervasyon (Lua), onay/bırakma, süre uzatma; süpürücü ve stok defteri                    |
 | [`order-service`](apps/order-service/README.md) (T7.5)     | 50053 | Taslak (catalog fiyatıyla), saga (risk → ödeme → 3DS), iptal, geçmiş, outbox → olay; ödenen siparişe kurye (T13.1)    |
 | [`payment-service`](apps/payment-service/README.md) (T5.3) | 50054 | `Charge`, `Confirm3Ds` — mock kart + 3DS, idempotent; Mongo `payments` ya da `MOCK`                                   |
 | [`risk-service`](apps/risk-service/README.md) (T6.3)       | 50055 | `Evaluate`, `GetLastEvaluation` — 6 kural, veto, `risk_events` (Mongo ya da `MOCK`)                                   |
@@ -431,11 +512,11 @@ Tek repo, üç üst klasör: `apps/` çalışan process'ler, `packages/` paylaş
 
 ```text
 quick-commerce-microservices/
-├── apps/                      # Çalışan process'ler (Gün 3'ten itibaren doluyor)
-│   ├── gateway/               # Go - tek dış kapı  (T3.4 ilk proxy)
-│   ├── catalog-service/       # Node - market, ürün, teklif, kategori  (T4.8 pazaryeri)
+├── apps/                      # Çalışan process'ler
+│   ├── gateway/               # Go - tek dış kapı: REST, JWT, rate limit, idempotency
+│   ├── catalog-service/       # Node - market, ürün, teklif, kategori (pazaryeri)
 │   ├── inventory-service/     # Node - stok, rezervasyon, süpürücü
-│   ├── order-service/         # Node - durum makinesi, saga, outbox  (T3.2 iskelet)
+│   ├── order-service/         # Node - durum makinesi, saga, outbox
 │   ├── payment-service/       # Node - mock kart + 3DS
 │   ├── risk-service/          # Node - kural motoru
 │   ├── courier-service/       # Node - atama + GPS simülatörü
@@ -445,31 +526,30 @@ quick-commerce-microservices/
 │   ├── core/                  # @getir/core - Result, AppError, ID üretimi, config loader, mesafe (geo)
 │   ├── contracts/             # @getir/contracts - Zod şemaları, ApiResponse zarfı
 │   ├── proto/                 # @getir/proto - .proto + buf + üretilen TS/Go kodu
-│   ├── pricing/               # @getir/pricing - sepet hesabı, market kuralları, kupon  (T4.3)
+│   ├── pricing/               # @getir/pricing - sepet hesabı, market kuralları, kupon
 │   ├── redis-kit/             # @getir/redis-kit - client, key builder, Lua yükleyici
 │   ├── mongo-kit/             # @getir/mongo-kit - client, repository tabanı, migration
 │   ├── event-bus/             # @getir/event-bus - EventBus arayüzü + Redis Streams
 │   ├── observability/         # @getir/observability - logger, request-id, metrics
-│   ├── service-kit/           # @getir/service-kit - gRPC bootstrap, health, shutdown
-│   └── testing/               # @getir/testing - fixture'lar, testcontainers yardımcıları
+│   └── service-kit/           # @getir/service-kit - gRPC bootstrap, health, shutdown
 ├── infra/                     # Çalıştırma ortamı
 │   ├── docker/                # docker-compose.dev.yml, redis.conf (+ kendi README'si)
-│   ├── seed/                  # seed düzeni + henüz sahibi olmayan veri (adresler)  (T4.1)
-│   └── scripts/               # geliştirme ve kod üretimi betikleri          [Gün 2]
+│   └── seed/                  # seed düzeni ve sırası (veri her servisin kendi seed'inde)
+├── scripts/                   # migrate, seed köprüsü, git kuralları, paket taraması, ekran görüntüleri
 ├── docs/
-│   ├── adr/                   # Numaralı mimari karar kayıtları (14 adet + dizin)
-│   ├── api/                   # openapi.yaml, socket-events.md, Postman     [Gün 2]
+│   ├── adr/                   # Numaralı mimari karar kayıtları (20 adet + dizin)
+│   ├── api/                   # openapi.yaml, socket-events.md
+│   ├── screenshots/           # README ekran görüntüleri (pnpm screenshots)
 │   └── roadmap.md             # 20 günlük yol haritası ve görev panosu
-├── .github/workflows/ci.yml   # CI kapıları
+├── .github/workflows/        # ci.yml (CI kapıları), screenshots.yml (ekran görüntüleri)
 ├── .env.example               # Tüm ortam değişkenlerinin belgelenmiş örneği
 ├── package.json               # Kök script'ler
 ├── pnpm-workspace.yaml        # Workspace tanımı (apps/*, packages/*)
 └── turbo.json                 # Görev grafiği ve önbellek
 ```
 
-Köşeli parantezli notlar o klasörün hangi günde geleceğini söyler. Bugün depoda gerçekten bulunan
-kısım şudur: kök yapılandırması, `infra/docker/`, `packages/core/`, `docs/adr/` ve `docs/roadmap.md`.
-Kalanı hedef yapıdır ve yol haritasındaki sırayla doldurulur.
+Haritadaki her klasör depoda vardır; her servisin ve paketin kendi README'si bugünkü durumunu
+(hangi RPC, hangi görev) ayrıntılı anlatır.
 
 Üç kural klasör karışıklığını önler:
 
@@ -516,11 +596,13 @@ import { ok, err } from './result.js';
 
 | Faz   | Kapsam                                                                      | Gün   | Durum            |
 | ----- | --------------------------------------------------------------------------- | ----- | ---------------- |
-| Faz 1 | Sözleşmeler ve iskelet: monorepo, Docker, `packages/core`, proto taslakları | 1–3   | **Devam ediyor** |
-| Faz 2 | İş servisleri ve çekirdek risk: catalog, order, payment, risk               | 4–7   | Bekliyor         |
-| Faz 3 | Gateway ve stok motoru: Go gateway, atomik kilit, TTL, süpürücü             | 8–11  | Bekliyor         |
-| Faz 4 | Gerçek zamanlı katman: kurye simülatörü, Socket.io, canlı harita            | 12–15 | Bekliyor         |
-| Faz 5 | Tasarım, cila ve teslim                                                     | 16–20 | Bekliyor         |
+| Faz 1 | Sözleşmeler ve iskelet: monorepo, Docker, `packages/core`, proto taslakları | 1–3   | ✅ Tamamlandı    |
+| Faz 2 | İş servisleri ve çekirdek risk: catalog, order, payment, risk               | 4–7   | ✅ Tamamlandı    |
+| Faz 3 | Gateway ve stok motoru: Go gateway, atomik kilit, TTL, süpürücü             | 8–11  | ✅ Tamamlandı    |
+| Faz 4 | Gerçek zamanlı katman: kurye simülatörü, Socket.io, canlı harita            | 12–15 | ✅ Tamamlandı ¹  |
+| Faz 5 | Tasarım, cila ve teslim                                                     | 16–20 | **Devam ediyor** |
+
+¹ Uçtan uca demo betiği (`pnpm demo`, T15.1) henüz yok; akış bugün arayüzden elle oynatılır.
 
 Kapsam iki halkadan oluşur: **Opsiyon A** (zorunlu taban; Gün 11'de T11.4 ile kapanır, B19) ve
 **Opsiyon B** (Gün 20'de teslim edilen taahhüt). Gerçek ödeme entegrasyonu, gerçek harita rotalama
@@ -532,19 +614,10 @@ risk bandına göre süre, T11.3), geri sayım siparişte görünür, kilit bır
 (`DELETE /v1/cart/reserve/{orderId}`) ya da süresi dolunca süpürücü stoğu geri verir; ödeme risk
 ve 3DS'ten geçer, ödenince stok kesinleşir.
 
-**Şu anki durum — Gün 1 devam ediyor.** T1.1–T1.5 tamamlandı; sırada **T1.6** var.
-
-| Görev | İçerik                                                                                 | Durum     |
-| ----- | -------------------------------------------------------------------------------------- | --------- |
-| T1.1  | Monorepo iskeleti: pnpm workspace, turbo, tsconfig tabanı, eslint, prettier, stylelint | ✅        |
-| T1.2  | `docker-compose.dev.yml` + altyapı yapılandırması                                      | ✅        |
-| T1.3  | `packages/core`: Result, AppError, ID üretici, hata kodları, Zod env loader            | ✅        |
-| T1.4  | Kurulum dosyaları: README, `.env.example`, `.editorconfig`, `.nvmrc`                   | ✅        |
-| T1.5  | `docs/adr/` karar kayıtları + `docs/api/` iskeleti                                     | ✅        |
-| T1.6  | `common.proto` + `catalog.proto` taslağı, buf yapılandırması                           | ⏭️ sırada |
-
-Gün 1 sonunda `docker compose up -d` ile Mongo ve Redis ayağa kalkmış, `buf lint` temiz geçmiş
-olur. Ayrıntılı görev panosu: [`docs/roadmap.md`](docs/roadmap.md).
+**Şu anki durum — Faz 5 (tasarım ve cila).** Backend uçtan uca çalışıyor: ürün → sepet →
+rezervasyon → risk → ödeme ve 3DS → sipariş → kurye ataması → haritada canlı takip → teslim. Gün
+15'teki hata ayıklama turu (T15.3) ve ekranların görsel tasarımı (T16–T17) sürüyor; arayüzün bugünkü
+hali yukarıdaki [Ekranlar](#ekranlar) bölümünde. Ayrıntılı görev panosu: [`docs/roadmap.md`](docs/roadmap.md).
 
 ---
 
@@ -553,22 +626,28 @@ olur. Ayrıntılı görev panosu: [`docs/roadmap.md`](docs/roadmap.md).
 Sistemin neden böyle kurulduğunu anlatan kararlar `docs/adr/` altında, her biri tek sayfalık
 dosyada durur:
 
-| No                                                        | Karar                                                                        | Neden                                                                                                 |
-| --------------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| [ADR-01](docs/adr/0001-lua-vs-redlock.md)                 | Sıcak yoldaki stok düşümü Redlock ile değil, tek Lua script'i ile yapılır    | Redis tek thread'lidir, Lua zaten atomiktir; Redlock ağ gecikmesi ve saat kayması riski ekler.        |
-| [ADR-02](docs/adr/0002-rezervasyon-suresi-zset.md)        | Rezervasyon süresi bitimi keyspace notification'a güvenmez                   | Redis expire olayları kaybolabilir; gerçek kaynak `resv:index` ZSET'idir, süpürücü 1 sn'de bir tarar. |
-| [ADR-03](docs/adr/0003-stok-gercegi-mongo-sayac-redis.md) | Stok gerçeği Mongo'da, hızlı sayaç Redis'te durur                            | Redis düşerse mali kayıt kaybolmaz; açılışta sayaç `stock` koleksiyonundan seed edilir.               |
-| [ADR-04](docs/adr/0004-outbox-ile-olay-yayini.md)         | Servisler arası olaylar outbox üzerinden yayınlanır                          | "Mongo'ya yazıldı ama olay gitmedi" durumunu imkânsız kılar; ikili yazım ortadan kalkar.              |
-| [ADR-05](docs/adr/0005-koleksiyon-sahipligi.md)           | Her servis kendi koleksiyonlarının tek sahibidir                             | Başka servisin koleksiyonuna yazmak da okumak da reddedilir; erişim yalnızca gRPC ile olur.           |
-| [ADR-06](docs/adr/0006-realtime-ayri-process.md)          | Realtime, gateway'den ayrı bir process'tir                                   | Go'da Socket.io protokol uyumu zahmetli; WebSocket bağlantıları farklı ölçeklenir.                    |
-| [ADR-07](docs/adr/0007-eventbus-arayuzu.md)               | Olay hattı `EventBus` arayüzü arkasında durur                                | Kafka'ya geçiş tek dosyalık bir uygulama değişikliği olur, çağıran kod değişmez.                      |
-| [ADR-08](docs/adr/0008-idempotency-key.md)                | Tüm mutasyon uçları `Idempotency-Key` ister                                  | Anahtar önce `NX` ile in-progress yazılır; çift tıklama veya otomatik retry ikinci siparişi yaratmaz. |
-| [ADR-09](docs/adr/0009-api-first.md)                      | Sözleşme koddan önce yazılır, `MOCK=1` modu zorunludur                       | Frontend ve backend paralel ilerler; UI değişen sözleşme yüzünden iki kez yazılmaz.                   |
-| [ADR-10](docs/adr/0010-zod-tek-dogrulama.md)              | Çalışma zamanı doğrulaması tek kütüphaneyle, Zod ile yapılır                 | Şema ve TypeScript tipi tek kaynaktan (`z.infer`) türer, çift bakım ortadan kalkar.                   |
-| [ADR-11](docs/adr/0011-token-ve-sabitler.md)              | Görsel değerler design token'da, iş sabitleri `config/constants.ts`'te durur | Tema veya eşik değişimi tek dosyayı etkiler; sihirli sayı ve ondalıklı para yasaktır.                 |
-| [ADR-12](docs/adr/0012-kimlik-telefon-sifre.md)           | Kimlik doğrulama telefon + şifre ile yapılır, SMS/OTP kurulmaz               | bcrypt hash, JWT + refresh token; `otp-velocity` kuralı ileriye bırakılır.                            |
-| [ADR-13](docs/adr/0013-sepet-sadece-tarayicida.md)        | Sepet durumu sunucuda tutulmaz, tarayıcıda yaşar                             | Zustand + localStorage; sepetin sunucudaki karşılığı rezervasyondur, `carts` koleksiyonu yoktur.      |
-| [ADR-14](docs/adr/0014-frontend-paralel-gelistirme.md)    | Frontend Gün 4'te başlar ve backend ile paralel ilerler                      | `MOCK=1` sayesinde servis beklenmez; Gün 16-20 yalnızca tasarım ve cilaya kalır.                      |
+| No                                                            | Karar                                                                        | Neden                                                                                                      |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| [ADR-01](docs/adr/0001-lua-vs-redlock.md)                     | Sıcak yoldaki stok düşümü Redlock ile değil, tek Lua script'i ile yapılır    | Redis tek thread'lidir, Lua zaten atomiktir; Redlock ağ gecikmesi ve saat kayması riski ekler.             |
+| [ADR-02](docs/adr/0002-rezervasyon-suresi-zset.md)            | Rezervasyon süresi bitimi keyspace notification'a güvenmez                   | Redis expire olayları kaybolabilir; gerçek kaynak `resv:index` ZSET'idir, süpürücü 1 sn'de bir tarar.      |
+| [ADR-03](docs/adr/0003-stok-gercegi-mongo-sayac-redis.md)     | Stok gerçeği Mongo'da, hızlı sayaç Redis'te durur                            | Redis düşerse mali kayıt kaybolmaz; açılışta sayaç `stock` koleksiyonundan seed edilir.                    |
+| [ADR-04](docs/adr/0004-outbox-ile-olay-yayini.md)             | Servisler arası olaylar outbox üzerinden yayınlanır                          | "Mongo'ya yazıldı ama olay gitmedi" durumunu imkânsız kılar; ikili yazım ortadan kalkar.                   |
+| [ADR-05](docs/adr/0005-koleksiyon-sahipligi.md)               | Her servis kendi koleksiyonlarının tek sahibidir                             | Başka servisin koleksiyonuna yazmak da okumak da reddedilir; erişim yalnızca gRPC ile olur.                |
+| [ADR-06](docs/adr/0006-realtime-ayri-process.md)              | Realtime, gateway'den ayrı bir process'tir                                   | Go'da Socket.io protokol uyumu zahmetli; WebSocket bağlantıları farklı ölçeklenir.                         |
+| [ADR-07](docs/adr/0007-eventbus-arayuzu.md)                   | Olay hattı `EventBus` arayüzü arkasında durur                                | Kafka'ya geçiş tek dosyalık bir uygulama değişikliği olur, çağıran kod değişmez.                           |
+| [ADR-08](docs/adr/0008-idempotency-key.md)                    | Tüm mutasyon uçları `Idempotency-Key` ister                                  | Anahtar önce `NX` ile in-progress yazılır; çift tıklama veya otomatik retry ikinci siparişi yaratmaz.      |
+| [ADR-09](docs/adr/0009-api-first.md)                          | Sözleşme koddan önce yazılır, `MOCK=1` modu zorunludur                       | Frontend ve backend paralel ilerler; UI değişen sözleşme yüzünden iki kez yazılmaz.                        |
+| [ADR-10](docs/adr/0010-zod-tek-dogrulama.md)                  | Çalışma zamanı doğrulaması tek kütüphaneyle, Zod ile yapılır                 | Şema ve TypeScript tipi tek kaynaktan (`z.infer`) türer, çift bakım ortadan kalkar.                        |
+| [ADR-11](docs/adr/0011-token-ve-sabitler.md)                  | Görsel değerler design token'da, iş sabitleri `config/constants.ts`'te durur | Tema veya eşik değişimi tek dosyayı etkiler; sihirli sayı ve ondalıklı para yasaktır.                      |
+| [ADR-12](docs/adr/0012-kimlik-telefon-sifre.md)               | Kimlik doğrulama telefon + şifre ile yapılır, SMS/OTP kurulmaz               | bcrypt hash, JWT + refresh token; `otp-velocity` kuralı ileriye bırakılır.                                 |
+| [ADR-13](docs/adr/0013-sepet-sadece-tarayicida.md)            | Sepet durumu sunucuda tutulmaz, tarayıcıda yaşar                             | Zustand + localStorage; sepetin sunucudaki karşılığı rezervasyondur, `carts` koleksiyonu yoktur.           |
+| [ADR-14](docs/adr/0014-frontend-paralel-gelistirme.md)        | Frontend Gün 4'te başlar ve backend ile paralel ilerler                      | `MOCK=1` sayesinde servis beklenmez; Gün 16-20 yalnızca tasarım ve cilaya kalır.                           |
+| [ADR-15](docs/adr/0015-pazaryeri-modeli.md)                   | İş modeli pazaryeridir, dark store değil                                     | Her market kendi fiyatı, minimum sepeti ve teslimat ücretiyle bağımsız satıcıdır.                          |
+| [ADR-16](docs/adr/0016-olay-akislari-uzunlukla-sinirlanir.md) | Olay akışları TTL yerine uzunlukla sınırlanır                                | `XADD ... MAXLEN ~ N`: akış tüketilmeden silinmez ama sınırsız da büyümez.                                 |
+| [ADR-17](docs/adr/0017-sayac-kumesi-isareti.md)               | Stok sayaç kümesinin işareti TTL'sizdir                                      | `stock:seeded` işareti, "SKU yok" ile "Redis boşaldı" ayrımını tek okumayla yapar.                         |
+| [ADR-18](docs/adr/0018-rezervasyonun-sonuclanmasi.md)         | Rezervasyon önce Redis'te sahiplenilir, sonra Mongo defterine yazılır        | Süpürücü ile onay yarışında işi tek çağrı yapar; kayıt silinmez, işaretlenir.                              |
+| [ADR-19](docs/adr/0019-sema-gocleri.md)                       | Şema göçleri servisin açılışında, kilit altında koşar                        | Göçler sahibi servisin kodunda durur, uygulananlar kendi veritabanındaki `migrations` koleksiyonunda.      |
+| [ADR-20](docs/adr/0020-dagitik-izleme.md)                     | Dağıtık izleme OpenTelemetry ile yapılır                                     | Bağlam W3C `traceparent` ile taşınır; span'ler RPC sınırlarında açılır, nitelikler izin listesinden geçer. |
 
 Her kararın bağlam, gerekçe ve sonuç bölümleri için kayıtların kendisine bakın; klasörün kendi
 dizini [`docs/adr/README.md`](docs/adr/README.md) içindedir. Kayıtlar değiştirilmez: bir karar
@@ -578,7 +657,7 @@ geçersiz kaldığında mevcut dosyanın durumu güncellenir ve yerini alan yeni
 
 ## Demo senaryosu (8 dakika)
 
-`pnpm demo` bu sırayı otomatik koşturacak şekilde yazılacaktır (Gün 7):
+Akış bugün arayüzden elle oynatılır; `pnpm demo` aynı sırayı otomatik koşturacak (T15.1):
 
 1. **0:00 — Kayıt ve konum.** Kayıt olunur, adres seçilir; yakındaki marketler listelenir ve biri seçilir (ADR-15).
 2. **1:00 — Ürün listesi ve sepet.** Stok rozetleri görünür durumdayken sepete 3 ürün eklenir.
