@@ -48,6 +48,7 @@ const failures = [];
 async function shot(page, name, fullPage = false) {
   if (fullPage) await scrollThrough(page);
   await settle(page);
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: `${OUT_DIR}${name}.png`, fullPage });
   console.log(`✓ ${name}`);
 }
@@ -251,10 +252,10 @@ async function captureShoppingFlow(browser) {
     await fillCardForm(dialog);
     await shot(page, '11-kart-ekle');
     await dialog.getByRole('button', { name: 'Devam' }).click();
+    // Kart kaydedilince pencere yontem listesine doner, yeni kart secili gelir.
     const confirm = page.getByRole('dialog').getByRole('button', { name: 'Seç', exact: true });
-    if (await confirm.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      await confirm.click();
-    }
+    await confirm.waitFor();
+    await confirm.click();
     await page.getByRole('dialog').waitFor({ state: 'hidden' });
   });
   await step(page, '12-3ds', async () => {

@@ -107,7 +107,7 @@ jobs:
           curl -sS localhost:8080/healthz || true
           exit 1
 
-      # Cikti docs/screenshots/_kosu.log'a da yazilir: basarisiz kosuda dala
+      # Cikti docs/screenshots/_kosu.txt'a da yazilir: basarisiz kosuda dala
       # gecen gunluk, hatanin nerede oldugunu Actions arayuzu acilmadan gosterir.
       - name: Ekranlari cek
         timeout-minutes: 15
@@ -121,8 +121,8 @@ jobs:
       - name: Basarisiz kosunun gunlugunu ekle
         if: failure()
         run: |
-          cp "$RUNNER_TEMP/kosu.log" docs/screenshots/_kosu.log || true
-          for svc in "$RUNNER_TEMP"/logs/*.log; do tail -n 40 "$svc" >> docs/screenshots/_kosu.log; done
+          cp "$RUNNER_TEMP/kosu.log" docs/screenshots/_kosu.txt || true
+          for svc in "$RUNNER_TEMP"/logs/*.log; do tail -n 40 "$svc" >> docs/screenshots/_kosu.txt; done
 
       # Dal adi ortam degiskeniyle gecer (komuta gomulmez; kabuk enjeksiyonu).
       - name: Goruntuleri PR dalina yaz
@@ -134,7 +134,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/screenshots
           if git diff --cached --quiet; then echo "degisiklik yok"; exit 0; fi
-          git commit -m "docs(platform): ekran goruntuleri yenilendi (T20.1)"
+          # [skip ci]: botun commit'i is akislarini yeniden tetiklemesin.
+          git commit -m "docs(platform): ekran goruntuleri yenilendi (T20.1)" -m "[skip ci]"
           git push origin "HEAD:$HEAD_REF"
 
       - name: Goruntuleri yukle
