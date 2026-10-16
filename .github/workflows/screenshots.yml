@@ -1,8 +1,9 @@
 name: Ekran goruntuleri
 
 # README'deki ekran goruntulerini (docs/screenshots/) uretir (T20.1).
-# Yigin MOCK=true ile kalkar: Mongo ve Redis gerekmez, demo hesaplari ve siparis
-# gecmisi servislerin acilisinda bellege yuklenir. Goruntuler is akisinin
+# Yigin gercek altyapiyla (Mongo + Redis, MOCK=false) kalkar: MOCK'ta olay hatti
+# kapali oldugundan siparis "kurye yolda"ya gecmez ve canli takip ekrani cekilemez.
+# Katalog, stok, kuryeler ve demo hesaplari seed ile yazilir. Goruntuler is akisinin
 # "screenshots" eserine (artifact) yazilir; PR'da ayrica PR'in dalina commit
 # edilir (README goruntuleri dogrudan dalda guncellenir). main'e asla yazilmaz.
 #
@@ -78,14 +79,20 @@ jobs:
 
       # Gateway ortami yalnizca surecin ortamindan okur (.env'i kendisi okumaz);
       # Node servisleri ise --env-file-if-exists ile okur. Ikisi ayni degerleri
-      # gorsun diye .env.example (MOCK=true) is akisinin ortamina aktarilir.
+      # gorsun diye .env (MOCK=false) is akisinin ortamina aktarilir.
       # Kabukta "source" yerine util.parseEnv: Mongo adreslerindeki "&" kabukta
       # komutu arka plana atardi.
-      - name: Ortami hazirla (MOCK=true)
+      - name: Ortami hazirla (MOCK=false)
         run: |
-          cp .env.example .env
+          sed 's/^MOCK=true$/MOCK=false/' .env.example > .env
           node -e "const { parseEnv } = require('node:util'); const fs = require('node:fs'); const env = parseEnv(fs.readFileSync('.env', 'utf8')); fs.appendFileSync(process.env.GITHUB_ENV, Object.entries(env).map(([k, v]) => k + '=' + v).join('\n') + '\n');"
-          echo "MOCK=true" >> "$GITHUB_ENV"
+
+      # Mongo (replica set) + Redis + Jaeger + Mailpit; --wait saglikli olana kadar bekler.
+      - name: Altyapiyi kaldir ve seed et
+        run: |
+          pnpm infra:up
+          pnpm seed
+          pnpm seed:personas
 
       - name: Yigini baslat
         run: |

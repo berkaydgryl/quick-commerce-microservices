@@ -3,7 +3,7 @@
 //
 // ON KOSUL: yigin ayakta ve web gelistirme modunda (`vite`, demo hesaplar ve kart
 // kasasi yalnizca orada var). CI'da .github/workflows/screenshots.yml yigini
-// MOCK=true ile kaldirir ve bu betigi kosar; yerelde:
+// Mongo + Redis ile kaldirir, seed eder ve bu betigi kosar; yerelde:
 //
 //   pnpm screenshots                         # http://localhost:5173, sistemdeki Chrome
 //   SCREENSHOT_BASE_URL=... pnpm screenshots
